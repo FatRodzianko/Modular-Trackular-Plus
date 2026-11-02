@@ -9,7 +9,7 @@
 
 #include "interfaceFxDesc.h"
 
-#ifdef PLATFORM_IMX
+#if defined(PLATFORM_IMX) && defined(FEATURE_SYNTH) // MT: off in MT_NO_SYNTH test builds
 #define GUI_HANDLE_SYNTH 1
 #else
 #define GUI_HANDLE_SYNTH 0

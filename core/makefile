@@ -21,6 +21,8 @@ CPP_SRCS 	+= $(shell find ./FileManager/ -name *.cpp)
 CPP_SRCS 	+= $(shell find ./Exporter/ -name *.cpp)
 CPP_SRCS 	+= $(shell find ./AudioEngine/ -name *.cpp)
 CPP_SRCS 	+= $(shell find ./synth/ -name *.cpp)
+# MT: Modular-Trackular mods (host tests in mods/tests/ are not firmware)
+CPP_SRCS 	+= $(shell find ./mods/ -name *.cpp -not -path "./mods/tests/*")
 C_SRCS 	 	+= $(shell find ./libs/ -name *.c)
 
 _CPP_OBJS	= $(patsubst ./%.cpp, %.o, $(CPP_SRCS))
@@ -33,7 +35,7 @@ OBJS_SORTED := $(sort $(OBJS))
 OBJ_DIRS	:= $(dir $(OBJS_SORTED))
 DEPS		:= $(OBJS_SORTED:.o=.d)
 
-INCLUDES=-I./include -I./config -I./source -I./synth -I./libs -I./libs/Audio -I./libs/ElapsedMillis -I./libs/SerialFlash -I./libs/SPI -I./libs/Audio/utility -I./libs/FT812 -I./libs/fonts -I./libs/NewDisplay -I./interface -I./effector -I./FileManager -I./Exporter -I./AudioEngine -I./libs/Audio/Polyverb -I./AudioEngine/ConstantValues -I./AudioEngine/MasterEnhancer -I${POLYUTIL_DIR}/include -I${POLYUTIL_DIR}/3rdparty -I${POLYSYNTH_DIR}/include  
+INCLUDES=-I./include -I./config -I./source -I./synth -I./libs -I./libs/Audio -I./libs/ElapsedMillis -I./libs/SerialFlash -I./libs/SPI -I./libs/Audio/utility -I./libs/FT812 -I./libs/fonts -I./libs/NewDisplay -I./interface -I./effector -I./FileManager -I./Exporter -I./AudioEngine -I./libs/Audio/Polyverb -I./AudioEngine/ConstantValues -I./AudioEngine/MasterEnhancer -I./mods -I${POLYUTIL_DIR}/include -I${POLYUTIL_DIR}/3rdparty -I${POLYSYNTH_DIR}/include  
 COMPILER_OPTIONS=-MMD -MP -fno-common -g -mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -fstack-usage -specs=nano.specs -Wall -Wextra -c -ffunction-sections -fdata-sections -ffreestanding -fno-builtin 
 ifdef DEBUG
 COMPILER_OPTIONS+=-Og -DDEBUG
@@ -54,7 +56,11 @@ ifeq ($(PLATFORM), MK66)
 COMPILER_OPTIONS+=-mcpu=cortex-m4 -mfpu=fpv4-sp-d16 
 else ifeq ($(PLATFORM), IMX)
 COMPILER_OPTIONS+=-mcpu=cortex-m7 -mfpu=fpv5-sp-d16 -mfp16-format=ieee
-DEFINES+=-DPLATFORM_IMX -DFEATURE_SYNTH
+DEFINES+=-DPLATFORM_IMX
+# MT: MT_NO_SYNTH=1 builds without the closed synth libraries (emulator test builds)
+ifneq ($(MT_NO_SYNTH),1)
+DEFINES+=-DFEATURE_SYNTH
+endif
 else 
 $(error Invalid PLATFORM value $(PLATFORM))
 endif

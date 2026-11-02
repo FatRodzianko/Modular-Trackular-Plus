@@ -9,6 +9,7 @@
 #endif
 
 #include "log.h"
+#include "mods.h" // MT:
 
 #include <cstring>
 
@@ -165,6 +166,9 @@ void WorkspaceProjectLoad::loadProjectFromWorkspaceFinish()
     newFileManager.startAudioEngine();
 
     newFileManager.getPatternsMetadata()->loadPatternsMetadata();
+#if MT_MODS // MT: per-project mod settings from the Workspace
+    mods::onWorkspaceLoaded();
+#endif
 
 #if FILEMANAGER_HANDLE_SYNTH == 1
     newFileManager.getSynth()->updateToSettings(mtProject.values, true);

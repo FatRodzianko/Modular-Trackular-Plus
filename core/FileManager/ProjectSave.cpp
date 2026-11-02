@@ -10,6 +10,7 @@
 #endif
 
 #include "log.h"
+#include "mods.h" // MT:
 
 #include <algorithm>
 #include <cstring>
@@ -531,6 +532,10 @@ void ProjectSave::saveProjectFinish()
              newFileManager.getCurrentProjectName());
 
     newFileManager.getSynth()->copyWorkspacePatches(cWorkspacePath, destFilePath);
+#endif
+
+#if MT_MODS // MT: per-project mod settings to the project folder
+    mods::onProjectSaved();
 #endif
 
     //-----------------------------------

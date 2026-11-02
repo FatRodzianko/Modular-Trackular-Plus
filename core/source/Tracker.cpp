@@ -14,6 +14,7 @@
 #include "mtSequencer.h"
 #include "mtSleep.h"
 #include "mtSliceDetector.h"
+#include "mods.h" // MT:
 
 #include <cr_section_macros.h>
 
@@ -144,6 +145,10 @@ void TrackerImpl::init(Platform* platform)
     newFileManager.init(platform->getFileSystem(), &synth, stereoSampleMode);
 #else
     newFileManager.init(platform->getFileSystem(), nullptr, stereoSampleMode);
+#endif
+
+#if MT_MODS // MT: global mod switches from mods.cfg
+    mods::init(platform->getFileSystem());
 #endif
 
     interfaceGlobals.devMode = platform->getFileSystem()->exists("/.develop");

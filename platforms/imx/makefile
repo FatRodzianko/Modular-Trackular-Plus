@@ -80,7 +80,12 @@ endif
 CPP_OPTIONS=-std=gnu++17 -felide-constructors -includecstdint -fno-rtti -fno-exceptions
 CC_OPTIONS=
 
+# MT: MT_NO_SYNTH=1 builds without the closed synth libraries (emulator test builds)
+ifeq ($(MT_NO_SYNTH),1)
+LIBS:= -Wl,--start-group -lTracker -larm_cortexM4lf_math -Wl,--end-group -Xlinker -z -Xlinker muldefs
+else
 LIBS:= -Wl,--start-group -lTracker -larm_cortexM4lf_math -lPolySynth -lPolyDSP -Wl,--end-group -Xlinker -z -Xlinker muldefs
+endif
  
 
 

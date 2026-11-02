@@ -9,6 +9,7 @@
 #endif
 
 #include "log.h"
+#include "mods.h" // MT:
 
 #include <cstring>
 
@@ -356,6 +357,10 @@ void ProjectOpen::openProjectFinish()
              newFileManager.getCurrentProjectName());
 
     newFileManager.getSynth()->copyWorkspacePatches(srcFilePath, cWorkspacePath);
+#endif
+
+#if MT_MODS // MT: per-project mod settings into the Workspace
+    mods::onProjectOpenCopy();
 #endif
 
     //-----------------------------------

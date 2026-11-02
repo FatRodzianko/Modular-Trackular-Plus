@@ -7,6 +7,7 @@
 #include "imageViewer/imageViewerDefs.h"
 
 #include "polyassert.h"
+#include "mods.h" // MT:
 
 #include <array>
 
@@ -22,7 +23,7 @@ constexpr uint8_t baseMenuGroupCount = 8;
 constexpr uint8_t projectMenuGroupCount = 10;
 constexpr uint8_t generalMenuGroupCount = 9;
 #elif defined(PLATFORM_IMX)
-constexpr uint8_t baseMenuGroupCount = 7;
+constexpr uint8_t baseMenuGroupCount = 7 + MT_MODS; // MT: + Mods
 constexpr uint8_t projectMenuGroupCount = 10;
 constexpr uint8_t generalMenuGroupCount = 12;
 #else
@@ -51,6 +52,11 @@ cMenuGroup menuUsb(menuBase, "USB", 2);
 
 cMenuGroup menuMetro(menuBase, "Metronome", 5);
 cMenuGroup menuFirmware(menuBase, "Firmware", 4);
+
+#if MT_MODS // MT: Config -> Mods, one Off/On item per mod after the count
+constexpr uint8_t modsMenuItemCount = 1 + mods::kModCount;
+cMenuGroup menuMods(menuBase, "Mods", modsMenuItemCount);
+#endif
 
 #ifdef TRACKER_MINI
 cMenuGroup menuFunctionButtons(menuBase, "Fn buttons binding", 8);
@@ -275,6 +281,18 @@ cMenuItem melResetConfig(menuFirmware,
                          nullptr,
                          menuTypeItemActionButton,
                          &resetConfigSetup);
+
+//==================================================================================================================================================================
+// MT: Mods
+#if MT_MODS
+const strItemTypeLabel modsCountSetup{ mods::kModCountText };
+
+cMenuItem melModsCount(menuMods,
+                       "Mods in build",
+                       nullptr,
+                       menuTypeItemLabel,
+                       &modsCountSetup);
+#endif
 
 //==================================================================================================================================================================
 // USB
