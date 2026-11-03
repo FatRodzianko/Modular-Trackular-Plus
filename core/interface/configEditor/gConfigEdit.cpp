@@ -25,8 +25,8 @@ static const uint16_t framesPlacesConfigGridScreen[3][4] = {
 
 const char creditsText[] = {
     "Polyend Tracker Community Edition (CE)"
-    "\nLicensed under the PolyForm Noncommercial License 1.0.0"
-    "\nwith Polyend Additional Permissions (.ptfx Plugin SDK under MIT)."
+    "\nLicensed under the MIT License"
+    "\n(No Wholesale Commercial Clones; see LICENSE)."
     "\n"
     "\nAll provided demo projects and samples are under a CC BY-NC 4.0 license."
     "\n"

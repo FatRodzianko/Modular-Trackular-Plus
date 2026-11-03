@@ -1,172 +1,101 @@
 Polyend Tracker Community Edition License
-(PolyForm Noncommercial License 1.0.0 with Polyend Additional Permissions)
+(MIT License with Wholesale Commercial Clone Restriction)
 
 Copyright (c) 2020-2026 Polyend Sp. z o.o. and Polyend Tracker Community Edition Contributors
 
 ================================================================================
-PART 1: ADDITIONAL PERMISSIONS & SCOPE (POLYEND TRACKER COMMUNITY EDITION)
+PART 1: SOURCE CODE, SDKs, OPEN SYNTH ENGINES & MODULES (MIT LICENSE)
 ================================================================================
 
-In addition to the terms of the PolyForm Noncommercial License 1.0.0 (Part 2),
-Polyend Sp. z o.o. and the Contributors grant the following explicit permissions
-and exceptions:
+All source code, headers, SDKs, open-source synthesizer engines, DSP modules,
+drivers, utilities, and documentation in this repository — including:
+  - `.ptfx` Sample Editor Plugin SDK (`editor-fx-sdk/`)
+  - Open Synth SDK headers (`synth/include/PolySynth/` and `synth/include/PolySynth/sdk/`)
+  - Open-source C++ synthesizer engines (`core/synth/engines/`, including `CHIP`)
+  - Hardware abstraction layers, drivers, audio libraries, and utilities (`platforms/`, `util/`, `core/libs/`)
+  - Individual classes, DSP algorithms, UI widgets, and source modules in `core/`
 
-1. Commercial Music Production, Live Performance & Content Creation Permitted
-   Running and using the compiled firmware to compose, record, produce, perform,
-   distribute, broadcast, or monetize music, audio recordings, albums, sample
-   packs, paid live performances ("gigs"), educational courses, or monetized
-   video/streaming content (such as YouTube, Twitch, or social media) is
-   EXPRESSLY PERMITTED and does not violate the Noncommercial Purpose restriction
-   of Part 2.
-
-   The noncommercial restriction in Part 2 applies to the Software and derivative
-   works themselves — meaning you may NOT:
-   (a) sell, license for a fee, or commercially distribute the firmware, source
-       code, or modified/derivative versions of the firmware or software; or
-   (b) incorporate any part of the firmware or source code into a commercial
-       hardware product, commercial software application, or competing product.
-
-2. .ptfx Sample Editor Plugin SDK (`editor-fx-sdk/`) — MIT License (Selling Permitted)
-   The `.ptfx` Sample Editor Plugin SDK located in `editor-fx-sdk/` (including
-   `editor-fx-sdk/tracker_plugin.h`, `editor-fx-sdk/ptfx_builder.py`, and the
-   reference plugins in `editor-fx-sdk/effects/`) is licensed separately under
-   the MIT License (Part 3 below). Developers are expressly permitted to build,
-   distribute, and sell `.ptfx` Sample Editor plugins commercially or
-   non-commercially.
-
-3. Precompiled Binary Libraries (`synth/lib/`)
-   The precompiled static archives `synth/lib/libPolySynth.a` and
-   `synth/lib/libPolyDSP.a` are proprietary software owned by Polyend Sp. z o.o.
-   and are governed by the terms in `synth/lib/LICENSE-PROPRIETARY.txt`.
-
-4. Third-Party Components
-   Third-party libraries and components listed in `NOTICE.md` remain governed by
-   their respective original licenses.
-
-================================================================================
-PART 2: POLYFORM NONCOMMERCIAL LICENSE 1.0.0
-(Applies to all firmware source code, headers, `synth/include/`, and `docs/`)
-================================================================================
-
-https://polyformproject.org/licenses/noncommercial/1.0.0
-
-Acceptance
-In order to get any license under these terms, you must agree to them as both
-strict obligations and conditions to all your licenses.
-
-Copyright License
-The licensor grants you a copyright license for the software to do everything
-you might do with the software that would otherwise infringe the licensor's
-copyright in it for any permitted purpose. However, you may only distribute the
-software according to Distribution License and make changes or new works based
-on the software according to Changes and New Works License.
-
-Distribution License
-The licensor grants you an additional copyright license to distribute copies of
-the software. Your license to distribute covers distributing the software with
-changes and new works permitted by Changes and New Works License.
-
-Notices
-You must ensure that anyone who gets a copy of any part of the software from
-you also gets a copy of these terms or the URL for them above, as well as
-copies of any plain-text lines beginning with `Required Notice:` that the
-licensor provided with the software. For example:
-
-  Required Notice: Copyright (c) 2020-2026 Polyend Sp. z o.o. and Polyend Tracker Community Edition Contributors (https://github.com/polyend/tracker-ce)
-
-Changes and New Works License
-The licensor grants you an additional copyright license to make changes and new
-works based on the software for any permitted purpose.
-
-Patent License
-The licensor grants you a patent license for the software that covers patent
-claims the licensor can license, or becomes able to license, that you would
-infringe by using the software.
-
-Noncommercial Purpose
-Any noncommercial purpose is a permitted purpose. Additionally, the uses
-explicitly listed in Part 1, Section 1 (Commercial Music Production, Live
-Performance & Content Creation) are permitted purposes.
-
-Personal Uses
-Personal use for research, experiment, and testing for the benefit of public
-knowledge, personal study, private entertainment, hobby projects, amateur
-pursuits, or religious observance, without any anticipated commercial
-application, is use for a noncommercial purpose.
-
-Noncommercial Organizations
-Use by any charitable organization, educational institution, public research
-organization, public safety or health organization, environmental protection
-organization, or government institution is use for a noncommercial purpose
-regardless of the source of funding or obligations resulting from the funding.
-
-Fair Use
-You may have "fair use" rights for the software under the law. These terms do
-not limit them.
-
-No Other Rights
-These terms do not allow you to sublicense or transfer any of your licenses to
-anyone else, or prevent the licensor from granting licenses to anyone else.
-These terms do not imply any other licenses.
-
-Patent Defense
-If you make any written claim that the software infringes or contributes to
-infringement of any patent, your patent license for the software granted under
-these terms ends immediately. If your company makes such a claim, your patent
-license ends immediately for work on behalf of your company.
-
-Violations
-The first time you are notified in writing that you have violated any of these
-terms, or done anything with the software not covered by your licenses, your
-licenses can nonetheless continue if you come into full compliance with these
-terms, and take practical steps to correct past violations, within 32 days of
-receiving notice. Otherwise, all your licenses end immediately.
-
-No Liability
-***As far as the law allows, the software comes as is, without any warranty or
-condition, and the licensor will not be liable to you for any damages arising
-out of these terms or the use or nature of the software, under any kind of
-legal claim.***
-
-Definitions
-The **licensor** is the individual or entity offering these terms, and the
-**software** is the software the licensor makes available under these terms.
-
-**You** refers to the individual or entity agreeing to these terms.
-
-**Your company** is any legal entity, sole proprietorship, or other kind of
-organization that you work for, plus all organizations that have control over,
-are under the control of, or are under common control with that organization.
-**Control** means ownership of substantially all the assets of an entity, or
-the power to direct its management and policies by vote, contract, or
-otherwise. Control can be direct or indirect.
-
-**Your licenses** are all the licenses granted to you for the software under
-these terms.
-
-**Use** means anything you do with the software requiring one of your licenses.
-
-================================================================================
-PART 3: MIT LICENSE FOR .PTFX SAMPLE EDITOR SDK (`editor-fx-sdk/`)
-================================================================================
-
-Copyright (c) 2020-2026 Polyend Sp. z o.o. and Polyend Tracker Community Edition Contributors
+are licensed under the standard MIT License below, subject only to the
+Wholesale Commercial Clone Restriction in Part 2 with respect to the complete
+integrated Polyend Tracker application/firmware as a whole, and Part 3 with
+respect to the precompiled binary archives in `synth/lib/`.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
-of the software and associated files in the `editor-fx-sdk/` directory (the
-"SDK Software"), to deal in the SDK Software without restriction, including
-without limitation the rights to use, copy, modify, merge, publish, distribute,
-sublicense, and/or sell copies of the SDK Software and `.ptfx` plugins built
-with it, and to permit persons to whom the SDK Software is furnished to do so,
-subject to the following conditions:
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the SDK Software.
+The above copyright notice, this permission notice, and the conditions in
+Part 2 shall be included in all copies or substantial portions of the Software.
 
-THE SDK SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SDK SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SDK SOFTWARE.
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+================================================================================
+PART 2: WHOLESALE COMMERCIAL CLONE RESTRICTION & EXPRESS PERMISSIONS
+================================================================================
+
+1. What Is Expressly Permitted (Commercial & Non-Commercial):
+   (a) Music Production, Live Performance & Content Creation:
+       Using the firmware to compose, record, produce, perform, distribute,
+       broadcast, or monetize music, albums, sample packs, paid live
+       performances ("gigs"), courses, or monetized video/streaming content
+       is EXPRESSLY PERMITTED without restriction.
+   (b) Selling `.ptfx` Sample Editor Plugins:
+       Building, distributing, and selling `.ptfx` Sample Editor plugins built
+       with `editor-fx-sdk/` (commercially or non-commercially) is EXPRESSLY
+       PERMITTED under the pure MIT License in Part 1.
+   (c) Reusing Code, Drivers, DSP, and Open Synth Engines in Other Projects:
+       Reusing, modifying, or incorporating individual components, drivers,
+       DSP algorithms, UI helpers, SDKs, or open-source C++ synth engines
+       (such as `core/synth/engines/`) into your own open-source or commercial
+       software (e.g., VST/AU/CLAP plugins, iOS/desktop apps) or original
+       hardware products (e.g., Eurorack modules, standalone instruments that
+       are not clones of the Polyend Tracker) is EXPRESSLY PERMITTED under the
+       MIT License in Part 1.
+
+2. What Is Prohibited (No Wholesale Commercial Clones):
+   Notwithstanding the permissions in Part 1, you may NOT:
+   (a) Commercial Hardware Clones:
+       Manufacture, distribute, or sell a commercial hardware product that is
+       preloaded with, designed primarily to run, or marketed to use the
+       complete Polyend Tracker firmware/application (or a substantially
+       unmodified or re-skinned derivative of the complete firmware/application);
+   (b) Commercial Software Clones / Ports:
+       Sell, license for a fee, or commercially distribute the complete Polyend
+       Tracker application/firmware (or a direct port or substantially
+       unmodified derivative of the integrated Tracker sequencer, UI, and
+       workflow as a whole) as a paid standalone software application, paid
+       plugin, or paid mobile/desktop app;
+   (c) Selling Firmware Builds:
+       Sell or charge a fee for downloading or obtaining compiled `.ptf`
+       firmware images or source distributions of the Polyend Tracker firmware;
+   (d) Trademark & Trade Dress:
+       Nothing in this License grants any right to use the "Polyend" or
+       "Polyend Tracker" trade names, trademarks, service marks, logos, boot
+       screens, or hardware trade dress in connection with any third-party
+       commercial product.
+
+================================================================================
+PART 3: PRECOMPILED SYNTH & DSP BINARIES (`synth/lib/`) & THIRD-PARTY CODE
+================================================================================
+
+1. Precompiled Binary Libraries (`synth/lib/libPolySynth.a` & `libPolyDSP.a`):
+   The precompiled static archives `synth/lib/libPolySynth.a` and
+   `synth/lib/libPolyDSP.a` contain Polyend's proprietary factory synthesizer
+   and DSP engines (`ACD`, `FAT`, `VAP`, `WTFM`, `PERC`, and `PolyDSP`). They
+   are governed by `synth/lib/LICENSE-PROPRIETARY.txt`, which permits free use
+   in authentic Polyend hardware as well as personal, hobbyist, and DIY
+   non-commercial projects, while prohibiting embedding those precompiled
+   binaries into commercial third-party hardware or software products.
+
+2. Third-Party Components:
+   Third-party libraries and components listed in `NOTICE.md` remain governed
+   by their respective original licenses.

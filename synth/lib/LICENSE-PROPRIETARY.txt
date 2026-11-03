@@ -7,29 +7,37 @@ directory:
   - libPolySynth.a
   - libPolyDSP.a
 
-1. Grant of License
+1. Grant of License (Polyend Hardware & Non-Commercial DIY Projects)
 Polyend Sp. z o.o. ("Polyend") grants you a non-exclusive, worldwide,
 royalty-free license to use, link, and redistribute these unmodified binary
-libraries solely for the purpose of compiling, modifying, and distributing
-firmware for authentic Polyend hardware devices (specifically Polyend Tracker+
-and Polyend Tracker Mini).
+libraries for:
+  (a) compiling, modifying, and distributing free firmware builds for authentic
+      Polyend hardware devices (specifically Polyend Tracker+ and Polyend
+      Tracker Mini); and
+  (b) personal, educational, research, hobbyist, or open-source DIY
+      non-commercial hardware or software projects (provided that no fee is
+      charged for the software, hardware, or product incorporating these
+      binary libraries).
 
 2. Restrictions
 You may NOT:
-  (a) decompile, disassemble, reverse-engineer, or attempt to derive the source
-      code of the DSP algorithms contained within libPolySynth.a or libPolyDSP.a,
-      except to the extent such restriction is expressly prohibited by applicable
-      law;
-  (b) use, link, or embed libPolySynth.a or libPolyDSP.a in any commercial or
-      non-commercial software, plugin, or hardware product that does not run on
-      authentic Polyend hardware.
+  (a) embed, link, bundle, or distribute `libPolySynth.a` or `libPolyDSP.a` in
+      any paid or commercial third-party hardware product, commercial software
+      application, paid plugin, or product sold for profit;
+  (b) sell or charge a fee for firmware builds or distributions containing
+      `libPolySynth.a` or `libPolyDSP.a`; or
+  (c) decompile, disassemble, reverse-engineer, or attempt to derive the source
+      code of the proprietary algorithms contained within `libPolySynth.a` or
+      `libPolyDSP.a`, except to the extent such restriction is expressly
+      prohibited by applicable law.
 
-3. Open-Source Synth SDK Headers
-The C++ header files in `synth/include/PolySynth/` and `synth/include/PolySynth/sdk/`
-are licensed under the repository's root `LICENSE` (PolyForm Noncommercial
-License 1.0.0 with Polyend Additional Permissions), allowing development of
-open-source, non-commercial synthesizer engines (such as `CHIP` in
-`core/synth/engines/`) that link against this library.
+3. Open-Source Synth SDK Headers & Open Synth Engines (MIT License)
+The C++ header files in `synth/include/PolySynth/` and
+`synth/include/PolySynth/sdk/`, as well as the open-source C++ synthesizer
+engines in `core/synth/engines/` (such as `CHIP`), are licensed under the MIT
+License (see Part 1 of the repository's root `LICENSE`). Developers may freely
+write, share, and reuse open-source C++ synth engines and DSP code in both
+non-commercial and commercial projects under the MIT License.
 
 4. Disclaimer of Warranty
 THESE LIBRARIES ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
