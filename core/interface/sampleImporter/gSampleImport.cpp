@@ -2,6 +2,7 @@
 #include "core/interfacePopups.h"
 #include "math.h"
 #include "sampleImporter/sampleImporter.h"
+#include "util_string.h"
 #include <string.h>
 
 static const uint16_t framesPlaces[3][4] = {
@@ -605,12 +606,7 @@ void cSampleImporter::importColorControl()
     else
     {
         char* fileName = explorerNames[selectedFile];
-        int fileLen = strlen(explorerNames[selectedFile]);
-
-        if (((fileName[fileLen - 1] == 'i') || (fileName[fileLen - 1] == 'I')) &&
-            ((fileName[fileLen - 2] == 't') || (fileName[fileLen - 2] == 'T')) &&
-            ((fileName[fileLen - 3] == 'p') || (fileName[fileLen - 3] == 'P')) &&
-            (fileName[fileLen - 4] == '.'))
+        if (hasFileExtension(fileName, "pti"))
         {
             colors = display.getTheme().inactiveButtonLabelsColors;
         }

@@ -92,6 +92,7 @@ bool SampleMemoryReload::loadInstrStruct(int idx, uint32_t& instrumentFileDataOf
     snprintf(instrumentFilePath, pathSize, cWorkspaceInstrumentFileFormatNew, idx + 1);
 
     strInstrumentFile fileManagerInstrumentBuffer;
+    uint32_t instrumentFileSize = fileSystem->getFileSize(instrumentFilePath);
 
     uint8_t loadStatus = fileTransfer.loadFileToMemory(instrumentFilePath,
                                                        (uint8_t*)&fileManagerInstrumentBuffer,
@@ -102,6 +103,7 @@ bool SampleMemoryReload::loadInstrStruct(int idx, uint32_t& instrumentFileDataOf
     {
         if (newFileManager.loadInstrumentFormFileStruct(&mtProject.instrument[idx],
                                                         &fileManagerInstrumentBuffer,
+                                                        instrumentFileSize,
                                                         instrumentFileDataOffsetOut))
         {
             newFileManager.removeWavExtensionFromName(mtProject.instrument[idx].sample.file_name);

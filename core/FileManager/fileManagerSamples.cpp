@@ -6,6 +6,7 @@
 #include "VoiceStreamManager.h"
 #include "fileManager.h"
 #include "fileTransfer.h"
+#include "instrumentFileValidation.h"
 
 #include "elapsedMillis.h"
 #include "log.h"
@@ -83,13 +84,18 @@ bool cFileManager::saveSampleDataToWorkspace(int idx)
                         while (remaining > 0)
                         {
                             uint32_t toRead = std::min<uint32_t>(remaining, sizeof(copyBuf));
-                            uint32_t bytesRead = fileSystem->readFile(copyBuf, toRead, srcHandle);
-                            if (bytesRead == 0)
+                            int32_t bytesRead = fileSystem->readFile(copyBuf, toRead, srcHandle);
+                            if (bytesRead <= 0)
                             {
                                 break;
                             }
-                            fileSystem->writeFile(copyBuf, bytesRead, dstHandle);
-                            remaining -= bytesRead;
+                            int32_t bytesWritten =
+                              fileSystem->writeFile(copyBuf, bytesRead, dstHandle);
+                            if (bytesWritten != bytesRead)
+                            {
+                                break;
+                            }
+                            remaining -= static_cast<uint32_t>(bytesRead);
                         }
                         fileSystem->closeFile(dstHandle);
                     }
@@ -447,6 +453,7 @@ uint32_t cFileManager::getSampleMemorySize(int fromSlot, int toSlot)
 
 uint32_t cFileManager::getWaveSizeAndHederIfValid(const char* fileName, strWavFileHeader& header)
 {
+    header = {};
 
     uint8_t nameLen = strlen(fileName);
     if (nameLen < 5)
@@ -474,7 +481,11 @@ uint32_t cFileManager::getWaveSizeAndHederIfValid(const char* fileName, strWavFi
         return 0;
     }
 
-    readHeader(&header, fileHandle);
+    if (!readHeader(&header, fileHandle))
+    {
+        fileSystem->closeFile(fileHandle);
+        return 0;
+    }
 
     uint32_t fileWaveDataSize = fileSystem->getFileAvailable(fileHandle);
 
@@ -498,12 +509,20 @@ uint32_t cFileManager::getWaveSizeIfValid(const char* filename)
 
 uint32_t cFileManager::getWaveSizeAfterConversion(const char* filename, bool countStereo)
 {
-    strWavFileHeader sampleHeader;
+    strWavFileHeader sampleHeader = {};
 
     uint32_t wavDataSize = getWaveSizeAndHederIfValid(filename, sampleHeader);
+    if (wavDataSize == 0 || sampleHeader.sampleRate == 0)
+    {
+        return 0;
+    }
 
     uint16_t allChannelBytesPerOneSample =
       (sampleHeader.bitsPerSample / 8) * sampleHeader.numChannels;
+    if (allChannelBytesPerOneSample == 0)
+    {
+        return 0;
+    }
 
     uint32_t wavDataSizeBytes =
       (wavDataSize <= sampleHeader.subchunk2Size) ? wavDataSize : sampleHeader.subchunk2Size;
@@ -538,21 +557,25 @@ uint32_t cFileManager::getInstrumentSampleSizeIfValid(const char* filename)
         return 0;
     }
 
-    strProjectFileHeader instrHeader;
-    memset(&instrHeader, 0, sizeof(instrHeader));
-
     uint32_t fileSize = fileSystem->getFileSize(wavfile);
-    fileSystem->readFile(&instrHeader, sizeof(instrHeader), wavfile);
+    strInstrumentFile instrumentFile;
+    memset(&instrumentFile, 0, sizeof(instrumentFile));
+    int32_t bytesRead = fileSystem->readFile(&instrumentFile, sizeof(instrumentFile), wavfile);
     fileSystem->closeFile(wavfile, false);
 
-    if (instrHeader.id_file[0] != 'T' || instrHeader.id_file[1] != 'I')
+    if (bytesRead < 0)
         return 0;
 
-    if (instrHeader.size == 0)
+    InstrumentFileValidation::Result validation;
+    if (!InstrumentFileValidation::validate((const uint8_t*)&instrumentFile,
+                                            bytesRead,
+                                            fileSize,
+                                            sizeof(strInstrument),
+                                            INSTRUMENT_FILE_VERSION,
+                                            validation))
+    {
         return 0;
+    }
 
-    uint32_t instrumentConfigPartSize =
-      instrHeader.size + (sizeof(strInstrumentFile) - sizeof(strInstrument));
-
-    return fileSize - instrumentConfigPartSize;
+    return fileSize - validation.dataOffset;
 }

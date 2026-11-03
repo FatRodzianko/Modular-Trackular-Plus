@@ -1,9 +1,11 @@
 #include "SdStream.h"
 #include "fileManagerDefs.h"
+#include "instrumentFileValidation.h"
 #include "interruptsControl.h"
 #include "log.h"
 #include "string.h"
 #include "wavHeaderReader.h"
+#include <algorithm>
 #include <cstring>
 #include <limits>
 
@@ -52,6 +54,10 @@ bool SdStream::startStream(const char* path,
     }
 
     fillBuffer(true);
+    if (!isFileOpened)
+    {
+        return false;
+    }
     switchBuffer();
 
     isActive = true;
@@ -159,17 +165,28 @@ bool SdStream::handleFileDecapsulation(const char* path,
         ((path[pathLength - 3] == 'W') || (path[pathLength - 3] == 'w')) &&
         (path[pathLength - 4] == '.'))
     {
-        readHeader(header, wavfile);
+        if (!readHeader(header, wavfile))
+        {
+            return false;
+        }
 
         if (header->chunkId == 0x46464952 && header->waveId == WAVEID &&
             header->subchunk1Id == 0x20746D66)
         {
             uint32_t bytesPerSample = (header->bitsPerSample / 8) * header->numChannels;
+            if (bytesPerSample == 0)
+            {
+                return false;
+            }
+
             uint32_t totalSamplesCount = header->subchunk2Size / bytesPerSample;
             float from_pos = (float)from / std::numeric_limits<uint16_t>::max();
 
             *currentPosition = ((uint32_t)(totalSamplesCount * from_pos)) * bytesPerSample;
-            fileSystem->seekFileCur(*currentPosition, wavfile);
+            if (!fileSystem->seekFileCur(*currentPosition, wavfile))
+            {
+                return false;
+            }
 
             float to_pos = (float)to / std::numeric_limits<uint16_t>::max();
             *endPosition = ((uint32_t)(totalSamplesCount * to_pos)) * bytesPerSample;
@@ -190,17 +207,21 @@ bool SdStream::handleFileDecapsulation(const char* path,
         strInstrumentFile instrFile;
         memset(&instrFile, 0, sizeof(instrFile));
 
-        fileSystem->readFile(&instrFile, sizeof(instrFile), wavfile);
+        int32_t bytesRead = fileSystem->readFile(&instrFile, sizeof(instrFile), wavfile);
 
-        strProjectFileHeader& instrumentHeader = instrFile.instrumentDataAndHeader.instrHeader;
+        InstrumentFileValidation::Result validation;
 
-        if (instrumentHeader.id_file[0] == 'T' && instrumentHeader.id_file[1] == 'I' &&
-            instrumentHeader.size > 0)
+        if (bytesRead >= 0 &&
+            InstrumentFileValidation::validate((const uint8_t*)&instrFile,
+                                               bytesRead,
+                                               fileSize,
+                                               sizeof(strInstrument),
+                                               INSTRUMENT_FILE_VERSION,
+                                               validation))
         {
             strInstrument& instrumentData = instrFile.instrumentDataAndHeader.instrument;
 
-            uint32_t instrumentSampleDataOffset =
-              instrumentHeader.size + (sizeof(strInstrumentFile) - sizeof(strInstrument));
+            uint32_t instrumentSampleDataOffset = validation.dataOffset;
 
             *currentPosition = instrumentSampleDataOffset;
 
@@ -290,11 +311,13 @@ void SdStream::fillBuffer(bool align)
     }
 
     int bufferIdx = getFirstEmptyBufferIdx();
+    bool readFailed = false;
 
     if (isSourceInterleaved)
     {
         writeBuffers[bufferIdx].storedDataSize = fileSystem->readFile(
           writeBuffers[bufferIdx].address, bufferSize - filePos % bufferSize, wavfile);
+        readFailed = writeBuffers[bufferIdx].storedDataSize < 0;
     }
     else
     {
@@ -305,23 +328,44 @@ void SdStream::fillBuffer(bool align)
         fileSystem->seekFileCur(dataLength * sizeof(int16_t), wavfile);
 
         // right buffer is first to detect the file end
-        size_t rightChannelStoredData = fileSystem->readFile(rightAddress, halfBufferSize, wavfile);
+        int32_t rightChannelStoredData =
+          fileSystem->readFile(rightAddress, halfBufferSize, wavfile);
+        readFailed = rightChannelStoredData < 0;
 
-        fileSystem->seekFileCur(-(dataLength * sizeof(int16_t) + rightChannelStoredData), wavfile);
+        if (!readFailed && rightChannelStoredData > 0)
+        {
+            fileSystem->seekFileCur(
+              -(dataLength * sizeof(int16_t) + rightChannelStoredData), wavfile);
 
-        // read from left channel the result bytes from right channel (end file detection) to avoid
-        // exceeding left channel area
-        writeBuffers[bufferIdx].storedDataSize =
-          rightChannelStoredData +
-          fileSystem->readFile(leftAddress, rightChannelStoredData, wavfile);
+            // read from left channel the result bytes from right channel (end file detection) to
+            // avoid exceeding left channel area
+            int32_t leftChannelStoredData =
+              fileSystem->readFile(leftAddress, rightChannelStoredData, wavfile);
+            readFailed = leftChannelStoredData < 0;
 
-        assert((uint32_t)writeBuffers[bufferIdx].storedDataSize == rightChannelStoredData * 2);
+            if (!readFailed)
+            {
+                writeBuffers[bufferIdx].storedDataSize =
+                  rightChannelStoredData + leftChannelStoredData;
 
-        makeBufferInterleaved(writeBuffers[bufferIdx].address,
-                              writeBuffers[bufferIdx].storedDataSize / 4);
+                assert(writeBuffers[bufferIdx].storedDataSize == rightChannelStoredData * 2);
+
+                makeBufferInterleaved(writeBuffers[bufferIdx].address,
+                                      writeBuffers[bufferIdx].storedDataSize / 4);
+            }
+        }
+        else
+        {
+            writeBuffers[bufferIdx].storedDataSize = 0;
+        }
     }
 
-    if (writeBuffers[bufferIdx].storedDataSize < bufferSize && !align)
+    if (readFailed)
+    {
+        writeBuffers[bufferIdx].storedDataSize = 0;
+    }
+
+    if (readFailed || (writeBuffers[bufferIdx].storedDataSize < bufferSize && !align))
     {
         fileSystem->closeFile(wavfile, false);
         isFileOpened = false;

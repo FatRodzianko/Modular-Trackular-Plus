@@ -344,7 +344,12 @@ void mtAudioExport::saveMasterBufferToSD(uint8_t closeFile)
             int32_t written = fileSystem->writeFile(
               ptrWrite, AUDIO_BLOCK_SAMPLES * 2 * 2 * blocksBuffered, wavStemsFile);
 
-            bytesWrittenInStem[stem_master] += written;
+            if (written < 0)
+            {
+                handleError(2);
+                return;
+            }
+            bytesWrittenInStem[stem_master] += static_cast<uint32_t>(written);
         }
         else
         {

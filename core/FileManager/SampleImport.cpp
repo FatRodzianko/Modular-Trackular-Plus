@@ -307,6 +307,7 @@ void SampleImport::loadImportingSamplesData(FileManagerOperation::SampleLoadData
             sampleImportData[instrIdx].ptiFile = true;
 
             strInstrumentFile instrumentFileBuff;
+            uint32_t instrumentFileSize = fileSystem->getFileSize(srcSamplePath);
 
             uint8_t loadStatus = fileTransfer.loadFileToMemory(srcSamplePath,
                                                                (uint8_t*)&instrumentFileBuff,
@@ -315,6 +316,7 @@ void SampleImport::loadImportingSamplesData(FileManagerOperation::SampleLoadData
             if (loadStatus == fileTransferEnd &&
                 newFileManager.loadInstrumentFormFileStruct(&mtProject.instrument[instrIdx],
                                                             &instrumentFileBuff,
+                                                            instrumentFileSize,
                                                             sampleImportData[instrIdx].fileOffset))
             {
                 newFileManager.removeWavExtensionFromName(
@@ -323,7 +325,6 @@ void SampleImport::loadImportingSamplesData(FileManagerOperation::SampleLoadData
 
                 //-------------------------------------------------------------------------------------------
                 bool ptiCorrect = true;
-                uint32_t instrumentFileSize = fileSystem->getFileSize(srcSamplePath);
                 uint32_t instrumentSampleDataSize =
                   instrumentFileSize - sampleImportData[instrIdx].fileOffset;
 
@@ -380,9 +381,7 @@ void SampleImport::loadImportingSamplesData(FileManagerOperation::SampleLoadData
               fileSystem->openFile(srcSamplePath, FileSystem::FileOpenMode::kRead);
             if (isOpen)
             {
-                readHeader(&sampleHead, fileHandle);
-
-                if (checkSampleValid(sampleHead))
+                if (readHeader(&sampleHead, fileHandle) && checkSampleValid(sampleHead))
                 {
                     if (mtProject.instrument[instrIdx].isActive == 0)
                     {
@@ -436,6 +435,8 @@ void SampleImport::loadImportingSamplesData(FileManagerOperation::SampleLoadData
 
                     continue;
                 }
+
+                fileSystem->closeFile(fileHandle);
             }
         }
 

@@ -80,10 +80,11 @@ void FileSystemAdapter::close(FileHandle file)
 
 bool FileSystemAdapter::write(FileHandle file, std::span<const uint8_t> data)
 {
-    return platformFileSystem->writeFile(data.data(), data.size(), file) == data.size();
+    return platformFileSystem->writeFile(data.data(), data.size(), file) ==
+           static_cast<int32_t>(data.size());
 }
 
-size_t FileSystemAdapter::read(FileHandle file, std::span<uint8_t> buf)
+int32_t FileSystemAdapter::read(FileHandle file, std::span<uint8_t> buf)
 {
     return platformFileSystem->readFile(buf.data(), buf.size(), file);
 }

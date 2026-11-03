@@ -125,7 +125,8 @@ uint32_t convertAudioData(ConversionConfig& conversionConfig)
 bool checkSampleValid(const strWavFileHeader& sampleHead)
 {
     if ((sampleHead.waveId != WAVEID) ||
-        ((sampleHead.numChannels != 1) && (sampleHead.numChannels != 2)))
+        ((sampleHead.numChannels != 1) && (sampleHead.numChannels != 2)) ||
+        sampleHead.sampleRate == 0)
     {
         return false;
     }

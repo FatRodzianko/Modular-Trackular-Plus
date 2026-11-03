@@ -273,12 +273,7 @@ void cFileManager::listOnlyWavFromActualPath()
     else if (listWavStage == 1) // stage 1 - przefiltruj znalezione wav o nie obslugiwane
     {
         char* fileName = explorerList[openCurrentPos];
-        uint32_t fileLen = strlen(explorerList[openCurrentPos]);
-
-        if (((fileName[fileLen - 1] == 'V') || (fileName[fileLen - 1] == 'v')) &&
-            ((fileName[fileLen - 2] == 'A') || (fileName[fileLen - 2] == 'a')) &&
-            ((fileName[fileLen - 3] == 'W') || (fileName[fileLen - 3] == 'w')) &&
-            (fileName[fileLen - 4] == '.'))
+        if (hasFileExtension(fileName, "wav"))
         {
             char wav_file[255];
             strcpy(wav_file, explorerCurrentPath);
@@ -289,10 +284,10 @@ void cFileManager::listOnlyWavFromActualPath()
             if (isOpen)
             {
                 strWavFileHeader localHeader;
-                readHeader(&localHeader, fileHandle);
+                bool headerRead = readHeader(&localHeader, fileHandle);
                 fileSystem->closeFile(fileHandle);
 
-                if (checkSampleValid(localHeader))
+                if (headerRead && checkSampleValid(localHeader))
                 {
                     openCurrentPos++;
                     if (openCurrentPos >= explorerListLength)
@@ -303,10 +298,7 @@ void cFileManager::listOnlyWavFromActualPath()
                 }
             }
         }
-        else if (((fileName[fileLen - 1] == 'i') || (fileName[fileLen - 1] == 'I')) &&
-                 ((fileName[fileLen - 2] == 't') || (fileName[fileLen - 2] == 'T')) &&
-                 ((fileName[fileLen - 3] == 'p') || (fileName[fileLen - 3] == 'P')) &&
-                 (fileName[fileLen - 4] == '.'))
+        else if (hasFileExtension(fileName, "pti"))
         {
             openCurrentPos++;
             if (openCurrentPos >= explorerListLength)

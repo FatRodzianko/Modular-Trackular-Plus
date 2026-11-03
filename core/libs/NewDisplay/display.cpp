@@ -404,6 +404,15 @@ void cDisplay::update()
                 uint8_t currentBuffer[imgBufforSize];
                 readBytes = fileSystem->readFile(currentBuffer, imgBufforSize, imgFile);
 
+                if (readBytes < 0)
+                {
+                    fileSystem->closeFile(imgFile, false);
+                    img.status = 0;
+                    img.loadProgress = 0;
+                    loadImage = 0;
+                    return;
+                }
+
                 if (img.loadProgress == 0)
                 {
                     displayDriver->beginCoProListNoCheck();
@@ -1029,6 +1038,12 @@ uint8_t cDisplay::readImgFromSd(char* path, uint32_t address, int16_t max_w, int
     uint8_t currentBuffer[5000];
     readBytes = fileSystem->readFile(currentBuffer, 5000, imgFile);
 
+    if (readBytes < 0)
+    {
+        fileSystem->closeFile(imgFile, false);
+        return 1;
+    }
+
     uint16_t width = 0;
     uint16_t height = 0;
 
@@ -1259,7 +1274,7 @@ bool cDisplay::loadCustomFontFromSD(FileSystem* fs, const char* fontFilePath)
         return false;
 
     PtFontHeader header;
-    if (fs->readFile(&header, sizeof(header), file) != sizeof(header))
+    if (fs->readFile(&header, sizeof(header), file) != static_cast<int32_t>(sizeof(header)))
     {
         fs->closeFile(file);
         return false;
@@ -1272,7 +1287,7 @@ bool cDisplay::loadCustomFontFromSD(FileSystem* fs, const char* fontFilePath)
     }
 
     PtFontEntry entries[displayFontCount];
-    if (fs->readFile(entries, sizeof(entries), file) != sizeof(entries))
+    if (fs->readFile(entries, sizeof(entries), file) != static_cast<int32_t>(sizeof(entries)))
     {
         fs->closeFile(file);
         return false;
@@ -1294,7 +1309,8 @@ bool cDisplay::loadCustomFontFromSD(FileSystem* fs, const char* fontFilePath)
         }
 
         fs->seekFile(entries[i].offset, file);
-        if (fs->readFile(decompressedFontsCommonBuffer, entries[i].size, file) != entries[i].size)
+        if (fs->readFile(decompressedFontsCommonBuffer, entries[i].size, file) !=
+            static_cast<int32_t>(entries[i].size))
         {
             fs->closeFile(file);
             return false;

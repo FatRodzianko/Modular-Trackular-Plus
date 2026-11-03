@@ -33,6 +33,9 @@ struct strWavFileHeader
     uint32_t subchunk2Size; // 40
 };
 
-void readHeader(strWavFileHeader* header, FileSystem::FileHandle fileHandle);
+bool readHeader(strWavFileHeader* header, FileSystem::FileHandle fileHandle);
+bool readHeader(strWavFileHeader* header,
+                FileSystem* fileSystem,
+                FileSystem::FileHandle fileHandle);
 
 #endif /* SOURCE_WAVHEADERREADER_H_ */

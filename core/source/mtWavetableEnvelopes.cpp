@@ -229,11 +229,23 @@ void loadUserWavetablesFromSD(FileSystem* fs)
         if (!opened || !fileHandle) continue;
 
         strWavFileHeader header;
-        readHeader(&header, fileHandle);
+        bool headerRead = readHeader(&header, fileHandle);
 
-        if (header.chunkId == 0x46464952 && header.AudioFormat == 1 && header.numChannels > 0)
+        if (headerRead && header.chunkId == 0x46464952 && header.AudioFormat == 1 &&
+            header.numChannels > 0 &&
+            (header.bitsPerSample == 8 || header.bitsPerSample == 16 || header.bitsPerSample == 24))
         {
-            size_t dataBytes = header.subchunk2Size;
+            size_t fileSize = fs->getFileSize(fileHandle);
+            size_t availableBytes = fs->getFileAvailable(fileHandle);
+            if (availableBytes > fileSize)
+            {
+                fs->closeFile(fileHandle, true);
+                continue;
+            }
+
+            size_t dataOffset = fileSize - availableBytes;
+            size_t dataBytes =
+              availableBytes < header.subchunk2Size ? availableBytes : header.subchunk2Size;
             int bytesPerSample = header.bitsPerSample / 8;
             int channels = header.numChannels;
             int frameSize = bytesPerSample * channels;
@@ -243,41 +255,52 @@ void loadUserWavetablesFromSD(FileSystem* fs)
                 size_t numFrames = dataBytes / frameSize;
                 int16_t rawPts[kWtEnvLength];
                 int16_t minSample = 32767;
+                bool samplesRead = true;
                 for (int pt = 0; pt < kWtEnvLength; ++pt)
                 {
                     size_t frameIdx = (pt * numFrames) / kWtEnvLength;
-                    uint32_t fileOffset = 44 + frameIdx * frameSize;
-                    fs->seekFile(fileOffset, fileHandle);
+                    uint64_t fileOffset = (uint64_t)dataOffset + frameIdx * frameSize;
+                    if (fileOffset > UINT32_MAX || !fs->seekFile((uint32_t)fileOffset, fileHandle))
+                    {
+                        samplesRead = false;
+                        break;
+                    }
 
                     int16_t sample16 = 0;
                     if (header.bitsPerSample == 16)
                     {
-                        fs->readFile(&sample16, 2, fileHandle);
+                        samplesRead = fs->readFile(&sample16, 2, fileHandle) == 2;
                     }
                     else if (header.bitsPerSample == 8)
                     {
                         uint8_t u8 = 0;
-                        fs->readFile(&u8, 1, fileHandle);
+                        samplesRead = fs->readFile(&u8, 1, fileHandle) == 1;
                         sample16 = ((int16_t)u8 - 128) << 8;
                     }
                     else if (header.bitsPerSample == 24)
                     {
                         uint8_t b[3];
-                        fs->readFile(b, 3, fileHandle);
+                        samplesRead = fs->readFile(b, 3, fileHandle) == 3;
                         sample16 = (int16_t)(((int32_t)b[1] << 8) | ((int32_t)b[2] << 16));
                     }
+
+                    if (!samplesRead) break;
 
                     rawPts[pt] = sample16;
                     if (sample16 < minSample) minSample = sample16;
                 }
 
-                bool isBipolar = (minSample < -256);
-                for (int pt = 0; pt < kWtEnvLength; ++pt)
+                if (samplesRead)
                 {
-                    int32_t unipolar = isBipolar ? (((int32_t)rawPts[pt] + 32768) >> 1) : (int32_t)rawPts[pt];
-                    if (unipolar > 32767) unipolar = 32767;
-                    else if (unipolar < 0) unipolar = 0;
-                    g_wtEnvelopeBank[kWtEnvFactoryCount + i][pt] = (int16_t)unipolar;
+                    bool isBipolar = (minSample < -256);
+                    for (int pt = 0; pt < kWtEnvLength; ++pt)
+                    {
+                        int32_t unipolar =
+                          isBipolar ? (((int32_t)rawPts[pt] + 32768) >> 1) : (int32_t)rawPts[pt];
+                        if (unipolar > 32767) unipolar = 32767;
+                        else if (unipolar < 0) unipolar = 0;
+                        g_wtEnvelopeBank[kWtEnvFactoryCount + i][pt] = (int16_t)unipolar;
+                    }
                 }
             }
         }

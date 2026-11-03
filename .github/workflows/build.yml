@@ -17,6 +17,18 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for AI bot Co-authored-by trailers
+        if: github.event_name == 'pull_request'
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          if git log --format="%B" "$BASE_SHA..$HEAD_SHA" | grep -iE "^Co-authored-by:.*(copilot|claude|cursor|anthropic|openai|gemini|windsurf|aider|coderabbit|devin|\[bot\])"; then
+            echo "::error::Please remove AI assistant 'Co-authored-by:' trailers from your commit messages so the repository Contributors list only credits human contributors."
+            exit 1
+          fi
 
       - name: Cache GNU Arm Embedded Toolchain 10.3-2021.10
         id: cache-toolchain

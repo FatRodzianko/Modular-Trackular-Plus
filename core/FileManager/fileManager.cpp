@@ -10,6 +10,7 @@
 
 #include "fileManager.h"
 #include "fileTransfer.h"
+#include "instrumentFileValidation.h"
 
 #include "projectEditor/projectEditor.h"
 
@@ -671,18 +672,30 @@ bool cFileManager::getPtiFileDataOffset(const char* path, uint32_t& dataOffsetOu
         return false;
     }
 
-    strProjectFileHeader instrHeader;
-    memset(&instrHeader, 0, sizeof(instrHeader));
-    int32_t bytesRead = fileSystem->readFile(&instrHeader, sizeof(instrHeader), fileHandle);
+    strInstrumentFile instrumentFile;
+    memset(&instrumentFile, 0, sizeof(instrumentFile));
+    uint32_t fileSize = fileSystem->getFileSize(fileHandle);
+    int32_t bytesRead =
+      fileSystem->readFile(&instrumentFile, sizeof(instrumentFile), fileHandle);
     fileSystem->closeFile(fileHandle);
 
-    if (bytesRead < (int32_t)sizeof(instrHeader) || instrHeader.id_file[0] != 'T' ||
-        instrHeader.id_file[1] != 'I' || instrHeader.size == 0)
+    if (bytesRead < 0)
     {
         return false;
     }
 
-    dataOffsetOut = instrHeader.size + (sizeof(strInstrumentFile) - sizeof(strInstrument));
+    InstrumentFileValidation::Result validation;
+    if (!InstrumentFileValidation::validate((const uint8_t*)&instrumentFile,
+                                            bytesRead,
+                                            fileSize,
+                                            sizeof(strInstrument),
+                                            INSTRUMENT_FILE_VERSION,
+                                            validation))
+    {
+        return false;
+    }
+
+    dataOffsetOut = validation.dataOffset;
     return true;
 }
 

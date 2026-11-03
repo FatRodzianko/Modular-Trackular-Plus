@@ -385,7 +385,7 @@ void FileSystemImpl::endFile(FileHandle fileHandle)
     file->end();
 }
 
-size_t FileSystemImpl::readFile(void* destBuf, size_t destLen, FileHandle fileHandle)
+int32_t FileSystemImpl::readFile(void* destBuf, size_t destLen, FileHandle fileHandle)
 {
     assert(fileHandle != nullptr);
     SdFile* file = (SdFile*)fileHandle;
@@ -395,7 +395,7 @@ size_t FileSystemImpl::readFile(void* destBuf, size_t destLen, FileHandle fileHa
     return file->read(destBuf, destLen);
 }
 
-size_t FileSystemImpl::writeFile(const void* data, size_t dataLen, FileHandle fileHandle)
+int32_t FileSystemImpl::writeFile(const void* data, size_t dataLen, FileHandle fileHandle)
 {
     assert(fileHandle != nullptr);
     SdFile* file = (SdFile*)fileHandle;

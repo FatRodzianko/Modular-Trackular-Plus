@@ -52,7 +52,7 @@ bool PatternsMetadata::readWorkspacePatternsMetadata()
 
 void PatternsMetadata::writeWorkspacePatternsMetadata()
 {
-    return writePatternsMetadata(cWorkspacePatternsMetadataFilePath);
+    writePatternsMetadata(cWorkspacePatternsMetadataFilePath);
 
     mtProject.values.projectNotSavedFlag |= 1;
     newFileManager.setProjectStructChanged();

@@ -36,7 +36,7 @@ class FileSystem
     virtual std::optional<FileHandle> open(const std::string& path, OpenOptions options) = 0;
     virtual void close(FileHandle file) = 0;
     virtual bool write(FileHandle file, std::span<const uint8_t> data) = 0;
-    virtual size_t read(FileHandle file, std::span<uint8_t> buf) = 0;
+    virtual int32_t read(FileHandle file, std::span<uint8_t> buf) = 0;
     virtual bool seek(FileHandle file, int offset) = 0;
 
     virtual void createFolder(const std::string& path) = 0;

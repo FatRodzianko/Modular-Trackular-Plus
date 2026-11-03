@@ -465,13 +465,18 @@ bool ProjectSave::copyInstruments(int idx, uint8_t& copyState)
                         while (remaining > 0)
                         {
                             uint32_t toRead = std::min<uint32_t>(remaining, sizeof(copyBuf));
-                            uint32_t bytesRead = fileSystem->readFile(copyBuf, toRead, srcHandle);
-                            if (bytesRead == 0)
+                            int32_t bytesRead = fileSystem->readFile(copyBuf, toRead, srcHandle);
+                            if (bytesRead <= 0)
                             {
                                 break;
                             }
-                            fileSystem->writeFile(copyBuf, bytesRead, dstHandle);
-                            remaining -= bytesRead;
+                            int32_t bytesWritten =
+                              fileSystem->writeFile(copyBuf, bytesRead, dstHandle);
+                            if (bytesWritten != bytesRead)
+                            {
+                                break;
+                            }
+                            remaining -= static_cast<uint32_t>(bytesRead);
                         }
                         fileSystem->closeFile(dstHandle);
                     }

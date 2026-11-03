@@ -4,6 +4,7 @@
 #include "mtSequencer.h"
 
 #include "fileTransfer.h"
+#include "instrumentFileValidation.h"
 #include <string.h>
 
 extern uint8_t externalRamFileManagerSrcBuff[READ_WRITE_BUFOR_SIZE];
@@ -145,7 +146,7 @@ uint8_t cFileTransfer::loadFileToMemory(const char* file,
 
     if (transferStep == 2)
     {
-        uint32_t result = fileSystem->readFile(memory + sourceMemComplited, memStep, transferFile);
+        int32_t result = fileSystem->readFile(memory + sourceMemComplited, memStep, transferFile);
 
         if (result >= 0)
         {
@@ -201,9 +202,7 @@ uint8_t cFileTransfer::loadSampleToMemory(const char* file,
             sourceMemComplited = 0;
             convertedDataSize = 0;
 
-            readHeader(&sampleHead, transferFile);
-
-            if (!checkSampleValid(sampleHead))
+            if (!readHeader(&sampleHead, transferFile) || !checkSampleValid(sampleHead))
             {
                 fileSystem->closeFile(transferFile, false);
                 transferStep = 0;
@@ -235,7 +234,7 @@ uint8_t cFileTransfer::loadSampleToMemory(const char* file,
 
     if (transferStep == 1)
     {
-        uint32_t result = fileSystem->readFile(externalRamFileManagerBuffL, memStep, transferFile);
+        int32_t result = fileSystem->readFile(externalRamFileManagerBuffL, memStep, transferFile);
 
         if (result >= 0)
         {
@@ -307,59 +306,81 @@ bool cFileTransfer::copyFile(FileSystem* fileSystem,
     }
 
     bool result = false;
-    uint32_t memCopyStep;
-    uint32_t sourceMemComplited;
-    uint32_t sourceMemTotal;
+    bool destinationOpened = false;
+    FileSystem::FileHandle sourceHandle = nullptr;
+    FileSystem::FileHandle destinationHandle = nullptr;
 
-    auto [isSrcOpen, srcFileHandle] =
+    auto [isSourceOpen, openedSourceHandle] =
       fileSystem->openFile(srcFilepath, FileSystem::FileOpenMode::kRead, &transferFile);
+    sourceHandle = openedSourceHandle;
 
-    if (isSrcOpen)
+    if (isSourceOpen)
     {
-        auto [isDestOpen, destFileHandle] = fileSystem->openFile(
-          dstFilepath, FileSystem::FileOpenMode::kWriteCreateNew, &transferFile2);
+        auto [isDestinationOpen, openedDestinationHandle] =
+          fileSystem->openFile(dstFilepath, FileSystem::FileOpenMode::kWriteCreateNew, &transferFile2);
+        destinationHandle = openedDestinationHandle;
+        destinationOpened = isDestinationOpen;
 
-        if (isDestOpen)
+        if (isDestinationOpen)
         {
-            sourceMemTotal = fileSystem->getFileSize(transferFile);
-            memCopyStep = READ_WRITE_BUFOR_SIZE;
-            sourceMemComplited = 0;
+            const size_t sourceSize = fileSystem->getFileSize(sourceHandle);
+            size_t bytesCopied = 0;
+            result = true;
 
-            while (sourceMemComplited < sourceMemTotal)
+            while (bytesCopied < sourceSize)
             {
-                int32_t read_result =
-                  fileSystem->readFile(externalRamFileManagerBuffL, memCopyStep, transferFile);
+                const size_t bytesRemaining = sourceSize - bytesCopied;
+                const size_t bytesToRead =
+                  bytesRemaining < READ_WRITE_BUFOR_SIZE ? bytesRemaining : READ_WRITE_BUFOR_SIZE;
+                const int32_t readResult =
+                  fileSystem->readFile(externalRamFileManagerBuffL, bytesToRead, sourceHandle);
 
-                if (read_result > 0)
+                if (readResult <= 0 || static_cast<size_t>(readResult) > bytesToRead)
                 {
-                    int32_t write_result = fileSystem->writeFile(
-                      externalRamFileManagerBuffL, read_result, transferFile2);
+                    result = false;
+                    break;
+                }
 
-                    if (write_result >= 0)
-                    {
-                        sourceMemComplited += write_result;
+                const size_t bytesRead = static_cast<size_t>(readResult);
+                size_t bytesWritten = 0;
+                while (bytesWritten < bytesRead)
+                {
+                    const size_t bytesToWrite = bytesRead - bytesWritten;
+                    const int32_t writeResult = fileSystem->writeFile(
+                      externalRamFileManagerBuffL + bytesWritten, bytesToWrite, destinationHandle);
 
-                        if (sourceMemComplited >= sourceMemTotal) // eof
-                        {
-                            result = true;
-                            break;
-                        }
-                        else if (read_result == write_result)
-                        {
-                            continue;
-                        }
-                    }
-                    else
+                    if (writeResult <= 0 || static_cast<size_t>(writeResult) > bytesToWrite)
                     {
+                        result = false;
                         break;
                     }
+
+                    bytesWritten += static_cast<size_t>(writeResult);
                 }
+
+                if (!result)
+                {
+                    break;
+                }
+
+                bytesCopied += bytesRead;
             }
         }
     }
 
-    fileSystem->closeFile(transferFile, false);
-    fileSystem->closeFile(transferFile2, false);
+    if (sourceHandle != nullptr)
+    {
+        fileSystem->closeFile(sourceHandle, false);
+    }
+    if (destinationHandle != nullptr)
+    {
+        fileSystem->closeFile(destinationHandle, false);
+    }
+    if (destinationOpened && !result)
+    {
+        fileSystem->remove(dstFilepath);
+    }
+
     return result;
 }
 
@@ -427,23 +448,35 @@ uint8_t cFileTransfer::copyFile(const char* src, const char* dest)
     if (transferStep == 2)
     {
         uint32_t fileNameLen = strlen(src);
+        bool invalidInstrument = false;
 
-        if (((src[fileNameLen - 1] == 'i') || (src[fileNameLen - 1] == 'I')) &&
+        if (fileNameLen >= 4 &&
+            ((src[fileNameLen - 1] == 'i') || (src[fileNameLen - 1] == 'I')) &&
             ((src[fileNameLen - 2] == 't') || (src[fileNameLen - 2] == 'T')) &&
             ((src[fileNameLen - 3] == 'p') || (src[fileNameLen - 3] == 'P')) &&
             (src[fileNameLen - 4] == '.'))
         {
             fileSystem->seekFile(0, transferFile);
-            strProjectFileHeader instrHeader;
-            memset(&instrHeader, 0, sizeof(instrHeader));
+            strInstrumentFile instrumentFile;
+            memset(&instrumentFile, 0, sizeof(instrumentFile));
 
-            fileSystem->readFile(&instrHeader, sizeof(instrHeader), transferFile);
+            int32_t bytesRead =
+              fileSystem->readFile(&instrumentFile, sizeof(instrumentFile), transferFile);
+            InstrumentFileValidation::Result validation;
 
-            if (instrHeader.id_file[0] == 'T' && instrHeader.id_file[1] == 'I' &&
-                instrHeader.size > 0)
+            if (bytesRead >= 0 &&
+                InstrumentFileValidation::validate((const uint8_t*)&instrumentFile,
+                                                   bytesRead,
+                                                   sourceMemComplited,
+                                                   sizeof(strInstrument),
+                                                   INSTRUMENT_FILE_VERSION,
+                                                   validation))
             {
-                convertedDataSize = sourceMemComplited - instrHeader.size +
-                                    (sizeof(strInstrumentFile) - sizeof(strInstrument));
+                convertedDataSize = sourceMemComplited - validation.dataOffset;
+            }
+            else
+            {
+                invalidInstrument = true;
             }
         }
 
@@ -451,6 +484,11 @@ uint8_t cFileTransfer::copyFile(const char* src, const char* dest)
 
         fileSystem->closeFile(transferFile, false);
         fileSystem->closeFile(transferFile2, false);
+        if (invalidInstrument)
+        {
+            fileSystem->remove(dest);
+            return fileTransferFileNoValid;
+        }
         return fileTransferEnd;
     }
 
@@ -480,28 +518,25 @@ uint8_t cFileTransfer::copyInstrumentHeader(const char* src, const char* dest)
 
     int32_t readResult =
       fileSystem->readFile(externalRamFileManagerBuffL, sizeof(strInstrumentFile), transferFile);
+    uint32_t sourceFileSize = fileSystem->getFileSize(transferFile);
     fileSystem->closeFile(transferFile, false);
 
-    if (readResult <= 0)
+    if (readResult < 0)
     {
         return fileTransferError;
     }
 
-    uint32_t headerSize = readResult;
-    if (readResult >= (int32_t)sizeof(strProjectFileHeader))
+    InstrumentFileValidation::Result validation;
+    if (!InstrumentFileValidation::validate(externalRamFileManagerBuffL,
+                                            readResult,
+                                            sourceFileSize,
+                                            sizeof(strInstrument),
+                                            INSTRUMENT_FILE_VERSION,
+                                            validation))
     {
-        strProjectFileHeader* instrHeader = (strProjectFileHeader*)externalRamFileManagerBuffL;
-        if (instrHeader->id_file[0] == 'T' && instrHeader->id_file[1] == 'I' &&
-            instrHeader->size > 0)
-        {
-            uint32_t calcHeaderSize =
-              instrHeader->size + (sizeof(strInstrumentFile) - sizeof(strInstrument));
-            if (calcHeaderSize <= (uint32_t)readResult)
-            {
-                headerSize = calcHeaderSize;
-            }
-        }
+        return fileTransferFileNoValid;
     }
+    uint32_t headerSize = validation.dataOffset;
 
     auto [isDestOpen, destFileHandle] =
       fileSystem->openFile(dest, FileSystem::FileOpenMode::kWriteCreateNew, &transferFile2);
@@ -543,20 +578,19 @@ uint8_t cFileTransfer::copySample(const char* src,
 
         if (isOpen)
         {
-            readHeader(&sampleHead, transferFile);
+            if (!readHeader(&sampleHead, transferFile) || !checkSampleValid(sampleHead))
+            {
+                fileSystem->closeFile(transferFile, false);
+                transferStep = 0;
+                return fileTransferFileNoValid;
+            }
+
             if (sampleRate != defaultSampleRate)
             {
                 // trigger resampling in convertAudioData to target sampleRate
                 // by faking source rate in inverse proportions
                 sampleHead.sampleRate = (uint64_t)sampleHead.sampleRate * 44100 / sampleRate;
                 sampleHead.byteRate = (uint64_t)sampleHead.byteRate * 44100 / sampleRate;
-            }
-
-            if (!checkSampleValid(sampleHead))
-            {
-                fileSystem->closeFile(transferFile, false);
-                transferStep = 0;
-                return fileTransferFileNoValid;
             }
 
             auto [isDestOpen, fileDestHandle] =
@@ -1052,20 +1086,19 @@ uint8_t cFileTransfer::copySampleToInstrumentFile(const char* src,
           fileSystem->openFile(src, FileSystem::FileOpenMode::kRead, &transferFile);
         if (isOpen)
         {
-            readHeader(&sampleHead, transferFile);
+            if (!readHeader(&sampleHead, transferFile) || !checkSampleValid(sampleHead))
+            {
+                fileSystem->closeFile(transferFile, false);
+                transferStep = 0;
+                return fileTransferFileNoValid;
+            }
+
             if (sampleRate != defaultSampleRate)
             {
                 // trigger resampling in convertAudioData to target sampleRate
                 // by faking source rate in inverse proportions
                 sampleHead.sampleRate = (uint64_t)sampleHead.sampleRate * 44100 / sampleRate;
                 sampleHead.byteRate = (uint64_t)sampleHead.byteRate * 44100 / sampleRate;
-            }
-
-            if (!checkSampleValid(sampleHead))
-            {
-                fileSystem->closeFile(transferFile, false);
-                transferStep = 0;
-                return fileTransferFileNoValid;
             }
 
             auto [isDestOpen, fileDestHandle] =
@@ -1143,7 +1176,7 @@ uint8_t cFileTransfer::copySampleToInstrumentFile(const char* src,
             memStep = sourceMemTotal - sourceMemComplited;
         }
 
-        uint32_t bytesReadFromSource =
+        int32_t bytesReadFromSource =
           fileSystem->readFile(externalRamFileManagerSrcBuff, memStep, transferFile);
 
         if (bytesReadFromSource == 0) // koniec pliku - koncz kopiowanie

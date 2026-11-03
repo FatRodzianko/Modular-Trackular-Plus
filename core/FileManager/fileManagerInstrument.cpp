@@ -6,8 +6,10 @@
 #include "fileManager.h"
 #include "fileManagerDefs.h"
 #include "fileTransfer.h"
+#include "instrumentFileValidation.h"
 #include "log.h"
 #include "mtFileManagerOldVersionRecovery.h"
+#include "util_string.h"
 
 #include <algorithm>
 #include <cstring>
@@ -200,7 +202,11 @@ bool cFileManager::startNewInstrumentSampleLoad(int idx,
         if (isOpen)
         {
             strWavFileHeader sampleHead;
-            readHeader(&sampleHead, fileHandle);
+            if (!readHeader(&sampleHead, fileHandle) || !checkSampleValid(sampleHead))
+            {
+                fileSystem->closeFile(fileHandle);
+                return false;
+            }
 
             uint32_t sourceMemTotal = fileSystem->getFileAvailable(
               fileHandle); // pobiera wielkosc dopiero po przesciu przez header
@@ -656,35 +662,42 @@ uint8_t cFileManager::saveInstrument(uint8_t idx)
 
 bool cFileManager::loadInstrumentFormFileStruct(strInstrument* instrument,
                                                 strInstrumentFile* instrumentFile,
+                                                uint32_t instrumentFileSize,
                                                 uint32_t& instrumentFileDataOffsetOut)
 {
     instrumentFileDataOffsetOut = 0;
 
-    if (((strInstrumentFile*)instrumentFile)->instrumentDataAndHeader.instrHeader.type !=
-        fileTypeInstrument)
+    InstrumentFileValidation::Result validation;
+    const uint32_t loadedSize =
+      std::min(instrumentFileSize, (uint32_t)sizeof(strInstrumentFile));
+    if (!InstrumentFileValidation::validate((const uint8_t*)instrumentFile,
+                                            loadedSize,
+                                            instrumentFileSize,
+                                            sizeof(strInstrument),
+                                            INSTRUMENT_FILE_VERSION,
+                                            validation))
     {
         return false;
     }
 
-    if (instrumentFile->instrumentDataAndHeader.instrHeader.fileStructureVersion[0] <
-        INSTRUMENT_FILE_VERSION)
+    if (validation.instrumentSize < sizeof(strInstrument))
+    {
+        memset((uint8_t*)&instrumentFile->instrumentDataAndHeader.instrument +
+                 validation.instrumentSize,
+               0,
+               sizeof(strInstrument) - validation.instrumentSize);
+    }
+
+    const uint8_t fileVersion =
+      instrumentFile->instrumentDataAndHeader.instrHeader.fileStructureVersion[0];
+    if (fileVersion < INSTRUMENT_FILE_VERSION)
     {
         //"older version of instrument file opened"
 
-        versionRecovery.translateinstrument(
-          instrumentFile->instrumentDataAndHeader.instrHeader.fileStructureVersion[0],
-          INSTRUMENT_FILE_VERSION,
-          instrumentFile);
-    }
-    else if (instrumentFile->instrumentDataAndHeader.instrHeader.fileStructureVersion[0] >
-             PROJECT_FILE_VERSION)
-    {
-        //"newer version of instrument file opened"
-        // todo: informacja do interfejsu zeby wyswietlic popup
+        versionRecovery.translateinstrument(fileVersion, INSTRUMENT_FILE_VERSION, instrumentFile);
     }
 
-    instrumentFileDataOffsetOut = instrumentFile->instrumentDataAndHeader.instrHeader.size +
-                                  (sizeof(strInstrumentFile) - sizeof(strInstrument));
+    instrumentFileDataOffsetOut = validation.dataOffset;
 
     memcpy(instrument, &instrumentFile->instrumentDataAndHeader.instrument, sizeof(strInstrument));
 
@@ -881,14 +894,9 @@ void cFileManager::checkLoopParameters(struct strInstrument* instr)
 
 void cFileManager::removeWavExtensionFromName(char* fileName)
 {
-    uint32_t fileNameLen = strlen(fileName);
-
-    if (((fileName[fileNameLen - 1] == 'V') || (fileName[fileNameLen - 1] == 'v')) &&
-        ((fileName[fileNameLen - 2] == 'A') || (fileName[fileNameLen - 2] == 'a')) &&
-        ((fileName[fileNameLen - 3] == 'W') || (fileName[fileNameLen - 3] == 'w')) &&
-        (fileName[fileNameLen - 4] == '.'))
+    if (hasFileExtension(fileName, "wav"))
     {
-        fileName[fileNameLen - 4] = 0;
+        fileName[strlen(fileName) - 4] = 0;
     }
 }
 
@@ -897,13 +905,9 @@ void cFileManager::copySampleNameWithoutExtension(char* sampleName, char* fileNa
     strncpy(sampleName, fileName, maxLength);
     sampleName[maxLength] = 0;
 
-    int fileNameLen = strlen(fileName);
-
-    if (((fileName[fileNameLen - 1] == 'V') || (fileName[fileNameLen - 1] == 'v')) &&
-        ((fileName[fileNameLen - 2] == 'A') || (fileName[fileNameLen - 2] == 'a')) &&
-        ((fileName[fileNameLen - 3] == 'W') || (fileName[fileNameLen - 3] == 'w')) &&
-        (fileName[fileNameLen - 4] == '.'))
+    if (hasFileExtension(fileName, "wav"))
     {
+        int fileNameLen = strlen(fileName);
         if ((fileNameLen - 4) <= maxLength)
         {
             sampleName[fileNameLen - 4] = 0;
@@ -913,13 +917,5 @@ void cFileManager::copySampleNameWithoutExtension(char* sampleName, char* fileNa
 
 bool cFileManager::isFilePtiInstrument(char* file)
 {
-    uint32_t fileLen = strlen(file);
-
-    if (((file[fileLen - 1] == 'i') || (file[fileLen - 1] == 'I')) &&
-        ((file[fileLen - 2] == 't') || (file[fileLen - 2] == 'T')) &&
-        ((file[fileLen - 3] == 'p') || (file[fileLen - 3] == 'P')) && (file[fileLen - 4] == '.'))
-    {
-        return true;
-    }
-    return false;
+    return hasFileExtension(file, "pti");
 }

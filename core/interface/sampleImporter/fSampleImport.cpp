@@ -12,6 +12,7 @@
 #include "mtConfig.h"
 #include "mtPadBoard.h"
 #include "mtPadsBacklight.h"
+#include "util_string.h"
 
 #include <cr_section_macros.h>
 
@@ -540,12 +541,7 @@ static void functInstrumentImport()
     SI->playFromPads(INTERFACE_BUTTON_PREVIEW, buttonRelease, -1);
 
     char* fileName = SI->explorerNames[SI->selectedFile];
-    int fileLen = strlen(SI->explorerNames[SI->selectedFile]);
-
-    if (((fileName[fileLen - 1] == 'i') || (fileName[fileLen - 1] == 'I')) &&
-        ((fileName[fileLen - 2] == 't') || (fileName[fileLen - 2] == 'T')) &&
-        ((fileName[fileLen - 3] == 'p') || (fileName[fileLen - 3] == 'P')) &&
-        (fileName[fileLen - 4] == '.'))
+    if (hasFileExtension(fileName, "pti"))
     {
         return;
     }

@@ -367,10 +367,7 @@ char* FileBrowser::getCurrentPath()
 
 bool FileBrowser::checkFilenameExtension(const char* filename, const char* extension)
 {
-    int fileNameLen = strlen(filename);
-    int extLen = strlen(extension);
-
-    return strcasecmp(extension, &filename[fileNameLen - extLen]) == 0;
+    return hasFileExtension(filename, extension);
 }
 
 bool FileBrowser::createFolderInCurrentPath(char* folderName)

@@ -61,5 +61,7 @@ Before submitting your PR, verify the following:
   * If adding a UI shortcut or screen interaction, verify how it operates on both the **Desktop form factor** (Original Tracker & Tracker+: 48 pads, rotary jog-wheel, dedicated function buttons) and **Tracker Mini** (`#ifdef TRACKER_MINI`: D-pad, `interfaceButtonMiniMiddle`, `[Shift]` combinations).
 * **Code Style**:
   * Format only your modified lines/files using [`core/.clang-format`](core/.clang-format).
+* **Human Commit Attribution (No AI Bot Trailers)**:
+  * Commit authors and `Co-authored-by:` trailers must only reference human contributors. Please strip any `Co-authored-by:` lines added by AI coding tools (such as `Copilot`, `Claude`, `Cursor`, etc.) before opening a PR so the repository's Contributors list reflects human contributors only.
 * **License Compliance**:
   * By submitting a PR, you agree that your contribution is licensed under the repository's [`LICENSE`](LICENSE) (PolyForm Noncommercial 1.0.0 with Polyend Additional Permissions for firmware/headers/docs, and MIT License for `editor-fx-sdk/`), and that Polyend Sp. z o.o. may also use, distribute, and relicense contributed changes in official Polyend firmware and products. If you include permissively licensed third-party code, add its attribution to [`NOTICE.md`](NOTICE.md).

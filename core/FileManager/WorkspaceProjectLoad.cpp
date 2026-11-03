@@ -226,7 +226,7 @@ bool WorkspaceProjectLoad::openProjectFromWorkspace()
 //=================================================================================================
 void WorkspaceProjectLoad::loadProjectFileFromWorkspace()
 {
-    strProjectFile* fileManagerProjectBuffer = new strProjectFile;
+    strProjectFile* fileManagerProjectBuffer = new strProjectFile{};
 
     uint8_t loadStatus = fileTransfer.loadFileToMemory(cProjectFileNameInWorkspace,
                                                        (uint8_t*)fileManagerProjectBuffer,
@@ -286,6 +286,7 @@ bool WorkspaceProjectLoad::loadInstrStruct(int idx, uint32_t& instrumentFileData
     }
 
     strInstrumentFile fileManagerInstrumentBuffer;
+    uint32_t instrumentFileSize = fileSystem->getFileSize(instrumentToLoad);
 
     uint8_t loadStatus = fileTransfer.loadFileToMemory(instrumentToLoad,
                                                        (uint8_t*)&fileManagerInstrumentBuffer,
@@ -296,17 +297,12 @@ bool WorkspaceProjectLoad::loadInstrStruct(int idx, uint32_t& instrumentFileData
     {
         if (newFileManager.loadInstrumentFormFileStruct(&mtProject.instrument[idx],
                                                         &fileManagerInstrumentBuffer,
+                                                        instrumentFileSize,
                                                         instrumentFileDataOffsetOut))
         {
-            uint32_t instrumentFileSize = fileSystem->getFileSize(instrumentToLoad);
-
-            if (instrumentFileSize >= instrumentFileDataOffsetOut)
-            {
-                newFileManager.removeWavExtensionFromName(
-                  mtProject.instrument[idx].sample.file_name);
-                mtProject.instrument[idx].isActive = 1;
-                return true;
-            }
+            newFileManager.removeWavExtensionFromName(mtProject.instrument[idx].sample.file_name);
+            mtProject.instrument[idx].isActive = 1;
+            return true;
         }
     }
 

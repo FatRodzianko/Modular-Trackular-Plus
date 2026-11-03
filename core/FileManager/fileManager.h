@@ -366,6 +366,7 @@ class cFileManager
 
     bool loadInstrumentFormFileStruct(strInstrument* instrument,
                                       strInstrumentFile* instrumentFile,
+                                      uint32_t instrumentFileSize,
                                       uint32_t& instrumentFileDataOffsetOut);
 
     void completeLoadedInstrumentStruct(int idx, bool success, uint32_t samplesCount = 0);
@@ -521,6 +522,9 @@ class cFileManager
 
     void loadPatternFromWorkspaceFinish();
 
+    bool validatePatternFileData(const char* filePath,
+                                 const Sequencer::strPattern* pattern,
+                                 size_t fileSize);
     bool writePatternFile(const char* filePath, Sequencer::strPattern* sourcePattern);
     bool readPatternFile(const char* filePath, Sequencer::strPattern* destPattern);
     bool saveActualPattern(const char* path, uint8_t index);

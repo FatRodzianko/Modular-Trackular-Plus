@@ -95,7 +95,7 @@ void Recorder::update()
             bool areChannelsAvailable =
               std::all_of(recordingQueue,
                           recordingQueue + config.sourceChannels,
-                          [this](auto& queue) { return queue->available() > 0; });
+                          [](auto& queue) { return queue->available() > 0; });
 
             if (areChannelsAvailable)
             {
@@ -110,13 +110,6 @@ void Recorder::update()
 
                 recordingHeadIdx += AUDIO_BLOCK_SAMPLES;
             }
-            else
-            {
-                for (int sourceChannel = 0; sourceChannel < config.sourceChannels; sourceChannel++)
-                {
-                    recordingQueue[sourceChannel]->freeBuffer();
-                }
-            }
         }
         else if (isDestinationMono)
         {
@@ -128,7 +121,7 @@ void Recorder::update()
                 bool areChannelsAvailable =
                   std::all_of(recordingQueue,
                               recordingQueue + config.sourceChannels,
-                              [this](auto& queue) { return queue->available() > 0; });
+                              [](auto& queue) { return queue->available() > 0; });
 
                 if (areChannelsAvailable)
                 {
@@ -197,16 +190,30 @@ void Recorder::stop()
 
     if (isActive)
     {
-        while ((recordingQueue[AudioInput::InputChannels::kLeft]->available() > 0) ||
-               (recordingQueue[AudioInput::InputChannels::kRight]->available() > 0))
+        if (config.sourceChannels == 1)
         {
-            update();
+            while (isActive && recordingQueue[AudioInput::InputChannels::kLeft]->available() > 0)
+            {
+                update();
+            }
         }
+        else if (config.sourceChannels == 2)
+        {
+            while (isActive && recordingQueue[AudioInput::InputChannels::kLeft]->available() > 0 &&
+                   recordingQueue[AudioInput::InputChannels::kRight]->available() > 0)
+            {
+                update();
+            }
+        }
+        else
+        {
+            assert(false);
+        }
+    }
 
-        for (int sourceChannel = 0; sourceChannel < config.sourceChannels; sourceChannel++)
-        {
-            recordingQueue[sourceChannel]->clear();
-        }
+    for (int sourceChannel = 0; sourceChannel < config.sourceChannels; sourceChannel++)
+    {
+        recordingQueue[sourceChannel]->clear();
     }
 
     finishRecording();
@@ -269,6 +276,11 @@ uint32_t Recorder::getSize()
 
 void Recorder::finishRecording()
 {
+    if (!isActive)
+    {
+        return;
+    }
+
     isActive = false;
     inputStereoToMono->setOutSignalType(
       (AudioStereoToMono::OutSignalType)mtConfig.general.lineInOutType);

@@ -146,10 +146,10 @@ bool PtfxLoader::readHeader(const char* filepath, PtfxHeader& outHeader)
         return false;
 
     alignas(32) PtfxHeader tempHeader;
-    size_t bytesRead = fs->readFile(&tempHeader, sizeof(PtfxHeader), fileHandle);
+    int32_t bytesRead = fs->readFile(&tempHeader, sizeof(PtfxHeader), fileHandle);
     fs->closeFile(fileHandle);
 
-    if (bytesRead != sizeof(PtfxHeader))
+    if (bytesRead != static_cast<int32_t>(sizeof(PtfxHeader)))
         return false;
 
     if (tempHeader.magic != PTFX_MAGIC || tempHeader.format_version != 1)
@@ -185,13 +185,13 @@ bool PtfxLoader::loadPlugin(const char* filepath,
         size_t chunk = sizeof(PtfxHeader) - headerBytesRead;
         if (chunk > 256)
             chunk = 256;
-        size_t n = fs->readFile(headerPtr + headerBytesRead, chunk, fileHandle);
-        if (n != chunk)
+        int32_t n = fs->readFile(headerPtr + headerBytesRead, chunk, fileHandle);
+        if (n != static_cast<int32_t>(chunk))
         {
             fs->closeFile(fileHandle);
             return false;
         }
-        headerBytesRead += n;
+        headerBytesRead += static_cast<size_t>(n);
     }
 
     if (outHeader.magic != PTFX_MAGIC || outHeader.format_version != 1)
@@ -238,10 +238,10 @@ bool PtfxLoader::loadPlugin(const char* filepath,
         size_t chunk = outHeader.code_size - bytesRead;
         if (chunk > 256)
             chunk = 256;
-        size_t n = fs->readFile(codeBuf + bytesRead, chunk, fileHandle);
-        if (n != chunk)
+        int32_t n = fs->readFile(codeBuf + bytesRead, chunk, fileHandle);
+        if (n != static_cast<int32_t>(chunk))
             break;
-        bytesRead += n;
+        bytesRead += static_cast<size_t>(n);
     }
     fs->closeFile(fileHandle);
 

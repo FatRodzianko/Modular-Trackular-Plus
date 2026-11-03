@@ -1484,10 +1484,10 @@ bool ThemeManager::applyTheme(uint8_t index)
         return false;
     }
 
-    size_t bytesRead = fs->readFile(s_fileReadBuffer, sizeof(s_fileReadBuffer) - 1, file);
+    int32_t bytesRead = fs->readFile(s_fileReadBuffer, sizeof(s_fileReadBuffer) - 1, file);
     fs->closeFile(file);
 
-    if (bytesRead == 0)
+    if (bytesRead <= 0)
     {
         currentThemeIndex = 0;
         display.setTheme(0);
@@ -1497,7 +1497,7 @@ bool ThemeManager::applyTheme(uint8_t index)
 
     s_fileReadBuffer[bytesRead] = '\0';
 
-    if (!parseThemeJson(s_fileReadBuffer, bytesRead, themeCustom))
+    if (!parseThemeJson(s_fileReadBuffer, static_cast<size_t>(bytesRead), themeCustom))
     {
         currentThemeIndex = 0;
         display.setTheme(0);

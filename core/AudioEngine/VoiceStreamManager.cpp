@@ -298,8 +298,13 @@ bool VoiceStreamManager::setupInstrumentStream(int instrIdx,
             return false;
         }
         size_t toRead = preCacheFrames * sizeof(int16_t);
-        size_t rd = fs->readFile(dst, toRead, fh);
-        if (rd < toRead)
+        int32_t rd = fs->readFile(dst, toRead, fh);
+        if (rd < 0)
+        {
+            fs->closeFile(fh);
+            return false;
+        }
+        if (static_cast<size_t>(rd) < toRead)
         {
             memset(reinterpret_cast<uint8_t*>(dst) + rd, 0, toRead - rd);
         }
@@ -378,8 +383,13 @@ bool VoiceStreamManager::setupInstrumentStream(int instrIdx,
                 }
                 if (fs->seekFile(chOffset + start * sizeof(int16_t), fh))
                 {
-                    size_t rd = fs->readFile(windowBuf, count * sizeof(int16_t), fh);
-                    uint32_t samplesRead = (uint32_t)(rd / sizeof(int16_t));
+                    int32_t rd = fs->readFile(windowBuf, count * sizeof(int16_t), fh);
+                    if (rd < 0)
+                    {
+                        fs->closeFile(fh);
+                        return false;
+                    }
+                    uint32_t samplesRead = static_cast<uint32_t>(rd) / sizeof(int16_t);
                     if (samplesRead > 0)
                     {
                         firstSample = windowBuf[0];
@@ -518,8 +528,20 @@ void VoiceStreamManager::refreshInstrumentSliceCache(int instrIdx)
                               (ch == 1 ? (totalFrames * sizeof(int16_t)) : 0);
                             if (fs->seekFile(chOffset + kLinearHalf * sizeof(int16_t), fh))
                             {
-                                fs->readFile(
-                                  dst + kLinearHalf, restoreCount * sizeof(int16_t), fh);
+                                size_t toRead = restoreCount * sizeof(int16_t);
+                                int32_t rd =
+                                  fs->readFile(dst + kLinearHalf, toRead, fh);
+                                if (rd < 0)
+                                {
+                                    fs->closeFile(fh);
+                                    return;
+                                }
+                                if (static_cast<size_t>(rd) < toRead)
+                                {
+                                    memset(reinterpret_cast<uint8_t*>(dst + kLinearHalf) + rd,
+                                           0,
+                                           toRead - rd);
+                                }
                             }
                         }
                     }
@@ -605,8 +627,13 @@ void VoiceStreamManager::refreshInstrumentSliceCache(int instrIdx)
                     if (fs->seekFile(chOffset + rawStart * sizeof(int16_t), fh))
                     {
                         size_t toRead = count * sizeof(int16_t);
-                        size_t rd = fs->readFile(dst + bufOff, toRead, fh);
-                        if (rd < toRead)
+                        int32_t rd = fs->readFile(dst + bufOff, toRead, fh);
+                        if (rd < 0)
+                        {
+                            fs->closeFile(fh);
+                            return;
+                        }
+                        if (static_cast<size_t>(rd) < toRead)
                         {
                             memset(reinterpret_cast<uint8_t*>(dst + bufOff) + rd,
                                    0,
@@ -720,8 +747,13 @@ void VoiceStreamManager::refreshInstrumentSingleSliceCache(int instrIdx, uint8_t
             if (fs->seekFile(chOffset + rawStart * sizeof(int16_t), fh))
             {
                 size_t toRead = count * sizeof(int16_t);
-                size_t rd = fs->readFile(dst + bufOff, toRead, fh);
-                if (rd < toRead)
+                int32_t rd = fs->readFile(dst + bufOff, toRead, fh);
+                if (rd < 0)
+                {
+                    fs->closeFile(fh);
+                    return;
+                }
+                if (static_cast<size_t>(rd) < toRead)
                 {
                     memset(reinterpret_cast<uint8_t*>(dst + bufOff) + rd, 0, toRead - rd);
                 }
@@ -1119,8 +1151,8 @@ bool VoiceStreamManager::readInstrumentFramesBlocking(int instrIdx,
     bool ok = fs->seekFile(byteOffset, fh);
     if (ok)
     {
-        size_t rd = fs->readFile(dest, bytesToRead, fh);
-        ok = (rd == bytesToRead);
+        int32_t rd = fs->readFile(dest, bytesToRead, fh);
+        ok = (rd == static_cast<int32_t>(bytesToRead));
     }
     fs->closeFile(fh);
     return ok;

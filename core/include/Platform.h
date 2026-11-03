@@ -367,8 +367,8 @@ class FileSystem
       FileOpenMode openMode = kRead,
       // non-null file handle means that fileHandle is already created
       FileHandle* fileHandle = nullptr) = 0;
-    virtual size_t readFile(void* destBuf, size_t bufLen, FileHandle file) = 0;
-    virtual size_t writeFile(const void* data, size_t dataSize, FileHandle fileHandle) = 0;
+    virtual int32_t readFile(void* destBuf, size_t bufLen, FileHandle file) = 0;
+    virtual int32_t writeFile(const void* data, size_t dataSize, FileHandle fileHandle) = 0;
     virtual bool seekFileCur(int offset, FileHandle fileHandle) = 0;
     virtual bool seekFile(uint32_t pos, FileHandle fileHandle) = 0;
     virtual void closeFile(FileHandle file, bool deleteOnClose = true) = 0;

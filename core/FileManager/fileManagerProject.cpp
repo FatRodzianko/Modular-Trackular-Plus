@@ -53,8 +53,20 @@ bool cFileManager::loadProjectFileFormFileStruct(strMtProject* project, strProje
     if (pFile->projectDataAndHeader.projectHeader.type != fileTypeProject)
         return false;
 
-    [[maybe_unused]] uint32_t checkCRC = crcCalculator->calculate32bitCrc(
-      (uint8_t*)&pFile->projectDataAndHeader, sizeof(pFile->projectDataAndHeader));
+    uint16_t projectFileSize = pFile->projectDataAndHeader.projectHeader.size;
+    if (projectFileSize < sizeof(strProjectFileHeader) + sizeof(uint32_t) ||
+        projectFileSize > sizeof(strProjectFile))
+    {
+        return false;
+    }
+
+    uint16_t projectDataSize = projectFileSize - sizeof(uint32_t);
+    uint32_t storedCRC;
+    memcpy(&storedCRC, (uint8_t*)pFile + projectDataSize, sizeof(storedCRC));
+    uint32_t checkCRC =
+      crcCalculator->calculate32bitCrc((uint8_t*)pFile, projectDataSize);
+    // Older IMX firmware wrote zero because its CRC calculator was a stub.
+    const bool hasStoredCRC = storedCRC != 0;
 
 #ifdef FILEMANAGER_DEBUGLOG
     char line[60];
@@ -66,7 +78,7 @@ bool cFileManager::loadProjectFileFormFileStruct(strMtProject* project, strProje
             pFile->projectDataAndHeader.projectHeader.fwVersion[2],
             b_ver > 0 && b_ver < 255 ? "beta " : "",
             b_ver,
-            checkCRC == pFile->crc ? "ok" : "err");
+            !hasStoredCRC ? "n/a" : checkCRC == storedCRC ? "ok" : "err");
     debugLog.addLine(line);
 #endif
 

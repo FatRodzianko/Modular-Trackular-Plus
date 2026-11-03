@@ -57,7 +57,12 @@ void cFileManager::drawSampleWaveformInit()
     }
 
     strWavFileHeader wavHeader;
-    readHeader(&wavHeader, wavfile);
+    if (!readHeader(&wavHeader, wavfile) || !checkSampleValid(wavHeader))
+    {
+        fileSystem->closeFile(wavfile, false);
+        stopOperationWithError(fmDrawingSampleWaveformError);
+        return;
+    }
 
     size_t fileAvailable = fileSystem->getFileAvailable(wavfile);
 

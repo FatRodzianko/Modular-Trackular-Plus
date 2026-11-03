@@ -17,7 +17,7 @@ class FileSystemAdapter : public polysynth::FileSystem
       polysynth::FileSystem::OpenOptions options) override;
     void close(FileHandle file) override;
     bool write(FileHandle file, std::span<const uint8_t> data) override;
-    size_t read(FileHandle file, std::span<uint8_t> buf) override;
+    int32_t read(FileHandle file, std::span<uint8_t> buf) override;
     bool seek(FileHandle file, int offset) override;
 
     void createFolder(const std::string& path) override;
