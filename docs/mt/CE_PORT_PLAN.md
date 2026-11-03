@@ -1,7 +1,7 @@
 # Porting the mods to Tracker CE: build plan
 
-Status: step 0 built and hardware-tested (2026-11-02); per-project mod sets
-(section 1.12) planned as step 0b. Base: Polyend Tracker CE v1.0.0
+Status: step 0 built, hardware-tested and committed (2026-11-02); step 0b, per-project
+mod sets (section 1.12), built and tested off-device. Base: Polyend Tracker CE v1.0.0
 (`9b9a13b`) in the fork `FatRodzianko/Modular-Trackular-Plus`, branch `modular`.
 Background, licence and the per-mod survey: [TRACKER_CE_REVIEW.md](TRACKER_CE_REVIEW.md).
 Line numbers below are for CE v1.0.0 and only show where to look; they move with
@@ -99,8 +99,12 @@ core/mods/tests/           host tests (built and run in CI with the host gcc)
   `menuTypeItemListTextWithAction` pattern CE uses for its own switches
   (`melSnapToZeroMode`). The action stores the bit and writes `mods.cfg`. A last item
   shows how many mods the build has.
-- **Config → Project Settings → Mods**: the same list for the open project. Changing
-  one marks the project changed, like any other project setting.
+- **Config → Project Settings → Mods**: the same list for the open project, then a
+  "Defaults: Config > Mods" line saying where the defaults are (step 0b). Changing one
+  marks the project changed, like any other project setting. It is CE's first group
+  inside a group: CE's menu code handles it (Enter goes in, Back comes out) but CE
+  itself never used it. With chords, each Config → Mods item's description says it is
+  the default for new projects.
 - **Per-project settings stay in Config → Project Settings**, where the 1.2.0 users
   know them (Global Swing, Humanize, Interpolate, Master FX, Slice Thru, Resample):
   new groups under `menuProject` (`projectMenuGroupCount` grows by one per group).
@@ -273,10 +277,11 @@ Asked for on 2026-11-02, after the step-0 hardware check.
   two actions on.
 
 **Step 0b** (before chords, small): `mods.cfg` record 0 becomes the defaults; the
-project store gets record 0; `mods::on` reads the project's set; New Project copies
-the defaults; Config → Project Settings → Mods group (empty until chords). Host
-tests for each case above. Nothing changes on the device until chords adds a switch,
-so its hardware check folds into chords'.
+project store gets record 0 (`modsSwitches.cpp` reads and writes it for both files);
+`mods::on` reads the project's set; New Project copies the defaults; importers say
+whether the project used their mod. Config → Project Settings → Mods holds only the
+"Defaults" line until chords. Host tests cover each case above. On the device the only
+change is that group; the switches themselves get their hardware check with chords.
 
 ## 2. Step 0: groundwork, before any mod
 

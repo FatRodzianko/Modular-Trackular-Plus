@@ -11,6 +11,7 @@
 
 #include "modsConfig.h"
 #include "modsProject.h"
+#include "modsSwitches.h"
 
 #include "Platform.h"
 #include "fileManager.h"
@@ -132,12 +133,17 @@ void init(FileSystem* fileSystem)
     configStore.clear();
     projectStore.clear();
     project::setChangedCallback(markProjectChanged);
-    config::load(fileIo, configStore);
+    config::load(fileIo, configStore, defaults.data(), kModCount);
 }
 
-void switchChanged()
+void defaultsChanged()
 {
-    config::save(fileIo, configStore);
+    config::save(fileIo, configStore, defaults.data(), kModCount);
+}
+
+void projectSwitchChanged()
+{
+    project::setSwitches(projectStore, switches.data(), kModCount);
 }
 
 void onProjectOpenCopy()
@@ -155,7 +161,12 @@ void onProjectOpenCopy()
 void onWorkspaceLoaded()
 {
     char path[project::kPathSize];
-    project::loadFromWorkspace(fileIo, projectStore, currentProjectFolder(path));
+    project::loadFromWorkspace(fileIo,
+                               projectStore,
+                               currentProjectFolder(path),
+                               defaults.data(),
+                               switches.data(),
+                               kModCount);
 }
 
 void onWorkspaceSaved()

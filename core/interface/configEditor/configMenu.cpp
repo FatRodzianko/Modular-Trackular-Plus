@@ -24,7 +24,7 @@ constexpr uint8_t projectMenuGroupCount = 10;
 constexpr uint8_t generalMenuGroupCount = 9;
 #elif defined(PLATFORM_IMX)
 constexpr uint8_t baseMenuGroupCount = 7 + MT_MODS; // MT: + Mods
-constexpr uint8_t projectMenuGroupCount = 10;
+constexpr uint8_t projectMenuGroupCount = 10 + MT_MODS; // MT: + Mods
 constexpr uint8_t generalMenuGroupCount = 12;
 #else
 constexpr uint8_t baseMenuGroupCount = 6;
@@ -88,6 +88,14 @@ cMenuItem melLimiterMode(menuProject, "Limiter mode", limiterDesc, menuTypeItemL
 cMenuItem melSendsMode(menuProject, "Sends mode", sendsDesc,  menuTypeItemListTextWithAction, &setupSendsMode);
 cMenuItem melHeadroomMode(menuProject, "Extra headroom", headroomDesc,  menuTypeItemListTextWithAction, &setupHeadroomMode);
 cMenuItem melSnapToZeroMode(menuProject, "Snap to zero", snapToZeroDesc,  menuTypeItemListTextWithAction, &setupSnapToZeroMode);
+
+#if MT_MODS // MT: Project Settings -> Mods: one Off/On item per mod for this project, then where the defaults are
+constexpr uint8_t projectModsMenuItemCount = mods::kModCount + 1;
+cMenuGroup menuProjectMods(menuProject, "Mods", projectModsMenuItemCount);
+
+const strItemTypeLabel projectModsDefaultsSetup{ "Config > Mods" };
+cMenuItem melProjectModsDefaults(menuProjectMods, "Defaults", nullptr, menuTypeItemLabel, &projectModsDefaultsSetup);
+#endif
 
 // general
 const strItemTypeListTextWithAction setupRadioRegion{ &mtConfig.general.radioRegion, 4, radioRegion, setRadioRegion };

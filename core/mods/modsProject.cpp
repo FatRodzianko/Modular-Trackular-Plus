@@ -6,6 +6,8 @@
 
 #include "modsProject.h"
 
+#include "modsSwitches.h"
+
 #include <cstdio>
 
 namespace mods
@@ -17,9 +19,9 @@ namespace
 {
 
 // 1.2.0 side-file importers (swing.bin, humanize.bin …), added with each mod.
-constexpr Importer kBuiltInImporters[] = { nullptr };
+constexpr ImporterEntry kBuiltInImporters[] = { { 0, nullptr } };
 
-const Importer* importers = kBuiltInImporters;
+const ImporterEntry* importers = kBuiltInImporters;
 size_t importerCount = sizeof(kBuiltInImporters) / sizeof(kBuiltInImporters[0]);
 
 bool dirty = false;
@@ -38,7 +40,7 @@ void setChangedCallback(void (*callback)())
     changedCallback = callback;
 }
 
-void setImporters(const Importer* list, size_t count)
+void setImporters(const ImporterEntry* list, size_t count)
 {
     importers = list;
     importerCount = count;
@@ -64,27 +66,40 @@ void copyIn(FileIo& io, Store& store, const char* projectFolder)
     store.clear();
 }
 
-void loadFromWorkspace(FileIo& io, Store& store, const char* projectFolder)
+void loadFromWorkspace(FileIo& io,
+                       Store& store,
+                       const char* projectFolder,
+                       const uint8_t* defaults,
+                       uint8_t* switches,
+                       size_t count)
 {
     dirty = false;
 
     const size_t size = io.read(kWorkspaceFile, store.image(), store.capacity());
     if (size != FileIo::kReadFailed && store.validate(size))
     {
+        readSwitches(store, switches, count);
         return;
     }
 
     store.clear();
+    for (size_t i = 0; i < count; i++)
+    {
+        switches[i] = projectFolder == nullptr ? defaults[i] : 0;
+    }
     if (projectFolder != nullptr)
     {
         for (size_t i = 0; i < importerCount; i++)
         {
-            if (importers[i] != nullptr)
+            const ImporterEntry& entry = importers[i];
+            if (entry.import != nullptr && entry.import(io, projectFolder, store) &&
+                entry.mod < count)
             {
-                importers[i](io, projectFolder, store);
+                switches[entry.mod] = 1;
             }
         }
     }
+    writeSwitches(store, switches, count);
 
     io.write(kWorkspaceFile, store.image(), store.finalize());
 }
@@ -109,6 +124,16 @@ bool saveToProject(FileIo& io, Store& store, const char* projectFolder)
         return false;
     }
     return io.write(path, store.image(), store.finalize());
+}
+
+bool setSwitches(Store& store, const uint8_t* switches, size_t count)
+{
+    if (!writeSwitches(store, switches, count))
+    {
+        return false;
+    }
+    markChanged();
+    return true;
 }
 
 void markChanged()

@@ -2,9 +2,9 @@
 """Step 0 checks on a Tracker+ test build (MT_NO_SYNTH=1):
 
 1. Config menu: the real static constructors build Config -> Mods as the 8th top-level
-   group, just before Info, holding the "Mods in build" line.
-2. Settings files through CE's FileSystem interface: mods::init and mods::switchChanged
-   read and write Mods/mods.cfg on a fake SD card wired into a FileSystem vtable whose
+   group, just before Info, holding the "Mods in build" line; and Project Settings ->
+   Mods as the last item of Project Settings, a group holding the "Defaults" line.
+2. Settings files through CE's FileSystem interface: mods::init reads Mods/mods.cfg on a fake SD card wired into a FileSystem vtable whose
    slots are taken from the image's own FileSystemImpl vtable.
 
 Usage: python tools/emu/test_step0.py build/emu/TrackerPlus_MT_nosynth.axf
@@ -33,6 +33,7 @@ def check(cond: bool, name: str, detail: str = "") -> None:
 # cMenuGroup: type@0, parentMenu@4, childsCount@8, childs@12, childsNames@16,
 # childsValues@20, groupName@24, selectedItem@28, slotsUsed@29, slot@30
 # cMenuItem:  type@0, itemName@4, itemDesc@8, itemType@12, itemSetup@16
+MENU_TYPE_GROUP = 1
 MENU_TYPE_ITEM_LABEL = 5
 EXPECTED_GROUPS = ["Project Settings", "General", "MIDI", "USB", "Metronome", "Firmware",
                    "Mods", "Info"]
@@ -57,6 +58,24 @@ def test_menu(m: Machine) -> None:
     check(m.cstr(m.r32(item + 4)) == "Mods in build", "item name")
     check(m.r32(item + 12) == MENU_TYPE_ITEM_LABEL, "item is a label")
     check(m.cstr(m.r32(m.r32(item + 16))) == "0", "label shows 0 mods")
+
+    project = m.addr("menuProject")
+    count, used = m.r8(project + 8), m.r8(project + 29)
+    check(count == 11 and used == 11, "Project Settings has CE's 10 items plus Mods",
+          f"count {count}, used {used}")
+    project_mods = m.addr("menuProjectMods")
+    check(m.r32(m.r32(project + 12) + 4 * 10) == project_mods,
+          "Project Settings' last item is the Mods group")
+    check(m.cstr(m.r32(m.r32(project + 16) + 4 * 10)) == "Mods", "its name")
+    check(m.r32(project_mods) == MENU_TYPE_GROUP and m.r32(project_mods + 4) == project,
+          "a group inside Project Settings")
+    check(m.r8(project_mods + 8) == 1 and m.r8(project_mods + 29) == 1,
+          "Project Settings -> Mods holds one item",
+          f"count {m.r8(project_mods + 8)}, used {m.r8(project_mods + 29)}")
+    item = m.r32(m.r32(project_mods + 12))
+    check(m.cstr(m.r32(item + 4)) == "Defaults", "item name")
+    check(m.r32(item + 12) == MENU_TYPE_ITEM_LABEL, "item is a label")
+    check(m.cstr(m.r32(m.r32(item + 16))) == "Config > Mods", "label points at Config -> Mods")
 
 
 # -- 2. Settings files through FileSystem -----------------------------------------------------
@@ -157,8 +176,9 @@ def store_image(magic: bytes, records: list[tuple[int, int, bytes]]) -> bytes:
 
 
 def test_files(m: Machine) -> None:
-    # Boot reads mods.cfg. Saving it (mods::switchChanged) is linked in only once a mod
-    # adds a switch; until then the host tests cover the write path.
+    # Boot reads mods.cfg. Saving it (mods::defaultsChanged) and the project's set
+    # (mods::projectSwitchChanged) are linked in only once a mod adds a switch; until
+    # then the host tests cover those paths.
     m.call(m.addr("_GLOBAL__sub_I__ZN4mods4initEP10FileSystem"))
     sd = FakeSd(m)
     init = m.addr("_ZN4mods4initEP10FileSystem")

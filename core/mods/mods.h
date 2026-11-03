@@ -19,7 +19,7 @@ class FileSystem;
 namespace mods
 {
 
-// Fixed ids, stored in mods.cfg; never reuse or renumber one.
+// Fixed ids, the index into the switches records; never reuse or renumber one.
 enum class Mod : uint8_t
 {
     kCount
@@ -28,7 +28,8 @@ enum class Mod : uint8_t
 constexpr size_t kModCount = static_cast<size_t>(Mod::kCount);
 
 // One byte per mod, 0 Off or 1 On, so Config list items can point at them.
-extern std::array<uint8_t, kModCount> switches;
+extern std::array<uint8_t, kModCount> switches; // the open project's set
+extern std::array<uint8_t, kModCount> defaults; // the set New Project starts with
 
 inline bool on(Mod mod)
 {
@@ -38,11 +39,14 @@ inline bool on(Mod mod)
 // Shown in Config -> Mods.
 constexpr char kModCountText[] = "0";
 
-// Boot, after the file manager: loads the switches from mods.cfg.
+// Boot, after the file manager: loads the defaults from mods.cfg.
 void init(FileSystem* fileSystem);
 
-// Config action for every switch item: saves mods.cfg.
-void switchChanged();
+// Config -> Mods action for every item: saves mods.cfg.
+void defaultsChanged();
+
+// Config -> Project Settings -> Mods action for every item: the project changed.
+void projectSwitchChanged();
 
 // Project file hooks, called from CE's file manager.
 void onProjectOpenCopy();  // ProjectOpen, after the Workspace is filled from the project

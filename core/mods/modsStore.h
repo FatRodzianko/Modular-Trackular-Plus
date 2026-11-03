@@ -1,7 +1,7 @@
 // Modular-Trackular mods. SPDX-License-Identifier: MIT
 //
-// A small file of tagged records, used for both mods.cfg (global switches) and
-// mods.bin (per-project settings).
+// A small file of tagged records, used for both mods.cfg (defaults for new
+// projects) and mods.bin (a project's mod set and settings).
 //
 // File layout, little-endian:
 //   header  magic[4], format (u16), payload length (u16), CRC-32 of the payload (u32)

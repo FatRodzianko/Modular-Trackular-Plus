@@ -1,13 +1,15 @@
 // Modular-Trackular mods. SPDX-License-Identifier: MIT
 //
-// Host tests for the mods' settings files: the record store, mods.cfg and the
-// per-project mods.bin flows (Open, workspace load, Save, Save As, New Project), on an
+// Host tests for the mods' settings files: the record store, the switches record,
+// mods.cfg (defaults for new projects) and the per-project mods.bin flows (Open,
+// workspace load, Save, Save As, New Project) with the project's mod set, on an
 // in-memory SD card. Build and run with `make -C core/mods/tests`.
 
 #include "mods.h"
 #include "modsConfig.h"
 #include "modsProject.h"
 #include "modsStore.h"
+#include "modsSwitches.h"
 
 #include <cstdio>
 #include <cstring>
@@ -256,43 +258,81 @@ void testStoreValidate()
 
 //------------------------------------------------------------------------------------------------
 
+void testSwitches()
+{
+    TestStore t(project::kMagic);
+    uint8_t values[3] = { 9, 9, 9 };
+
+    readSwitches(t.store, values, 3);
+    check(Bytes(values, values + 3) == Bytes({ 0, 0, 0 }), "no record: every mod Off");
+
+    check(writeSwitches(t.store, values, 0) && t.store.empty(),
+          "a build without mods writes no record");
+
+    const uint8_t on[3] = { 1, 0, 7 };
+    check(writeSwitches(t.store, on, 3), "write");
+    check(recordOf(t.store, kSwitchesRecord) == Bytes({ 1, 0, 1 }), "stored as 0 and 1");
+
+    // An older build (two mods) reads and writes back a newer build's record.
+    uint8_t two[2] = {};
+    readSwitches(t.store, two, 2);
+    check(Bytes(two, two + 2) == Bytes({ 1, 0 }), "older build reads its own mods");
+    two[0] = 0;
+    check(writeSwitches(t.store, two, 2) &&
+            recordOf(t.store, kSwitchesRecord) == Bytes({ 0, 0, 1 }),
+          "older build keeps the newer mods' bytes");
+
+    // A newer build (four mods) reads an older record: the new mod is Off.
+    uint8_t four[4] = { 9, 9, 9, 9 };
+    t.store.put(kSwitchesRecord, kSwitchesVersion, on, 2);
+    readSwitches(t.store, four, 4);
+    check(Bytes(four, four + 4) == Bytes({ 1, 0, 0, 0 }), "mods past the record are Off");
+}
+
 void testConfig()
 {
     MemoryFileIo io;
     TestStore t(config::kMagic);
+    uint8_t defaults[2] = { 9, 9 };
 
-    config::load(io, t.store);
-    check(t.store.empty(), "no mods.cfg: no records");
+    config::load(io, t.store, defaults, 2);
+    check(t.store.empty() && Bytes(defaults, defaults + 2) == Bytes({ 0, 0 }),
+          "no mods.cfg: every default Off");
 
-    // A newer build's file: switches for three mods this build doesn't know, plus
-    // another record. Saving must keep both.
+    // A newer build's file: defaults for a mod this build doesn't know, plus another
+    // record. Saving must keep both.
     io.files[config::kPath] =
-      makeFile(config::kMagic, { { config::kSwitchesRecord, { 1, 0, 1 } }, { 42, { 5, 6 } } });
-    config::load(io, t.store);
-    check(config::save(io, t.store), "save");
+      makeFile(config::kMagic, { { kSwitchesRecord, { 1, 0, 1 } }, { 42, { 5, 6 } } });
+    config::load(io, t.store, defaults, 2);
+    check(Bytes(defaults, defaults + 2) == Bytes({ 1, 0 }), "defaults read");
+    defaults[1] = 1;
+    check(config::save(io, t.store, defaults, 2), "save");
     check(io.dirs.count(config::kDir) == 1, "save makes the Mods folder");
 
     TestStore back(config::kMagic);
     check(loadImage(back.store, io.files[config::kPath]), "saved mods.cfg validates");
-    check(recordOf(back.store, config::kSwitchesRecord) == Bytes({ 1, 0, 1 }),
-          "unknown mods' switches kept");
+    check(recordOf(back.store, kSwitchesRecord) == Bytes({ 1, 1, 1 }),
+          "defaults saved, unknown mods' kept");
     check(recordOf(back.store, 42) == Bytes({ 5, 6 }), "other records kept");
 
     io.files[config::kPath][Store::kHeaderSize] ^= 0xFF;
-    config::load(io, t.store);
-    check(t.store.empty(), "damaged mods.cfg: defaults");
-    check(config::save(io, t.store), "save after damage");
+    config::load(io, t.store, defaults, 2);
+    check(t.store.empty() && Bytes(defaults, defaults + 2) == Bytes({ 0, 0 }),
+          "damaged mods.cfg: every default Off");
+    check(config::save(io, t.store, defaults, 2), "save after damage");
     check(loadImage(back.store, io.files[config::kPath]), "rewritten mods.cfg validates");
 }
 
 //------------------------------------------------------------------------------------------------
 
 constexpr uint8_t kTestRecord = 77;
+constexpr size_t kTestMods = 3;
+constexpr uint8_t kImportedMod = 1;
 int importerCalls = 0;
 int changedCalls = 0;
 
 // Stands in for a mod's 1.2.0 importer: turns "<folder>/old.bin" into a record.
-void testImporter(FileIo& io, const char* projectFolder, Store& store)
+bool testImporter(FileIo& io, const char* projectFolder, Store& store)
 {
     importerCalls++;
     std::string path = std::string(projectFolder) + "/old.bin";
@@ -301,10 +341,26 @@ void testImporter(FileIo& io, const char* projectFolder, Store& store)
     if (size != FileIo::kReadFailed && size <= sizeof(data))
     {
         store.put(kTestRecord, 1, data, static_cast<uint16_t>(size));
+        return true;
     }
+    return false;
 }
 
-const project::Importer kTestImporters[] = { testImporter };
+const project::ImporterEntry kTestImporters[] = { { kImportedMod, testImporter } };
+
+// The mods' arrays for a build with kTestMods mods.
+uint8_t defaults[kTestMods];
+uint8_t switches[kTestMods];
+
+void load(MemoryFileIo& io, Store& store, const char* folder)
+{
+    project::loadFromWorkspace(io, store, folder, defaults, switches, kTestMods);
+}
+
+Bytes set()
+{
+    return Bytes(switches, switches + kTestMods);
+}
 
 std::string projectFile(const char* folder)
 {
@@ -328,16 +384,35 @@ void testProjectFlows()
     const char* a = "Projects/A";
     const char* b = "Projects/B";
 
-    // Open a project with a mods.bin.
-    const Bytes fileA = makeFile(project::kMagic, { { kTestRecord, { 1, 1 } }, { 250, { 8 } } });
+    memset(defaults, 1, sizeof(defaults));
+
+    // Open a project with a mods.bin: its own set, whatever the defaults.
+    const Bytes fileA = makeFile(
+      project::kMagic,
+      { { kSwitchesRecord, { 0, 1, 0 } }, { kTestRecord, { 1, 1 } }, { 250, { 8 } } });
     io.files[projectFile(a)] = fileA;
     project::copyIn(io, s, a);
     check(io.files[project::kWorkspaceFile] == fileA, "open copies mods.bin into the Workspace");
     importerCalls = 0;
-    project::loadFromWorkspace(io, s, a);
+    load(io, s, a);
     check(recordOf(s, kTestRecord) == Bytes({ 1, 1 }), "load reads the Workspace copy");
+    check(set() == Bytes({ 0, 1, 0 }), "the project's own mod set, not the defaults");
     check(importerCalls == 0, "no import when the project has mods.bin");
     check(!project::isDirty(), "freshly loaded is clean");
+
+    // Changing the defaults leaves the open project alone.
+    memset(defaults, 0, sizeof(defaults));
+    load(io, s, a);
+    check(set() == Bytes({ 0, 1, 0 }), "defaults don't touch an open project");
+    memset(defaults, 1, sizeof(defaults));
+
+    // Project Settings -> Mods: a switch change is a project change.
+    changedCalls = 0;
+    switches[2] = 1;
+    check(project::setSwitches(s, switches, kTestMods), "set switches");
+    check(changedCalls == 1 && project::isDirty(), "a switch change marks the project changed");
+    check(recordOf(s, kSwitchesRecord) == Bytes({ 0, 1, 1 }), "switch change recorded");
+    project::saveToWorkspace(io, s);
 
     // Workspace save writes only after a change.
     io.writes = 0;
@@ -361,6 +436,7 @@ void testProjectFlows()
         TestStore p(project::kMagic);
         check(loadImage(p.store, io.files[projectFile(a)]), "saved mods.bin validates");
         check(recordOf(p.store, kTestRecord) == Bytes({ 2, 2 }), "saved setting");
+        check(recordOf(p.store, kSwitchesRecord) == Bytes({ 0, 1, 1 }), "saved mod set");
         check(recordOf(p.store, 250) == Bytes({ 8 }), "unknown record survives a save");
     }
 
@@ -371,49 +447,90 @@ void testProjectFlows()
           "Save As over a project replaces its mods.bin");
 
     // Open a project without mods.bin (stock 1.2.0 or CE): Workspace copy removed,
-    // 1.2.0 side file imported once, then saved with a mods.bin.
+    // 1.2.0 side file imported once and its mod On, the rest Off whatever the
+    // defaults; then saved with a mods.bin.
     const char* old = "Projects/Old";
     io.files[std::string(old) + "/old.bin"] = { 4, 5 };
     project::copyIn(io, s, old);
     check(!io.has(project::kWorkspaceFile), "open without mods.bin clears the Workspace copy");
     importerCalls = 0;
-    project::loadFromWorkspace(io, s, old);
+    load(io, s, old);
     check(importerCalls == 1 && recordOf(s, kTestRecord) == Bytes({ 4, 5 }),
           "1.2.0 side file imported");
+    check(set() == Bytes({ 0, 1, 0 }), "only the imported mod is On");
     check(io.has(project::kWorkspaceFile), "imported settings written to the Workspace");
+    {
+        TestStore w(project::kMagic);
+        check(loadImage(w.store, io.files[project::kWorkspaceFile]) &&
+                recordOf(w.store, kSwitchesRecord) == Bytes({ 0, 1, 0 }),
+              "imported mod set written to the Workspace");
+    }
 
     // Back to defaults, save, reopen: the side file must not come back.
     s.remove(kTestRecord);
-    project::markChanged();
+    switches[kImportedMod] = 0;
+    project::setSwitches(s, switches, kTestMods);
     project::saveToWorkspace(io, s);
     project::saveToProject(io, s, old);
     project::copyIn(io, s, old);
     importerCalls = 0;
-    project::loadFromWorkspace(io, s, old);
+    load(io, s, old);
     check(importerCalls == 0 && recordOf(s, kTestRecord).empty(),
           "a saved project is never imported again");
+    check(set() == Bytes({ 0, 0, 0 }), "the mod stays Off once turned off");
+
+    // A plain CE project with no side files: every mod Off.
+    const char* plain = "Projects/Plain";
+    project::copyIn(io, s, plain);
+    load(io, s, plain);
+    check(set() == Bytes({ 0, 0, 0 }), "plain CE project: every mod Off");
+
+    // A step-0 project: mods.bin with no mod set. Every mod Off, nothing imported.
+    const char* step0 = "Projects/Step0";
+    io.files[projectFile(step0)] = makeFile(project::kMagic, {});
+    io.files[std::string(step0) + "/old.bin"] = { 1 };
+    project::copyIn(io, s, step0);
+    importerCalls = 0;
+    load(io, s, step0);
+    check(importerCalls == 0 && set() == Bytes({ 0, 0, 0 }), "step-0 project: every mod Off");
 
     // A damaged project file counts as none.
     io.files[projectFile(a)][Store::kHeaderSize] ^= 0xFF;
     project::copyIn(io, s, a);
     check(!io.has(project::kWorkspaceFile), "damaged mods.bin not copied");
 
-    // New Project: empty Workspace, no folder. Defaults, nothing imported.
+    // New Project: empty Workspace, no folder. The defaults, nothing imported.
     io.files.erase(project::kWorkspaceFile);
     importerCalls = 0;
-    project::loadFromWorkspace(io, s, nullptr);
-    check(importerCalls == 0 && s.empty(), "new project starts empty");
+    defaults[0] = 1;
+    defaults[1] = 0;
+    defaults[2] = 1;
+    load(io, s, nullptr);
+    check(importerCalls == 0 && recordOf(s, kTestRecord).empty(), "new project: no settings");
+    check(set() == Bytes({ 1, 0, 1 }), "new project starts with the defaults");
     {
         TestStore w(project::kMagic);
-        check(loadImage(w.store, io.files[project::kWorkspaceFile]), "new project's Workspace file");
+        check(loadImage(w.store, io.files[project::kWorkspaceFile]) &&
+                recordOf(w.store, kSwitchesRecord) == Bytes({ 1, 0, 1 }),
+              "new project's Workspace file holds the defaults");
     }
 
-    // Boot: the Workspace already has the project's settings.
+    // A build without mods: New Project writes an empty file, as in step 0.
+    io.files.erase(project::kWorkspaceFile);
+    project::loadFromWorkspace(io, s, nullptr, defaults, switches, 0);
+    check(s.empty(), "no mods: new project starts empty");
+
+    // Boot: the Workspace already has the project's settings and set.
+    io.files.erase(project::kWorkspaceFile);
+    load(io, s, nullptr);
     setRecord(s, { 6 });
     project::saveToWorkspace(io, s);
     s.clear();
-    project::loadFromWorkspace(io, s, a);
+    memset(switches, 0, sizeof(switches));
+    memset(defaults, 0, sizeof(defaults));
+    load(io, s, a);
     check(recordOf(s, kTestRecord) == Bytes({ 6 }), "boot loads the Workspace settings");
+    check(set() == Bytes({ 1, 0, 1 }), "boot loads the Workspace mod set");
 
     // A too-long folder path fails safely.
     std::string longFolder(project::kPathSize, 'x');
@@ -428,6 +545,7 @@ int main()
     testStoreRecords();
     testStoreCapacity();
     testStoreValidate();
+    testSwitches();
     testConfig();
     testProjectFlows();
 

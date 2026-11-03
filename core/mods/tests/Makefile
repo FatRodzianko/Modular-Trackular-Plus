@@ -3,7 +3,8 @@
 
 CXX      ?= g++
 CXXFLAGS := -std=gnu++20 -Wall -Wextra -Werror -g -DMT_HOST_TEST -I..
-SRCS     := ../modsStore.cpp ../modsConfig.cpp ../modsProject.cpp test_mods.cpp
+SRCS     := ../modsStore.cpp ../modsSwitches.cpp ../modsConfig.cpp ../modsProject.cpp \
+            test_mods.cpp
 BUILD    := build
 
 .PHONY: all clean
