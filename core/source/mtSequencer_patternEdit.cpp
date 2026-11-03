@@ -1919,7 +1919,7 @@ void Sequencer::makeFxValLabelWithAlgin(char* ptr,
 
     int16_t valAfterCorrection = getFxValueCorrection(fxType, valueFromFx);
 
-#if MT_HAS_CHORDS // MT: chords 30..236 show their intervals
+#if MT_HAS_CHORDS // MT: chords 30..69 show their intervals
     if (fxType == fx.FX_TYPE_MIDI_CHORD && mods::chords::label(ptr, len, valueFromFx))
     {
         return;

@@ -1,11 +1,10 @@
 // Modular-Trackular mods. SPDX-License-Identifier: MIT
 //
-// chords: more chords for the MIDI Chord FX, inversions first. CE's Chord FX values
-// 0..29 are its own chords; this mod gives values 30..236 chords of their own (the
-// same numbers as the 1.2.0 patch, since they are saved in patterns): the major and
-// minor triad inversions, the maj7, min7 and dom7 inversions, the other inversions of
-// CE's chords, then every other chord of one to three notes above the step's note
-// within an octave. 237..255 stay free and play as CE plays them (the note alone).
+// chords: chord inversions for the MIDI Chord FX. CE's Chord FX values 0..29 are its
+// own chords; this mod gives values 30..69 chords of their own (the same numbers as
+// the 1.2.0 patch, since they are saved in patterns): the major and minor triad
+// inversions, the maj7, min7 and dom7 inversions, then the other inversions of CE's
+// chords. 70..255 stay free and play as CE plays them (the note alone).
 //
 // A chord is an interval mask like CE's chordDef: bit i set means "also play the
 // step's note + i". CE plays the notes, ends them and arpeggiates them from the mask,
@@ -28,7 +27,7 @@ namespace chords
 {
 
 constexpr uint8_t kFirst = 30; // after CE's chords 0..29
-constexpr uint8_t kLast = 236;
+constexpr uint8_t kLast = 69;
 constexpr size_t kCount = kLast - kFirst + 1;
 
 extern const uint16_t kLibrary[kCount];

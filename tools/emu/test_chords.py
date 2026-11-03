@@ -4,10 +4,10 @@ with every mod compiled out (MT_NO_MODS, so plain CE):
 
 1. Playing: the notes Sequencer::sendMidiChordOn and sendMidiChordOff send for every
    Chord value 0..255, in FX1 and FX2, with the mod Off and On. Off sends exactly what
-   the reference sends; On sends the same for 0..29 and 237..255, and for 30..236 the
+   the reference sends; On sends the same for 0..29 and 70..255, and for 30..69 the
    step's note plus the intervals the cell shows.
 2. Cell text (makeFxValLabelWithAlgin): Off as the reference for CE's chords and no
-   interval text past them; On, the intervals for 30..236.
+   interval text past them; On, the intervals for 30..69.
 3. Config: Config -> Mods' Chords line is the default for new projects (mods.cfg) and
    Project Settings -> Mods' Chords line is the project's switch (Workspace/mods.bin),
    each through its own action on a fake SD card.
@@ -34,7 +34,7 @@ FX_CHORD = 14
 FX_ARP = 21
 FX_VOLUME = 18
 CHORDS_ID = 14
-FIRST, LAST = 30, 236
+FIRST, LAST = 30, 69
 MIDI_INSTRUMENT = 48            # MIDI channel 1
 MENU_TYPE_ITEM_LIST_TEXT_WITH_ACTION = 4
 
@@ -106,15 +106,15 @@ def test_playing(mt: Rig, ref: Rig) -> None:
     mt.set_chords(True)
     outside = [v for v in range(256) if not FIRST <= v <= LAST]
     check(all(mt.notes(48, v, col) == ref.notes(48, v, col) for v in outside for col in (0, 1)),
-          "On: 0-29 and 237-255 send what plain CE sends")
+          "On: 0-29 and 70-255 send what plain CE sends")
     check(all(mt.label(v) == ref.label(v) for v in range(30)), "On: CE's chords' text unchanged")
 
     texts = {v: mt.label(v) for v in range(FIRST, LAST + 1)}
-    check(texts[31] == " 59" and texts[40] == "368" and texts[236] == "9AB",
-          "On: 31, 40, 236 show \" 59\", \"368\", \"9AB\"", f"{texts[31]!r} {texts[40]!r} {texts[236]!r}")
+    check(texts[31] == " 59" and texts[40] == "368" and texts[69] == "168",
+          "On: 31, 40, 69 show \" 59\", \"368\", \"168\"", f"{texts[31]!r} {texts[40]!r} {texts[69]!r}")
     bad = [v for v in range(FIRST, LAST + 1) for col in (0, 1)
            if mt.notes(48, v, col) != expected(48, texts[v])]
-    check(not bad, "On: 30-236 send the note plus the intervals shown, on and off", str(bad[:8]))
+    check(not bad, "On: 30-69 send the note plus the intervals shown, on and off", str(bad[:8]))
     high = [v for v in range(FIRST, LAST + 1) if mt.notes(120, v, 0) != expected(120, texts[v])]
     check(not high, "On: notes above 127 left out", str(high[:8]))
 

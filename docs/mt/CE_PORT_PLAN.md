@@ -165,7 +165,7 @@ One file per project instead of eight side files.
 
 **Chords and condtrig in old projects.** Their values live in the patterns, so no side
 file shows them in use. Scanning a project's pattern files on Open is left out for now:
-a 1.2.0 project with chords 30–236 opens with Chords Off (those steps play the note
+a 1.2.0 project with chords 30–69 opens with Chords Off (those steps play the note
 alone, as plain CE) until Chords is turned on in Project Settings → Mods.
 
 **Importing 1.2.0 projects.** On Open, when a project has no `mods.bin`, read each
@@ -200,7 +200,7 @@ are converted at load time (condtrig, below).
 - **Project round trip:** a project made with mods Off has no `mods.bin` and
   byte-identical patterns.
 - **What plain CE does with mod data** (checked in CE's code):
-  - chord values 30–236: the root note only (`getChordBitmask` maps past `MAX_CHORD`
+  - chord values 30–69: the root note only (`getChordBitmask` maps past `MAX_CHORD`
     to `MIN_CHORD`);
   - Chance values 175–211: always play (`evaluateChanceFx` ends in `return true`);
   - `mods.bin`: ignored.
@@ -324,11 +324,11 @@ effort (S, M, L as in the review). The behaviour itself is as in each
 
 - **CE today:** 30 chords, `MAX_CHORD = 29` (`mtChordDefs.h` L5).
 - **Hooks:** `getChordBitmask` and `getChordBitmaskForArp` (`mtSequencer.cpp`
-  L2326–2341): values 30–236 from our table; `getFxMax` (`mtSequencer_patternEdit.cpp`
-  L1745) for the Chord FX: 236 when on; the Chord FX value text in the grid and the
+  L2326–2341): values 30–69 from our table; `getFxMax` (`mtSequencer_patternEdit.cpp`
+  L1745) for the Chord FX: 69 when on; the Chord FX value text in the grid and the
   FX popup: our names.
 - **Our code:** the chord table and inversion logic from `patch/chords/chords.c`
-  (ours), unchanged in meaning: values 30–236 keep their 1.2.0 numbers.
+  (ours), unchanged in meaning: values 30–69 keep their 1.2.0 numbers.
 - **Data:** in the pattern. No settings.
 - **Old projects:** values carry over as they are.
 - **Off:** encoder stops at 29; stored values past it play the root (CE behaviour).
@@ -337,14 +337,14 @@ effort (S, M, L as in the review). The behaviour itself is as in each
 - **Hardware:** a few chords, inversions, Arp, on sample and MIDI tracks.
 - **Effort:** S. First because it proves the switch, a pattern value range, the
   encoder limit and grid text with almost no risk.
-- **Built (2026-11-02):** `core/mods/chords.h/.cpp` (the 1.2.0 table, unchanged). CE
+- **Built (2026-11-02):** `core/mods/chords.h/.cpp` (the 1.2.0 table's values 30–69). CE
   already plays, ends and arpeggiates a chord from its mask, so the hooks are small:
-  `getChordBitmask` and `getChordBitmaskForArp` take the mod's mask for 30–236;
-  `changeSelectionFxValue` lets the encoder go to 236; `makeFxValLabelWithAlgin`
+  `getChordBitmask` and `getChordBitmaskForArp` take the mod's mask for 30–69;
+  `changeSelectionFxValue` lets the encoder go to 69; `makeFxValLabelWithAlgin`
   writes the intervals. Pads, Fill, random fill and the Random FX value keep CE's
   0–29, as on 1.2.0. Re-picking the Chord type in the FX picker clamps a value past
-  29 to `57B`, as CE does (not hooked). Host tests: the list against CE's chords and
-  the 1.2.0 numbers (30 checks). Emulator, against the plain-CE reference: the notes
+  29 to `57B`, as CE does (not hooked). Host tests: the list against CE's chords'
+  inversions and the 1.2.0 numbers (27 checks). Emulator, against the plain-CE reference: the notes
   sent and ended for every value in both FX columns, Off and On; the text; the
   Config lines and their files (18 checks). On the device: the encoder and the Arp
   (the emulator can't reach them by symbol).
@@ -352,6 +352,14 @@ effort (S, M, L as in the review). The behaviour itself is as in each
   chords and their OFF, the Arp in either column, save and reopen, Off and back On,
   New Project defaults. With Chords Off, an Arp on a value past 29 plays every
   semitone: CE reads an unknown chord as chord 0, which the Arp plays chromatically.
+- **Inversions only (2026-11-03, user's call):** the list stops at 69: the 40
+  inversions (the triads and 7th chords, then the other inversions of CE's chords).
+  The 1.2.0 patch's 70–236 (every other chord of one to three notes within an
+  octave) are left out, as 200-odd encoder steps past `57B` is too many for one FX.
+  70–255 play as plain CE (the note alone), so a 1.2.0 project that used them plays
+  those steps as the note alone. 30–69 keep their numbers, so 1.2.0 projects and a
+  possible upstream PR agree. Hardware-tested 2026-11-03: the encoder stops at `168`,
+  the chords and the Arp on them play, both Config lines.
 
 ### 3.2 condtrig
 

@@ -95,8 +95,8 @@ cMenuGroup menuProjectMods(menuProject, "Mods", projectModsMenuItemCount);
 
 #if MT_HAS_CHORDS
 const char projectChordsDesc[] = { "Chords for this project: the Chord FX goes on past 57B into "
-                                   "chord inversions and every other chord within an octave. Off: "
-                                   "those values play the note alone, as in CE. " };
+                                   "chord inversions. Off: those values play the note alone, as "
+                                   "in CE. " };
 const strItemTypeListTextWithAction projectChordsSetup{
     &mods::switches[static_cast<size_t>(mods::Mod::chords)], 2, onOffStateTexts, mods::projectSwitchChanged };
 cMenuItem melProjectChords(menuProjectMods, "Chords", projectChordsDesc, menuTypeItemListTextWithAction, &projectChordsSetup);
@@ -315,8 +315,7 @@ cMenuItem melModsCount(menuMods,
 #if MT_HAS_CHORDS
 const char modsChordsDesc[] = { "Whether new projects start with Chords on. Each project has its "
                                 "own switch in Project Settings > Mods. Chords: the Chord FX goes "
-                                "on past 57B into chord inversions and every other chord within "
-                                "an octave. " };
+                                "on past 57B into chord inversions. " };
 const strItemTypeListTextWithAction modsChordsSetup{
     &mods::defaults[static_cast<size_t>(mods::Mod::chords)], 2, onOffStateTexts, mods::defaultsChanged };
 cMenuItem melModsChords(menuMods, "Chords", modsChordsDesc, menuTypeItemListTextWithAction, &modsChordsSetup);

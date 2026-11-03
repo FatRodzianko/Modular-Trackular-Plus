@@ -2326,7 +2326,7 @@ uint8_t Sequencer::isStop(void)
 
 uint16_t Sequencer::getChordBitmask(uint8_t chord)
 {
-#if MT_HAS_CHORDS // MT: chords 30..236
+#if MT_HAS_CHORDS // MT: chords 30..69
     if (const uint16_t mask = mods::chords::bitmask(chord))
     {
         return mask;
@@ -2339,7 +2339,7 @@ uint16_t Sequencer::getChordBitmask(uint8_t chord)
 }
 uint16_t Sequencer::getChordBitmaskForArp(uint8_t chord)
 {
-#if MT_HAS_CHORDS // MT: chords 30..236
+#if MT_HAS_CHORDS // MT: chords 30..69
     if (const uint16_t mask = mods::chords::bitmask(chord))
     {
         return mask;

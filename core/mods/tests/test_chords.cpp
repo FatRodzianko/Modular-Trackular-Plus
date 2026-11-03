@@ -1,8 +1,8 @@
 // Modular-Trackular mods. SPDX-License-Identifier: MIT
 //
-// Host tests for the chords mod: the chord list against CE's chords and the 1.2.0
-// patch's numbering, the masks handed to CE, and the cell text. Build and run with
-// `make -C core/mods/tests`.
+// Host tests for the chords mod: the chord list against CE's chords' inversions and
+// the 1.2.0 patch's numbering, the masks handed to CE, and the cell text. Build and run
+// with `make -C core/mods/tests`.
 
 #include "chords.h"
 
@@ -47,6 +47,29 @@ std::string text(uint8_t value)
     return buffer;
 }
 
+// A chord's inversions: each of its other notes as the lowest, the rest folded into
+// the octave above it.
+std::set<uint16_t> inversionsOf(uint16_t mask)
+{
+    std::set<uint16_t> result;
+    for (int bass = 1; bass < 12; bass++)
+    {
+        if (mask >> bass & 1)
+        {
+            uint16_t inversion = 0;
+            for (int i = 0; i < 12; i++)
+            {
+                if (mask >> i & 1)
+                {
+                    inversion |= 1u << ((i - bass + 12) % 12);
+                }
+            }
+            result.insert(inversion);
+        }
+    }
+    return result;
+}
+
 // A mask's intervals as CE labels its chords, from the mask alone.
 std::string intervals(uint16_t mask)
 {
@@ -76,45 +99,49 @@ void testList()
     }
     check(true, "every chord is the note plus 1-3 notes in an octave");
 
-    // Together with CE's chords that fit in an octave, the list holds every chord of
-    // one to three notes above the step's note, once; only two inversions repeat a
-    // CE chord (34 = CE 18 "378", 37 = CE 22 "479").
+    // The list is every inversion of CE's chords that fit in an octave, except those
+    // that are CE chords already; two of those stay so that every maj7 and min7
+    // inversion has a value in a row (34 = CE 18 "378", 37 = CE 22 "479").
     std::set<uint16_t> ce;
+    std::set<uint16_t> inversions;
     for (unsigned v = 1; v <= MAX_CHORD; v++)
     {
+        ce.insert(chordDef[v]);
         if (chordDef[v] >> 12 == 0)
         {
-            ce.insert(chordDef[v]);
+            for (uint16_t inversion : inversionsOf(chordDef[v]))
+            {
+                inversions.insert(inversion);
+            }
         }
     }
-    std::set<uint16_t> all = ce;
+    std::set<uint16_t> expected;
+    for (uint16_t inversion : inversions)
+    {
+        if (!ce.count(inversion))
+        {
+            expected.insert(inversion);
+        }
+    }
+    expected.insert(chordDef[18]);
+    expected.insert(chordDef[22]);
+
+    std::set<uint16_t> list;
     std::set<unsigned> repeats;
     bool unique = true;
-    std::set<uint16_t> seen;
     for (unsigned v = chords::kFirst; v <= chords::kLast; v++)
     {
         const uint16_t mask = chords::kLibrary[v - chords::kFirst];
-        unique = unique && seen.insert(mask).second;
+        unique = unique && list.insert(mask).second;
         if (ce.count(mask))
         {
             repeats.insert(v);
         }
-        all.insert(mask);
     }
     check(unique, "no chord twice in the list");
     check(repeats == std::set<unsigned>{ 34, 37 }, "only 34 and 37 repeat CE chords");
-    check(all.size() == 11 + 55 + 165, "every chord of 1-3 notes within an octave");
-
-    // 70..236: one, two, then three notes, each group in digit order.
-    bool ordered = true;
-    for (unsigned v = 71; v <= chords::kLast; v++)
-    {
-        const uint16_t a = chords::kLibrary[v - 1 - chords::kFirst];
-        const uint16_t b = chords::kLibrary[v - chords::kFirst];
-        const int na = __builtin_popcount(a), nb = __builtin_popcount(b);
-        ordered = ordered && (na < nb || (na == nb && intervals(a) < intervals(b)));
-    }
-    check(ordered, "70-236 in size, then digit order");
+    check(list == expected, "the list is exactly the inversions CE lacks, plus 34 and 37");
+    check(chords::kCount == 40, "40 chords, 30-69");
 
     // The 1.2.0 patch's numbers (saved in patterns, so they must not move).
     const struct
@@ -124,9 +151,8 @@ void testList()
     } known[] = {
         { 30, " 38" }, { 31, " 59" }, { 32, " 49" }, { 33, " 58" }, { 34, "378" },
         { 35, "459" }, { 36, "158" }, { 37, "479" }, { 38, "358" }, { 39, "259" },
-        { 40, "368" }, { 41, "359" }, { 42, "269" }, { 43, " 39" }, { 69, "168" },
-        { 70, "  1" }, { 80, "  B" }, { 81, " 12" }, { 116, " AB" }, { 117, "123" },
-        { 236, "9AB" },
+        { 40, "368" }, { 41, "359" }, { 42, "269" }, { 43, " 39" }, { 48, " 5B" },
+        { 55, "26A" }, { 59, "257" }, { 69, "168" },
     };
     for (const auto& k : known)
     {
@@ -154,7 +180,7 @@ void testOnOff()
         outside = outside && (inList ? chords::bitmask(v) == chords::kLibrary[v - chords::kFirst]
                                      : chords::bitmask(v) == 0 && text(v) == "-");
     }
-    check(outside, "On: 30-236 have masks and text, CE keeps the rest");
+    check(outside, "On: 30-69 have masks and text, CE keeps the rest");
 
     char small[3];
     check(!chords::label(small, sizeof(small), 31), "no text into a buffer under 4 bytes");
