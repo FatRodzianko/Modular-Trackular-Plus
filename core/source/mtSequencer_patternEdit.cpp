@@ -4,6 +4,7 @@
 #include "mtSequencer.h"
 #include "mtStructs.h"
 #include "patternEditor/patternEditor.h"
+#include "chords.h" // MT:
 
 #include "ctype.h"
 #include "util_math.h"
@@ -757,6 +758,12 @@ void Sequencer::changeSelectionFxValue(uint8_t fxIndex, int16_t value)
                         _fx->value = _fx->value - fx.CHANCE_CYCLE_STEPS;
                 }
             }
+#if MT_HAS_CHORDS // MT: the encoder goes on past 29 into the chords mod's chords
+            else if (_fx->type == fx.FX_TYPE_MIDI_CHORD && mods::on(mods::Mod::chords))
+            {
+                _fx->value = clamp<int>(_fx->value + value, MIN_CHORD, mods::chords::kLast);
+            }
+#endif
             else
             {
                 _fx->value =
@@ -1911,6 +1918,13 @@ void Sequencer::makeFxValLabelWithAlgin(char* ptr,
 {
 
     int16_t valAfterCorrection = getFxValueCorrection(fxType, valueFromFx);
+
+#if MT_HAS_CHORDS // MT: chords 30..236 show their intervals
+    if (fxType == fx.FX_TYPE_MIDI_CHORD && mods::chords::label(ptr, len, valueFromFx))
+    {
+        return;
+    }
+#endif
 
     switch (fxType)
     {

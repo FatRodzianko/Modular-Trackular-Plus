@@ -121,9 +121,9 @@ void WorkspaceProjectSave::saveProjectToWorkspaceFinish()
 {
 #if FILEMANAGER_HANDLE_SYNTH == 1
     newFileManager.getSynth()->saveDirtyWorkspacePatches();
+#endif
 #if MT_MODS // MT: changed mod settings to the Workspace
     mods::onWorkspaceSaved();
-#endif
 #endif
 
     if (newFileManager.getStatus() == fmSavingProjectToProjects) // przejdz do kopiowania projektu

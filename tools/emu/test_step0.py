@@ -2,8 +2,10 @@
 """Step 0 checks on a Tracker+ test build (MT_NO_SYNTH=1):
 
 1. Config menu: the real static constructors build Config -> Mods as the 8th top-level
-   group, just before Info, holding the "Mods in build" line; and Project Settings ->
-   Mods as the last item of Project Settings, a group holding the "Defaults" line.
+   group, just before Info, starting with the "Mods in build" line and then one line per
+   mod; and Project Settings -> Mods as the last item of Project Settings, a group with
+   one line per mod and then the "Defaults" line. Each mod's own lines are checked by
+   its test (test_chords.py).
 2. Settings files through CE's FileSystem interface: mods::init reads Mods/mods.cfg on a fake SD card wired into a FileSystem vtable whose
    slots are taken from the image's own FileSystemImpl vtable.
 
@@ -52,12 +54,17 @@ def test_menu(m: Machine) -> None:
     mods = m.addr("menuMods")
     check(m.r32(base + 12 + 0) != 0 and m.r32(m.r32(base + 12) + 4 * 6) == mods,
           "slot 6 is the menuMods object")
-    check(m.r8(mods + 8) == 1 and m.r8(mods + 29) == 1, "Mods holds one item",
-          f"count {m.r8(mods + 8)}, used {m.r8(mods + 29)}")
     item = m.r32(m.r32(mods + 12))
-    check(m.cstr(m.r32(item + 4)) == "Mods in build", "item name")
+    check(m.cstr(m.r32(item + 4)) == "Mods in build", "first item: Mods in build")
     check(m.r32(item + 12) == MENU_TYPE_ITEM_LABEL, "item is a label")
-    check(m.cstr(m.r32(m.r32(item + 16))) == "0", "label shows 0 mods")
+    built = m.cstr(m.r32(m.r32(item + 16)))
+    check(built.isdigit(), "label shows a count", built)
+    if not built.isdigit():
+        return
+    built = int(built)
+    check(m.r8(mods + 8) == 1 + built and m.r8(mods + 29) == 1 + built,
+          "Mods holds the count and one item per mod",
+          f"count {m.r8(mods + 8)}, used {m.r8(mods + 29)}, mods {built}")
 
     project = m.addr("menuProject")
     count, used = m.r8(project + 8), m.r8(project + 29)
@@ -69,11 +76,11 @@ def test_menu(m: Machine) -> None:
     check(m.cstr(m.r32(m.r32(project + 16) + 4 * 10)) == "Mods", "its name")
     check(m.r32(project_mods) == MENU_TYPE_GROUP and m.r32(project_mods + 4) == project,
           "a group inside Project Settings")
-    check(m.r8(project_mods + 8) == 1 and m.r8(project_mods + 29) == 1,
-          "Project Settings -> Mods holds one item",
+    check(m.r8(project_mods + 8) == built + 1 and m.r8(project_mods + 29) == built + 1,
+          "Project Settings -> Mods holds one item per mod and Defaults",
           f"count {m.r8(project_mods + 8)}, used {m.r8(project_mods + 29)}")
-    item = m.r32(m.r32(project_mods + 12))
-    check(m.cstr(m.r32(item + 4)) == "Defaults", "item name")
+    item = m.r32(m.r32(project_mods + 12) + 4 * built)
+    check(m.cstr(m.r32(item + 4)) == "Defaults", "last item: Defaults")
     check(m.r32(item + 12) == MENU_TYPE_ITEM_LABEL, "item is a label")
     check(m.cstr(m.r32(m.r32(item + 16))) == "Config > Mods", "label points at Config -> Mods")
 

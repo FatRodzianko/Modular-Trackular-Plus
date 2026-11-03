@@ -54,7 +54,7 @@ cMenuGroup menuMetro(menuBase, "Metronome", 5);
 cMenuGroup menuFirmware(menuBase, "Firmware", 4);
 
 #if MT_MODS // MT: Config -> Mods, one Off/On item per mod after the count
-constexpr uint8_t modsMenuItemCount = 1 + mods::kModCount;
+constexpr uint8_t modsMenuItemCount = 1 + mods::kBuiltModCount;
 cMenuGroup menuMods(menuBase, "Mods", modsMenuItemCount);
 #endif
 
@@ -90,8 +90,17 @@ cMenuItem melHeadroomMode(menuProject, "Extra headroom", headroomDesc,  menuType
 cMenuItem melSnapToZeroMode(menuProject, "Snap to zero", snapToZeroDesc,  menuTypeItemListTextWithAction, &setupSnapToZeroMode);
 
 #if MT_MODS // MT: Project Settings -> Mods: one Off/On item per mod for this project, then where the defaults are
-constexpr uint8_t projectModsMenuItemCount = mods::kModCount + 1;
+constexpr uint8_t projectModsMenuItemCount = mods::kBuiltModCount + 1;
 cMenuGroup menuProjectMods(menuProject, "Mods", projectModsMenuItemCount);
+
+#if MT_HAS_CHORDS
+const char projectChordsDesc[] = { "Chords for this project: the Chord FX goes on past 57B into "
+                                   "chord inversions and every other chord within an octave. Off: "
+                                   "those values play the note alone, as in CE. " };
+const strItemTypeListTextWithAction projectChordsSetup{
+    &mods::switches[static_cast<size_t>(mods::Mod::chords)], 2, onOffStateTexts, mods::projectSwitchChanged };
+cMenuItem melProjectChords(menuProjectMods, "Chords", projectChordsDesc, menuTypeItemListTextWithAction, &projectChordsSetup);
+#endif
 
 const strItemTypeLabel projectModsDefaultsSetup{ "Config > Mods" };
 cMenuItem melProjectModsDefaults(menuProjectMods, "Defaults", nullptr, menuTypeItemLabel, &projectModsDefaultsSetup);
@@ -293,13 +302,25 @@ cMenuItem melResetConfig(menuFirmware,
 //==================================================================================================================================================================
 // MT: Mods
 #if MT_MODS
-const strItemTypeLabel modsCountSetup{ mods::kModCountText };
+const strItemTypeLabel modsCountSetup{ mods::kModCountText.text };
 
 cMenuItem melModsCount(menuMods,
                        "Mods in build",
                        nullptr,
                        menuTypeItemLabel,
                        &modsCountSetup);
+
+// Each item is the mod's default for new projects; a project's own switch is in
+// Project Settings -> Mods.
+#if MT_HAS_CHORDS
+const char modsChordsDesc[] = { "Whether new projects start with Chords on. Each project has its "
+                                "own switch in Project Settings > Mods. Chords: the Chord FX goes "
+                                "on past 57B into chord inversions and every other chord within "
+                                "an octave. " };
+const strItemTypeListTextWithAction modsChordsSetup{
+    &mods::defaults[static_cast<size_t>(mods::Mod::chords)], 2, onOffStateTexts, mods::defaultsChanged };
+cMenuItem melModsChords(menuMods, "Chords", modsChordsDesc, menuTypeItemListTextWithAction, &modsChordsSetup);
+#endif
 #endif
 
 //==================================================================================================================================================================

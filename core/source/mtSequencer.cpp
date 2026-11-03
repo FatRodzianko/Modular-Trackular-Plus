@@ -9,6 +9,7 @@
 #include "mtSequencer.h"
 #include "mtStructs.h"
 #include "sampleRecorder/sampleRecorder.h"
+#include "chords.h" // MT:
 
 #include "configEditor/configEditor.h"
 #include "core/songTimer.h"
@@ -2325,6 +2326,12 @@ uint8_t Sequencer::isStop(void)
 
 uint16_t Sequencer::getChordBitmask(uint8_t chord)
 {
+#if MT_HAS_CHORDS // MT: chords 30..236
+    if (const uint16_t mask = mods::chords::bitmask(chord))
+    {
+        return mask;
+    }
+#endif
     if (chord > MAX_CHORD)
         chord = MIN_CHORD;
 
@@ -2332,6 +2339,12 @@ uint16_t Sequencer::getChordBitmask(uint8_t chord)
 }
 uint16_t Sequencer::getChordBitmaskForArp(uint8_t chord)
 {
+#if MT_HAS_CHORDS // MT: chords 30..236
+    if (const uint16_t mask = mods::chords::bitmask(chord))
+    {
+        return mask;
+    }
+#endif
     if (chord > MAX_CHORD)
         chord = MIN_CHORD;
 

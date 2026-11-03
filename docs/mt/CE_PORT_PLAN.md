@@ -1,8 +1,7 @@
 # Porting the mods to Tracker CE: build plan
 
-Status: step 0 built, hardware-tested and committed (2026-11-02); step 0b, per-project
-mod sets (section 1.12), built and tested off-device. Base: Polyend Tracker CE v1.0.0
-(`9b9a13b`) in the fork `FatRodzianko/Modular-Trackular-Plus`, branch `modular`.
+Status (2026-11-02): step 0, step 0b (per-project mod sets, section 1.12) and chords
+(section 3.1) hardware-tested and committed. Base: Polyend Tracker CE v1.0.0 (`9b9a13b`) in the fork `FatRodzianko/Modular-Trackular-Plus`, branch `modular`.
 Background, licence and the per-mod survey: [TRACKER_CE_REVIEW.md](TRACKER_CE_REVIEW.md).
 Line numbers below are for CE v1.0.0 and only show where to look; they move with
 every CE release.
@@ -71,6 +70,10 @@ core/mods/tests/           host tests (built and run in CI with the host gcc)
   `core/mods/modsBuild.h`, overridable through the makefile's `CUSTOM_DEFINES`).
   A build with a flag at 0 has no trace of that mod. Used for a debug build, for
   bisecting, or if a mod ever costs too much to ship always-in.
+  `CUSTOM_DEFINES=-DMT_NO_MODS` leaves every mod out: built with `EDITION_NAME=CE
+  BUILD_TAG=9b9a13b` it gives Polyend's CE 1.0.0 `.ptf` byte for byte (checked with
+  chords in), so every hook really is compiled out. With `MT_NO_SYNTH=1` it is the
+  plain-CE reference the emulator tests compare against.
 - **Licence.** Files under `core/mods/` are ours and can carry MIT. The one-line
   hooks are changes to CE files and fall under CE's licence, as does the fork as a
   whole (review section 1). Nothing from the fork goes back into Modular-Trackular,
@@ -159,6 +162,11 @@ One file per project instead of eight side files.
 - **Plain CE** opening a project saved with mods ignores `mods.bin`. CE's Save As
   doesn't copy it (it copies only its own files), so the copy made by plain CE loses
   the mod settings. Acceptable: nothing breaks.
+
+**Chords and condtrig in old projects.** Their values live in the patterns, so no side
+file shows them in use. Scanning a project's pattern files on Open is left out for now:
+a 1.2.0 project with chords 30–236 opens with Chords Off (those steps play the note
+alone, as plain CE) until Chords is turned on in Project Settings → Mods.
 
 **Importing 1.2.0 projects.** On Open, when a project has no `mods.bin`, read each
 1.2.0 side file that exists (`swing.bin`, `humanize.bin`, `interpolate.bin`,
@@ -329,6 +337,21 @@ effort (S, M, L as in the review). The behaviour itself is as in each
 - **Hardware:** a few chords, inversions, Arp, on sample and MIDI tracks.
 - **Effort:** S. First because it proves the switch, a pattern value range, the
   encoder limit and grid text with almost no risk.
+- **Built (2026-11-02):** `core/mods/chords.h/.cpp` (the 1.2.0 table, unchanged). CE
+  already plays, ends and arpeggiates a chord from its mask, so the hooks are small:
+  `getChordBitmask` and `getChordBitmaskForArp` take the mod's mask for 30–236;
+  `changeSelectionFxValue` lets the encoder go to 236; `makeFxValLabelWithAlgin`
+  writes the intervals. Pads, Fill, random fill and the Random FX value keep CE's
+  0–29, as on 1.2.0. Re-picking the Chord type in the FX picker clamps a value past
+  29 to `57B`, as CE does (not hooked). Host tests: the list against CE's chords and
+  the 1.2.0 numbers (30 checks). Emulator, against the plain-CE reference: the notes
+  sent and ended for every value in both FX columns, Off and On; the text; the
+  Config lines and their files (18 checks). On the device: the encoder and the Arp
+  (the emulator can't reach them by symbol).
+- **Hardware-tested (2026-11-02):** both Config lines, the encoder limit Off and On,
+  chords and their OFF, the Arp in either column, save and reopen, Off and back On,
+  New Project defaults. With Chords Off, an Arp on a value past 29 plays every
+  semitone: CE reads an unknown chord as chord 0, which the Arp plays chromatically.
 
 ### 3.2 condtrig
 
