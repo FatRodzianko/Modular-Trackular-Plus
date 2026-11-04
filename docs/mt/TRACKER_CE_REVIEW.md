@@ -5,21 +5,28 @@ everything below comes from reading the repository online (GitHub pages, raw fil
 GitHub API). Where a claim needs a build or a hardware run to confirm, it says so.
 
 Repository: [polyend/tracker-ce](https://github.com/polyend/tracker-ce), tag
-[`v1.0.0`](https://github.com/polyend/tracker-ce/tree/v1.0.0) (commit `9b9a13b`, the same
-as `main` today). Links below point at that tag so the line numbers stay valid.
+[`v1.0.0`](https://github.com/polyend/tracker-ce/tree/v1.0.0) (commit `9b9a13b`, `main` on
+2026-11-02). Links below point at that tag so the line numbers stay valid.
+
+**License parts updated 2026-11-04.** Polyend changed the license in commit
+[`9cc7aae`](https://github.com/polyend/tracker-ce/commit/9cc7aae) on 2026-11-03. The
+license statements here, and the links in [section 1](#1-license), now follow that commit.
+`LICENSE`, `CONTRIBUTING.md` and the library license are unchanged since, up to `main` at
+`7fd6c2c`. Everything else still describes v1.0.0.
 
 **This is not legal advice.** It is a careful reading of the license text by someone who
 isn't a lawyer. If anything here decides whether you publish, ask one, or ask Polyend.
 
 ## Summary
 
-- **License.** Source-available, not open source: PolyForm Noncommercial 1.0.0 plus
-  Polyend's extra permissions. You may modify CE and publish your changes, source and
-  binaries, for free on GitHub, with the license and a copyright notice attached. You may
-  not sell it or put it into a commercial or "competing" product. There is no copyleft
-  (no duty to publish source), no trademark grant and no CLA, but a pull request to
-  Polyend gives them the right to relicense your code. Two closed synth libraries come
-  with a stricter license that forbids reverse engineering them. [Section 1](#1-license)
+- **License.** Since 2026-11-03: MIT, plus a "Wholesale Commercial Clone Restriction".
+  You may modify CE and publish your changes, source and binaries, with the copyright
+  notice, the permission notice and Part 2's conditions attached. You may not sell
+  firmware builds, sell the complete application as a paid product, or make commercial
+  clone hardware. There is no copyleft (no duty to publish source), no trademark grant
+  and no CLA, but a pull request to Polyend gives them the right to relicense your code.
+  Two closed synth libraries have their own license: free use on Tracker+ and Mini and in
+  non-commercial projects, no fee, no reverse engineering. [Section 1](#1-license)
 - **Tracker+ features.** CE 1.0.0 is past 1.2.0: it has 1.2.0's features (synths, USB
   audio In+Out) and adds eleven new ones plus fixes, including the 44.1 kHz tempo fix,
   per-step `m`/`V` columns, slice Play Thru, more Chance conditions and SD streaming. It
@@ -32,8 +39,7 @@ isn't a lawyer. If anything here decides whether you publish, ask one, or ask Po
   runtime switches in Config in one build. That ends the 2^N mix testing, but every mod
   needs a new hardware test, and each CE release needs another one.
   [Section 3](#3-porting-modular-trackular-to-ce)
-- **Changing Polyend's code.** Allowed (noncommercially), except for the two closed
-  synth/DSP libraries. CE already fixes the 44.1 kHz issue. The jacks going silent with
+- **Changing Polyend's code.** Allowed, except for the two closed synth/DSP libraries. CE already fixes the 44.1 kHz issue. The jacks going silent with
   USB In+Out, RAM limits and the master effects all become source edits. The bootloader
   and the stock synth engines stay out of reach. [Section 4](#4-modifying-polyends-own-code)
 - **Recommendation.** Run both for a while. Keep shipping on 1.2.0, try a CE fork with
@@ -43,69 +49,96 @@ isn't a lawyer. If anything here decides whether you publish, ask one, or ask Po
 
 ## 1. License
 
+### What changed on 2026-11-03
+
+Before `9cc7aae`, CE was PolyForm Noncommercial 1.0.0 with Polyend's extra permissions, and
+only `editor-fx-sdk/` was MIT. In practice:
+
+- **Free forks and free `.ptf` builds:** still allowed. We lose nothing, and nothing in the
+  fork has to change.
+- **Selling:** selling builds or the complete application is still banned. Commercial use
+  of individual parts is now allowed: drivers, DSP, UI helpers, SDKs and open synth engines
+  can go into your own products, paid ones included, if they aren't clones of the Tracker.
+- **Reusing CE code elsewhere:** the license no longer stops it. CE code can be copied into
+  other projects with the notices. Our own rule that CE work stays in the fork still stands
+  (see [below](#what-it-changes-for-no-polyend-code)).
+- **Closed libraries:** the clause barring them from anything that "does not run on
+  authentic Polyend hardware" is gone. They may now also be used in personal, educational,
+  research, hobbyist or open-source DIY non-commercial projects, if no fee is charged. So
+  **running them in our PC emulator is now allowed on a plain reading**, but reverse
+  engineering them is still banned (see [the emulator row](#publishing-a-custom-firmware-on-github)).
+- **Original Tracker:** the library license no longer stops a free, non-commercial project
+  linking them for that device. It still wouldn't work: a read-only check on 2026-11-02
+  found them built for the Cortex-M7 and too big for its free flash.
+- **Gone with PolyForm:** "competing product", the `Required Notice:` line and the 32-day
+  period to fix a violation. The new text has no such period.
+- **Unchanged:** the relicensing right on pull requests, no trademark grant, third-party
+  code under its own licenses, and stock 1.2.0 outside all of this.
+
 ### What the license is
 
-The [`LICENSE`](https://github.com/polyend/tracker-ce/blob/v1.0.0/LICENSE) file has three
-parts, and two more documents add terms:
+The [`LICENSE`](https://github.com/polyend/tracker-ce/blob/9cc7aae/LICENSE) file has three parts, and two more documents add terms:
 
 | Part | Covers | Terms |
 |---|---|---|
-| Part 1 | Everything | Polyend's extra permissions: making music with it commercially is fine; selling the firmware isn't |
-| Part 2 | Firmware source, headers, `synth/include/`, `docs/` | [PolyForm Noncommercial 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0) |
-| Part 3 | `editor-fx-sdk/` (`.ptfx` sample-editor plugins) | MIT |
-| [`synth/lib/LICENSE-PROPRIETARY.txt`](https://github.com/polyend/tracker-ce/blob/v1.0.0/synth/lib/LICENSE-PROPRIETARY.txt) | `libPolySynth.a`, `libPolyDSP.a` (binary only) | Polyend proprietary: redistribute unmodified, only for firmware for Tracker+ and Mini; no reverse engineering |
+| Part 1 | Source code, headers, SDKs (`editor-fx-sdk/`, `synth/include/`), open synth engines (`core/synth/engines/`), `platforms/`, `util/`, `core/`, documentation | MIT, with one extra condition: Part 2's conditions travel with every copy |
+| Part 2 | The complete firmware/application as a whole | Lists what's expressly allowed, and bans commercial clones and selling builds |
+| Part 3 | `synth/lib/` and third-party code | Points to the two documents below |
+| [`synth/lib/LICENSE-PROPRIETARY.txt`](https://github.com/polyend/tracker-ce/blob/9cc7aae/synth/lib/LICENSE-PROPRIETARY.txt) | `libPolySynth.a`, `libPolyDSP.a` (binary only) | Polyend proprietary: use, link and redistribute unmodified, for free firmware on Tracker+ and Mini or for non-commercial projects; no fee; no reverse engineering |
 | [`NOTICE.md`](https://github.com/polyend/tracker-ce/blob/v1.0.0/NOTICE.md) | Third-party code (NXP SDK, CMSIS, FatFs, Teensy Audio, ETL, fonts…) | Each keeps its own license (BSD-3, Apache-2.0, MIT, OFL) |
-| [`CONTRIBUTING.md`](https://github.com/polyend/tracker-ce/blob/v1.0.0/CONTRIBUTING.md#L64-L65) | Pull requests to polyend/tracker-ce | Your code goes in under the same license, and Polyend may relicense it |
+| [`CONTRIBUTING.md`](https://github.com/polyend/tracker-ce/blob/9cc7aae/CONTRIBUTING.md#L66-L67) | Pull requests to polyend/tracker-ce | Your code goes in under the same license, and Polyend may relicense it |
 
 ### The clauses this relies on
 
-- Part 2 lets you change it: "a copyright license to make changes and new works based on
-  the software for any permitted purpose"
-  ([L77–79](https://github.com/polyend/tracker-ce/blob/v1.0.0/LICENSE#L77-L79)).
-- …and distribute it, changed or not: "Your license to distribute covers distributing the
-  software with changes" ([L64–67](https://github.com/polyend/tracker-ce/blob/v1.0.0/LICENSE#L64-L67)).
-- Notices: whoever gets any part of it from you must also get "a copy of these terms or
-  the URL for them", plus every line starting `Required Notice:`
-  ([L69–75](https://github.com/polyend/tracker-ce/blob/v1.0.0/LICENSE#L69-L75)).
-- Part 1 says you may not "sell, license for a fee, or commercially distribute the
-  firmware" or derivatives, and may not put it into "a commercial hardware product,
-  commercial software application, or competing product"
-  ([L22–27](https://github.com/polyend/tracker-ce/blob/v1.0.0/LICENSE#L22-L27)).
-- Hobby use counts as noncommercial ("Personal Uses",
-  [L91–96](https://github.com/polyend/tracker-ce/blob/v1.0.0/LICENSE#L91-L96)).
-- "These terms do not imply any other licenses"
-  ([L107–110](https://github.com/polyend/tracker-ce/blob/v1.0.0/LICENSE#L107-L110)), so no
-  trademark license.
-- Violations: you get 32 days to fix one after written notice
-  ([L118–123](https://github.com/polyend/tracker-ce/blob/v1.0.0/LICENSE#L118-L123)).
-- The closed libraries may be redistributed "solely for the purpose of compiling,
-  modifying, and distributing firmware for authentic Polyend hardware"; you may not
-  "decompile, disassemble, reverse-engineer" them, nor use them in anything that "does
-  not run on authentic Polyend hardware"
-  ([L10–25](https://github.com/polyend/tracker-ce/blob/v1.0.0/synth/lib/LICENSE-PROPRIETARY.txt#L10-L25)).
+- Part 1 gives the standard MIT rights to "use, copy, modify, merge, publish, distribute,
+  sublicense, and/or sell", subject to Part 2 only for the complete integrated application
+  ([L18–28](https://github.com/polyend/tracker-ce/blob/9cc7aae/LICENSE#L18-L28)).
+- Notices: "The above copyright notice, this permission notice, and the conditions in
+  Part 2" go in "all copies or substantial portions"
+  ([L30–31](https://github.com/polyend/tracker-ce/blob/9cc7aae/LICENSE#L30-L31)). This is wider than plain MIT, although
+  `CONTRIBUTING.md` and Part 2 itself say "pure MIT" for some parts. The cautious reading:
+  keep Part 2's text with reused code too.
+- Expressly allowed: making money with music made on it, selling `.ptfx` plugins, and
+  reusing individual components in your own open-source or commercial software, or in
+  hardware that isn't a clone ([L45–62](https://github.com/polyend/tracker-ce/blob/9cc7aae/LICENSE#L45-L62)).
+- Not allowed: commercial hardware clones, paid ports or derivatives of the complete
+  application, and to "Sell or charge a fee for downloading or obtaining compiled `.ptf`
+  firmware images or source distributions"
+  ([L64–79](https://github.com/polyend/tracker-ce/blob/9cc7aae/LICENSE#L64-L79)).
+- Trademarks: no right to the names, logos, boot screens or trade dress "in connection with
+  any third-party commercial product" ([L80–84](https://github.com/polyend/tracker-ce/blob/9cc7aae/LICENSE#L80-L84)).
+- Closed libraries, what's allowed: free firmware builds for Tracker+ and Mini, and
+  "personal, educational, research, hobbyist, or open-source DIY non-commercial hardware or
+  software projects (provided that no fee is charged …)"
+  ([L10–20](https://github.com/polyend/tracker-ce/blob/9cc7aae/synth/lib/LICENSE-PROPRIETARY.txt#L10-L20)).
+- Closed libraries, what isn't: anything paid or commercial, charging for builds that
+  contain them, and to "decompile, disassemble, reverse-engineer, or attempt to derive the
+  source code of the proprietary algorithms"
+  ([L22–32](https://github.com/polyend/tracker-ce/blob/9cc7aae/synth/lib/LICENSE-PROPRIETARY.txt#L22-L32)).
 - The README invites forks: "we actively encourage community forks!"
-  ([README L57](https://github.com/polyend/tracker-ce/blob/v1.0.0/README.md?plain=1#L57)).
+  ([README L57](https://github.com/polyend/tracker-ce/blob/9cc7aae/README.md?plain=1#L57)).
 
 ### Publishing a custom firmware on GitHub
 
 | Question | Answer | How sure |
 |---|---|---|
-| Fork it, change it, publish the source on GitHub | Allowed, for free, with LICENSE and the Required Notice line kept | Clear |
-| Publish built `.ptf` binaries (GitHub Releases, Pages) | Allowed. A CE build includes the closed `.a` libraries; their license allows redistributing them unmodified in firmware for Tracker+ and Mini | Clear |
-| Publish a modified `.ptf` built from **CE** | Allowed, same as above. This is the big change from today | Clear |
+| Fork it, change it, publish the source on GitHub | Allowed, with LICENSE kept. Charging for a source distribution isn't | Clear |
+| Publish built `.ptf` binaries (GitHub Releases, Pages) | Allowed if free. A CE build includes the closed `.a` libraries; their license allows redistributing them unmodified in free firmware for Tracker+ and Mini | Clear |
+| Publish a modified `.ptf` built from **CE** | Allowed if free, same as above. This is the big change from today | Clear |
 | Publish a modified `.ptf` built from **stock 1.2.0** | Not covered. The 1.2.0 binary was never released under these terms, so the repo's rule (patches only) still stands for it | Ambiguous at best; treat as not allowed |
-| Copyleft: must you publish your source? | No. PolyForm has no source-sharing duty. Binaries alone would be allowed | Clear |
-| Your own new files in a fork | Yours; you may keep them MIT. Changes to CE files are derivatives and fall under CE's license. The fork as a whole can only go out under CE's terms | Clear in principle; where a file stops being "yours" is a judgment call |
-| Sublicensing | Not allowed: you pass CE's terms on, you can't grant your own on CE code | Clear |
-| Attribution | Keep the `Required Notice:` copyright line and the license (or its URL) with every copy, including binary downloads. Third-party BSD-3/Apache code in the image wants its notices shipped with binaries too, so ship `NOTICE.md` and the license texts beside the `.ptf` | Clear for Polyend's part; third-party part is ordinary practice |
-| Noncommercial | Free downloads and hobby work are fine. Selling, paid builds, paid early access: not allowed | Clear |
-| Donations, GitHub Sponsors, Patreon | Not addressed. "commercially distribute" could be read to include sponsorship tied to the firmware | **Ambiguous**: avoid tying money to the firmware, or ask Polyend |
-| "competing product" | Not defined, and grammatically not limited to commercial products. A free fork could be called one, though the README says forks are encouraged | **Ambiguous**; low practical risk given the README |
-| Device locking | The closed synth libraries may only be used in firmware for Tracker+ and Mini. Firmware for the original Tracker doesn't link them | Clear |
-| Names and trademarks | No trademark grant. Saying "for the Polyend Tracker+" to describe compatibility is ordinary nominative use; a fork named "Polyend …" or "Tracker CE …" isn't safe. The `.ptf` file name must start with `TrackerPlus` for the updater to list it, which is technical, not branding | Grant: clear (none). Naming: judgment, keep the "not affiliated" line |
+| Copyleft: must you publish your source? | No. MIT has no source-sharing duty. Binaries alone would be allowed | Clear |
+| Your own new files in a fork | Yours; you may keep them MIT. Changes to CE files are derivatives and stay under CE's license, as does the fork as a whole | Clear in principle; where a file stops being "yours" is a judgment call |
+| Sublicensing | MIT allows it for Part 1 material, but the notices and Part 2's conditions must stay with it. The closed libraries' license has no sublicensing right: pass them on unmodified under their own terms | Clear |
+| Reusing individual CE parts in other projects | Allowed, commercial products included, if the result isn't a Tracker clone. Keep the notices and Part 2's text | Clear |
+| Attribution | Keep the copyright notice, the permission notice and Part 2 (in practice, LICENSE) with every copy, including binary downloads. Third-party BSD-3/Apache code in the image wants its notices shipped with binaries too, so ship `NOTICE.md` beside the `.ptf`. The fork's CI already puts `LICENSE` and `NOTICE.md` in the firmware artifact | Clear for Polyend's part; third-party part is ordinary practice |
+| Selling | Free downloads and hobby work are fine. Selling builds, paid downloads, paid early access: not allowed. The closed libraries add "no fee" for any project that uses them | Clear |
+| Donations, GitHub Sponsors, Patreon | Not addressed. A voluntary donation isn't a fee "for downloading or obtaining" a build on a plain reading; anything that buys access to a build is. Sponsorship could still make a project look commercial, which matters for the closed libraries | **Ambiguous**, narrower than before. Closed for this project: none planned (2026-11-04) |
+| Commercial clone restriction | Every ban in Part 2 is about commercial or paid products. A free fork of the complete firmware isn't caught. "Competing product" is no longer in the license | Clear |
+| Device locking | None any more for free, non-commercial work: the closed libraries are allowed on Tracker+ and Mini, and in non-commercial projects generally. Firmware for the original Tracker doesn't link them | Clear on the text |
+| Names and trademarks | No trademark grant. Saying "for the Polyend Tracker+" to describe compatibility is ordinary nominative use; a fork named "Polyend …" or "Tracker CE …" isn't safe, though the license's wording only mentions commercial products. The `.ptf` file name must start with `TrackerPlus` for the updater to list it, which is technical, not branding | Grant: clear (none). Naming: judgment, keep the "not affiliated" line |
 | CLA | None for forks. A pull request to polyend/tracker-ce gives Polyend the right to "use, distribute, and relicense" your change, commercially too | Clear |
-| Reverse engineering | Fine for the PolyForm parts (you have the source anyway). Forbidden for `libPolySynth.a`/`libPolyDSP.a` "except to the extent" local law overrides it | Clear |
-| Running a CE image, closed libraries included, in our PC emulator | The library license bars using the libraries in software "that does not run on authentic Polyend hardware". An emulator running the device image on a PC could be read that way | **Ambiguous**. Matters for synth tests, see [the emulator](#the-emulator) |
+| Reverse engineering | Fine for the Part 1 material (you have the source anyway). Forbidden for `libPolySynth.a`/`libPolyDSP.a` "except to the extent" local law overrides it | Clear |
+| Running a CE image, closed libraries included, in our PC emulator | Allowed on a plain reading. Section 1(b) grants "use" of the unmodified libraries in personal, research or hobbyist non-commercial software projects where no fee is charged, and the old ban on software that doesn't run on Polyend hardware is gone. Section 2(c) still applies: no disassembly, and no tracing or probing to work out how they work. So call them through their public interface, leave their code unpatched, and put no hooks inside it. Matters for synth tests, see [the emulator](#the-emulator) | Running them: clear on the text. Where testing becomes reverse engineering: judgment |
 | Warranty and support | None. Polyend says custom firmware isn't covered by warranty; out-of-warranty repair is offered | Clear (README) |
 
 ### What it changes for "No Polyend code"
@@ -124,9 +157,9 @@ CE changes that only for CE material, under CE's terms:
   far more of it public.
 
 **Still not allowed:**
-- Pasting CE code into this MIT repository. The copied code would have to stay under
-  PolyForm NC with its notice, and the repo couldn't call itself MIT for it. Keep
-  this repo Polyend-code-free and put CE-derived code in the fork.
+- Pasting CE code into this MIT repository. This is now our own rule, not the license's:
+  CE code could be copied here with its notices and Part 2's text. Keep this repo
+  Polyend-code-free anyway and put CE-derived code in the fork.
 - Shipping modified stock 1.2.0 `.ptf` files: CE's license doesn't cover the 1.2.0
   binary.
 - Reverse engineering the two closed libraries (under CE's license). Our earlier work on
@@ -325,20 +358,23 @@ against real function names.
   and every test.
 - With our own `.axf`, tests can call functions by name, which is a big simplification.
 
-**License caution for synth tests:**
+**License and synth tests:**
 - `synth_rig.py` and the synths, legato and interpolate tests run the stock synth
   engines. In a CE build those are the closed libraries.
-- Running them in a PC emulator may count as using them in software "that does not run
-  on authentic Polyend hardware", and tracing them may count as reverse engineering.
-- Safer: test our own engines through the SDK interface only, and keep the stock
-  engines out of the emulator, or ask Polyend.
+- Running them in a PC emulator is now allowed on a plain reading (section 1(b) of the
+  library license, since `9cc7aae`). Stepping through their code, or disassembling it, may
+  still count as reverse engineering (section 2(c)).
+- So the stock engines may run in the emulator as a black box: call them through the
+  public interface and check what comes out. Don't study or patch their code.
+- Decided 2026-11-04: tests move to full builds, with the libraries in, and sound tests
+  are built with the mods that need them. See [SOUND_TEST_PLAN.md](SOUND_TEST_PLAN.md).
 
 ---
 
 ## 4. Modifying Polyend's own code
 
-Yes, CE lets you change built-in behaviour directly, noncommercially, anywhere except
-the two closed libraries. Some examples follow.
+Yes, CE lets you change built-in behaviour directly, anywhere except the two closed
+libraries. Selling the result as firmware stays banned. Some examples follow.
 
 ### The 44.1 kHz issue
 
@@ -447,7 +483,7 @@ Why not ignore it:
 | Hardware sessions | Per mod as today | All 15 mods, then again for each CE release we adopt | CE stock first (does it work for you?), then one ported mod |
 | RAM | 832 B of startup RAM left: each new mod is a squeeze | Plenty | Plenty on CE |
 | Maintenance | Frozen base: tests stay valid | Merging CE releases into a fork forever (or upstreaming) | Both lines for a while, the real cost of this option |
-| Legal | As today (patches only) | CE license, notices, no money tied to it | Both |
+| Legal | As today (patches only) | CE license, notices, no selling builds | Both |
 | New features (tracklen-like work) | Hooks, RE, ITCM stubs | Plain C++ | Write new big ones for CE only? (decision below) |
 
 **Suggested first steps:**
@@ -465,9 +501,9 @@ Why not ignore it:
 
 ### Questions for you
 
-1. **License terms.** Are you comfortable releasing a fork under PolyForm Noncommercial
-   (no sales, nothing paid tied to it, keep the notices)? Any plan for donations or
-   sponsorship? That's the main grey area.
+1. **License terms.** Are you comfortable releasing a fork under CE's license (no selling
+   builds, keep the notices and Part 2)? Donations and sponsorship: answered 2026-11-04,
+   none planned.
 2. **Binaries.** For CE builds, publish `.ptf` files (allowed), or keep a patch-style
    distribution anyway?
 3. **Where the work lives.** A separate fork repository (my suggestion), keeping this
@@ -484,5 +520,5 @@ Why not ignore it:
    freeze it to fixes only? And do you want the one-word 44.1 kHz tempo fix for 1.2.0?
 9. **Tools.** Install GNU Arm 10.3 and `make` (WSL or MSYS2) locally, or build only in
    GitHub Actions?
-10. **Closed libraries in tests.** OK to keep the stock synth engines out of CE emulator
-    tests, given the library license, or ask Polyend first?
+10. **Closed libraries in tests.** Answered 2026-11-04: include them. Tests move to full
+    builds, with closed engines as a black box ([plan](SOUND_TEST_PLAN.md)).

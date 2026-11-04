@@ -72,8 +72,9 @@ core/mods/tests/           host tests (built and run in CI with the host gcc)
   bisecting, or if a mod ever costs too much to ship always-in.
   `CUSTOM_DEFINES=-DMT_NO_MODS` leaves every mod out: built with `EDITION_NAME=CE
   BUILD_TAG=9b9a13b` it gives Polyend's CE 1.0.0 `.ptf` byte for byte (checked with
-  chords in), so every hook really is compiled out. With `MT_NO_SYNTH=1` it is the
-  plain-CE reference the emulator tests compare against.
+  chords in), so every hook really is compiled out. It is the plain-CE reference the
+  emulator tests compare against, with `MT_NO_SYNTH=1` so far and a full build for the
+  sound tests.
 - **Licence.** Files under `core/mods/` are ours and can carry MIT. The one-line
   hooks are changes to CE files and fall under CE's licence, as does the fork as a
   whole (review section 1). Nothing from the fork goes back into Modular-Trackular,
@@ -242,10 +243,12 @@ Three layers replace today's tiers.
    chip, so the memory map carries over, checked against CE's
    `TrackerPlus_memory.ld`. Functions found by symbol name, never by address. Drives
    the sequencer (`Sequencer::tick`), file hooks with `fakefs`, and screen drawing
-   with `eve.py`. **Licence catch:** the image contains the closed synth libraries,
-   whose licence bars running them on non-Polyend hardware. Step 0 checks whether a
-   test build without `FEATURE_SYNTH` links without them; if so, emulator tests use
-   that build. Otherwise, ask Polyend before running the full image in the emulator.
+   with `eve.py`. **Synths are included:** since CE `9cc7aae`, section 1(b) of the closed
+   libraries' licence allows running them here, so tests run on full builds (your call,
+   2026-11-04). Section 2(c) still bans reverse engineering, so closed engines are a
+   black box. `MT_NO_SYNTH=1` builds stay available but can't test engines. Sound
+   checks: [SOUND_TEST_PLAN.md](SOUND_TEST_PLAN.md), built in stages with the mods
+   that need them.
 3. **Hardware checklist** per mod, by you, in the usual scope (no Break FX or
    Performance mode). CE has a built-in `Profiler` (`core/source/Profiler.cpp`) for
    CPU checks on the device, which replaces the timing-headroom estimates.
@@ -397,7 +400,9 @@ id stays unused. The notes below are what was built.
   So half of the 1.2.0 problem is gone.
 - **Hooks:** at play start and at each pattern start (where `switchRowStep` handles
   the last row, L1705, and song mode's next pattern, L369/L781): set the project's
-  amount with `swing.setSwing` and the long step first.
+  amount with `swing.setSwing` and the long step first. Pattern-start hooks run in the
+  audio interrupt, so the amount must already be in RAM: no `mods.bin` read and no
+  `double` there.
 - **Data:** `mods.bin` record: on/off, amount. Project Settings → Global Swing.
 - **Old projects:** `swing.bin` import.
 - **Tests:** emulator: tick timing per take and per pattern start, Swing FX inside a
@@ -475,7 +480,8 @@ id stays unused. The notes below are what was built.
 - **Bonus on CE:** the Synth SDK decides legato from note order (`isLegatoStep`
   from `hadHeldNote`, `SynthVoiceSDK.h` L340), so the order change also gives CE's
   own engines and ours their legato behaviour without more code.
-- **Tests:** emulator: MIDI byte order; synth note events.
+- **Tests:** emulator: MIDI byte order; synth note events. Sound test stage 1 comes with
+  this mod (envelopes and Off = CE on all engines, [plan](SOUND_TEST_PLAN.md)).
 - **Hardware:** MIDI to an external synth; a synth track with Glide Mode.
 - **Effort:** S–M.
 
@@ -490,7 +496,8 @@ id stays unused. The notes below are what was built.
 - **Data:** `mods.bin`: MIDI CC on/off, Synths on/off.
 - **Old projects:** `interpolate.bin` import.
 - **Tests:** host: ramp math and wrap; emulator: CC stream per microstep, with
-  tracklen; CPU via the Profiler on hardware.
+  tracklen; a Macro ramp moves the sound (sound test stage 2,
+  [plan](SOUND_TEST_PLAN.md)); CPU via the Profiler on hardware.
 - **Effort:** M.
 
 ### 3.9 songloop
@@ -510,7 +517,11 @@ id stays unused. The notes below are what was built.
   project.
 - **Hooks:** block colour in `songPlayer.cpp` `fillBlocks` (L708, `colors[1]`, muted
   `colors[7]`); content hashes refreshed when a pattern is saved and on project
-  open. Hashes skip the `m` and `V` columns, as 1.2.0 skips humanize's FX.
+  open. Hashes skip the `m` and `V` columns, as 1.2.0 skips humanize's FX. Pattern saves
+  can run in the audio interrupt (MIDI Start in Song mode → `playSongFromPosition` →
+  `saveWorkspacePatternNow`), so a save only sets a flag and the main loop does the
+  hashing. If per-block colours add display-list commands, count them against the
+  8,172-byte frame budget.
 - **Themes:** CE themes recolour the UI; our hues must stay readable on them. Pick
   colours relative to the theme's song colours, or document that colorsong overrides
   the block fill only.
@@ -554,7 +565,8 @@ id stays unused. The notes below are what was built.
   measure with the Profiler).
 - **Our code:** the DSP from `patch/masterfx/` (ours), buffers from the SDRAM pool.
 - **Data:** `mods.bin`: reverb choice, delay choice; `masterfx.bin` import.
-- **Tests:** host: DSP against the 1.2.0 test references; emulator: routing; CPU on
+- **Tests:** host: DSP against the 1.2.0 test references; emulator: routing and effects,
+  synth sends included (sound test stage 3, [plan](SOUND_TEST_PLAN.md)); CPU on
   hardware with all 8 synth voices sounding (your budget rule).
 - **Effort:** M.
 
@@ -571,7 +583,8 @@ id stays unused. The notes below are what was built.
 - **Data:** `mods.bin`: the two settings; `resample.bin` import.
 - **Note:** the USB In+Out rule that silences the jacks (`mtAudioEngine.cpp`
   L851–865) is CE's and stays.
-- **Tests:** emulator: recorded blocks equal the master blocks; hardware: record a
+- **Tests:** emulator: recorded blocks equal the master blocks, synth tracks included
+  (sound test stage 4, [plan](SOUND_TEST_PLAN.md)); hardware: record a
   playing pattern, compare by ear and by file.
 - **Effort:** M–L.
 
@@ -592,8 +605,10 @@ id stays unused. The notes below are what was built.
   convert to the new type with the patch values mapped (decision 6), or leave them as
   the stock model.
 - **Tests:** host renders of our voices (our code plus the SDK headers, no closed
-  libraries), compared with the 1.2.0 references; hardware: chords on 8 voices (the
-  1.2.0 screech came only on hardware).
+  libraries), compared with the 1.2.0 references; emulator: our engines through CE's real
+  host and graph, beside the closed ones (sound test stage 5,
+  [plan](SOUND_TEST_PLAN.md)); hardware: chords on 8 voices (the 1.2.0 screech came only
+  on hardware).
 - **Effort:** L.
 
 ## 4. Order and why

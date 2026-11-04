@@ -6,8 +6,11 @@ load addresses and copies initialised RAM sections to their run addresses, as th
 startup code would. Functions are found by symbol name, never by address. Nothing runs
 the boot path: tests set up the state a function needs and call it.
 
-Licence note: run only test builds made with MT_NO_SYNTH=1, which leave out Polyend's
-closed synth libraries (their licence bars running them off Polyend hardware).
+Licence note: since CE 9cc7aae the closed synth libraries' licence
+(synth/lib/LICENSE-PROPRIETARY.txt, 1(b)) allows non-commercial use off Polyend hardware,
+so full builds may run here. Treat those libraries as a black box: unmodified, with no
+hooks inside them and no disassembling or tracing their code (2(c)). See
+docs/mt/SOUND_TEST_PLAN.md. MT_NO_SYNTH=1 builds, without the libraries, also still work.
 """
 from __future__ import annotations
 
