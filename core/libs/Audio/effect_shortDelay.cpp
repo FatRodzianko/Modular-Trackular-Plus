@@ -1,7 +1,10 @@
 #include "effect_shortDelay.h"
 #include "Audio.h"
+#include "masterfxDsp.h" // MT:
 #include "mtSequencer.h"
 #include "utility/dspinst.h"
+
+#include <algorithm> // MT:
 
 static int16_t zeroblock[AUDIO_BLOCK_SAMPLES] = {};
 
@@ -121,6 +124,9 @@ AUDIO_CORE_FLASH void AudioEffectShortDelay::clear()
     memset(pingpongDelaylineRight, 0, MAX_DELAYLINE_LENGTH * sizeof(int16_t));
     memset(pingpongDelaylineLeft, 0, MAX_DELAYLINE_LENGTH * sizeof(int16_t));
     memset(monoDelayline, 0, MAX_DELAYLINE_LENGTH * sizeof(int16_t));
+#if MT_HAS_MASTERFX // MT: the chosen delay starts over in the cleared buffers
+    mods::masterfx::delayCleared();
+#endif
     //    AudioInterrupts();
     unblockUpdate();
 }
@@ -146,6 +152,27 @@ AUDIO_CORE_RAM void AudioEffectShortDelay::update(void)
 
     bool processed = false;
 
+#if MT_HAS_MASTERFX // MT: the chosen delay instead of CE's, with the same block handling
+    if (mods::masterfx::activeDelay != 0)
+    {
+        if (outputLeft != nullptr && outputRight != nullptr && !noRefresh)
+        {
+            const mods::masterfx::DelayKnobs knobs{ timeInSamples, filterCoeffs.b1, feedback, isPingpong };
+            // outputRight goes out on channel 0, so it's the effect's left
+            const bool silent = mods::masterfx::delayProcess(knobs,
+                                                             pingpongDelaylineRight,
+                                                             pingpongDelaylineLeft,
+                                                             input != nullptr ? input->data : zeroblock,
+                                                             outputRight->data,
+                                                             outputLeft->data);
+            // what isSilent reads, for an export's tail
+            silentSamplesCount =
+              !silent ? 0 : std::min<uint32_t>(silentSamplesCount + AUDIO_BLOCK_SAMPLES, MAX_DELAYLINE_LENGTH);
+            processed = true;
+        }
+    }
+    else
+#endif
     if (outputLeft != nullptr && outputRight != nullptr)
     {
         processed = process(input != nullptr ? input->data : zeroblock,

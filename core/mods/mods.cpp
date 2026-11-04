@@ -165,6 +165,12 @@ void projectSwingSwitchChanged()
 void projectMasterfxSwitchChanged()
 {
     projectSwitchChanged();
+    masterfx::apply();
+}
+
+void masterfxStarted()
+{
+    masterfx::started();
 }
 #endif
 
@@ -203,6 +209,7 @@ void projectSettingEdited()
     if (masterfx::storeIfEdited(projectStore))
     {
         project::markChanged();
+        masterfx::apply();
     }
 #endif
 }
@@ -236,6 +243,7 @@ void onWorkspaceLoaded()
 #endif
 #if MT_HAS_MASTERFX
     masterfx::load(projectStore);
+    masterfx::apply();
 #endif
 #if MT_HAS_COLORSONG
     colorsong::reset();

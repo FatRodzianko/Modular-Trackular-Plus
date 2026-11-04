@@ -9,6 +9,11 @@
 #include <cstdio>
 #include <cstring>
 
+#ifndef MT_HOST_TEST
+#include "masterfxDsp.h"
+#include "mtAudioEngine.h"
+#endif
+
 namespace mods
 {
 namespace masterfx
@@ -109,6 +114,51 @@ bool importSideFile(FileIo& io, const char* projectFolder, Store& store)
     return store.put(kRecord, kRecordVersion, &s, kRecordSize) &&
            (s.reverb != kStock || s.delay != kStock);
 }
+
+#ifndef MT_HOST_TEST
+
+namespace
+{
+bool hasStarted = false;
+}
+
+void apply()
+{
+    if (!hasStarted)
+    {
+        return;
+    }
+
+    const bool isOn = on(Mod::masterfx);
+    const uint8_t reverb = isOn && settings.reverb < kReverbCount ? settings.reverb : kStock;
+    const uint8_t delay = isOn && settings.delay < kDelayCount ? settings.delay : kStock;
+
+    if (reverb != activeReverb)
+    {
+        AudioEffectPolyverb* object = engine.getMixerAndFx()->getPolyverb();
+        object->blockUpdate();
+        activeReverb = reverb;
+        object->reset(); // unblocks
+    }
+    if (delay != activeDelay)
+    {
+        AudioEffectShortDelay* object = engine.getMixerAndFx()->getDelay();
+        object->blockUpdate();
+        activeDelay = delay;
+        object->clear(); // unblocks
+    }
+}
+
+void started()
+{
+    if (!hasStarted)
+    {
+        hasStarted = true;
+        apply();
+    }
+}
+
+#endif // MT_HOST_TEST
 
 } // namespace masterfx
 } // namespace mods

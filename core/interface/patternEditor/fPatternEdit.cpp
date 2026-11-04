@@ -22,6 +22,7 @@
 #include <cr_section_macros.h>
 
 #include "humanize.h"           // MT:
+#include "mods.h"               // MT:
 #include "modsPatternButtons.h" // MT:
 
 __NOINIT(EXTERNAL_RAM) strTrackerPattern cPatternEditor::trackerPattern;
@@ -176,6 +177,10 @@ elapsedMillis playheadBlinkTimer;
 
 void cPatternEditor::update()
 {
+#if MT_HAS_MASTERFX // MT: the unit has started, so the project's effects may play
+    mods::masterfxStarted();
+#endif
+
     // zarzadznie renderowaniem zaznaczenia ---------------------------
     uint8_t managerStatus = newFileManager.getStatus();
 

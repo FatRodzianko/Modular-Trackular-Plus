@@ -5,7 +5,11 @@
 
 extern uint16_t externalRamReverbBuff[];
 #ifdef PLATFORM_IMX
+#if MT_HAS_MASTERFX // MT: Spring keeps floats in this buffer
+static uint16_t internalRamReverbBuff[16384] __attribute__((section(".noinit"), aligned(4)));
+#else
 static uint16_t internalRamReverbBuff[16384] __attribute__((section(".noinit")));
+#endif
 #else
 static __NOINIT(EXTERNAL_RAM) uint16_t internalRamReverbBuff[16384];
 #endif
@@ -47,6 +51,14 @@ AUDIO_CORE_RAM void AudioEffectPolyverb::update(void)
         return;
     }
 
+#if MT_HAS_MASTERFX // MT: the chosen reverb instead of CE's
+    if (mods::masterfx::activeReverb != 0)
+    {
+        const mods::masterfx::ReverbKnobs knobs = reverb.knobsForMods();
+        mods::masterfx::reverbProcess(knobs, buffer, buffer2, block_left->data, block_right->data);
+    }
+    else
+#endif
     reverb.Process(block_left->data, block_right->data, AUDIO_BLOCK_SAMPLES);
 
     transmit(block_left, 0);
@@ -60,6 +72,9 @@ AUDIO_CORE_FLASH void AudioEffectPolyverb::reset(void)
 {
     isBlockedUpdate = true;
     reverb.Reset();
+#if MT_HAS_MASTERFX // MT: the chosen reverb starts over in the cleared buffers
+    mods::masterfx::reverbCleared();
+#endif
     isBlockedUpdate = false;
 }
 

@@ -109,6 +109,10 @@ void projectSwingSwitchChanged();
 #if MT_HAS_MASTERFX
 // The same for Master FX's switch, which also changes the effects that play.
 void projectMasterfxSwitchChanged();
+
+// Pattern screen update. Until the first one, Stock plays: on 1.2.0 Freeverb running
+// during boot hung the unit.
+void masterfxStarted();
 #endif
 
 #if MT_HAS_COLORSONG

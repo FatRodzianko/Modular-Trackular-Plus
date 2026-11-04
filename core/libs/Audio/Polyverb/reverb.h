@@ -34,6 +34,7 @@
 #define POLYVERB_REVERB_H_
 
 #include "fx_engine.h"
+#include "masterfxDsp.h" // MT:
 #include "util.h"
 
 class Reverb
@@ -194,6 +195,13 @@ class Reverb
     inline bool IsActive() { return last_update_delta_ > sound_delta_threshold_; }
 
     inline void SetActiveThreshold(float threshold) { sound_delta_threshold_ = threshold; }
+
+#if MT_HAS_MASTERFX // MT: the Master Reverb page's knobs, for the chosen reverb
+    inline mods::masterfx::ReverbKnobs knobsForMods() const
+    {
+        return { amount_, input_gain_, reverb_time_, diffusion_, lp_, predelay_length_ };
+    }
+#endif
 
   private:
     typedef FxEngine<16384, FORMAT_16_BIT> E;

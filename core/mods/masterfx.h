@@ -6,8 +6,10 @@
 // Off, or Stock chosen: CE's own effect runs and nothing here does. Off keeps the
 // project's choice, so On brings it back.
 //
-// The choice is made in the main loop (Config menu, project load). The audio interrupt
-// only reads what's in RAM.
+// The choice is made in the main loop (Config menu, project load). apply() blocks the
+// effect, clears its buffers through CE's own clear and sets what plays; the next audio
+// block lays the effect out in the clean buffers. The effect is silent for that long and
+// the dry sound isn't touched. The interrupt side is in masterfxDsp.cpp.
 
 #ifndef MODS_MASTERFX_H_
 #define MODS_MASTERFX_H_
@@ -54,6 +56,13 @@ bool storeIfEdited(Store& store);
 // A project from stock 1.2.0: its masterfx.bin into store's record. True if it picks
 // anything but Stock and Stock, so the project starts with the mod On.
 bool importSideFile(FileIo& io, const char* projectFolder, Store& store);
+
+// Main loop only. Makes the effects that play match settings and the switch. Does
+// nothing until started().
+void apply();
+
+// Main loop only: the unit has started. Cheap to call again.
+void started();
 
 } // namespace masterfx
 } // namespace mods

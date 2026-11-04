@@ -1,0 +1,367 @@
+/*
+ * shimmer_dsp.h: in CE's reverb slot. Included once, by ../masterfxDsp.cpp, after freeverb_dsp.h.
+ *
+ * A shimmer reverb is a reverb with a pitch shifter in its feedback: the tail is shifted
+ * up an octave and fed back into the reverb, so every pass adds a layer an octave
+ * higher, and the tail rises into a bright, organ-like wash.
+ *
+ * The reverb is the same plate as plate_dsp.h (Dattorro, "Effect Design, Part 1", 1997:
+ * input diffusers, a two-half tank, seven output taps per side), here at the paper's own
+ * delay lengths (as if at 29.761 kHz), which leaves room in the stock reverb's two
+ * buffers for the pitch shifter's line next to the Predelay. Every pass:
+ *  - the plate's output (both sides, summed) is written into the shifter's line
+ *    (2,048 samples, 46 ms); two read heads move through it at twice the speed it is
+ *    written, half a line apart, each faded in and out with a triangle window as it
+ *    wraps, so together they play it back an octave up without gaps;
+ *  - the shifted signal is band-limited (200 Hz to 6 kHz, so the octaves don't pile up
+ *    into a whistle or a rumble), limited (so the loop can't run away, whatever the
+ *    knobs), scaled by the shimmer amount and added to the plate's input.
+ *
+ * The Master Reverb knobs:
+ *  - Size (0..1)          -> the plate's decay 0.35..0.97: how long it rings
+ *  - Damping (1 - damping) -> the plate's damping: the tail's tone
+ *  - Predelay (0..5000 samples) -> a delay before the reverb, as for the others
+ *  - Diffusion (0..0.85)  -> the shimmer amount: none at 0 (a plain plate) to full
+ *                                   at the top; the plate's own diffusion is fixed at
+ *                                   the paper's values
+ * The return is mixed as the stock reverb's: send + (wet - send) * amount, with the
+ * object's amount and input gain.
+ */
+#ifndef SHIMMER_DSP_H
+#define SHIMMER_DSP_H
+
+/* ---- the lines (the paper's lengths) ------------------------------------------------ */
+#define SH_EXCURSION        16u             /* the modulated allpasses' swing, samples */
+#define SH_AP_A_LEN         672u
+#define SH_AP_B_LEN         908u
+#define SH_WINDOW           2048u           /* the pitch shifter's line */
+
+#define S_IN1               142u
+#define S_IN2               107u
+#define S_IN3               379u
+#define S_IN4               277u
+#define S_AP_A              (SH_AP_A_LEN + SH_EXCURSION + 2u)
+#define S_D1_A              4453u
+#define S_AP2_A             1800u
+#define S_D2_A              3720u
+#define S_AP_B              (SH_AP_B_LEN + SH_EXCURSION + 2u)
+#define S_D1_B              4217u
+#define S_AP2_B             2656u
+#define S_D2_B              3163u
+/* ring 0 (the first buffer): the input diffusers and the left half */
+#define SB_IN1              0u
+#define SB_IN2              (SB_IN1 + S_IN1 + 1u)
+#define SB_IN3              (SB_IN2 + S_IN2 + 1u)
+#define SB_IN4              (SB_IN3 + S_IN3 + 1u)
+#define SB_AP_A             (SB_IN4 + S_IN4 + 1u)
+#define SB_D1_A             (SB_AP_A + S_AP_A + 1u)
+#define SB_AP2_A            (SB_D1_A + S_D1_A + 1u)
+#define SB_D2_A             (SB_AP2_A + S_AP2_A + 1u)
+#define SB_PRE0             (SB_D2_A + S_D2_A + 1u)
+#define S_PRE0              (BUFFER_SAMPLES - SB_PRE0 - 1u)
+/* ring 1 (the second buffer): the right half and the pitch shifter */
+#define SB_AP_B             0u
+#define SB_D1_B             (SB_AP_B + S_AP_B + 1u)
+#define SB_AP2_B            (SB_D1_B + S_D1_B + 1u)
+#define SB_D2_B             (SB_AP2_B + S_AP2_B + 1u)
+#define SB_SHIFT            (SB_D2_B + S_D2_B + 1u)
+#define SB_PRE1             (SB_SHIFT + SH_WINDOW + 1u)
+#define S_PRE1              (BUFFER_SAMPLES - SB_PRE1 - 1u)
+#define SH_MASK             (BUFFER_SAMPLES - 1u)
+#if SB_PRE0 + 1u > BUFFER_SAMPLES || SB_PRE1 + 1u > BUFFER_SAMPLES || S_PRE0 + S_PRE1 < PREDELAY_MAX
+#error "the shimmer's lines and the predelay don't fit the two buffers"
+#endif
+
+#define SH_BANDWIDTH        0.9995f
+#define SH_TAP_GAIN         0.6f
+#define SH_IN_GAIN          0.5f            /* the send into the plate, at the stock input gain 0.1 */
+#define SH_OUT_TRIM         0.5f            /* the return level against the stock reverb's */
+#define SH_ID1              0.75f           /* the plate's diffusion: the paper's values */
+#define SH_ID2              0.625f
+#define SH_DD1              0.70f
+#define SH_AMOUNT_MAX       0.6f            /* the shifted feed at the top of the Diffusion knob */
+#define SH_HP               0.97191f        /* the feed's low cut: exp(-2 pi 200 / 44100) */
+#define SH_LP               0.57466f        /* ... and high cut: 1 - exp(-2 pi 6000 / 44100) */
+#define SH_LIMIT            4000.0f         /* the feed's ceiling, sample units */
+#define SH_RELEASE          0.99989f        /* the limiter's release: about 0.2 s */
+#define SH_ROT_C            0.99983371f     /* the modulation: 1 Hz, per block */
+#define SH_ROT_S            0.01823676f
+
+#define SH_MAGIC            0x4D4D4853u     /* "SHMM": laid out for buf_l/buf_r */
+
+struct shimmer_state {
+    uint32_t magic;
+    uint32_t buf_l, buf_r;
+    uint32_t wp;                            /* the rings' write position */
+    uint16_t head[2];                       /* the shifter's read heads: samples back, 1..SH_WINDOW */
+    float bw;
+    float damp[2];
+    float osc[2];
+    float hp_x, hp_y, lp, env, feed;        /* the shifted feed: filters, limiter, last value */
+};
+static struct shimmer_state shimmer_state_ram;
+#define SH (&shimmer_state_ram)
+
+#define SH_RD0(off)         ((float)q0[(wp + (off)) & SH_MASK])
+#define SH_RD1(off)         ((float)q1[(wp + (off)) & SH_MASK])
+#define SH_WR0(off, v)      (q0[(wp + (off)) & SH_MASK] = sat16(v))
+#define SH_WR1(off, v)      (q1[(wp + (off)) & SH_MASK] = sat16(v))
+
+/* Lay out the rings in the two (cleared) buffers. */
+static void shimmer_init(uint32_t buf_l, uint32_t buf_r)
+{
+    SH->wp = 0;
+    SH->head[0] = SH_WINDOW;
+    SH->head[1] = SH_WINDOW / 2u;
+    SH->bw = 0.0f;
+    SH->damp[0] = SH->damp[1] = 0.0f;
+    SH->osc[0] = 1.0f;
+    SH->osc[1] = 0.0f;
+    SH->hp_x = SH->hp_y = SH->lp = SH->env = SH->feed = 0.0f;
+    SH->buf_l = buf_l;
+    SH->buf_r = buf_r;
+    SH->magic = SH_MAGIC;
+}
+
+/* the shifter's triangle window, Q15: 0 at the line's ends, 1 in the middle (the
+ * exact value the float 1 - |head * 2 / SH_WINDOW - 1| gave) */
+static inline int32_t sh_window_q15(uint32_t head)
+{
+    int32_t t = (int32_t)head * (int32_t)(65536u / SH_WINDOW) - 32768;
+    return 32768 - (t < 0 ? -t : t);
+}
+
+#define SH_TANK_Q           9830            /* into the shifter: 0.5 x SH_TAP_GAIN, Q15 */
+
+/* ---- the output taps, as block passes ----------------------------------------------
+ * Every output tap but one, and the tank-end reads, look at least a whole block back,
+ * so they never see the current block's writes and can run before the sample loop: a
+ * few streams at a time, each a backward walk through its ring, split where one would
+ * walk below the ring's start (the shape of gated's burst passes), in integers since
+ * the lines hold int16. The gains are the taps' signs. */
+MFX_ITCM static void sh_pass4(int32_t *acc, int first,
+                     const int16_t *qa, uint32_t sa, int32_t ga,
+                     const int16_t *qb, uint32_t sb, int32_t gb,
+                     const int16_t *qc, uint32_t sc, int32_t gc,
+                     const int16_t *qd, uint32_t sd, int32_t gd)
+{
+    for (uint32_t n = 0; n < BLOCK;) {
+        uint32_t run = BLOCK - n;
+        if (sa + 1u < run)
+            run = sa + 1u;
+        if (sb + 1u < run)
+            run = sb + 1u;
+        if (sc + 1u < run)
+            run = sc + 1u;
+        if (sd + 1u < run)
+            run = sd + 1u;
+        const int16_t *pa = qa + sa, *pb = qb + sb, *pc = qc + sc, *pd = qd + sd;
+        int32_t *o = acc + n;
+        if (first)
+            for (uint32_t i = 0; i < run; i++)
+                *o++ = ga * *pa-- + gb * *pb-- + gc * *pc-- + gd * *pd--;
+        else
+            for (uint32_t i = 0; i < run; i++)
+                *o++ += ga * *pa-- + gb * *pb-- + gc * *pc-- + gd * *pd--;
+        sa = (sa - run) & SH_MASK;
+        sb = (sb - run) & SH_MASK;
+        sc = (sc - run) & SH_MASK;
+        sd = (sd - run) & SH_MASK;
+        n += run;
+    }
+}
+
+MFX_ITCM static void sh_pass3(int32_t *acc,          /* three more streams, added on */
+                     const int16_t *qa, uint32_t sa, int32_t ga,
+                     const int16_t *qb, uint32_t sb, int32_t gb,
+                     const int16_t *qc, uint32_t sc, int32_t gc)
+{
+    for (uint32_t n = 0; n < BLOCK;) {
+        uint32_t run = BLOCK - n;
+        if (sa + 1u < run)
+            run = sa + 1u;
+        if (sb + 1u < run)
+            run = sb + 1u;
+        if (sc + 1u < run)
+            run = sc + 1u;
+        const int16_t *pa = qa + sa, *pb = qb + sb, *pc = qc + sc;
+        int32_t *o = acc + n;
+        for (uint32_t i = 0; i < run; i++)
+            *o++ += ga * *pa-- + gb * *pb-- + gc * *pc--;
+        sa = (sa - run) & SH_MASK;
+        sb = (sb - run) & SH_MASK;
+        sc = (sc - run) & SH_MASK;
+        n += run;
+    }
+}
+
+MFX_ITCM static void sh_pass2(int32_t *acc,          /* two more streams, added on */
+                     const int16_t *qa, uint32_t sa, int32_t ga,
+                     const int16_t *qb, uint32_t sb, int32_t gb)
+{
+    for (uint32_t n = 0; n < BLOCK;) {
+        uint32_t run = BLOCK - n;
+        if (sa + 1u < run)
+            run = sa + 1u;
+        if (sb + 1u < run)
+            run = sb + 1u;
+        const int16_t *pa = qa + sa, *pb = qb + sb;
+        int32_t *o = acc + n;
+        for (uint32_t i = 0; i < run; i++)
+            *o++ += ga * *pa-- + gb * *pb--;
+        sa = (sa - run) & SH_MASK;
+        sb = (sb - run) & SH_MASK;
+        n += run;
+    }
+}
+
+/* Process one block of the stereo send in place; returns the average output level. */
+MFX_ITCM static float shimmer_process(const ReverbKnobs *obj, int16_t *left, int16_t *right)
+{
+    int16_t *q0 = (int16_t *)SH->buf_l, *q1 = (int16_t *)SH->buf_r;
+    float size = fclamp(obj->size, 0.0f, 1.0f);
+    float damping = fclamp(1.0f - obj->lp, 0.0f, 1.0f);
+    float diffusion = fclamp(obj->diffusion, 0.0f, 1.0f);
+    float amount = fclamp(obj->amount, 0.0f, 1.0f);
+    float gain = fclamp(obj->inputGain, 0.0f, 1.0f);
+    int32_t predelay = obj->predelay;
+    if (predelay < 0)
+        predelay = 0;
+    if (predelay > (int32_t)PREDELAY_MAX)
+        predelay = PREDELAY_MAX;
+
+    float decay = 0.35f + 0.62f * size;
+    float dd2 = fclamp(decay + 0.15f, 0.25f, 0.5f);
+    float damp = 0.85f * damping, keep = 1.0f - damp;
+    float in_gain = SH_IN_GAIN * (gain / 0.1f);
+    float shimmer = SH_AMOUNT_MAX * fclamp(diffusion / 0.85f, 0.0f, 1.0f);
+    const float tg = SH_TAP_GAIN * SH_OUT_TRIM;
+
+    float c = SH->osc[0], s = SH->osc[1];
+    float c2 = c * SH_ROT_C - s * SH_ROT_S, s2 = s * SH_ROT_C + c * SH_ROT_S;
+    float g = 1.5f - 0.5f * (c2 * c2 + s2 * s2);
+    c2 *= g;
+    s2 *= g;
+    SH->osc[0] = c2;
+    SH->osc[1] = s2;
+    float sa = s * (float)SH_EXCURSION, sa_step = (s2 - s) * (float)SH_EXCURSION / BLOCK;
+    float ca = c * (float)SH_EXCURSION, ca_step = (c2 - c) * (float)SH_EXCURSION / BLOCK;
+
+    uint32_t pre0 = (uint32_t)predelay < S_PRE0 ? (uint32_t)predelay : S_PRE0;
+    uint32_t pre1 = (uint32_t)predelay - pre0;
+
+    float bw = SH->bw, lp_a = SH->damp[0], lp_b = SH->damp[1];
+    float hp_x = SH->hp_x, hp_y = SH->hp_y, flp = SH->lp, env = SH->env, feed = SH->feed;
+    uint32_t h0 = SH->head[0], h1 = SH->head[1];
+    uint32_t wp = SH->wp;
+
+    /* the output taps for the whole block (every one at least a block back, except the
+     * 121-sample tap, which stays in the loop below); the signs are the taps' signs */
+    int32_t tapl[BLOCK], tapr[BLOCK];
+    sh_pass4(tapl, 1,
+             q1, (wp + SB_D1_B + 266u) & SH_MASK, 1, q1, (wp + SB_D1_B + 2974u) & SH_MASK, 1,
+             q1, (wp + SB_AP2_B + 1913u) & SH_MASK, -1, q1, (wp + SB_D2_B + 1996u) & SH_MASK, 1);
+    sh_pass3(tapl,
+             q0, (wp + SB_D1_A + 1990u) & SH_MASK, -1, q0, (wp + SB_AP2_A + 187u) & SH_MASK, -1,
+             q0, (wp + SB_D2_A + 1066u) & SH_MASK, -1);
+    sh_pass4(tapr, 1,
+             q0, (wp + SB_D1_A + 353u) & SH_MASK, 1, q0, (wp + SB_D1_A + 3627u) & SH_MASK, 1,
+             q0, (wp + SB_AP2_A + 1228u) & SH_MASK, -1, q0, (wp + SB_D2_A + 2673u) & SH_MASK, 1);
+    sh_pass2(tapr,
+             q1, (wp + SB_D1_B + 2111u) & SH_MASK, -1, q1, (wp + SB_AP2_B + 335u) & SH_MASK, -1);
+
+    float level = 0.0f;
+    for (uint32_t n = 0; n < BLOCK; n++) {
+        /* the predelay, in integers (the lines hold int16; / 2 cuts the half toward
+         * zero, as the old float write did) */
+        int32_t xi = ((int32_t)left[n] + (int32_t)right[n]) / 2;
+        q0[(wp + SB_PRE0) & SH_MASK] = (int16_t)xi;
+        if (pre0)
+            xi = q0[(wp + SB_PRE0 + pre0) & SH_MASK];
+        q1[(wp + SB_PRE1) & SH_MASK] = (int16_t)xi;
+        if (pre1)
+            xi = q1[(wp + SB_PRE1 + pre1) & SH_MASK];
+        float x = (float)xi * in_gain + feed;   /* the send, and the shifted tail */
+
+        int32_t ol = tapl[n];
+        int32_t orr = tapr[n] - (int32_t)q1[(wp + SB_D2_B + 121u) & SH_MASK];
+        float out_l = (float)ol, out_r = (float)orr;
+        float end_a = SH_RD0(SB_D2_A + S_D2_A), end_b = SH_RD1(SB_D2_B + S_D2_B);
+
+        bw = SH_BANDWIDTH * x + (1.0f - SH_BANDWIDTH) * bw;
+        float v = bw, d, y;
+        d = SH_RD0(SB_IN1 + S_IN1); y = d - SH_ID1 * v; SH_WR0(SB_IN1, v + SH_ID1 * y); v = y;
+        d = SH_RD0(SB_IN2 + S_IN2); y = d - SH_ID1 * v; SH_WR0(SB_IN2, v + SH_ID1 * y); v = y;
+        d = SH_RD0(SB_IN3 + S_IN3); y = d - SH_ID2 * v; SH_WR0(SB_IN3, v + SH_ID2 * y); v = y;
+        d = SH_RD0(SB_IN4 + S_IN4); y = d - SH_ID2 * v; SH_WR0(SB_IN4, v + SH_ID2 * y); v = y;
+
+        float in_a = v + decay * end_b;
+        float dl = (float)SH_AP_A_LEN + sa;
+        uint32_t whole = (uint32_t)dl;
+        float frac = dl - (float)whole;
+        d = SH_RD0(SB_AP_A + whole) * (1.0f - frac) + SH_RD0(SB_AP_A + whole + 1u) * frac;
+        y = d + SH_DD1 * in_a;
+        SH_WR0(SB_AP_A, in_a - SH_DD1 * y);
+        float a = SH_RD0(SB_D1_A + S_D1_A);
+        SH_WR0(SB_D1_A, y);
+        lp_a = keep * a + damp * lp_a;
+        float u = lp_a * decay;
+        d = SH_RD0(SB_AP2_A + S_AP2_A); y = d - dd2 * u; SH_WR0(SB_AP2_A, u + dd2 * y);
+        SH_WR0(SB_D2_A, y);
+
+        float in_b = v + decay * end_a;
+        dl = (float)SH_AP_B_LEN + ca;
+        whole = (uint32_t)dl;
+        frac = dl - (float)whole;
+        d = SH_RD1(SB_AP_B + whole) * (1.0f - frac) + SH_RD1(SB_AP_B + whole + 1u) * frac;
+        y = d + SH_DD1 * in_b;
+        SH_WR1(SB_AP_B, in_b - SH_DD1 * y);
+        float b = SH_RD1(SB_D1_B + S_D1_B);
+        SH_WR1(SB_D1_B, y);
+        lp_b = keep * b + damp * lp_b;
+        u = lp_b * decay;
+        d = SH_RD1(SB_AP2_B + S_AP2_B); y = d - dd2 * u; SH_WR1(SB_AP2_B, u + dd2 * y);
+        SH_WR1(SB_D2_B, y);
+
+        /* the octave up: the plate's output into the shifter's line, two heads reading it
+         * at twice the speed (each one sample closer every sample), cross-faded; in
+         * integers up to the filters (feedforward, so plain truncation is fine) */
+        int32_t tsum = __ssat(ol + orr, 18);    /* +-131071 x SH_TANK_Q still fits 32 bits */
+        q1[(wp + SB_SHIFT) & SH_MASK] = (int16_t)__ssat((tsum * SH_TANK_Q) / 32768, 16);
+        int32_t sh_i = (int32_t)q1[(wp + SB_SHIFT + h0) & SH_MASK] * sh_window_q15(h0)
+                       + (int32_t)q1[(wp + SB_SHIFT + h1) & SH_MASK] * sh_window_q15(h1);
+        float shifted = (float)sh_i * (1.0f / 32768.0f);
+        h0 = h0 > 1u ? h0 - 1u : SH_WINDOW;
+        h1 = h1 > 1u ? h1 - 1u : SH_WINDOW;
+        hp_y = SH_HP * (hp_y + shifted - hp_x);
+        hp_x = shifted;
+        flp += SH_LP * (hp_y - flp);
+        float mag = flp < 0 ? -flp : flp;
+        env = mag > env ? mag : env * SH_RELEASE;
+        feed = flp * shimmer * (env > SH_LIMIT ? SH_LIMIT / env : 1.0f);
+
+        sa += sa_step;
+        ca += ca_step;
+        wp = (wp - 1u) & SH_MASK;
+
+        float wl = out_l * tg, wrt = out_r * tg;
+        float dry_l = (float)left[n], dry_r = (float)right[n];
+        left[n] = sat16(dry_l + (wl - dry_l) * amount);
+        right[n] = sat16(dry_r + (wrt - dry_r) * amount);
+        level += (wl < 0 ? -wl : wl) + (wrt < 0 ? -wrt : wrt);
+    }
+    SH->wp = wp;
+    SH->head[0] = (uint16_t)h0;
+    SH->head[1] = (uint16_t)h1;
+    SH->bw = bw;
+    SH->damp[0] = lp_a;
+    SH->damp[1] = lp_b;
+    SH->hp_x = hp_x;
+    SH->hp_y = hp_y;
+    SH->lp = flp;
+    SH->env = env;
+    SH->feed = feed;
+    return level / BLOCK;
+}
+
+#endif
