@@ -494,14 +494,49 @@ void testProjectFlows()
     load(io, s, plain);
     check(set() == Bytes({ 0, 0, 0 }), "plain CE project: every mod Off");
 
-    // A step-0 project: mods.bin with no mod set. Every mod Off, nothing imported.
-    const char* step0 = "Projects/Step0";
-    io.files[projectFile(step0)] = makeFile(project::kMagic, {});
-    io.files[std::string(step0) + "/old.bin"] = { 1 };
-    project::copyIn(io, s, step0);
+    // A mods.bin from a build without this mod yet: the importer still gets its one turn.
+    const char* older = "Projects/Older";
+    io.files[projectFile(older)] =
+      makeFile(project::kMagic, { { kSwitchesRecord, { 0, 0, 1 } }, { 250, { 8 } } });
+    io.files[std::string(older) + "/old.bin"] = { 6, 7 };
+    project::copyIn(io, s, older);
     importerCalls = 0;
-    load(io, s, step0);
-    check(importerCalls == 0 && set() == Bytes({ 0, 0, 0 }), "step-0 project: every mod Off");
+    load(io, s, older);
+    check(importerCalls == 1 && recordOf(s, kTestRecord) == Bytes({ 6, 7 }),
+          "an older build's mods.bin: the side file is imported");
+    check(set() == Bytes({ 0, 1, 1 }), "that mod On, the project's own switches kept");
+    check(recordOf(s, 250) == Bytes({ 8 }), "and its other records kept");
+    {
+        TestStore w(project::kMagic);
+        check(loadImage(w.store, io.files[project::kWorkspaceFile]) &&
+                recordOf(w.store, kSwitchesRecord) == Bytes({ 0, 1, 1 }),
+              "written to the Workspace");
+    }
+    switches[kImportedMod] = 0;
+    s.remove(kTestRecord);
+    project::setSwitches(s, switches, kTestMods);
+    project::saveToProject(io, s, older);
+    project::copyIn(io, s, older);
+    importerCalls = 0;
+    load(io, s, older);
+    check(importerCalls == 0 && set() == Bytes({ 0, 0, 1 }), "and only once: turned off stays off");
+
+    // That mod already set up in the project: the side file doesn't overwrite it.
+    const char* setUp = "Projects/SetUp";
+    io.files[projectFile(setUp)] = makeFile(project::kMagic, { { kSwitchesRecord, { 0, 1, 0 } } });
+    io.files[std::string(setUp) + "/old.bin"] = { 1 };
+    project::copyIn(io, s, setUp);
+    importerCalls = 0;
+    load(io, s, setUp);
+    check(importerCalls == 0 && set() == Bytes({ 0, 1, 0 }), "a mod already On is not imported over");
+    const char* withRecord = "Projects/WithRecord";
+    io.files[projectFile(withRecord)] = makeFile(
+      project::kMagic, { { kSwitchesRecord, { 0, 0, 0 } }, { kImportedMod + 1, { 3 } } });
+    io.files[std::string(withRecord) + "/old.bin"] = { 1 };
+    project::copyIn(io, s, withRecord);
+    importerCalls = 0;
+    load(io, s, withRecord);
+    check(importerCalls == 0 && set() == Bytes({ 0, 0, 0 }), "nor a mod with settings of its own");
 
     // A damaged project file counts as none.
     io.files[projectFile(a)][Store::kHeaderSize] ^= 0xFF;

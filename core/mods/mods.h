@@ -48,6 +48,9 @@ constexpr size_t kBuiltModCount = 0
 #if MT_HAS_HUMANIZE
                                   + 1
 #endif
+#if MT_HAS_SWING
+                                  + 1
+#endif
   ;
 
 // One byte per mod, 0 Off or 1 On, so Config list items can point at them.
@@ -91,6 +94,11 @@ void defaultsChanged();
 
 // Config -> Project Settings -> Mods action for every item: the project changed.
 void projectSwitchChanged();
+
+#if MT_HAS_SWING
+// The same for Global Swing's switch, which also takes effect at once when playing.
+void projectSwingSwitchChanged();
+#endif
 
 // After any Config menu edit: mods' settings the menu edits directly are stored if they
 // changed, which marks the project changed.

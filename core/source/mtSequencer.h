@@ -4,6 +4,7 @@
 #include "Platform.h"
 #include "mtChordDefs.h"
 #include "mtMidi.h"
+#include "modsBuild.h" // MT:
 #include "mtStructs.h"
 #include "scales.h"
 #include "util_math.h"
@@ -642,6 +643,9 @@ class Sequencer
     uint32_t getSeqTimer();
 
     strPlayer const* ptrPlayer = &player;
+#if MT_HAS_SWING // MT: for mods::swing
+    strPlayer::strSwing& swingForMods() { return player.swing; }
+#endif
 
     strPattern* getPatternToSaveToFile() { return currentPattern; }
 

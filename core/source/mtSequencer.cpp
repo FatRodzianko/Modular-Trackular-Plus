@@ -8,6 +8,7 @@
 #include "mtAudioEngine.h"
 #include "mtSequencer.h"
 #include "mtStructs.h"
+#include "swing.h" // MT:
 #include "sampleRecorder/sampleRecorder.h"
 
 #include "configEditor/configEditor.h"
@@ -1320,6 +1321,13 @@ AUDIO_CORE_RAM void Sequencer::play(uint8_t fromPos)
     reset_actual_pos();
     resetChanceState();
 
+#if MT_HAS_SWING // MT: Global Swing: a take starts at the project's amount
+    if (mods::on(mods::Mod::swing))
+    {
+        mods::swing::restart(player.swing);
+    }
+#endif
+
     player.isStop = 0;
     player.isPlay = 1;
     timerTicks = 1;
@@ -1385,6 +1393,13 @@ void Sequencer::playSelection(bool looped) // potrzebuje aktualnego zaznaczenia
     player.uStep = 1;
 
     player.globalPos = player.loopSelection.firstStep;
+
+#if MT_HAS_SWING // MT: Global Swing: a take starts at the project's amount
+    if (mods::on(mods::Mod::swing))
+    {
+        mods::swing::restart(player.swing);
+    }
+#endif
 
     player.isStop = 0;
     player.isPlay = 1;
@@ -1777,6 +1792,12 @@ void Sequencer::switchRowStep(uint8_t row) // przełączamy stepy w zależności
 
                 if (row == kAllTracks - 1)
                 {
+#if MT_HAS_SWING // MT: Global Swing: a new pass or the next pattern starts at the amount
+                    if (mods::on(mods::Mod::swing) && !player.performanceMode)
+                    {
+                        mods::swing::restart(player.swing);
+                    }
+#endif
                     player.endOfPattern = true;
                 }
             }
