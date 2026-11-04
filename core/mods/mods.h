@@ -45,6 +45,9 @@ constexpr size_t kModCount = static_cast<size_t>(Mod::kCount);
 
 // How many mods this build has (each has an MT_HAS_<NAME> flag).
 constexpr size_t kBuiltModCount = 0
+#if MT_HAS_HUMANIZE
+                                  + 1
+#endif
   ;
 
 // One byte per mod, 0 Off or 1 On, so Config list items can point at them.
@@ -88,6 +91,10 @@ void defaultsChanged();
 
 // Config -> Project Settings -> Mods action for every item: the project changed.
 void projectSwitchChanged();
+
+// After any Config menu edit: mods' settings the menu edits directly are stored if they
+// changed, which marks the project changed.
+void projectSettingEdited();
 
 // Project file hooks, called from CE's file manager.
 void onProjectOpenCopy();  // ProjectOpen, after the Workspace is filled from the project

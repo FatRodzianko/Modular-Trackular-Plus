@@ -7,7 +7,8 @@
 #include "imageViewer/imageViewerDefs.h"
 
 #include "polyassert.h"
-#include "mods.h" // MT:
+#include "humanize.h" // MT:
+#include "mods.h"     // MT:
 
 #include <array>
 
@@ -24,7 +25,7 @@ constexpr uint8_t projectMenuGroupCount = 10;
 constexpr uint8_t generalMenuGroupCount = 9;
 #elif defined(PLATFORM_IMX)
 constexpr uint8_t baseMenuGroupCount = 7 + MT_MODS; // MT: + Mods
-constexpr uint8_t projectMenuGroupCount = 10 + MT_MODS; // MT: + Mods
+constexpr uint8_t projectMenuGroupCount = 10 + MT_MODS + MT_HAS_HUMANIZE; // MT: + Mods, Humanize
 constexpr uint8_t generalMenuGroupCount = 12;
 #else
 constexpr uint8_t baseMenuGroupCount = 6;
@@ -93,8 +94,37 @@ cMenuItem melSnapToZeroMode(menuProject, "Snap to zero", snapToZeroDesc,  menuTy
 constexpr uint8_t projectModsMenuItemCount = mods::kBuiltModCount + 1;
 cMenuGroup menuProjectMods(menuProject, "Mods", projectModsMenuItemCount);
 
+#if MT_HAS_HUMANIZE
+const char projectHumanizeDesc[] = { "Humanize for this project: a button on the Pattern screen's third "
+                                     "page that randomizes timing and level of the selected notes. " };
+const strItemTypeListTextWithAction projectHumanizeSetup{
+    &mods::switches[static_cast<size_t>(mods::Mod::humanize)], 2, onOffStateTexts, mods::projectSwitchChanged };
+cMenuItem melProjectHumanize(menuProjectMods, "Humanize", projectHumanizeDesc, menuTypeItemListTextWithAction, &projectHumanizeSetup);
+#endif
+
 const strItemTypeLabel projectModsDefaultsSetup{ "Config > Mods" };
 cMenuItem melProjectModsDefaults(menuProjectMods, "Defaults", nullptr, menuTypeItemLabel, &projectModsDefaultsSetup);
+
+#if MT_HAS_HUMANIZE // MT: Project Settings -> Humanize
+cMenuGroup menuProjectHumanize(menuProject, "Humanize", 6);
+cMenuItem melHumanizeOn(menuProjectHumanize, "Humanize", projectHumanizeDesc, menuTypeItemListTextWithAction, &projectHumanizeSetup);
+const char humanizeTimingDesc[] = { "How far Humanize moves timing. Empty m: 0 to this value. A value "
+                                    "already there: a random value in a window this wide. " };
+const char humanizeVolumeDesc[] = { "Off: Humanize changes only timing and leaves V alone. " };
+const char humanizeRangeDesc[] = { "How far Humanize moves level: a random value in a window this wide. " };
+const char humanizeMidiDesc[] = { "Center for an empty V on MIDI and synth instruments. " };
+const char humanizeSampleDesc[] = { "Center for an empty V on sample instruments. " };
+const strItemTypeListValues humanizeTimingSetup{ &mods::humanize::settings.timingRange, 0, 99, 1, 1 };
+const strItemTypeListTextWithAction humanizeVolumeSetup{ &mods::humanize::settings.volumeOn, 2, onOffStateTexts, mods::projectSettingEdited };
+const strItemTypeListValues humanizeRangeSetup{ &mods::humanize::settings.volumeRange, 0, 99, 1, 1 };
+const strItemTypeListValues humanizeMidiSetup{ &mods::humanize::settings.midiVelocity, 0, 99, 1, 1 };
+const strItemTypeListValues humanizeSampleSetup{ &mods::humanize::settings.sampleVolume, 0, 99, 1, 1 };
+cMenuItem melHumanizeTiming(menuProjectHumanize, "Timing range", humanizeTimingDesc, menuTypeItemListValues, &humanizeTimingSetup);
+cMenuItem melHumanizeVolume(menuProjectHumanize, "Volume/velocity", humanizeVolumeDesc, menuTypeItemListTextWithAction, &humanizeVolumeSetup);
+cMenuItem melHumanizeRange(menuProjectHumanize, "Volume range", humanizeRangeDesc, menuTypeItemListValues, &humanizeRangeSetup);
+cMenuItem melHumanizeMidi(menuProjectHumanize, "MIDI velocity", humanizeMidiDesc, menuTypeItemListValues, &humanizeMidiSetup);
+cMenuItem melHumanizeSample(menuProjectHumanize, "Sample volume", humanizeSampleDesc, menuTypeItemListValues, &humanizeSampleSetup);
+#endif
 #endif
 
 // general
@@ -303,6 +333,14 @@ cMenuItem melModsCount(menuMods,
 
 // Each item is the mod's default for new projects; a project's own switch is in
 // Project Settings -> Mods.
+#if MT_HAS_HUMANIZE
+const char modsHumanizeDesc[] = { "Whether new projects start with Humanize on. Each project has its "
+                                  "own switch in Project Settings > Mods. Humanize: a Pattern button "
+                                  "that randomizes timing and level of the selected notes. " };
+const strItemTypeListTextWithAction modsHumanizeSetup{
+    &mods::defaults[static_cast<size_t>(mods::Mod::humanize)], 2, onOffStateTexts, mods::defaultsChanged };
+cMenuItem melModsHumanize(menuMods, "Humanize", modsHumanizeDesc, menuTypeItemListTextWithAction, &modsHumanizeSetup);
+#endif
 #endif
 
 //==================================================================================================================================================================
@@ -841,6 +879,10 @@ void cConfigEditor::configListConfirm(uint8_t list_pos)
         }
         default: break;
     }
+
+#if MT_MODS // MT: list items have no action of their own
+    mods::projectSettingEdited();
+#endif
 
     saveConfigToEeprom();
 }

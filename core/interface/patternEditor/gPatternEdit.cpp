@@ -5,6 +5,7 @@
 #include "mtStructs.h"
 #include "patternEditor/patternEditor.h"
 #include "performanceMode/performanceMode.h"
+#include "modsPatternButtons.h" // MT:
 #include "scales.h"
 
 #ifdef GUI_HANDLE_SYNTH
@@ -1617,6 +1618,31 @@ void cPatternEditor::showActionButtonPage3Labels()
                                  controlStyleCenterX | controlStyleCenterY | controlStyleFont3);
         display.refreshControl(label[i]);
     }
+
+#if MT_MODS // MT: the buttons of the mods that are on
+    for (uint8_t i = 0; i < mods::kPatternButtonSlots; i++)
+    {
+        const mods::PatternButton* button = mods::patternEditorButton(i);
+        if (button == nullptr)
+        {
+            break;
+        }
+        const uint8_t index = mods::kPatternButtonFirst + i;
+        display.setControlText(label[index], button->text);
+        display.setControlColors(label[index],
+                                 editMode ? display.getTheme().activeButtonLabelsColors
+                                          : display.getTheme().inactiveButtonLabelsColors);
+        display.setControlData(label[index], &labelDataRed);
+        display.setControlValue(label[index], 0);
+        display.setControlStyle(label[index],
+                                controlStyleCenterX | controlStyleCenterY | controlStyleFont3 |
+                                  controlStyleShow |
+                                  (display.getTheme().patternEditorBottomButtonsLines
+                                     ? controlStyleSpecialFx
+                                     : 0));
+        display.refreshControl(label[index]);
+    }
+#endif
 
     labelDataMore.dotIndicator.current = 2;
 

@@ -9,6 +9,7 @@
 
 #include "mods.h"
 
+#include "humanize.h"
 #include "modsConfig.h"
 #include "modsProject.h"
 #include "modsSwitches.h"
@@ -146,6 +147,16 @@ void projectSwitchChanged()
     project::setSwitches(projectStore, switches.data(), kModCount);
 }
 
+void projectSettingEdited()
+{
+#if MT_HAS_HUMANIZE
+    if (humanize::storeIfEdited(projectStore))
+    {
+        project::markChanged();
+    }
+#endif
+}
+
 void onProjectOpenCopy()
 {
     char path[project::kPathSize];
@@ -167,6 +178,9 @@ void onWorkspaceLoaded()
                                defaults.data(),
                                switches.data(),
                                kModCount);
+#if MT_HAS_HUMANIZE
+    humanize::load(projectStore);
+#endif
 }
 
 void onWorkspaceSaved()

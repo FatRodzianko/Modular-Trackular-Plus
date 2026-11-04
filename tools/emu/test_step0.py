@@ -5,7 +5,7 @@
    group, just before Info, starting with the "Mods in build" line and then one line per
    mod; and Project Settings -> Mods as the last item of Project Settings, a group with
    one line per mod and then the "Defaults" line. Each mod's own lines are checked by
-   its test.
+   its test (test_humanize.py).
 2. Settings files through CE's FileSystem interface: mods::init reads Mods/mods.cfg on a fake SD card wired into a FileSystem vtable whose
    slots are taken from the image's own FileSystemImpl vtable.
 
@@ -68,7 +68,7 @@ def test_menu(m: Machine) -> None:
 
     project = m.addr("menuProject")
     count, used = m.r8(project + 8), m.r8(project + 29)
-    check(count == 11 and used == 11, "Project Settings has CE's 10 items plus Mods",
+    check(count == 12 and used == 12, "Project Settings has CE's 10 items plus Mods and Humanize",
           f"count {count}, used {used}")
     project_mods = m.addr("menuProjectMods")
     check(m.r32(m.r32(project + 12) + 4 * 10) == project_mods,

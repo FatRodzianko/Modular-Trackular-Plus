@@ -21,6 +21,9 @@
 
 #include <cr_section_macros.h>
 
+#include "humanize.h"           // MT:
+#include "modsPatternButtons.h" // MT:
+
 __NOINIT(EXTERNAL_RAM) strTrackerPattern cPatternEditor::trackerPattern;
 __NOINIT(EXTERNAL_RAM) cPatternEditor::strFill cPatternEditor::fillData[6];
 
@@ -40,6 +43,9 @@ static void functRedo(uint8_t state);
 
 static void functExportSelection();
 static void functInvert();
+#if MT_HAS_HUMANIZE // MT:
+static void functHumanize();
+#endif
 static void functDuplicatePattern();
 static void functExpandPattern();
 static void functShrinkPattern();
@@ -3948,6 +3954,30 @@ static void functInvert()
     newFileManager.setActualPatternStructChanged();
 }
 
+#if MT_HAS_HUMANIZE // MT: without a selection, the cursor's whole track
+static void functHumanize()
+{
+    newFileManager.storePatternUndoRevision();
+
+    if (isMultiSelection())
+    {
+        sendSelection();
+    }
+    else
+    {
+        sequencer.setSelection(0,
+                               PTE->trackerPattern.actualTrack,
+                               sequencer.getPatternLength() - 1,
+                               PTE->trackerPattern.actualTrack);
+    }
+    mods::humanize::applyToSelection();
+
+    PTE->refreshPattern();
+
+    newFileManager.setActualPatternStructChanged();
+}
+#endif
+
 // ##############################################################################################
 // ###############################       Duplicate pattern      #################################
 // ##############################################################################################
@@ -5150,6 +5180,22 @@ void cPatternEditor::setActionButtonPage2Funct()
     ip->setButtonObj(interfaceButton7, buttonPress, functNextActionButtonPage);
 }
 
+#if MT_MODS // MT: the mods' buttons, in the order they take page 3's free buttons
+static const mods::PatternButton modPatternButtons[] = {
+#if MT_HAS_HUMANIZE
+    { mods::Mod::humanize, "Humanize", functHumanize },
+#endif
+    { mods::Mod::kCount, nullptr, nullptr },
+};
+
+const mods::PatternButton* mods::patternEditorButton(size_t n)
+{
+    return nthPatternButton(modPatternButtons,
+                            sizeof(modPatternButtons) / sizeof(modPatternButtons[0]),
+                            n);
+}
+#endif
+
 // third buttons page
 void cPatternEditor::setActionButtonPage3Funct()
 {
@@ -5157,6 +5203,21 @@ void cPatternEditor::setActionButtonPage3Funct()
 
     ip->setButtonObj(interfaceButton0, buttonPress, functNamePattern);
     ip->setButtonObj(interfaceButton1, buttonPress, functNameTrack);
+
+#if MT_MODS // MT:
+    if (editMode)
+    {
+        for (uint8_t i = 0; i < mods::kPatternButtonSlots; i++)
+        {
+            const mods::PatternButton* button = mods::patternEditorButton(i);
+            if (button == nullptr)
+            {
+                break;
+            }
+            ip->setButtonObj(interfaceButton0 + mods::kPatternButtonFirst + i, buttonPress, button->press);
+        }
+    }
+#endif
 
     ip->setButtonObj(interfaceButton7, buttonPress, functNextActionButtonPage);
 }

@@ -6,6 +6,7 @@
 
 #include "modsProject.h"
 
+#include "humanize.h"
 #include "modsSwitches.h"
 
 #include <cstdio>
@@ -18,8 +19,13 @@ namespace project
 namespace
 {
 
-// 1.2.0 side-file importers (swing.bin, humanize.bin …), added with each mod.
-constexpr ImporterEntry kBuiltInImporters[] = { { 0, nullptr } };
+// 1.2.0 side-file importers, added with each mod.
+constexpr ImporterEntry kBuiltInImporters[] = {
+#if MT_HAS_HUMANIZE
+    { static_cast<uint8_t>(Mod::humanize), humanize::importSideFile },
+#endif
+    { 0, nullptr },
+};
 
 const ImporterEntry* importers = kBuiltInImporters;
 size_t importerCount = sizeof(kBuiltInImporters) / sizeof(kBuiltInImporters[0]);
