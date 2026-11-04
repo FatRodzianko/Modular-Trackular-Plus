@@ -342,7 +342,9 @@ Memory isn't the first limit. These are:
 - **CPU.** 1.2.0's masterfx measured up to 10.4 points of CPU above stock (Gated), running from flash.
   `CLAUDE.md` has CPU measured on the device with all 8 synth voices sounding.
 - **ITCM.** 22,696 bytes free, against masterfx's 20,008 bytes of code. It can't all move in, so
-  hot loops must be chosen.
+  hot loops must be chosen. The split across all mods is in
+  [MASTERFX_PORT_PLAN.md](MASTERFX_PORT_PLAN.md#memory). `libPolyDSP.a` and parts of
+  `libPolySynth.a` already live in ITCM, by linker script. CE's open CHIP engine runs from flash.
 - **Display list.** 8,172 bytes per frame.
 - **Heap.** A hard hang on failure, though 80 KB was free in the reading above.
 

@@ -1,6 +1,7 @@
 # Sound tests on CE: plan
 
-Status: plan only, 2026-11-04. No rig or test exists yet. It's based on CE's source at
+Status: plan only, 2026-11-04. No rig or test is committed yet; a probe ran its start-up (see
+[What's checked so far](#whats-checked-so-far)). It's based on CE's source at
 `b4a95ca` and the 1.2.0 sound tests in Modular-Trackular (`tools/emu/synth_rig.py`,
 `reverb_rig.py`, `test_synths.py`, `test_masterfx.py`, `test_legato.py`,
 `test_interpolate.py`). [What's checked and what isn't](#whats-checked-so-far) lists how
@@ -248,12 +249,19 @@ measurements.
   headers. It hasn't been linked or run on the PC.
 - The `SCRATCH` overlap, from the full image's symbol table.
 
+**Confirmed by a throwaway probe on the reference build, 2026-11-04**
+([figures](MASTERFX_PORT_PLAN.md#9-sound-test-plan)):
+- All 116 static constructors ran with none skipped, with peripherals mapped as zero memory and
+  stubs on `_sbrk`, `Sgtl5000`, `attachUpdateTimer` and the timer. `FakeSd` was enough for
+  `Synth::init`, with no unexpected file calls.
+- `Synth::init` and `audioEngine::init` run. Notes through `triggerTestNote` come out of
+  `updateAudioBuffers`, whose buffers read as plain 16-bit samples.
+- The same on two fresh machines gives identical samples. All 7 engines sound. 8 voices run at 94
+  ms per block, with a block pool peak of 65 of 80.
+
 **Not tried yet:**
-- Any of this rig: `Synth::init`, a closed engine, or the graph under Unicorn.
-- Whether output is the same twice on CE. It was on 1.2.0.
-- Which static constructors touch hardware, what `_sbrk` needs, and which further `Platform`
-  and `FileSystem` methods get called.
-- Whether the output buffers of `updateAudioBuffers` are easy to read as plain samples.
+- `artificial_isr` and `renderMode`, the sequencer's real note path, and reverb or delay returns
+  checked by themselves.
 - Whether Level A links without the closed libraries. The SDK's base class looks header-only,
   but `InstrumentTypeRegistry` and the host are in the library, so level A would call the
   voice directly.

@@ -1,6 +1,6 @@
 # masterfx on CE: build plan
 
-Status: plan only, 2026-11-04. Nothing is built. Based on CE's source at `af01d47`, a reference
+Status: plan only, 2026-11-04, your answers to the decisions are in. Nothing is built. Based on CE's source at `af01d47`, a reference
 build of it, and 1.2.0's `patch/masterfx` (mf8) compiled with CE's FPU flags. Section 3.13 of
 [CE_PORT_PLAN.md](CE_PORT_PLAN.md) points here.
 
@@ -195,10 +195,31 @@ project, so that wouldn't block the mod. The device reading in section 8 answers
 | OCRAM, heap | 0 | Mods stay out |
 
 **ITCM choice:** `shimmer_process` and its passes (2,832 B) and `bbd_process` and `bbd_coefs`
-(2,420 B): the costliest reverb and delay. All 15.2 KB of loops would fit, but that would leave
-only about 6 KB for legato, interpolate and the synths, for about 1.6 points. Per-loop sizes:
-Tape 1,660, Spring 1,780, Plate 2,092, Gated 2,176, Freeverb 2,250. The next to move is Freeverb,
-if the reading says it's needed. `tools/mem_budget.py` gives the final figures.
+(2,420 B): the costliest reverb and delay. Moving all 15.2 KB of loops would save only about 1.4
+more points and leave about 6 KB for everything else. Per-loop sizes: Tape 1,660, Spring 1,780,
+Plate 2,092, Gated 2,176, Freeverb 2,250. `tools/mem_budget.py` gives the final figures.
+
+**ITCM for the whole project.** 21,672 B is usable above the floor. Hot code is my estimate, from
+each mod's 1.2.0 function sizes:
+
+| Who | Code on 1.2.0 | Hot part, estimate |
+|---|---|---|
+| legato, tracklen, slicethru Loop, resample, songloop, visualizer's step path | 20 KB in total | 2.5 KB |
+| interpolate (the port plan puts its microstep path in ITCM) | 3.5 KB | 1 KB |
+| WAVE and PHASE voice loops: `wt_voice_render` 5,216, `ph_voice_render` 2,552, `wt_saw` 2,126 | 516 KB, mostly tables | 10 KB |
+| masterfx, this plan | | 5.3 KB |
+| **Total** | | **18.8 KB, leaving about 2.9 KB** |
+
+- Everything fits, including the synths' voice loops. Moving all the synths' hot helpers too (LFOs,
+  envelopes, about 4 KB more) wouldn't fit.
+- Engines don't have to be in ITCM: CE's own CHIP renders from flash (4 KB at `0x60156440`). So
+  later engines start in flash.
+- A loop that runs every block costs about 0.7 points per KB from flash, whichever mod owns it.
+  Placement can change later with one attribute per function and no change to files, so nothing
+  here locks us in. If synths need the room, BBD goes back to flash first (about 1.7 points on
+  projects that pick BBD).
+- The device reading in section 8 also gives the first real flash-against-ITCM figure on CE, which
+  the synth port needs.
 
 ## 4. UI options, against the real code
 
@@ -351,8 +372,8 @@ generated test project: three synth tracks holding 8 voices in total, sending to
 3. **CPU:** with an empty `/.develop` on the card and the pattern playing, open Config and note the
    CPU average and max at each of these, changing them under Project Settings > Master FX:
    - Reverb Stock, Delay Stock
-   - Reverb Shimmer, Delay BBD
-   - Reverb Freeverb, Delay Tape
+   - Reverb Shimmer, Delay BBD, PingPong On (both in ITCM)
+   - Reverb Freeverb, Delay Tape, PingPong On (both in flash)
 
    Also note free heap and max stack once. No crackle at any of them is the other half of the
    check.
@@ -371,20 +392,46 @@ What the readings mean:
 isn't built yet. masterfx would be the first to need any of the rig. "Each switch gives its
 silent clearing blocks" changes, since clearing now happens in the main loop. That line is updated.
 
-The check that synth sends reach the chosen effect is close to true by construction, because
-the hook sits inside the object at the end of the send mixer, and nothing about the graph changes.
+**The rig's main unknown is gone.** A throwaway probe on the reference build ran CE's real start-up
+under Unicorn on its first try, using only stubs on open functions:
+
+| Check | Result |
+|---|---|
+| 116 static constructors, `Synth::init`, `audioEngine::init` | All ran, under 3 s |
+| A test note through `updateAudioBuffers` | Silence before, sound after (peak 21,492) |
+| Same note on two fresh machines | Identical samples |
+| Note off | Decays to 0 |
+| 8 voices on one part | Sound, 94 ms per block, block pool peak 65 of 80, heap peak 68,628 B |
+| 1 voice | 40 ms per block |
+| The 7 engines (ids 1, 2, 4–8) | All make sound; MIDI Out silent, as it should be |
+| Synth reverb send, synth delay send | Output differs from no send; return not yet checked by itself |
+
+Ids 3 and 9–11 stopped the emulator. Those were my own test values: they aren't engines
+`registry.cpp` registers, and I didn't look further.
+
+**Cost of the rig, estimate:**
+
+| Part | Size | Needed for masterfx? |
+|---|---|---|
+| `sound_rig.py`: start-up, fake `Platform`, licence guard, note and block helpers (level C, with level B a small step from it) | 300–400 lines; about 150 are in the probe | Yes |
+| Engine smoke test: all 7 engines, same twice, note off, Off = CE | About 150 lines, about a minute to run | Yes, it guards the rig |
+| Level A, host render of our own engines | Nothing to test yet | No, comes with synths |
+| Stages 2, 4, 5: Macros, recorder tap, our engines | | No, they come with interpolate, resample, synths |
+
+So stage 1 and the level C part of stage 3 add about one build step, on top of masterfx's own test
+port. No firmware change and nothing on your side. A second of audio takes 15–32 s here, so stress
+runs stay short or use the object level. It can't measure CPU, which stays on the device.
 
 ## 10. Open decisions
 
-1. **UI:** B and C as recommended, or also A on the effect pages? A adds Reverb's list and Delay's
-   Shift+Back. I'd start with B and add A only if you miss it after trying it.
-2. **Rig:** the graph-level test (level C) with sample voices through `update_all`, and one try at
-   synths under Unicorn, per the sound plan's stop-and-report rule. If synths don't start there,
-   synth sends move to your hardware check, heard in step 3. I'd do that rather than build all of
-   stage 1 first.
-3. **Names:** the table in section 4. "Release" on Reverse is the code's meaning, even though
-   Reverse swells. Change any you like.
-4. **ITCM:** 5.3 KB as proposed, or less if you want more kept for synths?
+Answered 2026-11-04:
+
+1. **UI:** Master page only for now (options B and C). A stays possible later.
+2. **Rig:** you asked what the whole rig costs. Section 9 has it, and I recommend building stage 1
+   and stage 3's level C with masterfx, leaving level A and later stages to their mods. Waiting on
+   your OK with the build.
+3. **Names:** no changes, so section 4's table stands.
+4. **ITCM:** left to me: 5.3 KB, Shimmer and BBD, with the project-wide table in section 3.
 
 ## 11. Added beyond the brief
 
