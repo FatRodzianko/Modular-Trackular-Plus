@@ -1,15 +1,15 @@
 # Modular-Trackular mods. SPDX-License-Identifier: MIT
-"""Step 0 checks on a Tracker+ test build (MT_NO_SYNTH=1):
+"""Step 0 checks on a full Tracker+ build, with the synth libraries in:
 
 1. Config menu: the real static constructors build Config -> Mods as the 8th top-level
    group, just before Info, starting with the "Mods in build" line and then one line per
    mod; and Project Settings -> Mods as the last item of Project Settings, a group with
    one line per mod and then the "Defaults" line. Each mod's own lines are checked by
-   its test (test_humanize.py).
+   its test (test_humanize.py, test_swing.py).
 2. Settings files through CE's FileSystem interface: mods::init reads Mods/mods.cfg on a fake SD card wired into a FileSystem vtable whose
    slots are taken from the image's own FileSystemImpl vtable.
 
-Usage: python tools/emu/test_step0.py build/emu/TrackerPlus_MT_nosynth.axf
+Usage: python tools/emu/test_step0.py build/emu/TrackerPlus_MT_full.axf
 """
 from __future__ import annotations
 
@@ -68,12 +68,15 @@ def test_menu(m: Machine) -> None:
 
     project = m.addr("menuProject")
     count, used = m.r8(project + 8), m.r8(project + 29)
-    check(count == 12 and used == 12, "Project Settings has CE's 10 items plus Mods and Humanize",
+    check(count == 13 and used == 13, "Project Settings has CE's 10 items plus Mods, Global Swing and Humanize",
           f"count {count}, used {used}")
     project_mods = m.addr("menuProjectMods")
     check(m.r32(m.r32(project + 12) + 4 * 10) == project_mods,
-          "Project Settings' last item is the Mods group")
+          "after CE's items comes the Mods group")
     check(m.cstr(m.r32(m.r32(project + 16) + 4 * 10)) == "Mods", "its name")
+    check(m.r32(m.r32(project + 12) + 4 * 11) == m.addr("menuProjectSwing")
+          and m.r32(m.r32(project + 12) + 4 * 12) == m.addr("menuProjectHumanize"),
+          "then Global Swing and Humanize")
     check(m.r32(project_mods) == MENU_TYPE_GROUP and m.r32(project_mods + 4) == project,
           "a group inside Project Settings")
     check(m.r8(project_mods + 8) == built + 1 and m.r8(project_mods + 29) == built + 1,

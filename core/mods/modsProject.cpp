@@ -8,8 +8,10 @@
 
 #include "humanize.h"
 #include "modsSwitches.h"
+#include "swing.h"
 
 #include <cstdio>
+#include <cstring>
 
 namespace mods
 {
@@ -24,6 +26,9 @@ constexpr ImporterEntry kBuiltInImporters[] = {
 #if MT_HAS_HUMANIZE
     { static_cast<uint8_t>(Mod::humanize), humanize::importSideFile },
 #endif
+#if MT_HAS_SWING
+    { static_cast<uint8_t>(Mod::swing), swing::importSideFile },
+#endif
     { 0, nullptr },
 };
 
@@ -37,6 +42,51 @@ bool projectFilePath(char* path, const char* projectFolder)
 {
     const int length = snprintf(path, kPathSize, "%s/%s", projectFolder, kFileName);
     return length > 0 && static_cast<size_t>(length) < kPathSize;
+}
+
+// Each importer gets one turn per project, also when an older build, which didn't have
+// that mod yet, already saved a mods.bin there. Settings the project already has for the
+// mod win: then its turn just passes. A mod's record is its id + 1.
+bool runImporters(FileIo& io,
+                  Store& store,
+                  const char* projectFolder,
+                  uint8_t* switches,
+                  size_t count)
+{
+    uint32_t done = 0;
+    uint16_t length = 0;
+    const uint8_t* record = store.find(kImportsRecord, nullptr, &length);
+    if (record != nullptr && length == sizeof(done))
+    {
+        memcpy(&done, record, sizeof(done));
+    }
+
+    uint32_t now = done;
+    for (size_t i = 0; i < importerCount; i++)
+    {
+        const ImporterEntry& entry = importers[i];
+        const uint32_t bit = 1u << entry.mod;
+        if (entry.import == nullptr || entry.mod >= count || (now & bit) != 0)
+        {
+            continue;
+        }
+        now |= bit;
+
+        const bool configured =
+          switches[entry.mod] != 0 ||
+          store.find(static_cast<uint8_t>(entry.mod + 1), nullptr, nullptr) != nullptr;
+        if (projectFolder != nullptr && !configured && entry.import(io, projectFolder, store))
+        {
+            switches[entry.mod] = 1;
+        }
+    }
+
+    if (now == done)
+    {
+        return false;
+    }
+    store.put(kImportsRecord, 1, &now, sizeof(now));
+    return true;
 }
 
 } // namespace
@@ -85,6 +135,11 @@ void loadFromWorkspace(FileIo& io,
     if (size != FileIo::kReadFailed && store.validate(size))
     {
         readSwitches(store, switches, count);
+        if (runImporters(io, store, projectFolder, switches, count))
+        {
+            writeSwitches(store, switches, count);
+            io.write(kWorkspaceFile, store.image(), store.finalize());
+        }
         return;
     }
 
@@ -93,18 +148,7 @@ void loadFromWorkspace(FileIo& io,
     {
         switches[i] = projectFolder == nullptr ? defaults[i] : 0;
     }
-    if (projectFolder != nullptr)
-    {
-        for (size_t i = 0; i < importerCount; i++)
-        {
-            const ImporterEntry& entry = importers[i];
-            if (entry.import != nullptr && entry.import(io, projectFolder, store) &&
-                entry.mod < count)
-            {
-                switches[entry.mod] = 1;
-            }
-        }
-    }
+    runImporters(io, store, projectFolder, switches, count);
     writeSwitches(store, switches, count);
 
     io.write(kWorkspaceFile, store.image(), store.finalize());

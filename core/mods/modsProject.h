@@ -26,6 +26,9 @@ constexpr char kWorkspaceFile[] = "Workspace/mods.bin";
 constexpr char kMagic[] = "MTP1";
 constexpr size_t kPathSize = 256;
 
+// Bit n set: mod n's importer has had its turn in this project.
+constexpr uint8_t kImportsRecord = 240;
+
 // Reads one 1.2.0 side file from projectFolder into store's records. True if the
 // project used the mod, which then starts On.
 using Importer = bool (*)(FileIo& io, const char* projectFolder, Store& store);
@@ -46,7 +49,8 @@ void copyIn(FileIo& io, Store& store, const char* projectFolder);
 // Workspace load (boot, Open, New Project): RAM from Workspace/mods.bin, and the
 // project's set into switches (count mods). Without the file: a project never saved
 // (projectFolder nullptr, so New Project) takes the defaults; a saved one starts all
-// Off and runs the importers. The result is written to the Workspace.
+// Off and runs the importers. The result is written to the Workspace. A mods.bin from a
+// build that didn't have a mod yet: that mod's importer still gets its one turn.
 void loadFromWorkspace(FileIo& io,
                        Store& store,
                        const char* projectFolder,

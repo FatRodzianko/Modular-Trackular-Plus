@@ -24,4 +24,11 @@
 #define MT_HAS_HUMANIZE 0
 #endif
 
+#ifndef MT_HAS_SWING
+#define MT_HAS_SWING MT_MODS
+#elif !MT_MODS
+#undef MT_HAS_SWING
+#define MT_HAS_SWING 0
+#endif
+
 #endif /* MODS_MODSBUILD_H_ */

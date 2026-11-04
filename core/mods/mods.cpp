@@ -13,6 +13,7 @@
 #include "modsConfig.h"
 #include "modsProject.h"
 #include "modsSwitches.h"
+#include "swing.h"
 
 #include "Platform.h"
 #include "fileManager.h"
@@ -147,12 +148,27 @@ void projectSwitchChanged()
     project::setSwitches(projectStore, switches.data(), kModCount);
 }
 
+#if MT_HAS_SWING
+void projectSwingSwitchChanged()
+{
+    projectSwitchChanged();
+    swing::switchEdited();
+}
+#endif
+
 void projectSettingEdited()
 {
 #if MT_HAS_HUMANIZE
     if (humanize::storeIfEdited(projectStore))
     {
         project::markChanged();
+    }
+#endif
+#if MT_HAS_SWING
+    if (swing::storeIfEdited(projectStore))
+    {
+        project::markChanged();
+        swing::amountEdited();
     }
 #endif
 }
@@ -180,6 +196,9 @@ void onWorkspaceLoaded()
                                kModCount);
 #if MT_HAS_HUMANIZE
     humanize::load(projectStore);
+#endif
+#if MT_HAS_SWING
+    swing::load(projectStore);
 #endif
 }
 

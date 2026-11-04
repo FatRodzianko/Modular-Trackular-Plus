@@ -4,7 +4,7 @@ Fork of polyend/tracker-ce with our mods as runtime switches under `core/mods/`.
 
 ## What runs in the audio interrupt
 
-`AudioOutputI2S::isr` → `updateBuffers` → `TrackerImpl::updateAudioBuffers` (`core/source/Tracker.cpp`) → `midiUpdate()`, `sequencer.tick()`, `engine.update()`. So every MIDI handler registered in `midiInit`, the whole sequencer and the audio engine run in the interrupt, on both platforms. So does the `scheduleMidiClockUs` callback.
+`AudioOutputI2S::isr` → `updateBuffers` → `TrackerImpl::updateAudioBuffers` (`core/source/Tracker.cpp`) → `midiUpdate()`, `sequencer.tick()`, `engine.update()`. So every MIDI handler registered in `midiInit`, the whole sequencer and the audio engine run in the interrupt, on both platforms. So does the `scheduleMidiClockUs` callback, and on IMX `TMR4_IRQHandler`.
 
 On those paths: no SD, heap, blocking or UI calls (`display.*`, `mtPopups.*`). Set a flag and do the work in a main-loop `update()`. Settings a hook needs must already be in RAM.
 

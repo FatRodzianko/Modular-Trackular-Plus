@@ -1,5 +1,5 @@
 # Modular-Trackular mods. SPDX-License-Identifier: MIT
-"""Humanize checks on a Tracker+ test build (MT_NO_SYNTH=1):
+"""Humanize checks on a full Tracker+ build, with the synth libraries in:
 
 1. The edit on CE's own pattern, through mods::humanize::applyToSelection: only the
    selection changes, only its notes, only their m and V columns, in the windows of
@@ -15,7 +15,7 @@ The ordering rules, the windows' edges and the 1.2.0 side file are in the host t
 (core/mods/tests/test_humanize.cpp). Drawing the button, greying it outside edit mode
 and a real selection on screen are checked on the device.
 
-Usage: python tools/emu/test_humanize.py build/emu/TrackerPlus_MT_nosynth.axf
+Usage: python tools/emu/test_humanize.py build/emu/TrackerPlus_MT_full.axf
 """
 from __future__ import annotations
 
@@ -202,11 +202,11 @@ def test_config(r: Rig) -> None:
     m = r.m
     m.call(m.addr("_GLOBAL__sub_I_menuBase"))
 
-    item = menu_item(m, "menuMods", 1)
+    item = menu_item(m, "menuMods", 2)
     setup = m.r32(item + 16)
     check(m.cstr(m.r32(item + 4)) == "Humanize" and m.r32(setup) == m.addr("_ZN4mods8defaultsE") + HUMANIZE_ID,
           "Config -> Mods: Humanize sets the default for new projects")
-    item = menu_item(m, "menuProjectMods", 0)
+    item = menu_item(m, "menuProjectMods", 1)
     setup = m.r32(item + 16)
     check(m.cstr(m.r32(item + 4)) == "Humanize" and m.r32(setup) == r.switches + HUMANIZE_ID,
           "Project Settings -> Mods: Humanize is the project's switch")

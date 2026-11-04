@@ -9,6 +9,7 @@
 #include "polyassert.h"
 #include "humanize.h" // MT:
 #include "mods.h"     // MT:
+#include "swing.h"    // MT:
 
 #include <array>
 
@@ -25,7 +26,7 @@ constexpr uint8_t projectMenuGroupCount = 10;
 constexpr uint8_t generalMenuGroupCount = 9;
 #elif defined(PLATFORM_IMX)
 constexpr uint8_t baseMenuGroupCount = 7 + MT_MODS; // MT: + Mods
-constexpr uint8_t projectMenuGroupCount = 10 + MT_MODS + MT_HAS_HUMANIZE; // MT: + Mods, Humanize
+constexpr uint8_t projectMenuGroupCount = 10 + MT_MODS + MT_HAS_SWING + MT_HAS_HUMANIZE; // MT: + Mods, Global Swing, Humanize
 constexpr uint8_t generalMenuGroupCount = 12;
 #else
 constexpr uint8_t baseMenuGroupCount = 6;
@@ -94,6 +95,15 @@ cMenuItem melSnapToZeroMode(menuProject, "Snap to zero", snapToZeroDesc,  menuTy
 constexpr uint8_t projectModsMenuItemCount = mods::kBuiltModCount + 1;
 cMenuGroup menuProjectMods(menuProject, "Mods", projectModsMenuItemCount);
 
+#if MT_HAS_SWING
+const char projectSwingDesc[] = { "Global Swing for this project: every take and every pattern starts "
+                                  "with the Swing amount. A Swing FX still changes it until the pattern "
+                                  "starts again. " };
+const strItemTypeListTextWithAction projectSwingSetup{
+    &mods::switches[static_cast<size_t>(mods::Mod::swing)], 2, onOffStateTexts, mods::projectSwingSwitchChanged };
+cMenuItem melProjectSwing(menuProjectMods, "Global Swing", projectSwingDesc, menuTypeItemListTextWithAction, &projectSwingSetup);
+#endif
+
 #if MT_HAS_HUMANIZE
 const char projectHumanizeDesc[] = { "Humanize for this project: a button on the Pattern screen's third "
                                      "page that randomizes timing and level of the selected notes. " };
@@ -104,6 +114,15 @@ cMenuItem melProjectHumanize(menuProjectMods, "Humanize", projectHumanizeDesc, m
 
 const strItemTypeLabel projectModsDefaultsSetup{ "Config > Mods" };
 cMenuItem melProjectModsDefaults(menuProjectMods, "Defaults", nullptr, menuTypeItemLabel, &projectModsDefaultsSetup);
+
+#if MT_HAS_SWING // MT: Project Settings -> Global Swing
+cMenuGroup menuProjectSwing(menuProject, "Global Swing", 2);
+cMenuItem melSwingOn(menuProjectSwing, "Global swing", projectSwingDesc, menuTypeItemListTextWithAction, &projectSwingSetup);
+const char swingAmountDesc[] = { "25 to 75, as the Swing FX: 50 is no swing, above 50 the off-beat steps "
+                                 "come later. Used when Global swing is On. " };
+const strItemTypeListValues swingAmountSetup{ &mods::swing::settings.amount, 0, 50, 1, 25 };
+cMenuItem melSwingAmount(menuProjectSwing, "Swing amount", swingAmountDesc, menuTypeItemListValues, &swingAmountSetup);
+#endif
 
 #if MT_HAS_HUMANIZE // MT: Project Settings -> Humanize
 cMenuGroup menuProjectHumanize(menuProject, "Humanize", 6);
@@ -333,6 +352,15 @@ cMenuItem melModsCount(menuMods,
 
 // Each item is the mod's default for new projects; a project's own switch is in
 // Project Settings -> Mods.
+#if MT_HAS_SWING
+const char modsSwingDesc[] = { "Whether new projects start with Global Swing on. Each project has its "
+                               "own switch in Project Settings > Mods. Global Swing: every take and "
+                               "every pattern starts with the Swing amount. " };
+const strItemTypeListTextWithAction modsSwingSetup{
+    &mods::defaults[static_cast<size_t>(mods::Mod::swing)], 2, onOffStateTexts, mods::defaultsChanged };
+cMenuItem melModsSwing(menuMods, "Global Swing", modsSwingDesc, menuTypeItemListTextWithAction, &modsSwingSetup);
+#endif
+
 #if MT_HAS_HUMANIZE
 const char modsHumanizeDesc[] = { "Whether new projects start with Humanize on. Each project has its "
                                   "own switch in Project Settings > Mods. Humanize: a Pattern button "
