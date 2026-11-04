@@ -9,6 +9,7 @@
 #include "polyassert.h"
 #include "colorsong.h" // MT:
 #include "humanize.h" // MT:
+#include "masterfx.h" // MT:
 #include "mods.h"     // MT:
 #include "swing.h"    // MT:
 
@@ -27,7 +28,7 @@ constexpr uint8_t projectMenuGroupCount = 10;
 constexpr uint8_t generalMenuGroupCount = 9;
 #elif defined(PLATFORM_IMX)
 constexpr uint8_t baseMenuGroupCount = 7 + MT_MODS; // MT: + Mods
-constexpr uint8_t projectMenuGroupCount = 10 + MT_MODS + MT_HAS_SWING + MT_HAS_HUMANIZE; // MT: + Mods, Global Swing, Humanize
+constexpr uint8_t projectMenuGroupCount = 10 + MT_MODS + MT_HAS_SWING + MT_HAS_HUMANIZE + MT_HAS_MASTERFX; // MT: + Mods, Global Swing, Humanize, Master FX
 constexpr uint8_t generalMenuGroupCount = 12;
 #else
 constexpr uint8_t baseMenuGroupCount = 6;
@@ -122,6 +123,15 @@ const strItemTypeListTextWithAction projectHumanizeSetup{
 cMenuItem melProjectHumanize(menuProjectMods, "Humanize", projectHumanizeDesc, menuTypeItemListTextWithAction, &projectHumanizeSetup);
 #endif
 
+#if MT_HAS_MASTERFX
+const char projectMasterfxDesc[] = { "Master FX for this project: other reverbs and delays, chosen on the "
+                                     "Master screen or in Project Settings > Master FX. Off plays CE's own "
+                                     "and keeps the choice. " };
+const strItemTypeListTextWithAction projectMasterfxSetup{
+    &mods::switches[static_cast<size_t>(mods::Mod::masterfx)], 2, onOffStateTexts, mods::projectMasterfxSwitchChanged };
+cMenuItem melProjectMasterfx(menuProjectMods, "Master FX", projectMasterfxDesc, menuTypeItemListTextWithAction, &projectMasterfxSetup);
+#endif
+
 const strItemTypeLabel projectModsDefaultsSetup{ "Config > Mods" };
 cMenuItem melProjectModsDefaults(menuProjectMods, "Defaults", nullptr, menuTypeItemLabel, &projectModsDefaultsSetup);
 
@@ -153,6 +163,20 @@ cMenuItem melHumanizeVolume(menuProjectHumanize, "Volume/velocity", humanizeVolu
 cMenuItem melHumanizeRange(menuProjectHumanize, "Volume range", humanizeRangeDesc, menuTypeItemListValues, &humanizeRangeSetup);
 cMenuItem melHumanizeMidi(menuProjectHumanize, "MIDI velocity", humanizeMidiDesc, menuTypeItemListValues, &humanizeMidiSetup);
 cMenuItem melHumanizeSample(menuProjectHumanize, "Sample volume", humanizeSampleDesc, menuTypeItemListValues, &humanizeSampleSetup);
+#endif
+
+#if MT_HAS_MASTERFX // MT: Project Settings -> Master FX
+cMenuGroup menuProjectMasterfx(menuProject, "Master FX", 2);
+const char masterfxReverbDesc[] = { "The Master reverb for this project. Stock is CE's own. Used when Master "
+                                    "FX is On in Project Settings > Mods. " };
+const char masterfxDelayDesc[] = { "The Master delay for this project. Stock is CE's own. Used when Master "
+                                   "FX is On in Project Settings > Mods. " };
+const strItemTypeListTextWithAction masterfxReverbSetup{
+    &mods::masterfx::settings.reverb, mods::masterfx::kReverbCount, mods::masterfx::kReverbNames, mods::projectSettingEdited };
+const strItemTypeListTextWithAction masterfxDelaySetup{
+    &mods::masterfx::settings.delay, mods::masterfx::kDelayCount, mods::masterfx::kDelayNames, mods::projectSettingEdited };
+cMenuItem melMasterfxReverb(menuProjectMasterfx, "Reverb", masterfxReverbDesc, menuTypeItemListTextWithAction, &masterfxReverbSetup);
+cMenuItem melMasterfxDelay(menuProjectMasterfx, "Delay", masterfxDelayDesc, menuTypeItemListTextWithAction, &masterfxDelaySetup);
 #endif
 #endif
 
@@ -387,6 +411,15 @@ const char modsHumanizeDesc[] = { "Whether new projects start with Humanize on. 
 const strItemTypeListTextWithAction modsHumanizeSetup{
     &mods::defaults[static_cast<size_t>(mods::Mod::humanize)], 2, onOffStateTexts, mods::defaultsChanged };
 cMenuItem melModsHumanize(menuMods, "Humanize", modsHumanizeDesc, menuTypeItemListTextWithAction, &modsHumanizeSetup);
+#endif
+
+#if MT_HAS_MASTERFX
+const char modsMasterfxDesc[] = { "Whether new projects start with Master FX on. Each project has its "
+                                  "own switch in Project Settings > Mods. Master FX: other reverbs and "
+                                  "delays, chosen on the Master screen. " };
+const strItemTypeListTextWithAction modsMasterfxSetup{
+    &mods::defaults[static_cast<size_t>(mods::Mod::masterfx)], 2, onOffStateTexts, mods::defaultsChanged };
+cMenuItem melModsMasterfx(menuMods, "Master FX", modsMasterfxDesc, menuTypeItemListTextWithAction, &modsMasterfxSetup);
 #endif
 #endif
 

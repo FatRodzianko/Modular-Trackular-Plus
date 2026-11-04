@@ -11,6 +11,7 @@
 
 #include "colorsong.h"
 #include "humanize.h"
+#include "masterfx.h"
 #include "modsConfig.h"
 #include "modsProject.h"
 #include "modsSwitches.h"
@@ -160,6 +161,13 @@ void projectSwingSwitchChanged()
 }
 #endif
 
+#if MT_HAS_MASTERFX
+void projectMasterfxSwitchChanged()
+{
+    projectSwitchChanged();
+}
+#endif
+
 #if MT_HAS_COLORSONG
 void projectColorsongSwitchChanged()
 {
@@ -191,6 +199,12 @@ void projectSettingEdited()
         swing::amountEdited();
     }
 #endif
+#if MT_HAS_MASTERFX
+    if (masterfx::storeIfEdited(projectStore))
+    {
+        project::markChanged();
+    }
+#endif
 }
 
 void onProjectOpenCopy()
@@ -219,6 +233,9 @@ void onWorkspaceLoaded()
 #endif
 #if MT_HAS_SWING
     swing::load(projectStore);
+#endif
+#if MT_HAS_MASTERFX
+    masterfx::load(projectStore);
 #endif
 #if MT_HAS_COLORSONG
     colorsong::reset();

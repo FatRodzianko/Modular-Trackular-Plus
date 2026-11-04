@@ -1,0 +1,63 @@
+// Modular-Trackular mods. SPDX-License-Identifier: MIT
+//
+// masterfx: other reverbs and delays in CE's own reverb and delay slots, chosen per
+// project. Sends, returns, the Reverb and Delay pages and their knobs stay CE's.
+//
+// Off, or Stock chosen: CE's own effect runs and nothing here does. Off keeps the
+// project's choice, so On brings it back.
+//
+// The choice is made in the main loop (Config menu, project load). The audio interrupt
+// only reads what's in RAM.
+
+#ifndef MODS_MASTERFX_H_
+#define MODS_MASTERFX_H_
+
+#include "mods.h"
+
+#if MT_HAS_MASTERFX
+
+#include "modsFileIo.h"
+#include "modsStore.h"
+
+namespace mods
+{
+namespace masterfx
+{
+
+constexpr uint8_t kRecord = static_cast<uint8_t>(Mod::masterfx) + 1;
+constexpr uint8_t kRecordVersion = 1;
+
+constexpr uint8_t kStock = 0;
+constexpr uint8_t kReverbCount = 7;
+constexpr uint8_t kDelayCount = 3;
+
+extern const char* const kReverbNames[kReverbCount];
+extern const char* const kDelayNames[kDelayCount];
+
+// Edited directly by Config -> Project Settings -> Master FX. The record holds these
+// two bytes.
+struct Settings
+{
+    uint8_t reverb = kStock;
+    uint8_t delay = kStock;
+};
+
+extern Settings settings; // the open project's
+
+// The project's record into settings: Stock if it has none or a damaged one.
+void load(const Store& store);
+
+// Call after settings may have been edited: stores them if they differ from the
+// record, and returns whether they did.
+bool storeIfEdited(Store& store);
+
+// A project from stock 1.2.0: its masterfx.bin into store's record. True if it picks
+// anything but Stock and Stock, so the project starts with the mod On.
+bool importSideFile(FileIo& io, const char* projectFolder, Store& store);
+
+} // namespace masterfx
+} // namespace mods
+
+#endif // MT_HAS_MASTERFX
+
+#endif /* MODS_MASTERFX_H_ */

@@ -51,6 +51,9 @@ constexpr size_t kBuiltModCount = 0
 #if MT_HAS_HUMANIZE
                                   + 1
 #endif
+#if MT_HAS_MASTERFX
+                                  + 1
+#endif
 #if MT_HAS_SWING
                                   + 1
 #endif
@@ -101,6 +104,11 @@ void projectSwitchChanged();
 #if MT_HAS_SWING
 // The same for Global Swing's switch, which also takes effect at once when playing.
 void projectSwingSwitchChanged();
+#endif
+
+#if MT_HAS_MASTERFX
+// The same for Master FX's switch, which also changes the effects that play.
+void projectMasterfxSwitchChanged();
 #endif
 
 #if MT_HAS_COLORSONG

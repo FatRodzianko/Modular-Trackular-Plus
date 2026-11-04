@@ -8,6 +8,7 @@
 
 #include "colorsong.h"
 #include "humanize.h"
+#include "masterfx.h"
 #include "modsSwitches.h"
 #include "swing.h"
 
@@ -29,6 +30,9 @@ constexpr ImporterEntry kBuiltInImporters[] = {
 #endif
 #if MT_HAS_HUMANIZE
     { static_cast<uint8_t>(Mod::humanize), humanize::importSideFile },
+#endif
+#if MT_HAS_MASTERFX
+    { static_cast<uint8_t>(Mod::masterfx), masterfx::importSideFile },
 #endif
 #if MT_HAS_SWING
     { static_cast<uint8_t>(Mod::swing), swing::importSideFile },
