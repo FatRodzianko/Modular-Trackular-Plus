@@ -18,11 +18,15 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from sound_rig import BLOCK_MS, SoundRig, peak  # noqa: E402
+from sound_rig import SoundRig, peak  # noqa: E402
+from unicorn import UC_HOOK_MEM_WRITE  # noqa: E402
+from unicorn.arm_const import UC_ARM_REG_PC, UC_ARM_REG_S0  # noqa: E402
 
 SWITCHES = "_ZN4mods8switchesE"
 SETTINGS = "_ZN4mods8masterfx8settingsE"
 MASTERFX = 3                        # mods::Mod::masterfx
+PATCH_SIZE = 255
+ENGINE_IDS = (1, 2, 4, 5, 6, 7, 8)  # Synth::kSynthTypes, as project.mt's models number them
 LIMIT = 8172                        # cDisplay::step3
 CONTROLS = 65                       # controlsCount
 
@@ -412,10 +416,344 @@ def test_ui(mods, ref):
         p.press("cancel")
 
 
+class Graph(SoundRig):
+    """A rig with the effects' knobs up and a synth part sending to them."""
+
+    def __init__(self, axf, reverb_send=0, delay_send=0, engine=2):
+        super().__init__(axf)
+        m = self.m
+        self.stub(m.addr("_ZN11TrackerImpl11getPlatformEv"), lambda mm: self.platform)
+        if "_ZN4mods15masterfxStartedEv" in self.syms:
+            m.call(m.addr("_ZN4mods15masterfxStartedEv"), max_insns=50_000_000)
+        self.knobs()
+        self.set_instrument(0, engine)
+        # All three: a mixer input is at unity until engine.update sets it, and the rig calls
+        # updateAudioBuffers without that. Twice: AudioMixer ramps from the gain before the last
+        # one, and a first note would get a block of that
+        for _ in range(2):
+            for part, reverb, delay in ((0, reverb_send, delay_send), (1, 0, 0), (2, 0, 0)):
+                self.reverb_send(part, reverb)
+                self.delay_send(part, delay)
+
+    def _float(self, name, value):
+        self.m.uc.reg_write(UC_ARM_REG_S0, struct.unpack("<I", struct.pack("<f", value))[0])
+        self.m.call(self.m.addr(name), self.engine, max_insns=5_000_000)
+
+    def knobs(self, size=0.7, damp=0.3, predelay=0.1, diffusion=0.6, time=200, feedback=50, filt=8000,
+              params=0x80):
+        m = self.m
+        self._float("_ZN11audioEngine13setReverbSizeEf", size)
+        self._float("_ZN11audioEngine13setReverbDampEf", damp)
+        self._float("_ZN11audioEngine17setReverbPredelayEf", predelay)
+        self._float("_ZN11audioEngine18setReverbDiffusionEf", diffusion)
+        m.call(m.addr("_ZN11audioEngine12setDelayTimeEt"), self.engine, time)
+        m.call(m.addr("_ZN11audioEngine16setDelayFeedbackEh"), self.engine, feedback)
+        m.call(m.addr("_ZN11audioEngine23setDelayFilterFrequencyEt"), self.engine, filt)
+        m.call(m.addr("_ZN11audioEngine14setDelayParamsEh"), self.engine, params)
+
+    def choose(self, on, reverb, delay):
+        set_mod(self, on, reverb, delay)
+
+
+def phrase(r, on_blocks=40, tail=260):
+    """A note and what's left after it."""
+    r.note(0, 60, True)
+    a = r.blocks(on_blocks)
+    r.note(0, 60, False)
+    b = r.blocks(tail)
+    return a, b
+
+
+def test_graph(mods, ref):
+    print("-- graph --")
+    # the switch and the boot gate
+    r = SoundRig(mods)
+    r.stub(r.m.addr("_ZN11TrackerImpl11getPlatformEv"), lambda mm: r.platform)
+    set_mod(r, True, 4, 2)
+
+    def active():
+        return (r.m.read(r.m.addr("_ZN4mods8masterfx12activeReverbE"), 1)[0],
+                r.m.read(r.m.addr("_ZN4mods8masterfx11activeDelayE"), 1)[0])
+    check(active() == (0, 0), "before the first screen: the choice waits, Stock runs")
+    r.m.call(r.m.addr("_ZN4mods15masterfxStartedEv"), max_insns=50_000_000)
+    check(active() == (4, 2), f"the first screen starts it {active()}")
+
+    # blocked first, new effect set, then the clear
+    order = []
+    r.watch(r.m.addr("_ZN19AudioEffectPolyverb5resetEv"), lambda mm: order.append(("reset", active()[0])))
+    r.watch(r.m.addr("_ZN21AudioEffectShortDelay11blockUpdateEv"), lambda mm: order.append(("block", active()[1])))
+    r.watch(r.m.addr("_ZN21AudioEffectShortDelay5clearEv"), lambda mm: order.append(("clear", active()[1])))
+    set_mod(r, True, 2, 1)
+    check(active() == (2, 1), f"the switch path changes the effects {active()}")
+    check(("reset", 2) in order and ("clear", 1) in order, f"CE's clears run with the new choice set ({order})")
+    if ("clear", 1) in order:
+        check(("block", 2) in order[:order.index(("clear", 1))], "the delay is blocked before the choice changes, and cleared after")
+    set_mod(r, False)
+    check(active() == (0, 0), "mod Off: Stock")
+    set_mod(r, True, 200, 200)
+    check(active() == (0, 0), "a damaged choice: Stock")
+
+    # Off, and On with Stock: CE, with notes through both sends
+    base = phrase(Graph(ref, 50, 50))
+    off = Graph(mods, 50, 50)
+    off.choose(False, 4, 2)
+    check(phrase(off) == base, "mod Off with Shimmer and BBD chosen: reference build, sample for sample")
+    stock = Graph(mods, 50, 50)
+    stock.choose(True, 0, 0)
+    check(phrase(stock) == base, "mod On, Stock and Stock: reference build, sample for sample")
+
+    # the synth's send reaches the chosen effect
+    dry = phrase(Graph(ref))
+    for reverb in range(1, 7):
+        g = Graph(mods)
+        g.choose(True, reverb, 0)
+        check(phrase(g) == dry, f"{REVERBS[reverb]}: send at 0, the dry sound and nothing else")
+        g = Graph(mods, 80, 0)
+        g.choose(True, reverb, 0)
+        a, b = phrase(g)
+        late = [p - q for p, q in zip(b[0][128 * 60:], dry[1][0][128 * 60:])]
+        check(peak(late) > 8, f"{REVERBS[reverb]}: a send reaches it, and it rings on after the note (peak {peak(late)} over the dry sound)")
+        check(not g.failures, f"{REVERBS[reverb]}: no asserts")
+    for delay in (1, 2):
+        g = Graph(mods)
+        g.choose(True, 0, delay)
+        check(phrase(g) == dry, f"{DELAYS[delay]}: send at 0, the dry sound and nothing else")
+        g = Graph(mods, 0, 80)
+        g.choose(True, 0, delay)
+        a, b = phrase(g)
+        late = [p - q for p, q in zip(b[0][128 * 60:], dry[1][0][128 * 60:])]
+        check(peak(late) > 8, f"{DELAYS[delay]}: a send reaches it, and it repeats after the note (peak {peak(late)} over the dry sound)")
+        check(b[0] != b[1], f"{DELAYS[delay]}: PingPong On, left and right differ")
+
+
+def buffers(g):
+    """Each effect buffer's [start, end) from the symbols that hold them."""
+    out = []
+    for name in ("_ZL21internalRamReverbBuff", "externalRamReverbBuff", "externalRamDelayBuff"):
+        s = g.syms.get(name)
+        if s and s.size:
+            out.append((name, s.addr, s.addr + s.size))
+    return out
+
+
+def test_stress(mods, ref):
+    print("-- stress --")
+    # the heaviest pair, 8 voices, against Stock
+    pools = {}
+    for name, (reverb, delay) in {"Stock": (0, 0), "Shimmer and BBD": (4, 2)}.items():
+        g = Graph(mods, 80, 80)
+        g.set_voices(0, 8)
+        g.choose(True, reverb, delay)
+        for n in range(8):
+            g.note(0, 48 + 3 * n, True)
+        g.blocks(40)
+        pools[name] = g.pool_peak()
+        check(not g.failures and g.pool_peak() <= 80, f"{name}, 8 voices: audio pool peak {g.pool_peak()} of 80")
+    check(pools["Shimmer and BBD"] == pools["Stock"], f"the effects take no more of the pool than CE's ({pools})")
+
+    # switches, knobs and notes while it plays
+    random.seed(1234)
+    g = Graph(mods, 60, 60)
+    g.set_voices(0, 8)
+    bad = []
+    ours = [(s.addr & ~1, (s.addr & ~1) + s.size) for n, s in g.syms.items()
+            if s.size and s.is_func and n.startswith(("_ZN4mods8masterfx", "_ZN21AudioEffectShortDelay", "_ZN19AudioEffectPolyverb"))]
+
+    def on_write(uc, access, address, size, value, user):
+        pc = uc.reg_read(UC_ARM_REG_PC)
+        if any(start <= address < end for _, start, end in guarded):    # the reverb's starts where the delay's ends
+            return
+        if any(a <= pc < b for a, b in ours):   # our code only: nothing from a closed library is looked at
+            bad.append((hex(address), hex(pc)))
+    guarded = buffers(g)
+    for name, start, end in guarded:
+        g.m.uc.hook_add(UC_HOOK_MEM_WRITE, on_write, begin=end, end=end + 63)
+        g.m.uc.hook_add(UC_HOOK_MEM_WRITE, on_write, begin=start - 64, end=start - 1)
+    print(f"     buffers guarded: {[b[0] for b in guarded]}")
+    notes = set()
+    switches = 0
+    for block in range(900):
+        roll = random.random()
+        if roll < 0.04:
+            g.choose(random.random() > 0.1, random.randrange(7), random.randrange(3))
+            switches += 1
+        elif roll < 0.10:
+            g.knobs(random.random(), random.random(), random.random(), random.random(),
+                    random.randrange(20, 1000), random.randrange(0, 100), random.randrange(100, 15000),
+                    random.choice((0, 0x80)))
+        elif roll < 0.20:
+            n = random.randrange(36, 84)
+            if n in notes:
+                g.note(0, n, False)
+                notes.discard(n)
+            elif len(notes) < 8:
+                g.note(0, n, True)
+                notes.add(n)
+        g.block()
+    print(f"     {switches} switches in 900 blocks")
+    check(not g.failures, "stress: no asserts")
+    check(not bad, f"stress: nothing written past an effect's buffers ({bad[:4]})")
+    check(g.pool_peak() <= 80, f"stress: audio pool peak {g.pool_peak()} of 80")
+    for n in notes:
+        g.note(0, n, False)
+    g.blocks(100)
+    g.choose(False, 0, 0)
+    g.m.call(g.m.addr("_ZN11audioEngine10clearDelayEv"), g.engine, max_insns=50_000_000)
+    g.m.call(g.m.addr("_ZN11audioEngine11clearReverbEv"), g.engine, max_insns=50_000_000)
+    g.reverb_send(0, 0)
+    g.delay_send(0, 0)
+    g.blocks(500)   # the synths' own releases
+    tail = g.blocks(10)
+    check(peak(tail[0]) <= 2 and peak(tail[1]) <= 2, f"stress: back to Stock, cleared, silence (peak {peak(tail[0])})")
+    g.knobs()
+    g.reverb_send(0, 50)
+    g.delay_send(0, 50)
+    g.note(0, 60, True)
+    check(peak(g.blocks(20)[0]) > 100, "and it still plays")
+
+
+def test_debounce(mods, ref):
+    print("-- debounce --")
+    p = MasterPage(mods)
+    m = p.m
+    marks = []
+    p.r.watch(m.addr("_ZN4mods7project11markChangedEv"), lambda mm: marks.append(1))
+    m.call(m.addr("_ZN4mods15masterfxStartedEv"), max_insns=50_000_000)
+    set_mod(p.r, True, 0, 0)
+    p.start()
+    p.press("right")
+
+    def active():
+        return m.read(m.addr("_ZN4mods8masterfx12activeReverbE"), 1)[0]
+    for step in range(3):
+        p.encoder(1)
+        p.r.now += 50
+        p.update()
+    check(settings(p.r)[0] == 3 and active() == 0, "turning the encoder: the list moves, the effect waits")
+    check(len(marks) == 3, f"each choice marks the project changed ({len(marks)})")
+    p.r.now += 99
+    p.update()
+    check(active() == 0, "149 ms after the last step: still waiting")
+    p.r.now += 1
+    p.update()
+    check(active() == 3, "150 ms after the last step: it changes")
+    p.encoder(1)
+    check(active() == 3, "another step waits again")
+    m.call(m.addr("_ZN13cMasterParams4stopEv"), p.page, max_insns=20_000_000)
+    check(active() == 4, "leaving the page changes it at once")
+    p.encoder(100)
+    before = len(marks)
+    p.encoder(100)
+    check(settings(p.r)[0] == 6 and len(marks) == before, "at the end of the list nothing changes, so nothing is marked")
+
+
+def test_project(mods, ref):
+    """make_masterfx_test_project.py's output through the firmware's own readers."""
+    print("-- device test project --")
+    source = Path(__file__).resolve()
+    for parent in source.parents:
+        if (parent / "hellish downtown" / "project.mt").exists():
+            source = parent / "hellish downtown"
+            break
+    else:
+        print("     no project beside the repo to copy: skipped")
+        return
+    import tempfile
+    import make_masterfx_test_project as maker
+    with tempfile.TemporaryDirectory() as temp:
+        out = maker.make(source, Path(temp), "MFX test")
+        original = {p.relative_to(source): p.read_bytes() for p in source.rglob("*") if p.is_file()}
+        copied = {p.relative_to(out): p.read_bytes() for p in out.rglob("*") if p.is_file()}
+        changed = [str(k) for k in original if copied.get(k) != original[k]]
+        check(all(k == "project.mt" or k.startswith("patterns") for k in map(lambda s: s.replace("\\", "/"), changed)),
+              f"only project.mt and patterns differ from the source ({len(changed)} files)")
+        files = {str(k).replace("\\", "/"): v for k, v in copied.items()}
+
+    r = SoundRig(mods)
+    m = r.m
+    fm = m.addr("newFileManager")
+    m.stub_function(m.addr("_ZN12cFileManager23setProjectStructChangedEv"), lambda mm: None)
+    # the card as it'd be with the project at /Projects/MFX test
+    folder = "Projects/MFX test"
+    r.sd.files.update({f"{folder}/{k}": v for k, v in files.items()})
+    r.sd.dirs.add(folder)
+    m.call(m.addr("_ZN4mods4initEP10FileSystem"), r.sd.obj)
+
+    # the pattern, through readPatternFile
+    m.call(m.addr("_ZN12cFileManager4initEP10FileSystemP5Synthb"), fm, r.sd.obj, r.synth, 0, max_insns=30_000_000)
+    dest = m.alloc(0x8000, 8)
+    path = m.put_str(f"{folder}/patterns/pattern_01.mtp")
+    ok = m.call(m.addr("_ZN12cFileManager15readPatternFileEPKcPN9Sequencer10strPatternE"), fm, path, dest, max_insns=30_000_000)
+    check(ok & 0xFF == 1, "CE's readPatternFile takes the pattern")
+    read = m.read(dest, 0x4030)
+    expected = maker.pattern()
+    check(read == expected, "and reads it as written")
+
+    # the project's record, through mods' own load path
+    r.stub(m.addr("_ZN11TrackerImpl11getPlatformEv"), lambda mm: r.platform)
+    m.call(m.addr("_ZN4mods15masterfxStartedEv"), max_insns=50_000_000)
+    path_at = find_project_path(r)
+    set_names(r, path_at, "Projects", "MFX test")
+    m.call(m.addr("_ZN4mods17onProjectOpenCopyEv"), max_insns=30_000_000)
+    m.call(m.addr("_ZN4mods17onWorkspaceLoadedEv"), max_insns=50_000_000)
+    on = m.read(m.addr(SWITCHES) + MASTERFX, 1)[0]
+    check(on == 1 and settings(r) == (4, 2), f"the project's 1.2.0 masterfx.bin imports: On, Shimmer and BBD ({on}, {settings(r)})")
+    active = tuple(m.read(m.addr("_ZN4mods8masterfx12activeReverbE"), 1)) + tuple(m.read(m.addr("_ZN4mods8masterfx11activeDelayE"), 1))
+    check(active == (4, 2), f"and they play {active}")
+
+    # 8 voices, the patches' models, through Synth's own calls
+    g = Graph(mods, 60, 60)
+    g.choose(True, 4, 2)
+    voices = maker.VOICES
+    models = [struct.unpack_from("<i", files["project.mt"], maker.ce.SLOT_RECORDS + s * maker.ce.SLOT_RECORD_SIZE + maker.ce.SLOT_MODEL)[0]
+              for s in range(3)]
+    print(f"     project's models: {models}")
+    for part, (count, model) in enumerate(zip(voices, models)):
+        g.set_voices(part, 0)
+    for part, (count, model) in enumerate(zip(voices, models)):
+        g.set_voices(part, count)
+        g.set_instrument(part, ENGINE_IDS[model])
+        g.reverb_send(part, maker.SEND)
+        g.delay_send(part, maker.SEND)
+    for track, part, note in maker.HELD:
+        g.note(part, note, True)
+    a = g.blocks(40)
+    check(peak(a[0]) > 100 and not g.failures, f"its 8 voices sound, no asserts (peak {peak(a[0])})")
+    check(g.pool_peak() <= 80, f"audio pool peak {g.pool_peak()} of 80")
+
+
+def find_project_path(r):
+    """cFileManager's path and name fields: wherever the hooks read them from."""
+    m, sd = r.m, r.sd
+    fm = m.sym("newFileManager")
+    sd.files["?//mods.bin"] = b"not a real one"
+    for at in range(fm.addr, fm.addr + fm.size):
+        before = m.read(at, 2)
+        m.write(at, b"?\0")
+        sd.calls.clear()
+        try:
+            m.call(m.addr("_ZN4mods17onProjectOpenCopyEv"))
+        except RuntimeError:
+            pass
+        found = any("readFile" in c for c in sd.calls)
+        m.write(at, before)
+        if found:
+            del sd.files["?//mods.bin"]
+            return at
+    raise RuntimeError("no project path field in cFileManager")
+
+
+def set_names(r, path_at, folder, name):
+    m = r.m
+    m.write(path_at, folder.encode() + b"\0")
+    m.write(path_at + PATCH_SIZE, name.encode() + b"\0")
+
+
 def main():
     mods, ref = Path(sys.argv[1]), Path(sys.argv[2])
     only = sys.argv[3] if len(sys.argv) > 3 else None
-    for name, fn in (("ui", test_ui),):
+    for name, fn in (("ui", test_ui), ("graph", test_graph), ("stress", test_stress), ("debounce", test_debounce),
+                     ("project", test_project)):
         if only in (None, name):
             fn(mods, ref)
     print(f"{failures} failures")

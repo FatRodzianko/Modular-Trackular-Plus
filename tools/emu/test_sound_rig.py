@@ -56,6 +56,7 @@ def main():
         tail = rm.blocks(10)
         check(peak(tail[0]) <= 2, f"engine {e}: note off, silence (peak {peak(tail[0])})")
         check(not rm.failures, f"engine {e}: no asserts")
+        check(rm.interrupts["disable"] == rm.interrupts["enable"], f"engine {e}: audio interrupts turned back on")
 
     print(f"{failures} failures")
     return 1 if failures else 0

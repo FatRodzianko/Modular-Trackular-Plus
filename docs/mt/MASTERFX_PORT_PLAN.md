@@ -1,7 +1,9 @@
 # masterfx on CE: build plan
 
-Status: plan only, 2026-11-04, your answers to the decisions are in. Nothing is built. Based on CE's source at `af01d47`, a reference
-build of it, and 1.2.0's `patch/masterfx` (mf8) compiled with CE's FPU flags. Section 3.13 of
+Status: steps 1 to 4 are built and pass in the emulator, 2026-11-04. Step 5, the device test in
+section 8, is waiting on its readings. Sections 2, 3 and 4 give what was built; the CPU figures are
+still estimates until then. Based on CE's source at `af01d47`, a reference build of it, and 1.2.0's
+`patch/masterfx` (mf8) compiled with CE's FPU flags. Section 3.13 of
 [CE_PORT_PLAN.md](CE_PORT_PLAN.md) points here.
 
 ## Summary
@@ -37,20 +39,14 @@ Taken from the code, not the brief: mf8 moved Gated to the reverb list and has R
 ### Hooks
 
 Both `update()`s are `AUDIO_CORE_RAM` and run from `AudioStream::update_all` in the audio
-interrupt. Each gets an `// MT:` check at the top, behind `MT_HAS_MASTERFX`:
+interrupt. CE's receive, allocate, transmit and release stay as they are. Each `update()` gets an
+`// MT:` check around CE's processing, behind `MT_HAS_MASTERFX`, and it calls
+`mods::masterfx::reverbProcess` or `delayProcess` instead of it. `reverb.h` gets `knobsForMods()`,
+so the effect reads CE's own knob values.
 
-```cpp
-void AudioEffectPolyverb::update()
-{
-    if (isBlockedUpdate) return;          // CE's
-#if MT_HAS_MASTERFX // MT:
-    if (mods::masterfx::activeReverb != 0) { mods::masterfx::reverbBlock(*this); return; }
-#endif
-    // CE's stock code
-```
-
-- **The stock object doesn't run when ours is chosen,** because the hook returns before the
-  stock code. That's what the CPU budget needs. Only one DSP per slot ever runs.
+- **The stock object doesn't run when ours is chosen,** because the hook replaces CE's processing.
+  That's what the CPU budget needs: CE's reverb drops from 32,233 instructions in `update()` to 57,
+  and CE's delay processing from 11,555 to 0. Only one DSP per slot ever runs.
 - **Off, or Stock chosen:** `activeReverb` is 0, one byte read and a branch. Same for the delay.
 - `-DMT_NO_MODS` compiles the hooks out, and the reference build stays byte-identical.
 - **Block handling** stays as stock's: receive, process, transmit, release. A missing block is
@@ -89,9 +85,10 @@ CE already has the right one.
 Every change of choice comes from main-loop code (section 6), so `masterfx::apply()` runs there:
 
 1. Block the object (`blockUpdate`, which both classes have).
-2. Clear through CE's own `reset()` or `clear()`.
-3. Initialise our DSP state.
-4. Set `activeReverb` or `activeDelay`, then unblock.
+2. Set `activeReverb` or `activeDelay`.
+3. Clear through CE's own `reset()` or `clear()`, which unblocks. Hooks in both tell the effect its
+   buffers are clean, so CE's own clears are covered too.
+4. The next audio block lays out the effect's state in the clean buffers. That init is in flash.
 
 The effect is silent for the length of the clear (estimate: under 20 ms for the delay's 1.5 MB)
 and dry sound isn't touched. The interrupt carries no clearing code at all. On the Master page,
@@ -186,13 +183,15 @@ project, so that wouldn't block the mod. The device reading in section 8 answers
 
 ### Memory
 
-| Region | Cost | Against |
-|---|---|---|
-| Flash | About 21 KB, estimate: 18,860 B of DSP measured, plus UI and settings | 14.9 MB free |
-| ITCM | 5,252 B of loops, plus about 40 B of hooks | 22,696 B free, floor 1,024 |
-| DTCM | About 1,150 B: 808 B of state measured, 332 B of Gated's tap cache, 2 B of settings | 21,120 B gap, floor 4,096 |
-| SDRAM | 0 | CE's own buffers |
-| OCRAM, heap | 0 | Mods stay out |
+Measured on the build, with `tools/mem_budget.py`:
+
+| Region | Cost | Free now | Floor |
+|---|---|---|---|
+| Flash | 19,384 B | 14,883,532 B | 1 MiB |
+| ITCM | 5,584 B | 17,112 B | 1,024 B |
+| DTCM | 1,144 B | 19,824 B gap | 4,096 B |
+| SDRAM | 0: CE's own buffers | 1,037,868 B | 256 KiB |
+| OCRAM, heap | 0 | 9,556 B OCRAM | Mods stay out |
 
 **ITCM choice:** `shimmer_process` and its passes (2,832 B) and `bbd_process` and `bbd_coefs`
 (2,420 B): the costliest reverb and delay. Moving all 15.2 KB of loops would save only about 1.4
@@ -280,23 +279,23 @@ Values still show as CE shows them: Size is a percentage, not a time.
 
 ### Display bytes
 
-Only API calls are exact here. The coprocessor expands `CMD_TEXT` and `CMD_GRADIENT`, so these are
-upper bounds: 24 B per text plus 12 B per glyph, 120 B per gradient. `cList` costs about 206 B
-(background, shadow, selection frame) plus 4 B of colour per line.
+Counted by `test_masterfx_rig.py` on the real controls, with the heaviest choices shown. Only API
+calls are exact. The coprocessor expands `CMD_TEXT` and `CMD_GRADIENT`, so these are upper bounds:
+24 B per text plus 12 B per glyph, 120 B per gradient.
 
-| Added to the Master page | Bytes, at most |
+| | Bytes, at most |
 |---|---|
-| Reverb list, 7 lines, 47 glyphs | 966 |
-| Delay list, 3 lines, 12 glyphs | 434 |
-| Second label lines, 8 glyphs each | 240 |
-| **Total added** | **1,640** |
-| Master page today, estimate (labels, 3 bars, Saturation list, cover, frame, title) | 4,230 |
-| **Page total, against 8,172** | **5,870** |
+| Reverb list | 964 |
+| Delay list | 456 |
+| Second lines of two labels | 176 |
+| **Total added** | **1,596** |
+| Master page as CE | 3,688 |
+| **Master page, against 8,172** | **5,284** |
+| Reverb page, with names | 3,476 |
+| Delay page, with names | 4,980 |
 
-Option A adds about 700 B to the Reverb page and about 100 B to the Delay page. Renames add at
-most 24 B per page: most new names are shorter. The emulator test counts the real commands and
-glyphs. If it ever overflowed, the lowest slots would vanish first, the frame and labels, so
-it would be obvious on the device.
+If it ever overflowed, the lowest slots would vanish first, the frame and labels, so it would be
+obvious on the device.
 
 ### Off, and other paths
 
@@ -361,16 +360,19 @@ and it can't see the screen.
 
 ### Smallest hardware test: one firmware, one sitting
 
-I'll give the firmware's full Windows path and a descriptive filename when it exists, along with a
-generated test project: three synth tracks holding 8 voices in total, sending to both effects.
+The firmware and generated test project come with the step 5 report. The project is a copy of
+`hellish downtown` with three synth parts holding 8 voices in total, sending to both effects, and
+every pattern holding those 8 notes. Its 1.2.0 `masterfx.bin` brings in Shimmer + BBD.
 
-1. **Boot:** the test project is saved with Shimmer + BBD and is the last project. Power on. It
-   reaches the Pattern screen.
+1. **Boot:** open the test project, so it's the last project. Power off and on. It reaches the
+   Pattern screen.
 2. **Master page (title Master 1/3):** Reverb and Delay lists show, with all labels and the frame.
    Left/Right stops on both. Turn the encoder on Reverb to Plate: the sound changes. Press the
    Reverb button: labels read Decay, Damping, Predelay, Diffusion.
-3. **CPU:** with an empty `/.develop` on the card and the pattern playing, open Config and note the
-   CPU average and max at each of these, changing them under Project Settings > Master FX:
+3. **CPU:** with an empty `/.develop` on the card, open Config and note the CPU average and max at
+   each of these, changing them under Project Settings > Master FX. CE's max and average run from
+   the last Play pressed on the Config screen, so after each change press Play to stop and Play to
+   start, and read after 15 seconds:
    - Reverb Stock, Delay Stock
    - Reverb Shimmer, Delay BBD, PingPong On (both in ITCM)
    - Reverb Freeverb, Delay Tape, PingPong On (both in flash)
@@ -386,11 +388,22 @@ What the readings mean:
   step 3 only.
 - **First row already over:** that's CE with 8 voices and not this mod, and I report it.
 
+### What ran
+
+`tools/emu/test_masterfx.py` covers the effects themselves, `tools/emu/test_masterfx_rig.py` the
+page, graph, stress, encoder wait and test project, and `tools/emu/test_sound_rig.py` the rig. Not
+covered, and left to the device: boot itself, CPU, the real screen, and the sequencer's own note
+path (`tools/emu/make_masterfx_test_project.py`'s pattern is read back through CE's reader, and its
+notes are played through `Synth`'s calls).
+
+The UI test found one bug the plan had missed, now fixed: the lists stayed on the Reverb page,
+because CE's `showReverbScreen` never had to hide them.
+
 ## 9. Sound test plan
 
-[SOUND_TEST_PLAN.md](SOUND_TEST_PLAN.md) stage 3 builds on stage 1, which comes with legato and
-isn't built yet. masterfx would be the first to need any of the rig. "Each switch gives its
-silent clearing blocks" changes, since clearing now happens in the main loop. That line is updated.
+[SOUND_TEST_PLAN.md](SOUND_TEST_PLAN.md) stages 1 and 3 came with this mod, level C only: level A
+waits for the synths. "Each switch gives its silent clearing blocks" changes, since clearing now
+happens in the main loop. That line is updated.
 
 **The rig's main unknown is gone.** A throwaway probe on the reference build ran CE's real start-up
 under Unicorn on its first try, using only stubs on open functions:
@@ -409,27 +422,32 @@ under Unicorn on its first try, using only stubs on open functions:
 Ids 3 and 9–11 stopped the emulator. Those were my own test values: they aren't engines
 `registry.cpp` registers, and I didn't look further.
 
-**Cost of the rig, estimate:**
+**What the rig is:**
 
-| Part | Size | Needed for masterfx? |
-|---|---|---|
-| `sound_rig.py`: start-up, fake `Platform`, licence guard, note and block helpers (level C, with level B a small step from it) | 300–400 lines; about 150 are in the probe | Yes |
-| Engine smoke test: all 7 engines, same twice, note off, Off = CE | About 150 lines, about a minute to run | Yes, it guards the rig |
-| Level A, host render of our own engines | Nothing to test yet | No, comes with synths |
-| Stages 2, 4, 5: Macros, recorder tap, our engines | | No, they come with interpolate, resample, synths |
+| Part | Status |
+|---|---|
+| `sound_rig.py`: start-up, fake `Platform`, licence guard, note and block helpers (level C, with level B a small step from it) | Built |
+| `test_sound_rig.py`: all 7 engines, same twice, note off, Off = CE | Built |
+| `masterfx_wavs.py`: each effect on a pluck, into `build/wavs/masterfx/` | Built |
+| Level A, host render of our own engines | Comes with synths |
+| Stages 2, 4, 5: Macros, recorder tap, our engines | Come with interpolate, resample, synths |
 
-So stage 1 and the level C part of stage 3 add about one build step, on top of masterfx's own test
-port. No firmware change and nothing on your side. A second of audio takes 15–32 s here, so stress
-runs stay short or use the object level. It can't measure CPU, which stays on the device.
+No firmware change. A second of audio takes 15–32 s here, so stress runs stay short or use the
+object level. It can't measure CPU, which stays on the device.
+
+**A thing to know when using it:** the rig calls `audioEngine::updateAudioBuffers`, without
+`engine.update`. So a mixer input stays at CE's unity default until the test sets it, and a part
+whose sends aren't set is heard by the reverb and delay. `Graph` in `test_masterfx_rig.py` sets all
+three parts' sends, twice, because `AudioMixer` ramps from the gain before the last one. Sends are 0
+to 100, as in the project file.
 
 ## 10. Open decisions
 
 Answered 2026-11-04:
 
 1. **UI:** Master page only for now (options B and C). A stays possible later.
-2. **Rig:** you asked what the whole rig costs. Section 9 has it, and I recommend building stage 1
-   and stage 3's level C with masterfx, leaving level A and later stages to their mods. Waiting on
-   your OK with the build.
+2. **Rig:** built with masterfx: stage 1 and stage 3's level C. Level A and later stages stay with
+   their mods.
 3. **Names:** no changes, so section 4's table stands.
 4. **ITCM:** left to me: 5.3 KB, Shimmer and BBD, with the project-wide table in section 3.
 

@@ -21,8 +21,8 @@ The licence reading below is careful, but it isn't legal advice.
 - **Closed engines are a black box.** Notes go in and audio comes out. We can compare and
   measure that audio, but we don't look inside. Our own engines get the full 1.2.0 set of
   checks.
-- **The code gets written in stages, each with the mod that first needs it.** This plan is
-  written now. The first stage comes with legato, or sooner if engine work comes first.
+- **The code gets written in stages, each with the mod that first needs it.** Stage 1's level
+  C part and stage 3 are built, with masterfx. Level A comes with the synths.
 - **Some things stay hardware-only.** The emulator has no device timing. The 1.2.0 WAVE
   screech appeared only on the device, and CPU cost is measured there with CE's Profiler.
 
@@ -220,9 +220,9 @@ Each stage is written with the mod that first needs it, and reused after that.
 | Stage | When | What | Done when |
 |---|---|---|---|
 | 0 | Now | This plan. Mod tests run on a full build too | `test_step0.py` and `test_humanize.py` pass on a full build (they do) |
-| 1 | legato, or the first engine work | `sound_rig.py` levels A and B, the symbol guard, reference build | All 7 engines: note gives sound, note off gives silence, same twice, Off = CE |
+| 1 | masterfx for the rig, and the synths for level A | `sound_rig.py`, the symbol guard, reference build. **Built, level A isn't** | All 7 engines: note gives sound, note off gives silence, same twice, Off = CE |
 | 2 | interpolate | Parameters and Macros at level B | A ramp moves the sound on CHIP and on a closed engine |
-| 3 | masterfx | Level C, object-level effect rig, WAV output | The Master FX checks, and the block pool at 8 voices |
+| 3 | masterfx | Level C, object-level effect rig, WAV output. **Built** | The Master FX checks, and the block pool at 8 voices: 65 of 80, the same as stock |
 | 4 | resample | Recorder tap at level C | Recorded blocks equal the source |
 | 5 | synths | Everything under [Our engines](#our-engines-wave-phase-later-ones-and-chip), ported from `test_synths.py` | WAVE and PHASE match their 1.2.0 references |
 
@@ -260,8 +260,7 @@ measurements.
   ms per block, with a block pool peak of 65 of 80.
 
 **Not tried yet:**
-- `artificial_isr` and `renderMode`, the sequencer's real note path, and reverb or delay returns
-  checked by themselves.
+- `artificial_isr` and `renderMode`, and the sequencer's real note path.
 - Whether Level A links without the closed libraries. The SDK's base class looks header-only,
   but `InstrumentTypeRegistry` and the host are in the library, so level A would call the
   voice directly.
