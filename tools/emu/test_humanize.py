@@ -25,7 +25,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from machine import Machine  # noqa: E402
-from test_step0 import FakeSd  # noqa: E402
+from test_step0 import FakeSd, menu_item_named  # noqa: E402
 
 HUMANIZE_ID = 1
 RECORD_ID = HUMANIZE_ID + 1
@@ -202,11 +202,11 @@ def test_config(r: Rig) -> None:
     m = r.m
     m.call(m.addr("_GLOBAL__sub_I_menuBase"))
 
-    item = menu_item(m, "menuMods", 2)
+    item = menu_item_named(m, "menuMods", "Humanize")
     setup = m.r32(item + 16)
     check(m.cstr(m.r32(item + 4)) == "Humanize" and m.r32(setup) == m.addr("_ZN4mods8defaultsE") + HUMANIZE_ID,
           "Config -> Mods: Humanize sets the default for new projects")
-    item = menu_item(m, "menuProjectMods", 1)
+    item = menu_item_named(m, "menuProjectMods", "Humanize")
     setup = m.r32(item + 16)
     check(m.cstr(m.r32(item + 4)) == "Humanize" and m.r32(setup) == r.switches + HUMANIZE_ID,
           "Project Settings -> Mods: Humanize is the project's switch")

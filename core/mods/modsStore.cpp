@@ -163,6 +163,20 @@ const uint8_t* Store::find(uint8_t id, uint8_t* version, uint16_t* length) const
 
 bool Store::put(uint8_t id, uint8_t version, const void* data, uint16_t length)
 {
+    uint8_t* out = reserve(id, version, length);
+    if (out == nullptr)
+    {
+        return false;
+    }
+    if (length > 0)
+    {
+        memmove(out, data, length);
+    }
+    return true;
+}
+
+uint8_t* Store::reserve(uint8_t id, uint8_t version, uint16_t length)
+{
     size_t oldSize = 0;
     size_t offset;
     const bool exists = findOffset(id, &offset);
@@ -174,7 +188,7 @@ bool Store::put(uint8_t id, uint8_t version, const void* data, uint16_t length)
     const size_t newPayload = payloadLength - oldSize + kRecordHeaderSize + length;
     if (kHeaderSize + newPayload > bufferCapacity || newPayload > 0xFFFF)
     {
-        return false;
+        return nullptr;
     }
 
     if (exists)
@@ -186,12 +200,8 @@ bool Store::put(uint8_t id, uint8_t version, const void* data, uint16_t length)
     out[0] = id;
     out[1] = version;
     writeU16(out + 2, length);
-    if (length > 0)
-    {
-        memmove(out + kRecordHeaderSize, data, length);
-    }
     payloadLength += kRecordHeaderSize + length;
-    return true;
+    return out + kRecordHeaderSize;
 }
 
 void Store::remove(uint8_t id)

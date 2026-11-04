@@ -41,6 +41,13 @@ EXPECTED_GROUPS = ["Project Settings", "General", "MIDI", "USB", "Metronome", "F
                    "Mods", "Info"]
 
 
+def menu_item_named(m: Machine, group: str, name: str) -> int:
+    """A group's item by its name, wherever other mods' lines have put it."""
+    a = m.addr(group)
+    items = (m.r32(m.r32(a + 12) + 4 * i) for i in range(m.r8(a + 8)))
+    return next(i for i in items if m.cstr(m.r32(i + 4)) == name)
+
+
 def test_menu(m: Machine) -> None:
     m.call(m.addr("_GLOBAL__sub_I_menuBase"))
 
@@ -108,6 +115,7 @@ class FakeSd:
             "openFile": self.open_file, "readFile": self.read_file,
             "writeFile": self.write_file, "closeFile": self.close_file,
             "getFileSizeEPv": self.size_of_handle,
+            "getFileSizeEPKc": self.size_of_path,
         }
         self.vtable = m.alloc(4 * slots, 4)
         for i in range(slots):
@@ -154,12 +162,17 @@ class FakeSd:
             if mode == 3:            # kWriteCreateNew
                 self.files[path] = b""
             self.handles[handle] = [path, mode, 0]
+            if self.m.arg(4):        # the caller's handle, for files kept open
+                self.m.w32(self.m.arg(4), handle)
         self.m.w32(ret, handle)
         self.m.w32(ret + 4, int(ok))
         return ret
 
     def size_of_handle(self):
         return len(self.files[self.handles[self.m.arg(1)][0]])
+
+    def size_of_path(self):
+        return len(self.files[self.m.cstr(self.m.arg(1))])
 
     def read_file(self):
         buf, n, h = self.m.arg(1), self.m.arg(2), self.m.arg(3)

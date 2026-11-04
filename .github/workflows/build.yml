@@ -117,6 +117,10 @@ jobs:
             LICENSE
             NOTICE.md
 
+      # MT: every memory region keeps its floor
+      - name: Memory budget
+        run: python3 tools/mem_budget.py platforms/imx/build-PLUS/TrackerPlus.axf
+
       # MT: Tracker+ image with symbols, for the emulator tests
       - name: Upload Tracker+ symbols (.axf)
         uses: actions/upload-artifact@v4

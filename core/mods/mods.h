@@ -45,6 +45,9 @@ constexpr size_t kModCount = static_cast<size_t>(Mod::kCount);
 
 // How many mods this build has (each has an MT_HAS_<NAME> flag).
 constexpr size_t kBuiltModCount = 0
+#if MT_HAS_COLORSONG
+                                  + 1
+#endif
 #if MT_HAS_HUMANIZE
                                   + 1
 #endif
@@ -98,6 +101,14 @@ void projectSwitchChanged();
 #if MT_HAS_SWING
 // The same for Global Swing's switch, which also takes effect at once when playing.
 void projectSwingSwitchChanged();
+#endif
+
+#if MT_HAS_COLORSONG
+// The same for Color Song's switch, which also reads the song again when turned on.
+void projectColorsongSwitchChanged();
+
+// Song screen update, with Color Song on.
+void colorsongUpdate();
 #endif
 
 // After any Config menu edit: mods' settings the menu edits directly are stored if they

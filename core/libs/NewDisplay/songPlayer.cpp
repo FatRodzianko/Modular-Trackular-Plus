@@ -2,6 +2,7 @@
 #include "display.h"
 #include "displayControls.h"
 #include "songPlayerControl.h"
+#include "colorsong.h" // MT:
 #include <algorithm>
 #include <string.h>
 
@@ -736,6 +737,22 @@ void cSongPlayer::fillBlocks()
             }
             else
             {
+#if MT_HAS_COLORSONG // MT: Color Song: the block's colour from its content, in CE's one command
+                if (mods::on(mods::Mod::colorsong))
+                {
+                    const bool muted =
+                      track < controlData->normalTracksCount
+                        ? controlData->normalTracksMute[track]
+                        : controlData->midiTracksMute[track - controlData->normalTracksCount];
+                    API_COLOR(mods::colorsong::blockColor(controlData->songData[textListPos + pattern],
+                                                          track,
+                                                          data,
+                                                          muted,
+                                                          muted ? colors[7] : colors[1],
+                                                          colors[8]));
+                }
+                else
+#endif
                 if (track < controlData->normalTracksCount
                       ? controlData->normalTracksMute[track]
                       : controlData->midiTracksMute[track - controlData->normalTracksCount])

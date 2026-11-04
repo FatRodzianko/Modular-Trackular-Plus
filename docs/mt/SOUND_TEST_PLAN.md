@@ -113,11 +113,8 @@ Three levels, using the cheapest that can show the problem.
 - Export: set `AudioStream::renderMode` and call `artificial_isr`. `PolySynth::update` takes a
   different path for an idle part in render mode, so it needs its own check.
 
-**Memory it must not reuse:** `machine.py`'s `SCRATCH` (`0x83F00000`) overlaps CE's own
-`.bss` (45 symbols in the full image, up to `0x83FFAA54`, such as `s_themeFileList` and
-`s_ptfxEntries`). Today's tests get away with it. The rig needs scratch memory the image
-doesn't use, in a region of its own outside the chip's map. Fix `machine.py` when the rig is
-built, and check that today's tests still pass.
+**Memory:** `machine.py`'s `SCRATCH` is in a region of its own outside the chip's map
+(`0x90000000`), so it can't overlap the image.
 
 ## The checks
 
@@ -222,7 +219,7 @@ Each stage is written with the mod that first needs it, and reused after that.
 | Stage | When | What | Done when |
 |---|---|---|---|
 | 0 | Now | This plan. Mod tests run on a full build too | `test_step0.py` and `test_humanize.py` pass on a full build (they do) |
-| 1 | legato, or the first engine work | `sound_rig.py` levels A and B, the symbol guard, the `SCRATCH` fix, reference build | All 7 engines: note gives sound, note off gives silence, same twice, Off = CE |
+| 1 | legato, or the first engine work | `sound_rig.py` levels A and B, the symbol guard, reference build | All 7 engines: note gives sound, note off gives silence, same twice, Off = CE |
 | 2 | interpolate | Parameters and Macros at level B | A ramp moves the sound on CHIP and on a closed engine |
 | 3 | masterfx | Level C, object-level effect rig, WAV output | The Master FX checks, and the block pool at 8 voices |
 | 4 | resample | Recorder tap at level C | Recorded blocks equal the source |

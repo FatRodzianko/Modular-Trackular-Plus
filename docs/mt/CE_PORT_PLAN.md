@@ -40,9 +40,10 @@ Runtime switches win on CE because:
 - Testing is one build with switch states as inputs. Today's release tier spends most
   of its 43 minutes proving that 2^15 binaries were put together right; on CE that
   question is gone.
-- CE has room: ~21 KB DTCM, ~22 KB ITCM and megabytes of SDRAM free, against
-  832 bytes of startup RAM on 1.2.0. Paying for every mod's code and state at all
-  times is affordable.
+- CE has room: about 21 KB DTCM, 22 KB ITCM and 1 MiB of SDRAM set aside, against
+  832 bytes of startup RAM on 1.2.0. All 15 mods added 28 KB of RAM on 1.2.0. Paying
+  for every mod's code and state at all times is affordable. Figures:
+  [CE_FIRMWARE_MAP.md](CE_FIRMWARE_MAP.md) section 15.
 - A mod costs one switch, not a doubling.
 
 What it costs: a mod's code is always in the image, and its Off path must truly be
@@ -180,15 +181,16 @@ are converted at load time (condtrig, below).
 
 ### 1.7 Memory
 
-- Switch bits and small per-mod state: DTCM (~21 KB free). Keep each mod's hot state
+- Switch bits and small per-mod state: DTCM (about 21 KB free). Keep each mod's hot state
   under a few hundred bytes.
 - Code on hot paths (sequencer microstep, note on/off, audio callbacks): ITCM with
   CE's `AUDIO_CORE_RAM` placement where CE's caller already lives there (~22 KB free).
-- Big buffers (masterfx delay lines and reverb state, resample buffers, synth voices'
-  tables, colorsong table): one SDRAM pool. The developer guide's `EXTERNAL_RAM` has
-  only ~8 KB free, so the pool comes from lowering `SAMPLE_MEMORY_SIZE`
-  (`mtStructs.h` L70, now ~60 MB on IMX) once for the whole fork (decision 3). Step 0
-  sizes it from the 1.2.0 builds' `late_ram` and buffer sizes.
+- Main-loop tables: SDRAM, with `__NOINIT(EXTERNAL_RAM)`. Startup doesn't zero it, so
+  the owner does. Mod builds lower `SAMPLE_MEMORY_SIZE` by 1 MiB for this (decision 3).
+- 1.2.0's mods had no big buffers of their own: masterfx uses the stock delay and reverb
+  buffers, resample the free part of sample memory, and synths keep wavetables in flash.
+- `tools/mem_budget.py` reports real free space and fails under a floor. Each mod's section
+  states its cost. Rules: `CLAUDE.md`, Memory.
 - Memory is reserved whether a mod is on or off. Simple and deterministic; Off costs
   RAM, not CPU.
 
@@ -310,7 +312,7 @@ Deliverable: a `modular` build with an empty Config → Mods group, `mods.cfg` a
    - menu items: hide or disable support;
    - file writes: screen-update constraint or file-manager queue;
    - `FEATURE_SYNTH`-less test build;
-   - SDRAM pool size from 1.2.0 buffer sizes;
+   - SDRAM share from 1.2.0's sizes (done late: see decision 3);
    - where CE marks a project changed (for settings edits).
 6. **First hardware flash of anything CE.** You held off on trying stock CE; this is
    the point to do it: back up the SD card, flash plain CE `1.0.0` from Polyend's
@@ -516,18 +518,27 @@ id stays unused. The notes below are what was built.
 
 - **What it does:** song blocks coloured by content; colours stay put; saved per
   project.
-- **Hooks:** block colour in `songPlayer.cpp` `fillBlocks` (L708, `colors[1]`, muted
-  `colors[7]`); content hashes refreshed when a pattern is saved and on project
-  open. Hashes skip the `m` and `V` columns, as 1.2.0 skips humanize's FX. Pattern saves
-  can run in the audio interrupt (MIDI Start in Song mode → `playSongFromPosition` →
-  `saveWorkspacePatternNow`), so a save only sets a flag and the main loop does the
-  hashing. If per-block colours add display-list commands, count them against the
-  8,172-byte frame budget.
-- **Themes:** CE themes recolour the UI; our hues must stay readable on them. Pick
-  colours relative to the theme's song colours, or document that colorsong overrides
-  the block fill only.
-- **Data:** `mods.bin` record (up to ~5 KB); `colorsong.bin` import.
-- **Tests:** host: allocation rules; emulator: EVE output of the Song screen.
+- **Hooks:** block colour in `songPlayer.cpp` `fillBlocks` (`colors[1]`, muted
+  `colors[7]`); `updatePatternBitmask` tells the mod a pattern changed. Saves can run in
+  the audio interrupt (MIDI Start in Song mode → `playSongFromPosition` →
+  `saveWorkspacePatternNow`), so that only sets a flag. The Song screen's `update()` does
+  the rest: one pattern file per call, through CE's reader, none while the file manager is
+  busy and one per 100 ms while playing; the actual pattern comes from RAM if it's unsaved.
+  Hashes skip the `m` and `V` columns, as 1.2.0 skips humanize's FX.
+- **Display list:** no bytes added. CE already sends one `API_COLOR` per block; the mod
+  chooses its value. A full grid is 2,316 bytes On and Off.
+- **Themes:** the mod overrides the fill of filled blocks only. A block's lightness keeps
+  a distance of 7 from the theme's empty-block colour, below it on a light theme, which
+  gives 1.2.0's floor of 14 on CE's dark themes, so 1.2.0's colours are unchanged there.
+- **Data:** `mods.bin` record, the image of 1.2.0's `colorsong.bin` (up to 5,124 bytes);
+  the file imports as it is. Keys are the same on both firmwares, in spite of the pattern
+  format change, since the hash reads the fields and not the file. A colour following an
+  edit goes out with the next Workspace save and doesn't mark the project changed.
+- **Memory:** 12,144 bytes of tables in SDRAM (9,180 for patterns, 2,964 for colours),
+  zeroed by `colorsong::init` at boot, and the project's `mods.bin` buffer grew by 4 KB.
+- **Tests:** host: `core/mods/tests/test_colorsong.cpp`, allocation rules and the file
+  format; emulator: `tools/emu/test_colorsong.py`, the Song screen's display commands, CE's
+  file reader and a real 1.2.0 project.
 - **Effort:** M.
 
 ### 3.11 visualizer
@@ -564,7 +575,8 @@ id stays unused. The notes below are what was built.
   routes the send through stock or ours. Changes only when stopped (`idleOnly`).
   The stock object must not run when ours is chosen (the device is stall-bound;
   measure with the Profiler).
-- **Our code:** the DSP from `patch/masterfx/` (ours), buffers from the SDRAM pool.
+- **Our code:** the DSP from `patch/masterfx/` (ours), on the stock delay and reverb buffers
+  as on 1.2.0.
 - **Data:** `mods.bin`: reverb choice, delay choice; `masterfx.bin` import.
 - **Tests:** host: DSP against the 1.2.0 test references; emulator: routing and effects,
   synth sends included (sound test stage 3, [plan](SOUND_TEST_PLAN.md)); CPU on
@@ -579,8 +591,7 @@ id stays unused. The notes below are what was built.
   feeds the master (or one track's) audio into the recording queues
   (`AudioInput.h`); routing in `mtAudioEngine.cpp`.
 - **Redo:** 1.2.0's "free part of sample memory" logic. CE streams large samples
-  from SD and has more SDRAM, so the recorder buffer comes from CE's recorder or our
-  pool.
+  from SD, so far more of sample memory is free for the recording than on 1.2.0.
 - **Data:** `mods.bin`: the two settings; `resample.bin` import.
 - **Note:** the USB In+Out rule that silences the jacks (`mtAudioEngine.cpp`
   L851–865) is CE's and stays.
@@ -630,7 +641,7 @@ id stays unused. The notes below are what was built.
 | 10 | colorsong | Song screen drawing, big record | M |
 | 11 | visualizer | pads | S–M |
 | 12 | slicethru Loop | audio objects, SD streaming | S–M |
-| 13 | masterfx | audio graph, SDRAM pool | M |
+| 13 | masterfx | audio graph | M |
 | 14 | resample | recorder routing | M–L |
 | 15 | synths | SDK engines | L |
 
@@ -644,8 +655,10 @@ candidate.
    on) or all On. Chosen: all Off.
 2. **When per-project settings save:** with the project (CE's way: Discard drops
    them) or instantly as on 1.2.0. Recommended: with the project.
-3. **SDRAM pool:** how much sample memory to give up. Recommended: decide after step 0
-   measures; expected 1–2 MB out of ~60 MB.
+3. **SDRAM for the mods:** chosen 2026-11-04: 1 MiB of sample memory, in mod builds only.
+   That's about 37 times what all the 1.2.0 mods added. The longest stereo recording goes
+   from 5:56 to 5:50, and large Wavetable and Granular samples, which can't stream, have
+   1 MiB less room.
 4. **Edition name** for `version.mk` and the `.ptf` name. Suggested: `MT`.
 5. **tracklen lengths:** pattern field or `mods.bin` record. Recommended: `mods.bin`.
 6. **Old WAVE/PHASE instruments:** convert to the new engines, or not supported.

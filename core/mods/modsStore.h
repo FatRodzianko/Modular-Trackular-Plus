@@ -52,6 +52,10 @@ class Store
     // not point into the store.
     bool put(uint8_t id, uint8_t version, const void* data, uint16_t length);
 
+    // Adds or replaces a record whose data the caller writes through the pointer, valid
+    // until the store next changes. nullptr (store unchanged) if it doesn't fit.
+    uint8_t* reserve(uint8_t id, uint8_t version, uint16_t length);
+
     void remove(uint8_t id);
 
     size_t payloadSize() const { return payloadLength; }
