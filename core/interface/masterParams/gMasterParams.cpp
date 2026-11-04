@@ -7,6 +7,10 @@
 #include <cmath>
 #include <masterParams/masterParams.h>
 
+#if MT_HAS_MASTERFX // MT:
+#include "masterfx.h"
+#endif
+
 static const uint16_t framesPlaces[8][4] = {
     { 0 + 1, 31, 800 / 8 - 3, 391 },
     { (800 / 8) * 1 + 1, 31, 800 / 8 - 3, 391 },
@@ -250,8 +254,118 @@ void cMasterParams::initDisplayControls()
     saturationList = display.createControl<cList>(&saturationListProperties);
 }
 
+#if MT_HAS_MASTERFX // MT: masterfx's lists and words
+namespace
+{
+
+strList masterfxReverbList;
+strList masterfxDelayList;
+
+// What the page calls each knob and itself, per effect. Stock's row isn't used: CE's own
+// words stay.
+struct MasterfxReverbWords
+{
+    const char* title;
+    const char* size;
+    const char* damping;
+    const char* diffusion;
+};
+struct MasterfxDelayWords
+{
+    const char* title;
+    const char* feedback;
+    const char* filter;
+};
+
+constexpr MasterfxReverbWords kMasterfxReverbWords[mods::masterfx::kReverbCount] = {
+    { "Master Reverb", "Size", "Damping", "Diffusion" },
+    { "Reverb: Freeverb", "Size", "Damping", "Diffusion" },
+    { "Reverb: Plate", "Decay", "Damping", "Diffusion" },
+    { "Reverb: Spring", "Decay", "Damping", "Drip" },
+    { "Reverb: Shimmer", "Decay", "Tone", "Shimmer" },
+    { "Reverb: \"Gated\"", "Length", "Tone", "Release" },
+    { "Reverb: Reverse", "Length", "Tone", "Release" },
+};
+constexpr MasterfxDelayWords kMasterfxDelayWords[mods::masterfx::kDelayCount] = {
+    { "Master Delay", "Feedback", "Filter" },
+    { "Delay: Tape", "Intensity", "Tone" },
+    { "Delay: BBD", "Feedback", "Tone" },
+};
+
+} // namespace
+
+// On the Master page the two lists of the Delay page's Sync and Rate columns show the
+// choices: those columns are empty here, and showDelayScreen gives the lists back.
+void cMasterParams::showMasterfxLists()
+{
+    masterfxReverbList.length = mods::masterfx::kReverbCount;
+    masterfxReverbList.linesCount = mods::masterfx::kReverbCount;
+    masterfxReverbList.data = (char**)mods::masterfx::kReverbNames;
+    masterfxDelayList.length = mods::masterfx::kDelayCount;
+    masterfxDelayList.linesCount = mods::masterfx::kDelayCount;
+    masterfxDelayList.data = (char**)mods::masterfx::kDelayNames;
+
+    display.setControlData(delaySyncEnableList, &masterfxReverbList);
+    display.setControlData(delaySyncRateList, &masterfxDelayList);
+    display.setControlColors(delaySyncEnableList, display.getTheme().activeListColors);
+    display.setControlColors(delaySyncRateList, display.getTheme().activeListColors);
+    display.setControlShow(delaySyncEnableList);
+    display.setControlShow(delaySyncRateList);
+
+    showMasterfxChoices();
+}
+
+void cMasterParams::showMasterfxChoices()
+{
+    const mods::masterfx::Settings& chosen = mods::masterfx::settings;
+
+    display.setControlValue(delaySyncEnableList, chosen.reverb);
+    display.refreshControl(delaySyncEnableList);
+    display.setControlValue(delaySyncRateList, chosen.delay);
+    display.refreshControl(delaySyncRateList);
+
+    display.setControlValue(label[1], 1);
+    display.setControlText2(label[1], mods::masterfx::kReverbNames[chosen.reverb]);
+    display.refreshControl(label[1]);
+    display.setControlValue(label[2], 1);
+    display.setControlText2(label[2], mods::masterfx::kDelayNames[chosen.delay]);
+    display.refreshControl(label[2]);
+}
+
+void cMasterParams::showMasterfxReverbWords()
+{
+    if (!mods::on(mods::Mod::masterfx) || mods::masterfx::settings.reverb == mods::masterfx::kStock)
+    {
+        return;
+    }
+    const MasterfxReverbWords& words = kMasterfxReverbWords[mods::masterfx::settings.reverb];
+    titleBar->setTitle(words.title);
+    display.setControlText(label[0], words.size);
+    display.setControlText(label[1], words.damping);
+    display.setControlText(label[3], words.diffusion);
+}
+
+void cMasterParams::showMasterfxDelayWords()
+{
+    if (!mods::on(mods::Mod::masterfx) || mods::masterfx::settings.delay == mods::masterfx::kStock)
+    {
+        return;
+    }
+    const MasterfxDelayWords& words = kMasterfxDelayWords[mods::masterfx::settings.delay];
+    titleBar->setTitle(words.title);
+    display.setControlText(label[4], words.feedback);
+    display.setControlText(label[5], words.filter);
+}
+#endif
+
 void cMasterParams::showMasterScreen()
 {
+#if MT_HAS_MASTERFX // MT: with the mod Off the lists aren't there to stop on
+    if (!mods::on(mods::Mod::masterfx) && (selectedPlace == 1 || selectedPlace == 2))
+    {
+        selectedPlace = 0;
+    }
+#endif
 
     display.setControlHide(delayPingpongEnableList);
     display.setControlHide(delaySyncEnableList);
@@ -320,6 +434,13 @@ void cMasterParams::showMasterScreen()
     showBassBoost();
     showStereoBoost();
 
+#if MT_HAS_MASTERFX // MT:
+    if (mods::on(mods::Mod::masterfx))
+    {
+        showMasterfxLists();
+    }
+#endif
+
     frameData.placesCount = 8;
     frameData.startPlace = selectedPlace;
     frameData.places[0] = &framesPlaces[0][0];
@@ -344,8 +465,14 @@ void cMasterParams::showMasterScreen()
     }
 
     // empty space covers
+#if MT_HAS_MASTERFX // MT: the cover draws over the lists, so it moves off their columns
+    const bool masterfxLists = mods::on(mods::Mod::masterfx);
+    display.setControlPosition(blankSpaceCover[0], (800 / 8) * (masterfxLists ? 3 : 1) + 2, -1);
+    display.setControlSize(blankSpaceCover[0], (800 / 8) * (masterfxLists ? 2 : 4) - 3, -1);
+#else
     display.setControlPosition(blankSpaceCover[0], (800 / 8) * 1 + 2, -1);
     display.setControlSize(blankSpaceCover[0], (800 / 8) * 4 - 3, -1);
+#endif
     display.setControlShow(blankSpaceCover[0]);
     display.refreshControl(blankSpaceCover[0]);
 
@@ -359,6 +486,16 @@ void cMasterParams::showMasterScreen()
 
 void cMasterParams::showReverbScreen()
 {
+#if MT_HAS_MASTERFX // MT: the Master page's lists, which CE never has up when it gets here
+    if (mods::on(mods::Mod::masterfx))
+    {
+        display.setControlHide(delaySyncEnableList);
+        display.setControlHide(delaySyncRateList);
+        display.refreshControl(delaySyncEnableList);
+        display.refreshControl(delaySyncRateList);
+    }
+#endif
+
     display.setControlHide(saturationList);
 
     for (uint8_t i = 0; i < 8; i++)
@@ -373,6 +510,9 @@ void cMasterParams::showReverbScreen()
     display.setControlText(label[1], "Damping");
     display.setControlText(label[2], "Predelay");
     display.setControlText(label[3], "Diffusion");
+#if MT_HAS_MASTERFX // MT:
+    showMasterfxReverbWords();
+#endif
     display.setControlText(label[4], "Line in");
     display.setControlText(label[5], " ");
     display.setControlText2(label[5], " ");
@@ -450,6 +590,11 @@ void cMasterParams::showReverbScreen()
 
 void cMasterParams::showDelayScreen()
 {
+#if MT_HAS_MASTERFX // MT: the Master page borrows these two lists
+    display.setControlData(delaySyncEnableList, &syncEnableData);
+    display.setControlData(delaySyncRateList, &syncRateData);
+#endif
+
     display.setControlShow(delayPingpongEnableList);
     display.setControlShow(delaySyncEnableList);
     display.setControlShow(delaySyncRateList);
@@ -474,6 +619,9 @@ void cMasterParams::showDelayScreen()
     display.setControlText(label[3], "Time");
     display.setControlText(label[4], "Feedback");
     display.setControlText(label[5], "Filter");
+#if MT_HAS_MASTERFX // MT:
+    showMasterfxDelayWords();
+#endif
     display.setControlText(label[6], "Line in");
     display.setControlText(label[7], "Back");
     display.setControlText2(label[7], " ");

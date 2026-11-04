@@ -10,6 +10,8 @@
 #include <cstring>
 
 #ifndef MT_HOST_TEST
+#include "Platform.h"
+#include "Tracker.h"
 #include "masterfxDsp.h"
 #include "mtAudioEngine.h"
 #endif
@@ -119,11 +121,24 @@ bool importSideFile(FileIo& io, const char* projectFolder, Store& store)
 
 namespace
 {
+
+constexpr uint32_t kApplyWaitMs = 150;
+
 bool hasStarted = false;
+bool applyPending = false;
+uint32_t applyAskedAt = 0;
+
+uint32_t nowMs()
+{
+    return Tracker::getInstance()->getPlatform()->getTimer()->millis();
 }
+
+} // namespace
 
 void apply()
 {
+    applyPending = false;
+
     if (!hasStarted)
     {
         return;
@@ -154,6 +169,28 @@ void started()
     if (!hasStarted)
     {
         hasStarted = true;
+        apply();
+    }
+}
+
+void applySoon()
+{
+    applyPending = true;
+    applyAskedAt = nowMs();
+}
+
+void pollApply()
+{
+    if (applyPending && nowMs() - applyAskedAt >= kApplyWaitMs)
+    {
+        apply();
+    }
+}
+
+void flushApply()
+{
+    if (applyPending)
+    {
         apply();
     }
 }

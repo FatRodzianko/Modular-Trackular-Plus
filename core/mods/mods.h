@@ -113,6 +113,9 @@ void projectMasterfxSwitchChanged();
 // Pattern screen update. Until the first one, Stock plays: on 1.2.0 Freeverb running
 // during boot hung the unit.
 void masterfxStarted();
+
+// A choice made on the Master page: stored, and applied once the encoder has stopped.
+void masterfxChosen();
 #endif
 
 #if MT_HAS_COLORSONG

@@ -64,6 +64,13 @@ void apply();
 // Main loop only: the unit has started. Cheap to call again.
 void started();
 
+// The Master page's encoder: a switch clears 1.5 MB, so it waits until the encoder has
+// stopped on a choice for a moment. pollApply, from the page's update, does it then;
+// flushApply, when leaving the page, does it now.
+void applySoon();
+void pollApply();
+void flushApply();
+
 } // namespace masterfx
 } // namespace mods
 

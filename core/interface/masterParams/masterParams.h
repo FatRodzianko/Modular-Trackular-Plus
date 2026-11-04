@@ -2,6 +2,7 @@
 #define INTERFACE_MASTERPARAMS_H_
 
 #include "core/modulesBase.h"
+#include "modsBuild.h" // MT:
 #include "mtKeyboardManager.h"
 
 #include "mtStructs.h"
@@ -49,6 +50,12 @@ class cMasterParams : public ModuleBase
     void showBassBoost();
     void showStereoBoost();
     void showSaturationType();
+#if MT_HAS_MASTERFX // MT: the Reverb and Delay lists on the Master page, and the effects' words
+    void showMasterfxLists();
+    void showMasterfxChoices();
+    void showMasterfxReverbWords();
+    void showMasterfxDelayWords();
+#endif
     // delay
     void showDelayScreen();
     void showDelayPingPongEnable();

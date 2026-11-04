@@ -172,6 +172,15 @@ void masterfxStarted()
 {
     masterfx::started();
 }
+
+void masterfxChosen()
+{
+    if (masterfx::storeIfEdited(projectStore))
+    {
+        project::markChanged();
+    }
+    masterfx::applySoon();
+}
 #endif
 
 #if MT_HAS_COLORSONG

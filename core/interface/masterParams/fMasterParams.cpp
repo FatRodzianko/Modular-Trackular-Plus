@@ -91,6 +91,12 @@ static void functSelectSynth2(uint8_t state);
 static void functSelectSynth3(uint8_t state);
 #endif
 
+#if MT_HAS_MASTERFX // MT:
+#include "masterfx.h"
+static void changeMasterfxReverb(int16_t value);
+static void changeMasterfxDelay(int16_t value);
+#endif
+
 // MASTER EDIT FUNCTIONS
 void changeVolume(int16_t value);
 void changeSaturationType(int16_t value);
@@ -141,6 +147,9 @@ static elapsedMillis refreshTimer;
 
 void cMasterParams::update()
 {
+#if MT_HAS_MASTERFX // MT: the encoder has stopped on a choice
+    mods::masterfx::pollApply();
+#endif
 
     if (displayType == displayMode::mixer && !keyboardManager.getState())
     {
@@ -333,6 +342,9 @@ void cMasterParams::start(uint32_t options)
 
 void cMasterParams::stop()
 {
+#if MT_HAS_MASTERFX // MT: a choice still waiting for the encoder to stop
+    mods::masterfx::flushApply();
+#endif
     sequencer.stopManualNotes();
     moduleRefresh = 0;
 }
@@ -556,6 +568,10 @@ static void functEncoder(int16_t value)
         switch (MP->selectedPlace)
         {
             case 0: changeVolume(value); break;
+#if MT_HAS_MASTERFX // MT:
+            case 1: changeMasterfxReverb(interfaceGlobals.invertValForList ? -value : value); break;
+            case 2: changeMasterfxDelay(interfaceGlobals.invertValForList ? -value : value); break;
+#endif
             case 5: changeSaturationType(interfaceGlobals.invertValForList ? -value : value); break;
             case 6: changeBassBoost(value); break;
             case 7: changeStereoBoost(value); break;
@@ -609,6 +625,14 @@ static void functLeft()
     }
     else
     {
+#if MT_HAS_MASTERFX // MT: the Reverb and Delay lists are stops too
+        if (mods::on(mods::Mod::masterfx) && MP->selectedPlace >= 1 && MP->selectedPlace <= 5)
+        {
+            MP->selectedPlace = MP->selectedPlace == 5 ? 2 : MP->selectedPlace - 1;
+            MP->activateLabelsBorder();
+            return;
+        }
+#endif
         if (MP->selectedPlace > 0)
         {
             if (MP->selectedPlace == 5)
@@ -673,6 +697,14 @@ static void functRight()
     }
     else
     {
+#if MT_HAS_MASTERFX // MT: the Reverb and Delay lists are stops too
+        if (mods::on(mods::Mod::masterfx) && MP->selectedPlace <= 2)
+        {
+            MP->selectedPlace = MP->selectedPlace == 2 ? 5 : MP->selectedPlace + 1;
+            MP->activateLabelsBorder();
+            return;
+        }
+#endif
         if (MP->selectedPlace < MP->frameData.placesCount - 1)
         {
             if (MP->selectedPlace == 0)
@@ -789,6 +821,10 @@ static void functUp()
         switch (MP->selectedPlace)
         {
             case 0: changeVolume(1); break;
+#if MT_HAS_MASTERFX // MT:
+            case 1: changeMasterfxReverb(-1); break;
+            case 2: changeMasterfxDelay(-1); break;
+#endif
             case 5: changeSaturationType(-1); break;
             case 6: changeBassBoost(1); break;
             case 7: changeStereoBoost(1); break;
@@ -893,6 +929,10 @@ static void functDown()
         switch (MP->selectedPlace)
         {
             case 0: changeVolume(-1); break;
+#if MT_HAS_MASTERFX // MT:
+            case 1: changeMasterfxReverb(1); break;
+            case 2: changeMasterfxDelay(1); break;
+#endif
             case 5: changeSaturationType(1); break;
             case 6: changeBassBoost(-1); break;
             case 7: changeStereoBoost(-1); break;
@@ -998,6 +1038,10 @@ static void functDelete()
         switch (MP->selectedPlace)
         {
             case 0: setDefaultMasterVolume(); break;
+#if MT_HAS_MASTERFX // MT: back to Stock
+            case 1: changeMasterfxReverb(-mods::masterfx::kReverbCount); break;
+            case 2: changeMasterfxDelay(-mods::masterfx::kDelayCount); break;
+#endif
             case 5: setDefaultSaturationType(); break;
             case 6: setDefaultBassBoost(); break;
             case 7: setDefaultStereoBoost(); break;
@@ -2308,6 +2352,24 @@ void changeSaturationType(int16_t value)
 
     MP->showSaturationType();
 }
+
+#if MT_HAS_MASTERFX // MT:
+static void changeMasterfxReverb(int16_t value)
+{
+    mods::masterfx::settings.reverb =
+      clamp<int>(mods::masterfx::settings.reverb + value, 0, mods::masterfx::kReverbCount - 1);
+    mods::masterfxChosen();
+    MP->showMasterfxChoices();
+}
+
+static void changeMasterfxDelay(int16_t value)
+{
+    mods::masterfx::settings.delay =
+      clamp<int>(mods::masterfx::settings.delay + value, 0, mods::masterfx::kDelayCount - 1);
+    mods::masterfxChosen();
+    MP->showMasterfxChoices();
+}
+#endif
 
 void changeBassBoost(int16_t value)
 {
