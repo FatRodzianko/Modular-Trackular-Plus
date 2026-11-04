@@ -99,12 +99,13 @@ void testList()
     }
     check(true, "every chord is the note plus 1-3 notes in an octave");
 
-    // The list is every inversion of CE's chords that fit in an octave, except those
+    // The list was made from CE's first 30 chords, the ones it had when the numbers were
+    // fixed: every inversion of them that fits in an octave, except those
     // that are CE chords already; two of those stay so that every maj7 and min7
     // inversion has a value in a row (34 = CE 18 "378", 37 = CE 22 "479").
     std::set<uint16_t> ce;
     std::set<uint16_t> inversions;
-    for (unsigned v = 1; v <= MAX_CHORD; v++)
+    for (unsigned v = 1; v <= 29; v++)
     {
         ce.insert(chordDef[v]);
         if (chordDef[v] >> 12 == 0)
