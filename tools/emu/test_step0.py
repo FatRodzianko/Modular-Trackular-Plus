@@ -5,7 +5,7 @@
    group, just before Info, starting with the "Mods in build" line and then one line per
    mod; and Project Settings -> Mods as the last item of Project Settings, a group with
    one line per mod and then the "Defaults" line. Each mod's own lines are checked by
-   its test (test_chords.py).
+   its test.
 2. Settings files through CE's FileSystem interface: mods::init reads Mods/mods.cfg on a fake SD card wired into a FileSystem vtable whose
    slots are taken from the image's own FileSystemImpl vtable.
 

@@ -287,6 +287,15 @@ void testSwitches()
     t.store.put(kSwitchesRecord, kSwitchesVersion, on, 2);
     readSwitches(t.store, four, 4);
     check(Bytes(four, four + 4) == Bytes({ 1, 0, 0, 0 }), "mods past the record are Off");
+
+    // A project saved with only the retired Chords On (id 14): no other mod turns On.
+    uint8_t chordsEra[15] = {};
+    chordsEra[14] = 1;
+    t.store.put(kSwitchesRecord, kSwitchesVersion, chordsEra, 15);
+    uint8_t loaded[15];
+    memset(loaded, 9, sizeof loaded);
+    readSwitches(t.store, loaded, 15);
+    check(loaded[1] == 0 && loaded[14] == 1, "a retired mod's byte stays at its own id");
 }
 
 void testConfig()

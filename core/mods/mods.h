@@ -37,7 +37,7 @@ enum class Mod : uint8_t
     resample = 11,
     tracklen = 12,
     songloop = 13,
-    chords = 14,
+    chords = 14, // retired: CE has these chords; the id stays unused
     kCount
 };
 
@@ -45,9 +45,6 @@ constexpr size_t kModCount = static_cast<size_t>(Mod::kCount);
 
 // How many mods this build has (each has an MT_HAS_<NAME> flag).
 constexpr size_t kBuiltModCount = 0
-#if MT_HAS_CHORDS
-                                  + 1
-#endif
   ;
 
 // One byte per mod, 0 Off or 1 On, so Config list items can point at them.

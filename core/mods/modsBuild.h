@@ -17,11 +17,4 @@
 #define MT_MODS 0
 #endif
 
-#ifndef MT_HAS_CHORDS
-#define MT_HAS_CHORDS MT_MODS
-#elif !MT_MODS
-#undef MT_HAS_CHORDS
-#define MT_HAS_CHORDS 0
-#endif
-
 #endif /* MODS_MODSBUILD_H_ */

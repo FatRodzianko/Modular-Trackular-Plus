@@ -322,6 +322,11 @@ effort (S, M, L as in the review). The behaviour itself is as in each
 
 ### 3.1 chords
 
+**Retired 2026-11-04.** CE merged these chords itself (polyend/tracker-ce#22, values
+30-67), so the mod was removed and its hooks went back to CE's code. CE's numbers differ
+from the mod's from 34 on, so 1.2.0 projects using those values play CE's chords. The mod
+id stays unused. The notes below are what was built.
+
 - **CE today:** 30 chords, `MAX_CHORD = 29` (`mtChordDefs.h` L5).
 - **Hooks:** `getChordBitmask` and `getChordBitmaskForArp` (`mtSequencer.cpp`
   L2326–2341): values 30–69 from our table; `getFxMax` (`mtSequencer_patternEdit.cpp`

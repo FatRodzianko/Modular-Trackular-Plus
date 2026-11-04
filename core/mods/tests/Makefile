@@ -5,7 +5,7 @@ CXX      ?= g++
 CXXFLAGS := -std=gnu++20 -Wall -Wextra -Werror -g -DMT_HOST_TEST -I..
 COMMON   := ../modsStore.cpp ../modsSwitches.cpp
 BUILD    := build
-TESTS    := test_mods test_chords
+TESTS    := test_mods
 
 .PHONY: all clean
 
@@ -13,10 +13,6 @@ all: $(addprefix $(BUILD)/,$(TESTS))
 	@for t in $(TESTS); do echo "$$t:"; ./$(BUILD)/$$t || exit 1; done
 
 $(BUILD)/test_mods: $(COMMON) ../modsConfig.cpp ../modsProject.cpp test_mods.cpp $(wildcard ../*.h)
-	@mkdir -p $(BUILD)
-	$(CXX) $(CXXFLAGS) -o $@ $(filter %.cpp,$^)
-
-$(BUILD)/test_chords: $(COMMON) ../chords.cpp test_chords.cpp $(wildcard ../*.h)
 	@mkdir -p $(BUILD)
 	$(CXX) $(CXXFLAGS) -o $@ $(filter %.cpp,$^)
 
