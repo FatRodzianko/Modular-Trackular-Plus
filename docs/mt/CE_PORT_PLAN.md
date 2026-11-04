@@ -571,8 +571,9 @@ id stays unused. The notes below are what was built.
 
 - **CE today:** master reverb (Polyverb) and delay are open source (`MixerAndFxs`,
   `getDelay()`, `getPolyverb()`).
-- **Hooks:** our reverbs and delays as audio objects in the master chain; a selector
-  routes the send through stock or ours. Changes only when stopped (`idleOnly`).
+- **Plan:** [MASTERFX_PORT_PLAN.md](MASTERFX_PORT_PLAN.md), which replaces what this section
+  first said: no new audio objects and no routing. Our effects run inside the stock objects'
+  `update()`, and switching works during playback (clearing in the main loop), so no `idleOnly`.
   The stock object must not run when ours is chosen (the device is stall-bound;
   measure with the Profiler).
 - **Our code:** the DSP from `patch/masterfx/` (ours), on the stock delay and reverb buffers

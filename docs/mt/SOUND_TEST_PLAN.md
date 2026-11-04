@@ -166,8 +166,8 @@ ours are ported. Everything in `test_synths.py`'s list applies, measured the sam
 ### Master FX
 
 Taken from `test_masterfx.py`:
-- **Stock:** identical to the reference build with Stock chosen; each switch gives its silent
-  clearing blocks, then the chosen effect.
+- **Stock:** identical to the reference build with Stock chosen; each switch is silent until the
+  main loop's clear ends, then the chosen effect ([plan](MASTERFX_PORT_PLAN.md)).
 - **Each effect, at object level (`update()`):**
   - bypass and missing-block handling, no clipping;
   - decay, Size, Damping, Predelay, echo times, feedback at 0.99 with no NaN.

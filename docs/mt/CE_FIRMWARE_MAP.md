@@ -107,6 +107,14 @@ objects, created by the constructors.
   `EDIT_BUFF_OFFSET = SAMPLE_MEMORY_SIZE - 2 * 2 * EDIT_BUFF_SIZE`, the top 15 MB of the
   pool, so they move with the constant. `mtEffect` handles overlap with loaded samples.
 - `.ptfx` custom effects load code and scratch into `externalRamScratchBuff`.
+- **Master effects.** `AudioEffectPolyverb::update` (1,264 B) and
+  `AudioEffectShortDelay::update` and `process` (about 580 B) run in ITCM. Reverb buffers: the
+  first, `internalRamReverbBuff`, is in DTCM (on 1.2.0, SDRAM) and holds the allpasses and the
+  predelay; the second, `externalRamReverbBuff`, is in SDRAM. Per block, with a 0.5 s delay:
+  reverb 33,399 instructions and 36 SDRAM lines, delay 11,661 and 51
+  ([plan](MASTERFX_PORT_PLAN.md)). The exporter uses the delay's `isSilent()` to set the tail, and
+  gives the reverb a fixed 300 ms. `reset()` and `clear()` run on project load, export, Sample
+  Editor and Sample Recorder.
 
 ## 6. Streaming (the change that decides sample memory)
 
@@ -190,12 +198,29 @@ main-loop only.
 Biggest own files: `fPatternEdit` 5,320 lines, `fIinstrEdit` 3,571, `fSamplePlay` 3,425,
 `fSampleRec` 3,230, `fMasterParams` 3,110.
 
+**Master screen (`core/interface/masterParams`).** Columns are 100 px wide. Each screen's
+`show*Screen` sets its own labels and hides or shows each control by name, so a new control must
+be added to all of them. `initDisplayControls` runs at each module start, so controls return to
+their created state. Hidden lists on the Master page: `delayPingpongEnableList` (column 0),
+`delaySyncEnableList` (1), `delaySyncRateList` (2), `limiterSidechainList` (4). `selectedPlace`,
+`selectedPlaceReverb` and `selectedPlaceDelay` are kept separately. Lists follow a pattern: first
+press selects, second cycles. `shiftHandler` polls Shift every 50 ms, and it's what turns Line in
+to Mute/Unmute. MIDI CC reaches only volumes (71–82), never reverb or delay knobs.
+
 ## 12. Display
 
 FT812 over LPSPI4 with DMA. `cDisplay::update` has three steps. Controls render bitmaps into
 RAM_G and `step3` appends each control's list from the highest slot down, stopping at the
 first that doesn't fit the 8,172 bytes (`CLAUDE.md`). Themes are JSON (`ThemeManager`) and fonts
 are decompressed into SDRAM. 15,684 lines in `core/libs/NewDisplay`.
+
+Each control's `ramSize` is what the coprocessor really wrote, which only the device knows.
+Bytes from source: `cList` about 206 B (background 28, shadow with `CMD_GRADIENT`, selection frame
+36) plus per line a 4 B colour and a `CMD_TEXT`. For planning, take at most 24 B per text plus 12 B
+per glyph, and 120 B per gradient. The Master page comes to about 4.2 KB at those bounds. 65
+control slots; `new` in `createControl` uses the heap, so reuse a hidden control where one fits.
+A later-created control has a higher slot and draws first, so `blankSpaceCover` draws over lists
+created after it.
 
 ## 13. Synth
 
@@ -335,8 +360,10 @@ Memory isn't the first limit. These are:
 | `mtMidi`, `TimerImpl`, `Recorder` | Handlers and structure |
 | File manager | Operation steps, autosave, load check; not import/export (`.mod`, `.it`) |
 | `FileSystemImpl`, FatFs config | API and settings; not the SD driver |
-| Interface, input | Module list, input path, `InputProcessor`; 13 modules not read inside |
-| Display | `step3` budget and file list; individual controls not read |
+| Interface, input | Module list, input path, `InputProcessor`; other 12 modules not read inside |
+| Display | `step3` budget, `cList`, `cLabel`, `cBar`, `cFrame` drawing; other controls not read |
+| `masterParams` | Read except mixer solo functions in `fMasterParams.cpp` lines 1800–2300 |
+| `AudioEffectPolyverb`, `Reverb`, `AudioEffectShortDelay` | Read in full |
 | USB, pads, LEDs, power | Entry points only |
 | Performance mode, exporter, themes, `.ptfx`, `mtEffect` | Purpose and memory use only |
 | Closed synth libraries | Not read, by licence |
@@ -355,3 +382,8 @@ Read the code at a site before hooking it; this map doesn't replace that.
   largest Wavetable and Granular sets.
 - The memory table in Color Song's first report added the heap to "used" and took the stack as
   free. The real free DTCM is the gap in section 15.
+- `docs/mt/CE_PORT_PLAN.md` section 3.13, "audio objects in the master chain ... a selector routes
+  the send" and `idleOnly`: neither is needed. See [MASTERFX_PORT_PLAN.md](MASTERFX_PORT_PLAN.md).
+- This map's section 15, "1.2.0's masterfx measured up to 10.4 points" and "ITCM ... against
+  masterfx's 20,008 bytes": both are 1.2.0 figures. On CE, with one reverb buffer in DTCM, the estimate is much lower,
+  and the inner loops are 15.2 KB.
