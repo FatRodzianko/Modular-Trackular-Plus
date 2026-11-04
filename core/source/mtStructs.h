@@ -2,6 +2,7 @@
 #define MT_STRUCTS_H
 
 #include "config.h"
+#include "modsBuild.h" // MT:
 #include "mtEnvelopeGenerator.h"
 #include <stdint.h>
 
@@ -67,7 +68,11 @@ const uint32_t SAMPLE_MEMORY_SIZE = (45 * 256 * 1024);     // 11,25 MB = 133.746
 // Tmini / Tplus
 const uint32_t EXTERAL_MEMORY_ADDRESS = 0x80000000;
 const uint32_t TOTAL_EXTERNAL_MEMORY = (64 * 1024 * 1024); // 64 MB
+#if MT_MODS // MT: 1 MiB goes to the mods' buffers. See docs/mt/CE_FIRMWARE_MAP.md section 15.
+const uint32_t SAMPLE_MEMORY_SIZE = ((60 * 1024 - 64 - 1024) * 1024);
+#else
 const uint32_t SAMPLE_MEMORY_SIZE = ((60 * 1024 - 64) * 1024); // ~60 MB minus 64 KB for pattern buffers
+#endif
 #endif
 
 const uint32_t DELAY_MEMORY_SIZE = (3 * 512 * 1024);               // 1,5 MB

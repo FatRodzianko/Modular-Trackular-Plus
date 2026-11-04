@@ -27,7 +27,7 @@ from unicorn.arm_const import (UC_ARM_REG_LR, UC_ARM_REG_PC, UC_ARM_REG_R0, UC_A
 # Our own region for stubs (unused by the chip's map).
 STUB_BASE = 0x70000000
 STUB_RET = STUB_BASE + 0x0FF0           # functions "return" here
-SCRATCH = 0x83F00000                    # top MB of SDRAM, for structures tests build
+SCRATCH = 0x90000000                    # outside the chip's map, for structures tests build
 STACK_TOP = 0x20058000
 
 MAPS = [  # (base, size): the i.MX RT1051 memories the Tracker+ uses
@@ -36,6 +36,7 @@ MAPS = [  # (base, size): the i.MX RT1051 memories the Tracker+ uses
     (0x20200000, 0x8000),       # OCRAM (the one FlexRAM bank set up as OCRAM)
     (0x60000000, 0x1000000),    # FlexSPI flash, 16 MB
     (0x80000000, 0x4000000),    # SDRAM, 64 MB
+    (SCRATCH, 0x1000000),
     (STUB_BASE, 0x1000),
 ]
 
