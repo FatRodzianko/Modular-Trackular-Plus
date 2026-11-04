@@ -216,7 +216,8 @@ are converted at load time (condtrig, below).
 ### 1.10 Build, branches, CI
 
 - `main` stays the untouched mirror of polyend/tracker-ce. `modular` is the
-  integration branch. Each mod gets `mod/<name>` and a PR into `modular`.
+  integration branch. Each mod gets `mod/<name>`, merged into `modular` after its hardware
+  test passes. No PR unless one is wanted for a review or a CI run.
 - `build.yml` today builds on pushes to `main`, `v*` tags, PRs to `main` and manual
   runs. Add `modular` to the push and pull_request branches (a two-line change), and
   upload the `.axf` and `.map` beside the `.ptf` (the emulator needs the symbols),
