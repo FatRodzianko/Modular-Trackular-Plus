@@ -1,3 +1,80 @@
+# Modular-Trackular Plus (MT+)
+
+Optional mods for the **Polyend Tracker+**, built into
+[Polyend's Tracker Community Edition (CE)](https://github.com/polyend/tracker-ce) firmware.
+It continues [Modular-Trackular](https://github.com/FatRodzianko/Modular-Trackular), which
+patches stock firmware 1.2.0.
+
+MT+ is unofficial and not affiliated with Polyend, who don't support these builds. Please
+don't report problems with them to Polyend.
+
+Everything CE does is here too. There is one firmware file, and each mod has its own
+Off/On switch, so there's no separate build for each mix of mods.
+
+## Mods
+
+| Mod | What it does | Settings |
+|---|---|---|
+| **Humanize** | A Humanize button on page 3 of the Pattern screen's bottom bar gives the selected notes small random changes in the Micro-move (`m`) and Volume (`V`) columns. It works in edit mode, and Undo reverts it. | Project Settings → Humanize |
+| **Global Swing** | Every take and pattern start uses the project's Swing amount (25–75). A Swing FX still works for the rest of its pattern. | Project Settings → Global Swing |
+| **Color Song** | Song screen blocks get a colour from their content, so the same material is easy to follow through a song. Colours stay put and are saved with the project. | On/Off only |
+
+All three are tested on hardware.
+
+The chord inversions from the 1.2.0 mods are now part of CE itself. Still to port, with no
+dates: conditional trigs, Copy to New, Variable Track Length, Legato, FX Interpolation,
+Song Loop, the pad visualizer, slice Loop, Master FX, live resampling, and the WAVE and
+PHASE synths. The plan is in [`docs/mt/CE_PORT_PLAN.md`](docs/mt/CE_PORT_PLAN.md).
+
+## Turning mods on and off
+
+- **Config → Mods** sets which mods are on in new projects.
+- **Project Settings → Mods** sets which are on in the open project. The choice is saved
+  with the project, so each project can have its own set.
+- With a mod Off, its code doesn't run and that part of the firmware is CE's. One thing
+  differs in every MT+ build, whichever mods are on: the mods get 1 MiB of sample memory,
+  so the longest stereo recording is 5:50 instead of 5:56.
+- A project that used these mods on 1.2.0 brings its Humanize, Global Swing and Color Song
+  settings with it the first time it opens.
+
+## Install
+
+MT+ is for the Tracker+ only. The Original Tracker and Tracker Mini builds from this branch
+have no mods.
+
+1. **Back up your SD card's `Projects` folder.** CE saves patterns in a newer format that
+   1.2.0 can't read. `tools/ce_to_120.py` makes a copy of a project that 1.2.0 can open,
+   without the things only CE has.
+2. **Get the firmware.** There are no releases yet. Either build it with `make plus` (see
+   [Building Firmware](#building-firmware) below), which makes
+   `build/TrackerPlus_MT_1.0.0.ptf`, or sign in to GitHub and download the
+   `polyend-tracker-ce-firmware` artifact from a build of this branch under
+   [Actions](https://github.com/FatRodzianko/Modular-Trackular-Plus/actions).
+3. **Flash it** as in
+   [Flashing on Hardware & Emergency Recovery](#4-flashing-on-hardware--emergency-recovery)
+   below. Config then shows the version as `1.0.0 MT`.
+
+## Development
+
+- `modular`, this branch, holds the mods. `main` is an untouched copy of polyend/tracker-ce.
+- The mods are in [`core/mods/`](core/mods), and changes to CE's own files are marked
+  `// MT:`.
+- Tests are in `core/mods/tests/` (on the computer) and `tools/emu/` (in an emulator).
+- [`CLAUDE.md`](CLAUDE.md) has the rules for adding code: what runs in the audio interrupt,
+  the display limit and memory.
+- [`docs/mt/CE_FIRMWARE_MAP.md`](docs/mt/CE_FIRMWARE_MAP.md) maps CE on the Tracker+.
+
+## MT+ license
+
+CE's [`LICENSE`](LICENSE) and [`NOTICE.md`](NOTICE.md) apply here, as in
+[License](#license) below. They don't allow selling `.ptf` builds. The closed synth
+libraries in `synth/lib/` have a license of their own.
+
+---
+
+*The rest of this page is CE's own README, unchanged. On this branch its build output is
+named `TrackerPlus_MT_*.ptf` rather than `TrackerPlus_CE_*.ptf`.*
+
 # Polyend Tracker Community Edition (CE)
 
 Welcome to the **Polyend Tracker Community Edition** repository!
