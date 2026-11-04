@@ -48,10 +48,10 @@ class CeFileIo : public FileIo
 
         const size_t size = fileSystem->getFileSize(file);
         const size_t wanted = std::min(size, capacity);
-        const size_t got = fileSystem->readFile(buffer, wanted, file);
+        const int32_t got = fileSystem->readFile(buffer, wanted, file); // < 0: error
         fileSystem->closeFile(file);
 
-        return got == wanted ? size : kReadFailed;
+        return got >= 0 && static_cast<size_t>(got) == wanted ? size : kReadFailed;
     }
 
     bool write(const char* path, const uint8_t* data, size_t length) override
@@ -68,9 +68,9 @@ class CeFileIo : public FileIo
             return false;
         }
 
-        const size_t written = fileSystem->writeFile(data, length, file);
+        const int32_t written = fileSystem->writeFile(data, length, file); // < 0: error
         fileSystem->closeFile(file);
-        return written == length;
+        return written >= 0 && static_cast<size_t>(written) == length;
     }
 
     void remove(const char* path) override
