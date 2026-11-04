@@ -7,6 +7,7 @@
 #include "imageViewer/imageViewerDefs.h"
 
 #include "polyassert.h"
+#include "colorsong.h" // MT:
 #include "humanize.h" // MT:
 #include "mods.h"     // MT:
 #include "swing.h"    // MT:
@@ -94,6 +95,15 @@ cMenuItem melSnapToZeroMode(menuProject, "Snap to zero", snapToZeroDesc,  menuTy
 #if MT_MODS // MT: Project Settings -> Mods: one Off/On item per mod for this project, then where the defaults are
 constexpr uint8_t projectModsMenuItemCount = mods::kBuiltModCount + 1;
 cMenuGroup menuProjectMods(menuProject, "Mods", projectModsMenuItemCount);
+
+#if MT_HAS_COLORSONG
+const char projectColorsongDesc[] = { "Color Song for this project: Song screen blocks are colored by their "
+                                      "content, so the same material can be followed through the song. "
+                                      "Same instruments, same hue. " };
+const strItemTypeListTextWithAction projectColorsongSetup{
+    &mods::switches[static_cast<size_t>(mods::Mod::colorsong)], 2, onOffStateTexts, mods::projectColorsongSwitchChanged };
+cMenuItem melProjectColorsong(menuProjectMods, "Color Song", projectColorsongDesc, menuTypeItemListTextWithAction, &projectColorsongSetup);
+#endif
 
 #if MT_HAS_SWING
 const char projectSwingDesc[] = { "Global Swing for this project: every take and every pattern starts "
@@ -352,6 +362,15 @@ cMenuItem melModsCount(menuMods,
 
 // Each item is the mod's default for new projects; a project's own switch is in
 // Project Settings -> Mods.
+#if MT_HAS_COLORSONG
+const char modsColorsongDesc[] = { "Whether new projects start with Color Song on. Each project has its "
+                                   "own switch in Project Settings > Mods. Color Song: Song screen blocks "
+                                   "are colored by their content. " };
+const strItemTypeListTextWithAction modsColorsongSetup{
+    &mods::defaults[static_cast<size_t>(mods::Mod::colorsong)], 2, onOffStateTexts, mods::defaultsChanged };
+cMenuItem melModsColorsong(menuMods, "Color Song", modsColorsongDesc, menuTypeItemListTextWithAction, &modsColorsongSetup);
+#endif
+
 #if MT_HAS_SWING
 const char modsSwingDesc[] = { "Whether new projects start with Global Swing on. Each project has its "
                                "own switch in Project Settings > Mods. Global Swing: every take and "

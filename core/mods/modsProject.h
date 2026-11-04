@@ -69,6 +69,9 @@ bool setSwitches(Store& store, const uint8_t* switches, size_t count);
 
 // For mods: call after changing a record.
 void markChanged();
+// The same for a record that follows other changes, which already marked the project: it goes
+// out with the next Workspace save, without marking the project changed.
+void markForWorkspaceSave();
 bool isDirty();
 
 // For tests: the importers run by loadFromWorkspace (default: the built-in list).

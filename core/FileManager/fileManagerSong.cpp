@@ -1,3 +1,4 @@
+#include "colorsong.h" // MT:
 #include "fileManagerDefs.h"
 #include "mtStructs.h"
 
@@ -195,6 +196,13 @@ void cFileManager::updateActualPatternBitmask()
 bool cFileManager::updatePatternBitmask(uint8_t patternIdx, Sequencer::strPattern* sourcePattern)
 {
     assert(patternIdx > 0);
+
+#if MT_HAS_COLORSONG // MT: Color Song: can run in the audio interrupt; only sets flags
+    if (mods::on(mods::Mod::colorsong))
+    {
+        mods::colorsong::patternChanged(patternIdx);
+    }
+#endif
 
     uint8_t bitmaskIdx = patternIdx - 1;
 

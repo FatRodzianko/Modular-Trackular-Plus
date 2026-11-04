@@ -6,6 +6,7 @@
 
 #include "modsProject.h"
 
+#include "colorsong.h"
 #include "humanize.h"
 #include "modsSwitches.h"
 #include "swing.h"
@@ -23,6 +24,9 @@ namespace
 
 // 1.2.0 side-file importers, added with each mod.
 constexpr ImporterEntry kBuiltInImporters[] = {
+#if MT_HAS_COLORSONG
+    { static_cast<uint8_t>(Mod::colorsong), colorsong::importSideFile },
+#endif
 #if MT_HAS_HUMANIZE
     { static_cast<uint8_t>(Mod::humanize), humanize::importSideFile },
 #endif
@@ -193,6 +197,11 @@ void markChanged()
     {
         changedCallback();
     }
+}
+
+void markForWorkspaceSave()
+{
+    dirty = true;
 }
 
 bool isDirty()

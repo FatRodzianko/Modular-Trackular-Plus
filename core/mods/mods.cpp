@@ -9,6 +9,7 @@
 
 #include "mods.h"
 
+#include "colorsong.h"
 #include "humanize.h"
 #include "modsConfig.h"
 #include "modsProject.h"
@@ -93,7 +94,7 @@ class CeFileIo : public FileIo
 };
 
 constexpr size_t kConfigBufferSize = 512;
-constexpr size_t kProjectBufferSize = 2048;
+constexpr size_t kProjectBufferSize = 6144; // Color Song's record is the largest, up to 5,124
 
 __NOINIT(EXTERNAL_RAM) uint8_t configBuffer[kConfigBufferSize];
 __NOINIT(EXTERNAL_RAM) uint8_t projectBuffer[kProjectBufferSize];
@@ -134,6 +135,9 @@ void init(FileSystem* fileSystem)
     fileIo.fileSystem = fileSystem;
     configStore.clear();
     projectStore.clear();
+#if MT_HAS_COLORSONG
+    colorsong::init();
+#endif
     project::setChangedCallback(markProjectChanged);
     config::load(fileIo, configStore, defaults.data(), kModCount);
 }
@@ -153,6 +157,22 @@ void projectSwingSwitchChanged()
 {
     projectSwitchChanged();
     swing::switchEdited();
+}
+#endif
+
+#if MT_HAS_COLORSONG
+void projectColorsongSwitchChanged()
+{
+    projectSwitchChanged();
+    colorsong::switchEdited();
+}
+
+void colorsongUpdate()
+{
+    if (colorsong::update(colorsong::ceSong(), projectStore))
+    {
+        project::markForWorkspaceSave();
+    }
 }
 #endif
 
@@ -199,6 +219,9 @@ void onWorkspaceLoaded()
 #endif
 #if MT_HAS_SWING
     swing::load(projectStore);
+#endif
+#if MT_HAS_COLORSONG
+    colorsong::reset();
 #endif
 }
 

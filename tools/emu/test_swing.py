@@ -41,7 +41,7 @@ from unicorn.arm_const import UC_ARM_REG_S0
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from machine import Machine  # noqa: E402
-from test_step0 import FakeSd, store_image  # noqa: E402
+from test_step0 import FakeSd, menu_item_named, store_image  # noqa: E402
 
 SWING_ID = 4
 RECORD_ID = SWING_ID + 1
@@ -486,11 +486,11 @@ def test_config(mt: Path) -> None:
     settings = m.addr("_ZN4mods5swing8settingsE")
     m.call(m.addr("_GLOBAL__sub_I_menuBase"))
 
-    item = menu_item(m, "menuMods", 1)
+    item = menu_item_named(m, "menuMods", "Global Swing")
     setup = m.r32(item + 16)
     check(m.cstr(m.r32(item + 4)) == "Global Swing" and m.r32(setup) == m.addr("_ZN4mods8defaultsE") + SWING_ID,
           "Config -> Mods: Global Swing sets the default for new projects")
-    item = menu_item(m, "menuProjectMods", 0)
+    item = menu_item_named(m, "menuProjectMods", "Global Swing")
     setup = m.r32(item + 16)
     check(m.cstr(m.r32(item + 4)) == "Global Swing" and m.r32(setup) == switches + SWING_ID,
           "Project Settings -> Mods: Global Swing is the project's switch")

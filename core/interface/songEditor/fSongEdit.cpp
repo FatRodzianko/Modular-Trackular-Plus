@@ -9,6 +9,7 @@
 
 #include "Platform.h"
 #include "mtPadBoard.h"
+#include "mods.h" // MT:
 #include "mtPadsBacklight.h"
 #include "mtStructs.h"
 #include "util_math.h"
@@ -136,6 +137,13 @@ void cSongEditor::update()
     tapTempo_update();
     refreshCopyPasting();
     refreshDeleting();
+
+#if MT_HAS_COLORSONG // MT: Color Song: reads the song's patterns, one file per update
+    if (mods::on(mods::Mod::colorsong))
+    {
+        mods::colorsongUpdate();
+    }
+#endif
 }
 
 void cSongEditor::start(uint32_t options)
