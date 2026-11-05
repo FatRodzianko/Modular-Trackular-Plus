@@ -3377,7 +3377,7 @@ int16_t Sequencer::findSlotWithPattern()
     uint8_t current_song_pos = mtProject.song.playlistPos;
 
     // try the last used playlist position first
-    for (slot_idx = current_song_pos;; slot_idx++)
+    for (slot_idx = current_song_pos; slot_idx < SONG_MAX; slot_idx++)
     {
         slot_value = mtProject.song.playlist[slot_idx];
         if (slot_value == current_pattern)
@@ -3390,7 +3390,7 @@ int16_t Sequencer::findSlotWithPattern()
         }
     }
 
-    for (slot_idx = 0;; slot_idx++)
+    for (slot_idx = 0; slot_idx < SONG_MAX; slot_idx++)
     {
         slot_value = mtProject.song.playlist[slot_idx];
         if (slot_value == current_pattern)
