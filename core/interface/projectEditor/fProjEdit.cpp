@@ -984,8 +984,7 @@ static void functSaveAsOverwriteYes()
         PE->ip->unblockAllInputs();
     }
 
-    PE->showDefaultScreen();
-    PE->setDefaultScreenFunct();
+    functCloseBrowser();
     display.processDisplayUpdateImmediate();
 }
 
@@ -1288,8 +1287,7 @@ static void functSaveChangesSaveOpen()
     }
 
     PE->ip->unblockAllInputs();
-    PE->showDefaultScreen();
-    PE->setDefaultScreenFunct();
+    functCloseBrowser();
 
     PE->saveProject();
 }
