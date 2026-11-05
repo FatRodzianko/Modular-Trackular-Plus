@@ -288,6 +288,9 @@ void cSampleRecorder::start(uint32_t options)
 
     if (sequencer.isPlay())
     {
+        // stop() puts this instrument back, also when the recorder is left from here.
+        globalLastUsedInstrumentIndex = mtProject.values.lastUsedInstrument;
+
         if (mtMenuPopup.isPopupVisible())
         {
             handleStartupWithPopupAndMenu();
