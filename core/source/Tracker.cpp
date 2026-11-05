@@ -152,6 +152,16 @@ void TrackerImpl::init(Platform* platform)
 #endif
 
     interfaceGlobals.devMode = platform->getFileSystem()->exists("/.develop");
+
+#if defined(PLATFORM_IMX) && defined(ENABLE_DEV_CONSOLE)
+    if (interfaceGlobals.devMode)
+    {
+        // The serial port carries the log and the development console.
+        Usb* usb = platform->getUsb();
+        usb->setClassState(Usb::ClassType::kSerial, true);
+        usb->reset();
+    }
+#endif
 }
 
 void TrackerImpl::update()
