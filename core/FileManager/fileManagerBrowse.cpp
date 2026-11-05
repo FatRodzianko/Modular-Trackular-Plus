@@ -46,9 +46,24 @@ void cFileManager::updateBrowseGames()
     }
 }
 
-void parseFolderName(const char* input, char* name, uint16_t* offset)
+static bool folderExists(FileSystem* fileSystem, const char* path, int pathLength, const char* name)
 {
-    const char* start = strchr(input, '(');
+    char fullPath[PATCH_SIZE];
+    int length = snprintf(fullPath, sizeof(fullPath), "%.*s%s", pathLength, path, name);
+
+    return length < (int)sizeof(fullPath) && fileSystem->exists(fullPath);
+}
+
+// A folder with more files than the list can hold is listed as several entries, "name (1-100)",
+// "name (101-200)" and so on. A folder can be named like that itself, so an entry is only taken
+// for such a page when no folder of exactly that name exists in path, which name points into.
+void parseFolderName(FileSystem* fileSystem,
+                     const char* path,
+                     const char* input,
+                     char* name,
+                     uint16_t* offset)
+{
+    const char* start = strrchr(input, '(');
     uint16_t dummy;
     int items;
 
@@ -61,7 +76,7 @@ void parseFolderName(const char* input, char* name, uint16_t* offset)
 
     items = sscanf(start, "(%" SCNd16 "-%" SCNd16 ")", offset, &dummy);
 
-    if (items == 2)
+    if (items == 2 && !folderExists(fileSystem, path, name - path, input))
     {
         strncpy(name, input, start - input);
         name[start - input] = '\0';
@@ -100,7 +115,11 @@ bool cFileManager::browseSdCard(uint8_t* index)
     {
         explorerDirLevel = 1;
 
-        parseFolderName(explorerList[*index], explorerCurrentPath, &explorerCurrentOffset);
+        parseFolderName(fileSystem,
+                        explorerCurrentPath,
+                        explorerList[*index],
+                        explorerCurrentPath,
+                        &explorerCurrentOffset);
         explorerPositionTable[explorerCurrentPosition] = *index;
         explorerCurrentPosition++;
 
@@ -116,7 +135,9 @@ bool cFileManager::browseSdCard(uint8_t* index)
 
                 explorerPositionTable[explorerCurrentPosition] = *index;
                 explorerCurrentPosition++;
-                parseFolderName(explorerList[*index],
+                parseFolderName(fileSystem,
+                                explorerCurrentPath,
+                                explorerList[*index],
                                 explorerCurrentPath + strlen(explorerCurrentPath),
                                 &explorerCurrentOffset);
                 *index = 0;
