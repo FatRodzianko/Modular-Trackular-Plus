@@ -379,6 +379,14 @@ void cGraphicProcessing::processSpectrum(strSampleMemory* sampleMemory,
     processSpectrum(sampleMemory->address[channel], instrument->sample.length, zoom, spectrum);
 }
 
+// The window of a zoomed view is not always inside the sample. At the very end it reaches a few
+// samples past it, and with a zoom that was set on a sample of another length it can lie
+// anywhere around it.
+static int16_t sampleOrSilence(const int16_t* address, uint32_t length, int32_t index)
+{
+    return (index >= 0 && (uint32_t)index < length) ? address[index] : 0;
+}
+
 void cGraphicProcessing::processSpectrum(int16_t* address,
                                          uint32_t length,
                                          strZoomParams* zoom,
@@ -482,6 +490,7 @@ void cGraphicProcessing::processSpectrum(int16_t* address,
         return;
     }
 
+    const int32_t firstSample = sampleData - address;
     uint32_t step = 0;
     uint16_t max_resolution =
       (resolution < 200) ? resolution : 200; // ogranicza liczbe przetwarzanych probek
@@ -494,7 +503,7 @@ void cGraphicProcessing::processSpectrum(int16_t* address,
 
             for (uint16_t j = 0; j < max_resolution; j++)
             {
-                int16_t sample = *(sampleData - step + j);
+                int16_t sample = sampleOrSilence(address, length, firstSample - (int32_t)step + j);
 
                 if (sample > up)
                     up = sample;
@@ -521,7 +530,7 @@ void cGraphicProcessing::processSpectrum(int16_t* address,
 
         for (uint16_t j = 0; j < max_resolution; j++)
         {
-            int16_t sample = *(sampleData + step + j);
+            int16_t sample = sampleOrSilence(address, length, firstSample + (int32_t)step + j);
 
             if (sample > up)
                 up = sample;
