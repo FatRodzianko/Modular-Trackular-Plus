@@ -2912,6 +2912,7 @@ void cMasterParams::lightUpPadBoard()
     padsBacklight.clearGlobalPads(0, 1, 1);
 
     bool isBeatSlice =
+      mtProject.values.lastUsedInstrument < kSampleInstrumentsCount &&
       mtProject.instrument[mtProject.values.lastUsedInstrument].playMode == playModeBeatSlice;
 
     if (isBeatSlice)
@@ -2936,6 +2937,7 @@ static void functPads(uint8_t pad, uint8_t state, int16_t velo)
     }
 
     bool isBeatSlice =
+      mtProject.values.lastUsedInstrument < kSampleInstrumentsCount &&
       mtProject.instrument[mtProject.values.lastUsedInstrument].playMode == playModeBeatSlice;
 
     if (state == buttonPress)
