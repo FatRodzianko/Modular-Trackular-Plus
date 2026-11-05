@@ -621,7 +621,8 @@ void cSampleImporter::importColorControl()
     }
     else
     {
-        char* fileName = explorerNames[selectedFile];
+        // There is no list until the first folder has been read.
+        char* fileName = explorerNames != nullptr ? explorerNames[selectedFile] : nullptr;
         if (hasFileExtension(fileName, "pti"))
         {
             colors = display.getTheme().inactiveButtonLabelsColors;

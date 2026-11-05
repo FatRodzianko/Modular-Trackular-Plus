@@ -1307,6 +1307,12 @@ static void functSwitchModule(uint8_t button)
 
 uint8_t cSampleImporter::changeFileSelection(int16_t value)
 {
+    // An empty list has no entry to move to; the clamp below would wrap around to entry 255.
+    if (locationExplorerCount == 0)
+    {
+        return 1;
+    }
+
     value = clamp<int>(value, -5, 5);
 
     if (selectionActive[selectedPlace])
