@@ -248,6 +248,14 @@ void cPerformanceMode::turnOffAtEndOfPattern()
     if (!sequencer.isPerformanceMode())
         return;
 
+    if (!sequencer.isPlay())
+    {
+        // No pattern end is coming that could do it.
+        turnOff();
+        dontClearPerformanceMode = 0;
+        return;
+    }
+
     dontClearPerformanceMode = 1;
     if (!sequencer.isSongMode())
     {
