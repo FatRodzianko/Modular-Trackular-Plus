@@ -10,7 +10,7 @@
 static char print_string[300];
 
 static constexpr size_t kFilPoolSize = FF_FS_LOCK;
-__NOINIT(EXTERNAL_RAM) static FIL s_filPool[kFilPoolSize];
+static FIL s_filPool[kFilPoolSize];
 static bool s_filPoolUsed[kFilPoolSize]{ false };
 
 static FIL* allocateFil()

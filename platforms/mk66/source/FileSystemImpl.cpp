@@ -9,7 +9,7 @@
 #include <algorithm>
 
 static constexpr size_t kSdFilePoolSize = FF_FS_LOCK;
-__NOINIT(EXTERNAL_RAM) static SdFile s_sdFilePool[kSdFilePoolSize];
+static SdFile s_sdFilePool[kSdFilePoolSize];
 static bool s_sdFilePoolUsed[kSdFilePoolSize]{ false };
 
 static SdFile* allocateSdFile()

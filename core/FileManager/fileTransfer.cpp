@@ -111,22 +111,17 @@ uint8_t cFileTransfer::loadFileToMemory(const char* file,
 {
     if (transferStep == 0)
     {
-        if (!fileSystem->exists(file))
-            return fileTransferFileNoExist;
-
         auto [isOpen, fileHandle] =
           fileSystem->openFile(file, FileSystem::FileOpenMode::kRead, &transferFile);
-        if (isOpen)
-        {
-            sourceMemTotal = memSize;
-            memStep = (mode == fileWholeOnce)      ? sourceMemTotal
-                      : (mode == fileDivIntoParts) ? memoryReadPerPart
-                                                   : READ_WRITE_BUFOR_SIZE;
-            sourceMemComplited = 0;
-            transferStep = 1;
+        if (!isOpen)
+            return fileTransferFileNoExist;
 
-            memset(memory, 0, memSize);
-        }
+        sourceMemTotal = memSize;
+        memStep = (mode == fileWholeOnce)      ? sourceMemTotal
+                  : (mode == fileDivIntoParts) ? memoryReadPerPart
+                                               : READ_WRITE_BUFOR_SIZE;
+        sourceMemComplited = 0;
+        transferStep = 1;
     }
 
     if (transferStep == 1)
@@ -171,6 +166,10 @@ uint8_t cFileTransfer::loadFileToMemory(const char* file,
 
     if (transferStep == 3)
     {
+        if (sourceMemComplited < memSize)
+        {
+            memset(memory + sourceMemComplited, 0, memSize - sourceMemComplited);
+        }
         transferStep = 0;
         fileSystem->closeFile(transferFile, false);
         return fileTransferEnd;

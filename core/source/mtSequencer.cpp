@@ -253,7 +253,7 @@ AUDIO_CORE_RAM void Sequencer::tick_uStep(void)
     }
 }
 
-AUDIO_CORE_FLASH void Sequencer::play_microStep(int row)
+AUDIO_CORE_RAM void Sequencer::play_microStep(int row)
 {
     assert(row < kAllTracks);
 
@@ -3733,19 +3733,11 @@ AUDIO_CORE_RAM void Sequencer::updateExternalClockTempo(seqtimesec_t deltaTime)
 
 bool Sequencer::copyBufferToBufferPattern(uint8_t* srcBuff)
 {
-    [[maybe_unused]] uint32_t checkCRC =
-      crcCalculator->calculate32bitCrc(srcBuff, sizeof(Sequencer::strPattern) - sizeof(uint32_t));
-
     uint8_t* destPattern = (uint8_t*)bufferPattern;
 
-    if (true)
-    {
-        memcpy(destPattern, srcBuff, sizeof(Sequencer::strPattern));
-        newFileManager.checkVersionAndTranslate((Sequencer::strPattern*)destPattern);
-        return true;
-    }
-
-    return false;
+    memcpy(destPattern, srcBuff, sizeof(Sequencer::strPattern));
+    newFileManager.checkVersionAndTranslate((Sequencer::strPattern*)destPattern);
+    return true;
 }
 
 bool Sequencer::copyCurrentPatternToBuff(uint8_t* destBuff)
