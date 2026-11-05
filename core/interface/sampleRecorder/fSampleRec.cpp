@@ -1352,6 +1352,16 @@ static void functActionButton7()
     {
         case cSampleRecorder::screenTypeConfig:
         {
+            if (SR->waitForPreRollEnd && !sequencer.isSetInternalClock())
+            {
+                // The count-in follows the clock, and an external clock may never come.
+                // Everything but this button is locked while waiting for it, so a second
+                // press has to give the wait up instead of arming it again.
+                SR->waitForPreRollEnd = false;
+                SR->recordInProgressFlag = 0;
+                mtPopups.hideInfoPopup();
+                break;
+            }
 #ifndef TRACKER_MINI
             if (sequencer.isPreRollConfigOn() &&
                 SR->recorderConfig.source != cSampleRecorder::sourceTypeRadio)
