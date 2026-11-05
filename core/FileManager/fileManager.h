@@ -263,7 +263,7 @@ class cFileManager
 
     bool deleteInstruments(uint8_t instrumentSlotFrom, uint8_t instrumentSlotTo);
 
-    bool loadWorkspacePattern(uint8_t index);
+    void loadWorkspacePattern(uint8_t index);
     const Sequencer::strPattern* loadWorkspacePatternToTempBuffer(uint8_t index);
 
     bool deleteProjectOrFolder(char* projectPath);
@@ -470,6 +470,8 @@ class cFileManager
     // wewnetrzne stany maszynki itp
     uint8_t currentOperation;
     uint8_t currentOperationStep;
+    // Pattern that loadWorkspacePattern() was asked for and update() has not started yet.
+    volatile uint8_t requestedPattern = 0;
     char currentCopyDestPath[PATCH_SIZE];
     bool forceOperation;
 
@@ -506,6 +508,7 @@ class cFileManager
     void updateBrowseSamples();
     void updateBrowseFirmwares();
     void updateBrowseGames();
+    void startRequestedPatternLoad();
     void updateLoadWorkspacePattern();
     void updateExportSound();
     void updateExportProjectSamples();

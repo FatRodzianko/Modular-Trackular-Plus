@@ -59,6 +59,8 @@ void cFileManager::init(FileSystem* fileSystem, Synth* synth, bool stereoSampleM
 
 void cFileManager::update()
 {
+    startRequestedPatternLoad();
+
     if (currentOperation == fmNoOperation && !sequencer.isRenderMode())
     {
         autoSaveProjectToWorkspace();
@@ -314,19 +316,36 @@ bool cFileManager::deleteInstruments(uint8_t instrumentSlotFrom, uint8_t instrum
     return instrumentDelete.deleteInstruments(instrumentSlotFrom, instrumentSlotTo);
 }
 
-bool cFileManager::loadWorkspacePattern(uint8_t index)
+// Called from the sequencer tick, which runs in the audio callback and must not use the SD
+// card, so the load is only asked for here; update() starts it.
+void cFileManager::loadWorkspacePattern(uint8_t index)
 {
     assert(index > 0);
+
+    requestedPattern = index;
+}
+
+void cFileManager::startRequestedPatternLoad()
+{
+    if (requestedPattern == 0)
+    {
+        return;
+    }
+
+    DISABLE_GLOBAL_INTERRUPTS();
+    uint8_t index = requestedPattern;
+    requestedPattern = 0;
+    ENABLE_GLOBAL_INTERRUPTS();
 
     stopAutosave(); // TODO: sprawdzic czy nie opoznia ladowania patternu
 
     // to wyjatek który moze byc wywolywany podczas exportu songa
     if (status != fmIdle && status != fmExportingSoundSong && status != fmExportingSoundSongStems &&
         status != fmSavingProjectToWorkspace)
-        return false;
+        return;
     if (currentOperation != fmNoOperation && currentOperation != fmExportSound &&
         currentOperation != fmSaveWorkspaceProject)
-        return false;
+        return;
 
     currentPattern = index;
 
@@ -337,7 +356,6 @@ bool cFileManager::loadWorkspacePattern(uint8_t index)
 
     currentOperationStep = 0;
     currentOperation = fmLoadWorkspacePattern;
-    return true;
 }
 
 bool cFileManager::deleteProjectOrFolder(char* projectPath)
@@ -616,7 +634,7 @@ void cFileManager::startAudioEngine()
 bool cFileManager::isPatternLoading()
 {
     return (status == fmLoadingPatternFromWorkspace) ||
-           (currentOperation == fmLoadWorkspacePattern);
+           (currentOperation == fmLoadWorkspacePattern) || (requestedPattern != 0);
 }
 
 bool cFileManager::projectExist(char* path, char* name)
