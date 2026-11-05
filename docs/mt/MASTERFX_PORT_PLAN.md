@@ -3,8 +3,9 @@
 Status: steps 1 to 4 are built and pass in the emulator, 2026-11-04. Step 5, the first device test,
 locked up the unit on Play. The stepped device test, 2026-11-05, found why: sustained overload of the
 audio interrupt, which also happens with Master FX on Stock, so Master FX isn't the cause. The load was
-CHIP: every other engine ran 8 voices, and so did Shimmer + BBD on ACD. Master FX's sound hasn't been
-checked on the unit yet. Section 8 has the readings. Sections 2, 3 and 4 give what was
+CHIP: every other engine ran 8 voices, and so did Shimmer + BBD on ACD. CHIP is now fixed, and this branch has
+the fix and upstream's optimisations of 2026-11-05. That firmware passes the release tests and hasn't been on the
+unit, and Master FX's sound hasn't been checked there. Section 8 has the readings. Sections 2, 3 and 4 give what was
 built. Based on CE's source at `af01d47`, a reference build of it, and 1.2.0's
 `patch/masterfx` (mf8) compiled with CE's FPU flags. Section 3.13 of
 [CE_PORT_PLAN.md](CE_PORT_PLAN.md) points here.
@@ -190,10 +191,10 @@ Measured on the build, with `tools/mem_budget.py`:
 
 | Region | Cost | Free now | Floor |
 |---|---|---|---|
-| Flash | 19,384 B | 14,883,532 B | 1 MiB |
-| ITCM | 5,584 B | 17,112 B | 1,024 B |
-| DTCM | 1,144 B | 19,824 B gap | 4,096 B |
-| SDRAM | 0: CE's own buffers | 1,037,868 B | 256 KiB |
+| Flash | 19,384 B | 14,884,004 B | 1 MiB |
+| ITCM | 5,584 B | 11,040 B | 1,024 B |
+| DTCM | 1,144 B | 15,520 B gap | 4,096 B |
+| SDRAM | 0: CE's own buffers | 1,042,700 B | 256 KiB |
 | OCRAM, heap | 0 | 9,556 B OCRAM | Mods stay out |
 
 **ITCM choice:** `shimmer_process` and its passes (2,832 B) and `bbd_process` and `bbd_coefs`
@@ -201,8 +202,9 @@ Measured on the build, with `tools/mem_budget.py`:
 more points and leave about 6 KB for everything else. Per-loop sizes: Tape 1,660, Spring 1,780,
 Plate 2,092, Gated 2,176, Freeverb 2,250. `tools/mem_budget.py` gives the final figures.
 
-**ITCM for the whole project.** 21,672 B is usable above the floor. Hot code is my estimate, from
-each mod's 1.2.0 function sizes:
+**ITCM for the whole project.** 15,648 B is usable above the floor. It was 21,672 B until upstream moved
+`Sequencer::play_microStep` (5,988 B) into ITCM on 2026-11-05. Hot code is my estimate, from each mod's 1.2.0
+function sizes:
 
 | Who | Code on 1.2.0 | Hot part, estimate |
 |---|---|---|
@@ -210,10 +212,10 @@ each mod's 1.2.0 function sizes:
 | interpolate (the port plan puts its microstep path in ITCM) | 3.5 KB | 1 KB |
 | WAVE and PHASE voice loops: `wt_voice_render` 5,216, `ph_voice_render` 2,552, `wt_saw` 2,126 | 516 KB, mostly tables | 10 KB |
 | masterfx, this plan | | 5.3 KB |
-| **Total** | | **18.8 KB, leaving about 2.9 KB** |
+| **Total** | | **18.8 KB, about 3.2 KB over** |
 
-- Everything fits, including the synths' voice loops. Moving all the synths' hot helpers too (LFOs,
-  envelopes, about 4 KB more) wouldn't fit.
+- It no longer all fits: the synths' voice loops take the shortfall. They start in flash, as below, and move
+  in as far as room allows. Upstream's move also saves CPU on every note, which a device reading can show.
 - Engines don't have to be in ITCM: CE's own CHIP renders from flash (4 KB at `0x60156440`). So
   later engines start in flash.
 - A loop that runs every block costs about 0.7 points per KB from flash, whichever mod owns it.
@@ -506,6 +508,13 @@ passing, 2026-11-04):
 | `test_bundle_cost.py` | Own code only | Heaviest effects 48,379 (Shimmer) and 23,261 (BBD) instructions a block, about the same right after a clear. No unaligned word access. The mods add at most 1,753 instructions to the sequencer's worst block, 83 on average |
 | `test_lockup_recorder.py` | Each recorder path on the diagnostic build | Passes |
 
+The same 24 passed again, 0 failed, on the firmware for the fourth set in
+[DEVICE_TEST_LADDER.md](DEVICE_TEST_LADDER.md): this branch with the CHIP fix and upstream's optimisations of
+2026-11-05, 2026-11-05. Its reference build is byte-identical to upstream `main` with `ChiptuneSynthVoice.cpp` from
+polyend/tracker-ce#52. `boot_rig.py` opened and played `A1` and `R1` with the right parts and effects, with no fault.
+`R1`'s output is silent on the rig, on the reference build too, so the rig says nothing about how it sounds. The
+rig has no model of the display's SPI bus, so upstream's rewrite of it is left to the device.
+
 Still not covered, so left to the device: anything that takes real time (CPU, overload, what a long
 interrupt does to the screen, card and buttons), the real screen, the card's timing, the cache, a real
 fault reaching the recorder's handlers, and the record surviving a real reset.
@@ -581,7 +590,7 @@ Answered 2026-11-04:
 - For the re-think of the tests after the lockup: `tools/run_tests.py`, `tools/emu/boot_rig.py`,
   `tools/emu/stress_masterfx.py`, `tools/emu/test_bundle_cost.py`, the lockup recorder
   (`MT_LOCKUP_RECORDER`, in no normal build), its log line for each Stop, and the test project maker's
-  `--worst`, `--effects` and `--ladder`.
+  `--worst`, `--effects`, `--ladder` and `--sound`.
 - Clearing in the main loop instead of per block, and the 150 ms wait on the encoder. This changes
   1.2.0's behaviour: the interrupt carries no clearing load, and a switch takes effect just after
   you stop turning.

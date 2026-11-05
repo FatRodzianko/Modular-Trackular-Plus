@@ -31,7 +31,7 @@ Each frame has 8,172 bytes of display list. `cDisplay::step3` appends controls f
 Map and figures: `docs/mt/CE_FIRMWARE_MAP.md`. Run `python3 tools/mem_budget.py <axf>`: it gives the real free space per region and fails under a floor. Give each mod's cost in its plan section.
 
 - State the audio interrupt touches per sample or per step: DTCM, and keep it small.
-- Hot audio code: ITCM (`AUDIO_CORE_RAM`). About 22 KB is free, so pick the inner loops.
+- Hot audio code: ITCM (`AUDIO_CORE_RAM`). About 11 KB is free, so pick the inner loops.
 - Tables for the main loop: SDRAM with `__NOINIT(EXTERNAL_RAM)`. Startup doesn't zero it, so the owner must. Mod builds have 1 MiB for this, taken from `SAMPLE_MEMORY_SIZE`; don't lower that further without asking.
 - Constants: flash.
 - OCRAM is CE's, and mods stay out. Mods don't use the heap: after boot a failed malloc hangs the unit.

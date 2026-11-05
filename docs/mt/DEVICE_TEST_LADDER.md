@@ -78,6 +78,21 @@ These are Init patches, so a real patch on the same engine can cost more or less
 The first run, 2026-11-05: all eight ran with no stall.
 [MASTERFX_PORT_PLAN.md](MASTERFX_PORT_PLAN.md) section 8 has the readings.
 
+## The fourth set: Master FX after the CHIP fix
+
+`python tools/emu/make_masterfx_test_project.py "<project>" build/device/masterfx_fixed --sound` writes the two new
+projects. The rest are the first set's. The firmware is the recorder build with the CHIP fix and upstream's
+optimisations.
+
+| Project | Voices | What it isolates |
+|---|---|---|
+| `L1 1 voice none` | 1 | The firmware itself |
+| `L6 4 voices Shimmer BBD` | 4 | Against the old 89 % |
+| `L7 8 voices none` | 8 | Stalled before the fix |
+| `L8 8 voices Shimmer BBD` | 8 | The load that locked up |
+| `R1 Real project` | The project's own | A real project with its own Shimmer + BBD from `masterfx.bin` |
+| `A1 Master FX sound` | 1 | Short notes with gaps, to hear each effect and check the screens |
+
 ## What a firmware comes with
 
 Each one handed over says what ran, what didn't, and the risk to the unit.

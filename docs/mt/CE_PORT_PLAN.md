@@ -40,7 +40,7 @@ Runtime switches win on CE because:
 - Testing is one build with switch states as inputs. Today's release tier spends most
   of its 43 minutes proving that 2^15 binaries were put together right; on CE that
   question is gone.
-- CE has room: about 21 KB DTCM, 22 KB ITCM and 1 MiB of SDRAM set aside, against
+- CE has room: about 17 KB DTCM, 16 KB ITCM and 1 MiB of SDRAM set aside, against
   832 bytes of startup RAM on 1.2.0. All 15 mods added 28 KB of RAM on 1.2.0. Paying
   for every mod's code and state at all times is affordable. Figures:
   [CE_FIRMWARE_MAP.md](CE_FIRMWARE_MAP.md) section 15.
@@ -186,7 +186,7 @@ are converted at load time (condtrig, below).
 - Switch bits and small per-mod state: DTCM (about 21 KB free). Keep each mod's hot state
   under a few hundred bytes.
 - Code on hot paths (sequencer microstep, note on/off, audio callbacks): ITCM with
-  CE's `AUDIO_CORE_RAM` placement where CE's caller already lives there (~22 KB free).
+  CE's `AUDIO_CORE_RAM` placement where CE's caller already lives there (about 11 KB free).
 - Main-loop tables: SDRAM, with `__NOINIT(EXTERNAL_RAM)`. Startup doesn't zero it, so
   the owner does. Mod builds lower `SAMPLE_MEMORY_SIZE` by 1 MiB for this (decision 3).
 - 1.2.0's mods had no big buffers of their own: masterfx uses the stock delay and reverb
@@ -573,8 +573,9 @@ id stays unused. The notes below are what was built.
 
 - **Status:** built and passing in the emulator. Its first device test locked up on Play. The stepped
   test in [DEVICE_TEST_LADDER.md](DEVICE_TEST_LADDER.md) found sustained overload from CHIP, which also
-  happens with Master FX on Stock, and Master FX adds 2 to 3 points; see section 8 of its plan. Its sound
-  hasn't been checked on the unit.
+  happens with Master FX on Stock, and Master FX adds 2 to 3 points; see section 8 of its plan. CHIP is fixed
+  ([CHIP_STALL.md](CHIP_STALL.md) on its own branch, polyend/tracker-ce#52). The firmware with the fix and upstream's
+  optimisations passes the emulator tests and hasn't been on the unit. Nor has Master FX's sound.
 - **CE today:** master reverb (Polyverb) and delay are open source (`MixerAndFxs`,
   `getDelay()`, `getPolyverb()`).
 - **Plan:** [MASTERFX_PORT_PLAN.md](MASTERFX_PORT_PLAN.md), which replaces what this section
