@@ -89,7 +89,8 @@ void cSamplePlayback::update()
 {
     refreshLiveParams();
 
-    if (refreshSpectrum)
+    // A MIDI or synth instrument has no waveform; the request waits for a sample instrument.
+    if (refreshSpectrum && mtProject.values.lastUsedInstrument < kSampleInstrumentsCount)
     {
         strSampleMemory* editorSampleMemory =
           &mtProject.sampleMemory[mtProject.values.lastUsedInstrument];
@@ -656,7 +657,8 @@ static void functMiniMiddle(uint8_t state)
     // Hold is set to button function with Press state . We have to handle it by rejecting
     // repetitive states if we don't want hold.
 
-    if (mtProject.instrument[mtProject.values.lastUsedInstrument].playMode == playModeBeatSlice)
+    if (mtProject.values.lastUsedInstrument < kSampleInstrumentsCount &&
+        mtProject.instrument[mtProject.values.lastUsedInstrument].playMode == playModeBeatSlice)
     {
         int note = mtProject.instrument[mtProject.values.lastUsedInstrument].selectedSlice +
                    FIRST_BEAT_SLICE_NOTE;
@@ -682,6 +684,7 @@ static void functPads(uint8_t pad, uint8_t state, int16_t velo)
     (void)velo;
 
     bool isBeatSlice =
+      mtProject.values.lastUsedInstrument < kSampleInstrumentsCount &&
       mtProject.instrument[mtProject.values.lastUsedInstrument].playMode == playModeBeatSlice;
 
     if (state == buttonPress)
