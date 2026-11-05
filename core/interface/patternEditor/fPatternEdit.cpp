@@ -4569,6 +4569,17 @@ static void functMiniMiddle(uint8_t state)
     }
 }
 
+// The pad board has more pads than there are FX; the last pads select nothing.
+static void setSelectionFxTypeFromPad(uint8_t fxIndex, uint8_t pad)
+{
+    if (pad >= FX_COUNT)
+    {
+        return;
+    }
+
+    sequencer.setSelectionFxType(fxIndex, interfaceGlobals.fxIDs[pad]);
+}
+
 static void functPads(uint8_t pad, uint8_t state, int16_t velo)
 {
     (void)velo;
@@ -4784,7 +4795,7 @@ static void functPads(uint8_t pad, uint8_t state, int16_t velo)
                            interfaceButtonFx2))) //&& mtPopups.getStepPopupState() == stepPopupNone)
                     {
                         PTE->dontShowPopupsUntilButtonRelease = 1;
-                        sequencer.setSelectionFxType(fx_index, interfaceGlobals.fxIDs[pad]);
+                        setSelectionFxTypeFromPad(fx_index, pad);
                     }
                     else
                     {
