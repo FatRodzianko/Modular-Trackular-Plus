@@ -402,7 +402,7 @@ use the model above: instructions, plus 350 cycles per SDRAM or flash line.
 | Shimmer | 47,500 | 141 | 6.4 |
 | BBD | 23,300 | 18 | 1.9 |
 
-CE's stock reverb is 32,233 instructions, so these agree with the estimates in section 4.
+CE's stock reverb is 32,233 instructions, so these are close to the estimates in section 3.
 
 ### Smallest hardware test: same firmware, one sitting
 
