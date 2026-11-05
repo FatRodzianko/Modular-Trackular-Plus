@@ -518,12 +518,17 @@ static void functDeleteSlot()
         return;
     }
 
-    mtProject.song.playlist[SE->songLength] = 0;
+    // A song that fills the playlist has no terminator after its last slot.
+    if (SE->songLength < SONG_MAX)
+    {
+        mtProject.song.playlist[SE->songLength] = 0;
+    }
 
-    for (int i = SE->selectedSongPosition; i < SE->songLength; i++)
+    for (int i = SE->selectedSongPosition; i < SE->songLength - 1; i++)
     {
         mtProject.song.playlist[i] = mtProject.song.playlist[i + 1];
     }
+    mtProject.song.playlist[SE->songLength - 1] = 0;
 
     SE->songLength--;
 
