@@ -20,7 +20,7 @@ from unicorn import UcError
 from unicorn.arm_const import UC_ARM_REG_LR, UC_ARM_REG_BASEPRI, UC_ARM_REG_PC, UC_ARM_REG_PRIMASK, UC_ARM_REG_R0, UC_ARM_REG_SP
 
 sys.path.insert(0, str(Path(__file__).parent))
-from machine import STACK_TOP, STUB_RET  # noqa: E402
+from machine import SCRATCH, STACK_TOP, STUB_RET  # noqa: E402
 from sound_rig import BLOCK, BLOCK_MS, SoundRig  # noqa: E402
 
 STACK_SIZE = 20480
@@ -291,6 +291,12 @@ def main():
     fired = [0]
     preempt = [tuple(int(x) for x in args.preempt.split(",")) if args.preempt else None]
 
+    def text(symbol, part):
+        """A std::string from one of Synth's open getters."""
+        result = SCRATCH + 0xFF0000
+        r.m.call(r.m.addr(symbol), result, r.synth, part)
+        return r.m.read(r.m.r32(result), r.m.r32(result + 4)).decode()
+
     def step():
         """One main loop and at least one audio block."""
         if preempt[0]:
@@ -340,6 +346,8 @@ def main():
                 before = len(r.sd.calls)
                 if quiet > 200:
                     break
+            print("parts:", [(text("_ZN5Synth12getSynthNameB5cxx11Ei", part), text("_ZN5Synth12getPatchNameB5cxx11Ei", part))
+                             for part in range(3)], flush=True)
             print("opened after", i, "loops; free heap", r.free_heap(), "stack", r.max_stack(), "effects", active(),
                   "open files", len(r.sd.handles), "failures", r.failures,
                   "interrupts inside main", fired[0], flush=True)

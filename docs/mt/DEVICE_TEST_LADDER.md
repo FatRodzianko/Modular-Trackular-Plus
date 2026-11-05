@@ -56,6 +56,25 @@ The first run, 2026-11-05: fine to `L4`, choppy screen at `L5` and `L6`, stalled
 [MASTERFX_PORT_PLAN.md](MASTERFX_PORT_PLAN.md) section 8 has the readings. These projects use the
 source project's patches, so `L1` to `L6` measure CHIP.
 
+## The second set: which engines reach 8 voices
+
+`python tools/emu/make_masterfx_test_project.py "<project>" build/device/no_chip --engines` writes them. All
+three parts use one engine with its Init patch, so nothing depends on the source project's sound. A stall
+on one engine says nothing about the next, so this set doesn't stop at the first problem.
+
+| Project | Voices | Engine | Reverb + delay | What it isolates |
+|---|---|---|---|---|
+| `N1 4 voices CHIP Init` | 4 | CHIP | Stock + Stock | Against `L5`: how much of CHIP's cost is that patch |
+| `N2 8 voices ACD` | 8 | ACD | Stock + Stock | |
+| `N3 8 voices FAT` | 8 | FAT | Stock + Stock | |
+| `N4 8 voices VAP` | 8 | VAP | Stock + Stock | |
+| `N5 8 voices WTFM` | 8 | WTFM | Stock + Stock | |
+| `N6 8 voices PERC` | 8 | PERC | Stock + Stock | The most memory: 53,508 B of heap free on the rig, against about 80,000 B |
+| `N7 8 voices DIRT` | 8 | DIRT | Stock + Stock | |
+| `N8 8 ACD Shimmer BBD` | 8 | ACD | Shimmer + BBD | Master FX at 8 voices, if `N2` runs |
+
+These are Init patches, so a real patch on the same engine can cost more or less.
+
 ## What a firmware comes with
 
 Each one handed over says what ran, what didn't, and the risk to the unit.

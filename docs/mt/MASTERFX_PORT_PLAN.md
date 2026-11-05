@@ -420,8 +420,9 @@ CE's stock reverb is 32,233 instructions, so these are close to the estimates in
 
 ### Device test: stepped, 2026-11-05
 
-Run on `TrackerPlus_mfx_recorder.ptf`, from `/mfx_log.txt`. `L1` to `L6` play 1 or 4 voices of CHIP
-(`0.patch`, engine 8). `L7` and `L8` add part 1's DIRT (2 voices) and part 2's VAP (2 voices).
+Run on `TrackerPlus_mfx_recorder.ptf`, from `/mfx_log.txt`. `L1` to `L6` play 1 or 4 voices of CHIP.
+`L7` and `L8` add part 2's ACD (`AT-Pluck`, 2 voices) and part 3's VAP (2 voices). `project.mt`'s `synthType`
+sets a part's engine, and `boot_rig.py` now prints each part's engine and patch after Open.
 
 | Project | Average | Slowest | Blocks over time | Longest main loop gap | What the unit did |
 | --- | --- | --- | --- | --- | --- |
@@ -445,7 +446,8 @@ way, with the buttons and power button unread. That is the lockup of 2026-11-04,
   filter, on top of what the model itself calls. 22 of the recorder's 32 address samples were in CHIP or
   the maths library, in flash, and the saved stacks show CHIP calling `powf` and `sinf`. That's a small
   sample, and the closed engines' share wasn't looked into.
-- **What isn't known:** whether 8 voices stall without CHIP. 1.2.0, which has no CHIP, read 107-110 % at
+- **What isn't known:** whether 8 voices stall without CHIP, which the second set of projects in
+  [DEVICE_TEST_LADDER.md](DEVICE_TEST_LADDER.md) tests. 1.2.0, which has no CHIP, read 107-110 % at
   8 voices. And whether unmodified CE stalls the same way: the rig says the mods add 83 instructions a
   block on average, but it hasn't run on the unit.
 - **Recorder bug:** its `voices` field prints `getMaxVoiceCount`, so `8 7 7` at 1 voice is what each part

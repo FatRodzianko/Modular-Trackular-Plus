@@ -4,6 +4,7 @@
     python tools/emu/make_masterfx_test_project.py "<project>" "<out folder>" [--name "MFX 5 voices"]
         [--voices 1,4,0] [--keep-masterfx] [--effects 4,2] [--worst]
     python tools/emu/make_masterfx_test_project.py "<project>" "<out folder>" --ladder
+    python tools/emu/make_masterfx_test_project.py "<project>" "<out folder>" --engines
 
 The project given is only read. In the copy:
 - project.mt: the new name, the voices given on the three synth parts, both sends at 60.
@@ -15,7 +16,9 @@ The project given is only read. In the copy:
 Everything else stays byte for byte, the synth patches and other mods' files included.
 
 --effects reverb,delay writes masterfx.bin with those numbers (kReverbNames, kDelayNames), so the project
-starts with them. --ladder writes the projects of docs/mt/DEVICE_TEST_LADDER.md, in order.
+starts with them. --ladder writes the projects of docs/mt/DEVICE_TEST_LADDER.md, in order. --engines
+writes that file's second set: all three parts on one engine with its Init patch, so nothing depends
+on the source project's sound. The engine comes from project.mt's synthType, not from the patch file.
 
 Every voice sounds all the time here, which is a CPU test and no kind of normal song: 8 held voices
 take the audio pool to its limit on a build without masterfx too.
@@ -34,6 +37,9 @@ import ce_to_120 as ce  # noqa: E402
 
 # SynthPartSettings in core/source/mtStructs.h
 SLOT_VOICES = 4
+SLOT_TYPE = 8
+SLOT_PATCH_NAME = 0x10
+SLOT_PATCH_NAME_SIZE = 32
 SLOT_REVERB_SEND = 0x30
 SLOT_DELAY_SEND = 0x34
 PROJECT_CRC = ce.PROJECT_SIZE - 4       # 0 means "no CRC", as older firmware wrote it
@@ -93,7 +99,7 @@ def worst_pattern(voices=VOICES) -> bytes:
     return bytes(data)
 
 
-def project_file(source: bytes, name: str, voices=VOICES, tempo=None) -> bytes:
+def project_file(source: bytes, name: str, voices=VOICES, tempo=None, engine=None) -> bytes:
     mt = bytearray(source)
     if len(mt) != ce.PROJECT_SIZE or mt[:2] != b"MT" or mt[ce.HEADER_VERSION] != ce.PROJECT_VERSION:
         raise ce.Refused(f"project.mt: {len(mt)} bytes. I only know version {ce.PROJECT_VERSION} "
@@ -104,6 +110,11 @@ def project_file(source: bytes, name: str, voices=VOICES, tempo=None) -> bytes:
         struct.pack_into("<i", mt, record + SLOT_VOICES, count)
         struct.pack_into("<f", mt, record + SLOT_REVERB_SEND, SEND)
         struct.pack_into("<f", mt, record + SLOT_DELAY_SEND, SEND)
+    for slot in range(3) if engine else ():
+        record = ce.SLOT_RECORDS + slot * ce.SLOT_RECORD_SIZE
+        struct.pack_into("<i", mt, record + SLOT_TYPE, ENGINES.index(engine))
+        mt[record + SLOT_PATCH_NAME:record + SLOT_PATCH_NAME + SLOT_PATCH_NAME_SIZE] = \
+            b"Init".ljust(SLOT_PATCH_NAME_SIZE, b"\0")
     if tempo:
         struct.pack_into("<f", mt, PROJECT_TEMPO, tempo)
     mt[PROJECT_CRC:PROJECT_CRC + 4] = bytes(4)
@@ -118,6 +129,22 @@ def masterfx_file(reverb: int, delay: int) -> bytes:
         h = ((h ^ byte) * 16777619) & 0xFFFFFFFF
     return b"HMF1" + data + struct.pack("<I", h)
 
+
+# In the order of Synth::kSynthTypes, which project.mt's synthType counts in.
+ENGINES = ("ACD", "FAT", "VAP", "WTFM", "PERC", "DIRT", "CHIP")
+
+# name, voices, (reverb, delay), the parts' engine. 8 voices split as L7 and L8 do: with all 8 on one
+# part, the pattern sounded only 4 notes.
+ENGINE_LADDER = (
+    ("N1 4 voices CHIP Init", (4, 0, 0), None, "CHIP"),
+    ("N2 8 voices ACD", (4, 2, 2), None, "ACD"),
+    ("N3 8 voices FAT", (4, 2, 2), None, "FAT"),
+    ("N4 8 voices VAP", (4, 2, 2), None, "VAP"),
+    ("N5 8 voices WTFM", (4, 2, 2), None, "WTFM"),
+    ("N6 8 voices PERC", (4, 2, 2), None, "PERC"),
+    ("N7 8 voices DIRT", (4, 2, 2), None, "DIRT"),
+    ("N8 8 ACD Shimmer BBD", (4, 2, 2), (4, 2), "ACD"),
+)
 
 # name, voices, (reverb, delay), lightest first. Spring and Tape are the lightest of each kind,
 # Shimmer and BBD the heaviest: tools/emu/test_bundle_cost.py.
@@ -143,14 +170,28 @@ def make_ladder(source: Path, parent: Path) -> list:
     return out
 
 
-def make(source: Path, parent: Path, name: str, voices=VOICES, keep_masterfx: bool = False, worst: bool = False) -> Path:
+def make_engines(source: Path, parent: Path) -> list:
+    out = []
+    for name, voices, effects, engine in ENGINE_LADDER:
+        folder = make(source, parent, name, voices, engine=engine)
+        if effects:
+            (folder / "masterfx.bin").write_bytes(masterfx_file(*effects))
+        out.append(folder)
+    return out
+
+
+def make(source: Path, parent: Path, name: str, voices=VOICES, keep_masterfx: bool = False, worst: bool = False,
+         engine=None) -> Path:
     out = parent / name
     if out.exists():
         raise ce.Refused(f"{out} already exists, and I won't write over it.")
-    new_project = project_file((source / "project.mt").read_bytes(), name, voices, WORST_TEMPO if worst else None)
+    new_project = project_file((source / "project.mt").read_bytes(), name, voices, WORST_TEMPO if worst else None,
+                               engine)
     parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(source, out)
     (out / "project.mt").write_bytes(new_project)
+    for slot in range(3) if engine else ():
+        (out / f"{slot}.patch").unlink(missing_ok=True)  # the source's own sound, and perhaps another engine's
     (out / "patterns").mkdir(exist_ok=True)
     names = {p.name for p in (out / "patterns").glob("pattern_*.mtp")} | {"pattern_01.mtp"}
     for filename in names:
@@ -170,10 +211,11 @@ def main() -> int:
     parser.add_argument("--worst", action="store_true")
     parser.add_argument("--effects", help="reverb,delay numbers for masterfx.bin")
     parser.add_argument("--ladder", action="store_true")
+    parser.add_argument("--engines", action="store_true")
     args = parser.parse_args()
     try:
-        if args.ladder:
-            for folder in make_ladder(args.project, args.out):
+        if args.ladder or args.engines:
+            for folder in (make_ladder if args.ladder else make_engines)(args.project, args.out):
                 print(f"Copy written: {folder}")
             return 0
         voices = tuple(int(v) for v in args.voices.split(","))
