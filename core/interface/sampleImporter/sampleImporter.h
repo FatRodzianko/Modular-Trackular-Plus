@@ -194,7 +194,7 @@ class cSampleImporter : public ModuleBase
     void rewindListToBeggining();
     void moveInstrListToEnd();
 
-    static const uint8_t maxListLength = 100;
+    static const uint8_t maxListLength = 101; // 100 files and the parent folder
     uint8_t selectionActive[2] = { 0, 0 };
     uint32_t explorerHeaderColors[4];
     uint32_t instrumentHeaderColors[4];
