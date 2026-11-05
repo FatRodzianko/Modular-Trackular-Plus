@@ -758,6 +758,17 @@ bool cFileManager::loadInstrumentFormFileStruct(strInstrument* instrument,
 
     memcpy(instrument, &instrumentFile->instrumentDataAndHeader.instrument, sizeof(strInstrument));
 
+    // The slice table and everything sized after it have MAX_SLICE_NUMBER entries, and the
+    // code that walks them takes these two counters as they are.
+    if (instrument->sliceNumber > MAX_SLICE_NUMBER)
+    {
+        instrument->sliceNumber = MAX_SLICE_NUMBER;
+    }
+    if (instrument->selectedSlice >= instrument->sliceNumber)
+    {
+        instrument->selectedSlice = (instrument->sliceNumber > 0) ? instrument->sliceNumber - 1 : 0;
+    }
+
     return true;
 }
 
