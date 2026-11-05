@@ -1179,7 +1179,7 @@ static void functActionButton6()
         FileSystem* fileSystem = TrackerImpl::getInstance()->getPlatform()->getFileSystem();
         char localPatch[70];
         uint16_t cnt = 1;
-        char localName[32];
+        char localName[MAX_NAME_LENGTH];
         strcpy(localName, SR->keyboardManager.getName());
         do
         {
