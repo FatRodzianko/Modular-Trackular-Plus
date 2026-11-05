@@ -450,6 +450,7 @@ static void functLeft()
         PM->showFxNames(PM->performanceEditPlace + 1);
         PM->showPerformaceValue(PM->performanceEditPlace);
         PM->showPerformaceValue(PM->performanceEditPlace + 1);
+        PM->lightUpPadBoard();
     }
     else if (PM->performanceEditState)
     {
@@ -495,6 +496,7 @@ static void functRight()
         PM->showFxNames(PM->performanceEditPlace - 1);
         PM->showPerformaceValue(PM->performanceEditPlace);
         PM->showPerformaceValue(PM->performanceEditPlace - 1);
+        PM->lightUpPadBoard();
     }
     else if (PM->performanceEditState)
     {

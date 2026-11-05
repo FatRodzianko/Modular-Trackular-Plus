@@ -11,6 +11,8 @@
 
 #include "performanceEngine.h"
 
+#include <utility>
+
 void saveProjectPerformanceValues()
 {
     newFileManager.setProjectStructChanged();
@@ -592,6 +594,13 @@ void cPerformEngine::swapSlotFx(uint8_t slotFrom, uint8_t slotTo)
     uint8_t temp_to_fx = slotToFx[slotTo];
     slotToFx[slotTo] = slotToFx[slotFrom];
     slotToFx[slotFrom] = temp_to_fx;
+
+    // The selected row, the value in use and the CC state belong to the FX and move with
+    // it. Left behind, they would be applied to the other FX, whose range can be different.
+    std::swap(slotToRow[slotTo], slotToRow[slotFrom]);
+    std::swap(slotsTempValues[slotTo], slotsTempValues[slotFrom]);
+    std::swap(slotToActiveCC[slotTo], slotToActiveCC[slotFrom]);
+    std::swap(slotToCCValue[slotTo], slotToCCValue[slotFrom]);
 
     if (sourceDataSaveFunct != nullptr)
         sourceDataSaveFunct();
