@@ -1583,6 +1583,12 @@ static void functPaste()
     }
     else if (SE->selectedPlace == 1)
     {
+        // Until the first copy the copied block is empty: no source, no progress to show.
+        if (SE->copyCurrentData.patternSelectionLength == 0)
+        {
+            return;
+        }
+
         SE->selectSongPosition(SE->selectedSongPosition);
 
         SE->currentCopyElement = 0;
