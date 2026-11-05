@@ -1513,6 +1513,7 @@ void cPatternEditor::changeFillData(int16_t value, bool rollListOver)
     int16_t min = 0, max;
     uint8_t fillParam = fillPlace;
     uint8_t fillIdx = getFillDataIdx();
+    uint8_t fillFx = interfaceGlobals.fxNameToId(fillData[fillIdx].param);
 
     switch (fillPlace)
     {
@@ -1549,12 +1550,12 @@ void cPatternEditor::changeFillData(int16_t value, bool rollListOver)
             {
                 min = (editParam < EditFx1
                          ? 0
-                         : sequencer.getFxMin(interfaceGlobals.fxIDs[fillData[fillIdx].param]));
+                         : sequencer.getFxMin(fillFx));
                 max = (editParam == EditNote
                          ? 127
                          : (editParam == EditInstr
                               ? kTotalInstrumentsCount - 1
-                              : sequencer.getFxMax(interfaceGlobals.fxIDs[fillData[fillIdx].param])));
+                              : sequencer.getFxMax(fillFx)));
             }
             break;
         case 3: // to
@@ -1576,12 +1577,12 @@ void cPatternEditor::changeFillData(int16_t value, bool rollListOver)
             {
                 min = (editParam < EditFx1
                          ? 0
-                         : sequencer.getFxMin(interfaceGlobals.fxIDs[fillData[fillIdx].param]));
+                         : sequencer.getFxMin(fillFx));
                 max = (editParam == EditNote
                          ? 127
                          : (editParam == EditInstr
                               ? kTotalInstrumentsCount - 1
-                              : sequencer.getFxMax(interfaceGlobals.fxIDs[fillData[fillIdx].param])));
+                              : sequencer.getFxMax(fillFx)));
             }
             break;
         case 4: // param
@@ -1667,9 +1668,9 @@ void cPatternEditor::changneFillDataByPad(uint8_t pad)
             else
             {
                 int16_t min_fx =
-                  sequencer.getFxMin(interfaceGlobals.fxIDs[fillData[fillIdx].param]);
+                  sequencer.getFxMin(interfaceGlobals.fxNameToId(fillData[fillIdx].param));
                 int16_t max_fx =
-                  sequencer.getFxMax(interfaceGlobals.fxIDs[fillData[fillIdx].param]);
+                  sequencer.getFxMax(interfaceGlobals.fxNameToId(fillData[fillIdx].param));
 
                 fillData[fillIdx].from = mapClamped<int>(pad, 0, 47, min_fx, max_fx);
 
@@ -1697,9 +1698,9 @@ void cPatternEditor::changneFillDataByPad(uint8_t pad)
             else
             {
                 int16_t min_fx =
-                  sequencer.getFxMin(interfaceGlobals.fxIDs[fillData[fillIdx].param]);
+                  sequencer.getFxMin(interfaceGlobals.fxNameToId(fillData[fillIdx].param));
                 int16_t max_fx =
-                  sequencer.getFxMax(interfaceGlobals.fxIDs[fillData[fillIdx].param]);
+                  sequencer.getFxMax(interfaceGlobals.fxNameToId(fillData[fillIdx].param));
 
                 fillData[fillIdx].to = mapClamped<int>(pad, 0, 47, min_fx, max_fx);
 
