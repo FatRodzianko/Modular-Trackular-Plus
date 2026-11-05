@@ -211,6 +211,7 @@ void cSampleRecorder::update()
         ip->unblockAllInputs();
 
         newFileManager.clearStatus();
+        wasSampleMemoryOverwritten = 0;
 
         if (SR->saveOrSaveloadFlag == cSampleRecorder::saveTypeLoad)
         {
@@ -308,8 +309,6 @@ void cSampleRecorder::start(uint32_t options)
 
     if (options == 0)
     {
-        wasSampleMemoryOverwritten = 0;
-
         saveOrSaveloadFlag = cSampleRecorder::saveTypeNormal;
         setCurrentScreenType(cSampleRecorder::screenTypeConfig);
     }
@@ -411,6 +410,14 @@ void cSampleRecorder::stop()
     radio->clearRDS();
     radio->setSeekCallback(nullptr);
     radio->enable(false);
+
+    if (recordInProgressFlag)
+    {
+        // The module can be taken off the screen in the middle of a recording (power button,
+        // card removed). Nothing else would end the recording then.
+        recordInProgressFlag = 0;
+        recorder.stop();
+    }
 
     moduleRefresh = 0;
     avoidPopOnStart.tryUnblockSoundOnExit();
