@@ -67,6 +67,7 @@ static void functSaveAsOverwriteYes();
 // Open
 static void functEnterBrowser();
 static void functCloseBrowser();
+static void functCancelBrowser();
 static void functSaveChangesCancelOpen();
 static void functSaveChangesDontSaveOpenBrowser();
 static void functSaveChangesSaveOpen();
@@ -233,6 +234,8 @@ void cProjectEditor::stop()
 {
     cleanupListsData();
     cleanupAfterSaveData();
+    // The path and name of a pending open are freed above; it must not run without them.
+    afterSaveOperation = noOperationAfterSave;
 
     sequencer.stopManualNotes();
     mtPopups.hideInfoPopup();
@@ -671,7 +674,7 @@ void cProjectEditor::setProjectBrowserFunct()
     PE->ip->setButtonObj(interfaceButton0, buttonPress, functEnterBrowser);
     PE->ip->setButtonObj(interfaceButton2, buttonPress, functDeleteFileFolder);
     PE->ip->setButtonObj(interfaceButton3, buttonPress, functCreateNewFolder);
-    PE->ip->setButtonObj(interfaceButton6, buttonPress, functCloseBrowser);
+    PE->ip->setButtonObj(interfaceButton6, buttonPress, functCancelBrowser);
 
     if (PE->currentBrowserMode == cProjectEditor::kSaveAsProject)
     {
@@ -1106,6 +1109,14 @@ static void functCloseBrowser()
 
     PE->showDefaultScreen();
     PE->setDefaultScreenFunct();
+}
+
+static void functCancelBrowser()
+{
+    // Cancelling Save As abandons the save, and with it whatever was to follow the save.
+    PE->afterSaveOperation = cProjectEditor::AfterSaveOperation::noOperationAfterSave;
+
+    functCloseBrowser();
 }
 
 bool cProjectEditor::browserEnter()
