@@ -8,7 +8,7 @@ firmware is safe on the unit. [DEVICE_TEST_LADDER.md](DEVICE_TEST_LADDER.md) is 
 
 | What happened on the unit | Why the emulator passed | Test now | What that test can't show |
 |---|---|---|---|
-| **Play locked the unit up** with 8 voices, Shimmer and BBD; it had to be unplugged. Found on 2026-11-05: sustained overload of the audio interrupt, and it happens with Master FX on Stock too (MT+, `MASTERFX_PORT_PLAN.md` section 8) | The rig skipped the real boot, main loop, Play button and interrupt timing | `tools/emu/boot_rig.py`: real boot, Open, Play button, main loop. `--preempt` fires the interrupt inside main-loop code | Anything that takes real time. It has passed on this project on both builds, so the rig doesn't reproduce the lockup |
+| **Play locked the unit up** with 8 voices, Shimmer and BBD; it had to be unplugged. Found on 2026-11-05: sustained overload of the audio interrupt, from CHIP, and it happens with Master FX on Stock too. The other engines ran 8 voices on Init patches (MT+, `MASTERFX_PORT_PLAN.md` section 8) | The rig skipped the real boot, main loop, Play button and interrupt timing | `tools/emu/boot_rig.py`: real boot, Open, Play button, main loop. `--preempt` fires the interrupt inside main-loop code | Anything that takes real time. It has passed on this project on both builds, so the rig doesn't reproduce the lockup |
 | **The first Freeverb hung at boot**, and the unit needed the pinhole (`FINDINGS.md` section 19). Stress found no stray writes or runaway loops, which pointed at timing | No clock, and no interrupt in the middle of other code | The ladder and the lockup recorder | The rig still has no clock |
 | **130 % on the Config screen, glitches, no lockup** (`TIMING_HEADROOM_PLAN.md` section 14). That figure is the worst block in each second, not an average | No clock | `tools/emu/test_bundle_cost.py` for our own code. The recorder logs each Play's average and slowest block on the unit | The closed libraries aren't counted, by licence |
 | **8 allocated voices read about 80 % idle**, as an allocated voice renders whether it sounds or not (same section) | No clock | The ladder adds voices step by step and logs each | Only the unit can say |
@@ -37,6 +37,7 @@ The rig should agree with the unit where both can read. If it stops agreeing, th
 | Free heap after boot | 80,472 to 80,708 B | 80,620 B |
 | Max stack | 7,777 B; 7,333 to 7,729 B on the ladder | 7,280 B with the interrupt fired inside main-loop code |
 | Free heap on the ladder, Stock | 84,340 B at 1 voice, 83,460 B at 4 | 85,864 B and 84,996 B: about 1,500 B high |
-| Block pool peak on the ladder | 34 of 80 | 49 at 1 and 4 voices, 55 at 8: the rig reads high, so it's a safe bound and not a reading |
+| Free heap at 8 voices, by engine | ACD 80,736 B, VAP 63,716 B, WTFM 62,740 B, PERC 51,980 B, DIRT 78,292 B | 82,232 B, 65,520 B, 64,568 B, 53,508 B, 80,092 B: the same 1,500 to 1,800 B high |
+| Block pool peak | 34 of 80 at 1 and 4 voices, 40 at 8, 48 on PERC | 49, 55 and 64: the rig reads high, so it's a safe bound and not a reading |
 
 The recorder's slowest block agreed with the Config screen's maximum on the unit, both 125 %.

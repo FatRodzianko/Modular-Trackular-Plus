@@ -2,8 +2,9 @@
 
 Status: steps 1 to 4 are built and pass in the emulator, 2026-11-04. Step 5, the first device test,
 locked up the unit on Play. The stepped device test, 2026-11-05, found why: sustained overload of the
-audio interrupt, which also happens with Master FX on Stock, so Master FX isn't the cause. Its sound
-hasn't been checked on the unit yet. Section 8 has the readings. Sections 2, 3 and 4 give what was
+audio interrupt, which also happens with Master FX on Stock, so Master FX isn't the cause. The load was
+CHIP: every other engine ran 8 voices, and so did Shimmer + BBD on ACD. Master FX's sound hasn't been
+checked on the unit yet. Section 8 has the readings. Sections 2, 3 and 4 give what was
 built. Based on CE's source at `af01d47`, a reference build of it, and 1.2.0's
 `patch/masterfx` (mf8) compiled with CE's FPU flags. Section 3.13 of
 [CE_PORT_PLAN.md](CE_PORT_PLAN.md) points here.
@@ -446,12 +447,38 @@ way, with the buttons and power button unread. That is the lockup of 2026-11-04,
   filter, on top of what the model itself calls. 22 of the recorder's 32 address samples were in CHIP or
   the maths library, in flash, and the saved stacks show CHIP calling `powf` and `sinf`. That's a small
   sample, and the closed engines' share wasn't looked into.
-- **What isn't known:** whether 8 voices stall without CHIP, which the second set of projects in
-  [DEVICE_TEST_LADDER.md](DEVICE_TEST_LADDER.md) tests. 1.2.0, which has no CHIP, read 107-110 % at
-  8 voices. And whether unmodified CE stalls the same way: the rig says the mods add 83 instructions a
+- **What isn't known:** whether unmodified CE stalls the same way: the rig says the mods add 83 instructions a
   block on average, but it hasn't run on the unit.
 - **Recorder bug:** its `voices` field prints `getMaxVoiceCount`, so `8 7 7` at 1 voice is what each part
   could take, not what it has. Project names above give the real count.
+
+### Device test: each engine, 2026-11-05
+
+The same firmware, with all three parts on one engine and its Init patch
+([DEVICE_TEST_LADDER.md](DEVICE_TEST_LADDER.md)). Nothing stalled, and no block went over time except two
+in `N1`. Each slowest figure agreed with the maximum read on the Config screen, to within the rounding
+of that reading.
+
+| Project | Voices | Average | Slowest | Longest main loop gap | Free heap |
+| --- | --- | --- | --- | --- | --- |
+| `N1` CHIP | 4 | 79 % | 100 % | 51 ms | 89,444 B |
+| `N2` ACD | 8 | 54-58 % | 75 % | 17 ms | 80,736 B |
+| `N3` FAT | 8 | 54-56 % | 73 % | 15 ms | 80,468 B |
+| `N4` VAP | 8 | 58 % | 75 % | 17 ms | 63,716 B |
+| `N5` WTFM | 8 | 48-51 % | 67 % | 16 ms | 62,740 B |
+| `N6` PERC | 8 | 18-19 % | 49 % | 9 ms | 51,980 B |
+| `N7` DIRT | 8 | 63-66 % | 83 % | 20 ms | 78,292 B |
+| `N8` ACD, Shimmer + BBD | 8 | 57-60 % | 75 % | 17 ms | 80,428 B |
+
+- **CHIP is the load behind the stall.** 4 voices of CHIP cost more than 8 of any other engine. `L5`, the same
+  4 voices on the project's patch, read 87 %, so the patch adds about 8 points. PERC's 18 % puts the part
+  of the figure that isn't voices at 18 % or less, which makes CHIP about 15 points a voice and ACD about 5.
+  So `L7`, 4 CHIP on the project's patch plus 4 other voices, comes to about 107 %, and the recorder read
+  109 % when it stalled. That is an estimate from averages.
+- **PERC's low figure may be its held note decaying**, so don't read it as a voice's full cost.
+- **Master FX adds 2 points at 8 voices of ACD,** with the same slowest block.
+- **These are Init patches.** A real patch on the same engine can cost more or less, and 1.2.0's records
+  show 8 voices over 100 % on real patches. Nothing here promises every project fits.
 
 ### The stepped device test
 

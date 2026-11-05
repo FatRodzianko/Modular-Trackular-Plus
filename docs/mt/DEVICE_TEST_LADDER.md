@@ -75,6 +75,9 @@ on one engine says nothing about the next, so this set doesn't stop at the first
 
 These are Init patches, so a real patch on the same engine can cost more or less.
 
+The first run, 2026-11-05: all eight ran with no stall.
+[MASTERFX_PORT_PLAN.md](MASTERFX_PORT_PLAN.md) section 8 has the readings.
+
 ## What a firmware comes with
 
 Each one handed over says what ran, what didn't, and the risk to the unit.
