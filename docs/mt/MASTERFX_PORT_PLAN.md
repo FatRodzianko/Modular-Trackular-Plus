@@ -1,8 +1,8 @@
 # masterfx on CE: build plan
 
 Status: steps 1 to 4 are built and pass in the emulator, 2026-11-04. Step 5, the device test in
-section 8, locked up the unit on its first attempt: most likely CPU from the test project's 8 held
-voices, not proven, and waiting on new readings. Sections 2, 3 and 4 give what was built; the
+section 8, locked up the unit on its first attempt. The cause isn't known. **Don't run the device
+test below:** its reasoning was wrong, and testing is being re-thought. Sections 2, 3 and 4 give what was built; the
 effects' own cost is now measured, but the CPU readings aren't in. Based on CE's source at `af01d47`, a reference build of it, and 1.2.0's
 `patch/masterfx` (mf8) compiled with CE's FPU flags. Section 3.13 of
 [CE_PORT_PLAN.md](CE_PORT_PLAN.md) points here.
@@ -376,12 +376,21 @@ Play, and no other test ran. Nothing in the emulator reproduces it. What was rul
 | Power-up contents of the buffers | 0xA5 in all three before CE's clear gives the same output as zeros |
 | Stack | Largest effect frame 1,184 B, against 7,777 of 20,480 read on a device |
 
-What's left is CPU, which the emulator can't see and we don't measure on the closed engines. An
-audio interrupt that overruns its block starves the main loop, so the screen and power handling
-stop, and that fits what happened. But it isn't proven. The project asked for much more than a
-real song does: 8 voices sounding all the time on 3 engines, where `hellish downtown` read 55 % max
-with 5 voices allocated and few sounding. If that's the cause, Stock can lock up too, and the
-effects' part is small: measured below at about 6.4 points for Shimmer and 1.9 for BBD, gross.
+That list only covers what the rig runs. The cause is still open, and these records from 1.2.0
+(Modular-Trackular) should have been read before the test project was made:
+
+- **8 voices were already known to overload stock.** `docs/TIMING_HEADROOM_PLAN.md` section 14: with
+  Polyphony 3/3/2, stock read 107-110 % on the device, and with Shimmer and "Gated" 130 %. With 8
+  voices allocated and nothing playing it read about 80 %. So this test project was over the limit
+  by design, and section 3's "Not known yet" missed that.
+- **But overload alone didn't lock 1.2.0 up.** Those 130 % runs lasted about 3 minutes with glitches,
+  and Config stayed readable. So "the interrupt overruns and starves the main loop", as this plan
+  first said, isn't an explanation until CE is shown to behave differently.
+- **A masterfx hang the emulator passed has happened before.** `docs/FINDINGS.md` section 19: the first
+  Freeverb hung the unit at boot while every emulator test passed, and needed the pinhole to power
+  on. Stress runs found no stray writes or runaway loops, which pointed at timing: heavier DSP in the
+  interrupt at a moment the rest of the firmware couldn't take it. It was never fully explained.
+  That is the nearest match to this lockup, at a different moment.
 
 ### Level against Stock
 
@@ -404,37 +413,11 @@ use the model above: instructions, plus 350 cycles per SDRAM or flash line.
 
 CE's stock reverb is 32,233 instructions, so these are close to the estimates in section 3.
 
-### Smallest hardware test: same firmware, one sitting
+### Device test: withdrawn
 
-No firmware change came out of this, so the build already on the unit stays. Two new projects, both
-copies of `hellish downtown`, with no `masterfx.bin`, so Master FX starts Off: `MFX 5 voices` has that
-project's own 1 + 4 + 0 voices, and `MFX 8 voices` has 4 + 2 + 2. Don't press Play on the old
-`MFX test`. An empty `/.develop` file on the card makes Config show the CPU.
-
-For each row: on Config press Play, read after 15 seconds, press Play to stop. Max and average run
-from the last Play pressed on that screen.
-
-1. **`MFX 5 voices`, Stock.** The baseline. It should play as any song does.
-2. **`MFX 5 voices`, Shimmer + BBD.** Project Settings > Mods > Master FX On, then Project Settings >
-   Master FX > Reverb Shimmer and Delay BBD. While it plays, on the Master page (title Master 1/3):
-   Reverb and Delay lists show, Left/Right stops on both. Turn the encoder on Reverb to Plate: the
-   sound changes. Press the Reverb button: labels read Decay, Damping, Predelay, Diffusion.
-3. **`MFX 8 voices`, Stock.** This is the one that may lock up, and if it does, that's the answer.
-4. **`MFX 8 voices`, Shimmer + BBD,** only if step 3 read under 90 % max.
-
-What the readings mean:
-
-- **Step 3 locks up or reads near 100 %:** 8 held voices are too much for CE itself, and the first
-  lockup was my test project. Masterfx carries on, with its cost from step 2.
-- **Step 2 locks up, step 1 doesn't:** it's masterfx at a normal load, and it doesn't ship until
-  that's found.
-- **Step 3 is fine, step 4 locks up or crackles:** the effects tip a full project over. A real
-  project could do that, so it needs fixing. The likely fix is falling back to Stock under overload,
-  which is new work and your call.
-- **All fine:** the first lockup didn't come back, so I go through what differed: that project's
-  effects came in through the importer.
-
-Steps 2 and 4 under 90 % max with no crackle, and the page behaving, finishes the mod.
+The four-step test written here on 2026-11-04 is withdrawn. It reused the firmware that locked up,
+with no fix and no way to tell why it stopped. Its reading of a plain 8-voice result was also wrong:
+over 100 % is what 1.2.0's records predict, so it wouldn't clear masterfx.
 
 ### What ran
 
