@@ -1105,8 +1105,8 @@ static void functCloseBrowser()
 {
     PE->currentBrowserMode = cProjectEditor::kNone;
 
-    PE->cleanupListsData();
-
+    // The browser lists are not freed here: the list control is only hidden and can
+    // still be refreshed. stop() and the next openBrowser() free them.
     PE->showDefaultScreen();
     PE->setDefaultScreenFunct();
 }
