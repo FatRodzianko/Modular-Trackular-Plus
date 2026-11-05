@@ -254,9 +254,9 @@ class cSampleImporter : public ModuleBase
 
     uint8_t selectedImportPlace;
 
-    char startPointValueText[8];
-    char endPointValueText[8];
-    char playTimeValueText[8];
+    char startPointValueText[12];
+    char endPointValueText[12];
+    char playTimeValueText[12];
     char previewVolumeText[12];
 
     void calcPlayProgressValue();

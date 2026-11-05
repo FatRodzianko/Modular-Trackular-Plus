@@ -900,7 +900,7 @@ void cSampleImporter::showImportStartPointValue()
     float recTimeValue = importSampleSamplesCount / 44100.0;
     float localStartPoint = (recTimeValue * importStartPoint) / MAX_16BIT;
 
-    sprintf(startPointValueText, "%.3fs", localStartPoint);
+    snprintf(startPointValueText, sizeof(startPointValueText), "%.3fs", localStartPoint);
 
     display.setControlText2(label[1], startPointValueText);
     display.setControlShow(label[1]);
@@ -913,7 +913,7 @@ void cSampleImporter::showImportEndPointValue()
     float recTimeValue = importSampleSamplesCount / 44100.0;
     float localEndPoint = (recTimeValue * importEndPoint) / MAX_16BIT;
 
-    sprintf(endPointValueText, "%.3fs", localEndPoint);
+    snprintf(endPointValueText, sizeof(endPointValueText), "%.3fs", localEndPoint);
 
     display.setControlText2(label[2], endPointValueText);
     display.setControlShow(label[2]);
@@ -930,7 +930,7 @@ void cSampleImporter::showImportPreviewValue()
     if (playTimeValue >= (localEndPoint - 0.01))
         playTimeValue = localEndPoint;
 
-    sprintf(playTimeValueText, "%.3fs", playTimeValue);
+    snprintf(playTimeValueText, sizeof(playTimeValueText), "%.3fs", playTimeValue);
 
     display.setControlText2(label[0], playTimeValueText);
     display.setControlShow(label[0]);
