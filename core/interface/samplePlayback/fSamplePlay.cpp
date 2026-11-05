@@ -3297,7 +3297,6 @@ void cSamplePlayback::onControlChangeReceive(int param, int value)
         editorInstrument = &mtProject.instrument[mtProject.values.lastUsedInstrument];
     }
 
-    editorInstrument = &mtProject.instrument[mtProject.values.lastUsedInstrument];
     changeControlChangeParam((ParamsCC)param, getControlChangeDelta((ParamsCC)param, value));
 }
 
