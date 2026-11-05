@@ -1099,7 +1099,7 @@ AUDIO_CORE_RAM void Sequencer::play_microStep(int row)
                     if (playerRow.roll.type == fx.rollType_noteUp)
                     {
                         playerRow.stepContRoll.note =
-                          clamp<int>(++playerRow.stepContRoll.note, 0, 127);
+                          clamp<int>(playerRow.stepContRoll.note + 1, 0, 127);
                     }
                     else if (playerRow.roll.type == fx.rollType_noteDown)
                     {
