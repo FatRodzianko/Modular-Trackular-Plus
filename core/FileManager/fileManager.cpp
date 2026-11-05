@@ -248,9 +248,13 @@ bool cFileManager::importSampleToProject(char* filePath, char* fileName, uint8_t
 bool cFileManager::importModAfterLoadNewProject(char* path, char* name)
 {
     // pobranie nazwy otwieranego projektu tu
-    strcpy(impFileData.path, path);
-    strcat(impFileData.path, "/");
-    strcat(impFileData.path, name);
+    int pathLen = snprintf(impFileData.path, sizeof(impFileData.path), "%s/%s", path, name);
+
+    // A file whose path does not fit could not be opened, so there is nothing to import.
+    if (pathLen >= (int)sizeof(impFileData.path))
+    {
+        return false;
+    }
 
     strcpy(impFileData.filename, name);
 

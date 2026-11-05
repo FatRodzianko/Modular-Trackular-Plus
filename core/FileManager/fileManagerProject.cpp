@@ -389,7 +389,7 @@ void cFileManager::getCurrentProjectPathWithName(char* path, int maxLen)
 
     strncpy(path, currentProjectPatch, maxLen);
 
-    if (pathLen > 0)
+    if (pathLen > 0 && pathLen < maxLen - 1)
     {
         strcat(path, "/");
     }
@@ -398,7 +398,11 @@ void cFileManager::getCurrentProjectPathWithName(char* path, int maxLen)
 
     assert(nameMaxLen > (int)strlen(currentProjectName));
 
-    strncat(path, currentProjectName, nameMaxLen);
+    // strncat takes the limit as an unsigned number, so a negative one is no limit at all.
+    if (nameMaxLen > 0)
+    {
+        strncat(path, currentProjectName, nameMaxLen);
+    }
 }
 
 bool cFileManager::createCurrentProjectFolderTree()
