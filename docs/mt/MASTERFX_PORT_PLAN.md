@@ -1,8 +1,9 @@
 # masterfx on CE: build plan
 
 Status: steps 1 to 4 are built and pass in the emulator, 2026-11-04. Step 5, the device test in
-section 8, is waiting on its readings. Sections 2, 3 and 4 give what was built; the CPU figures are
-still estimates until then. Based on CE's source at `af01d47`, a reference build of it, and 1.2.0's
+section 8, locked up the unit on its first attempt: most likely CPU from the test project's 8 held
+voices, not proven, and waiting on new readings. Sections 2, 3 and 4 give what was built; the
+effects' own cost is now measured, but the CPU readings aren't in. Based on CE's source at `af01d47`, a reference build of it, and 1.2.0's
 `patch/masterfx` (mf8) compiled with CE's FPU flags. Section 3.13 of
 [CE_PORT_PLAN.md](CE_PORT_PLAN.md) points here.
 
@@ -358,43 +359,96 @@ Each one is a commit, tested in the emulator. Effort overall: M.
 Emulator limits: it doesn't run boot, it doesn't model the cache (line counts are my stand-in),
 and it can't see the screen.
 
-### Smallest hardware test: one firmware, one sitting
+### Device test, first attempt: locked up on Play
 
-The firmware and generated test project come with the step 5 report. The project is a copy of
-`hellish downtown` with three synth parts holding 8 voices in total, sending to both effects, and
-every pattern holding those 8 notes. Its 1.2.0 `masterfx.bin` brings in Shimmer + BBD.
+On 2026-11-04 the unit locked up when Play was pressed in the Pattern screen, on the first test
+project, and had to be unplugged. That project held 8 voices with Shimmer + BBD on from the first
+Play, and no other test ran. Nothing in the emulator reproduces it. What was ruled out, and how:
 
-1. **Boot:** open the test project, so it's the last project. Power off and on. It reaches the
-   Pattern screen.
-2. **Master page (title Master 1/3):** Reverb and Delay lists show, with all labels and the frame.
-   Left/Right stops on both. Turn the encoder on Reverb to Plate: the sound changes. Press the
-   Reverb button: labels read Decay, Damping, Predelay, Diffusion.
-3. **CPU:** with an empty `/.develop` on the card, open Config and note the CPU average and max at
-   each of these, changing them under Project Settings > Master FX. CE's max and average run from
-   the last Play pressed on the Config screen, so after each change press Play to stop and Play to
-   start, and read after 15 seconds:
-   - Reverb Stock, Delay Stock
-   - Reverb Shimmer, Delay BBD, PingPong On (both in ITCM)
-   - Reverb Freeverb, Delay Tape, PingPong On (both in flash)
+| Suspect | Result |
+| --- | --- |
+| A fault or hang on the real path | None. Project opened through CE's load steps with its own mods files, then `TrackerImpl::updateAudioBuffers` for 3,000 blocks, past the pattern's end |
+| Asserts, or writes over the code | None |
+| Failed audio allocations | None in 159,000 calls. The pool does reach 80 of 80 at 8 voices, on the reference build too |
+| Unaligned accesses in our code (the emulator doesn't fault on them) | None, Shimmer and BBD |
+| Slow first block | No. After a clear, Shimmer and BBD cost about what any block does |
+| Loops that could spin | The effects have no `while` or `do` |
+| Power-up contents of the buffers | 0xA5 in all three before CE's clear gives the same output as zeros |
+| Stack | Largest effect frame 1,184 B, against 7,777 of 20,480 read on a device |
 
-   Also note free heap and max stack once. No crackle at any of them is the other half of the
-   check.
-4. **Off:** Project Settings > Mods > Master FX Off. The Master page looks as it did before the mod.
+What's left is CPU, which the emulator can't see and we don't measure on the closed engines. An
+audio interrupt that overruns its block starves the main loop, so the screen and power handling
+stop, and that fits what happened. But it isn't proven. The project asked for much more than a
+real song does: 8 voices sounding all the time on 3 engines, where `hellish downtown` read 55 % max
+with 5 voices allocated and few sounding. If that's the cause, Stock can lock up too, and the
+effects' part is small: measured below at about 6.4 points for Shimmer and 1.9 for BBD, gross.
+
+### Level against Stock
+
+No effect adds level. Same project, same notes, 300 blocks through the Play path, RMS against Stock:
+at most +0.2 dB (Freeverb) with 5 voices, -0.1 dB for Shimmer + BBD with 8. Each effect does hear
+the sends, with an input peak of 2,275 and output that differs from Stock. The loud peaks came from
+the first test project's held notes, and the reference build, which has no masterfx, gave the same
+ones. The test notes now play at CE's step volume 30: peak 23,602 and RMS 2,386 at 5 voices, against
+32,764 and 5,624 before.
+
+### Measured cost of the effects' own calls
+
+From `reverbProcess` and `delayProcess` called alone, so no closed code is under the hooks. Points
+use the model above: instructions, plus 350 cycles per SDRAM or flash line.
+
+| Effect | Instructions | SDRAM lines | Points, gross |
+| --- | --- | --- | --- |
+| Shimmer | 47,500 | 141 | 6.4 |
+| BBD | 23,300 | 18 | 1.9 |
+
+CE's stock reverb is 32,233 instructions, so these agree with the estimates in section 4.
+
+### Smallest hardware test: same firmware, one sitting
+
+No firmware change came out of this, so the build already on the unit stays. Two new projects, both
+copies of `hellish downtown`, with no `masterfx.bin`, so Master FX starts Off: `MFX 5 voices` has that
+project's own 1 + 4 + 0 voices, and `MFX 8 voices` has 4 + 2 + 2. Don't press Play on the old
+`MFX test`. An empty `/.develop` file on the card makes Config show the CPU.
+
+For each row: on Config press Play, read after 15 seconds, press Play to stop. Max and average run
+from the last Play pressed on that screen.
+
+1. **`MFX 5 voices`, Stock.** The baseline. It should play as any song does.
+2. **`MFX 5 voices`, Shimmer + BBD.** Project Settings > Mods > Master FX On, then Project Settings >
+   Master FX > Reverb Shimmer and Delay BBD. While it plays, on the Master page (title Master 1/3):
+   Reverb and Delay lists show, Left/Right stops on both. Turn the encoder on Reverb to Plate: the
+   sound changes. Press the Reverb button: labels read Decay, Damping, Predelay, Diffusion.
+3. **`MFX 8 voices`, Stock.** This is the one that may lock up, and if it does, that's the answer.
+4. **`MFX 8 voices`, Shimmer + BBD,** only if step 3 read under 90 % max.
 
 What the readings mean:
 
-- **Max under about 90 % on all three:** done.
-- **Second or third row over, first row under:** I move the next loops to ITCM and you repeat
-  step 3 only.
-- **First row already over:** that's CE with 8 voices and not this mod, and I report it.
+- **Step 3 locks up or reads near 100 %:** 8 held voices are too much for CE itself, and the first
+  lockup was my test project. Masterfx carries on, with its cost from step 2.
+- **Step 2 locks up, step 1 doesn't:** it's masterfx at a normal load, and it doesn't ship until
+  that's found.
+- **Step 3 is fine, step 4 locks up or crackles:** the effects tip a full project over. A real
+  project could do that, so it needs fixing. The likely fix is falling back to Stock under overload,
+  which is new work and your call.
+- **All fine:** the first lockup didn't come back, so I go through what differed: that project's
+  effects came in through the importer.
+
+Steps 2 and 4 under 90 % max with no crackle, and the page behaving, finishes the mod.
 
 ### What ran
 
 `tools/emu/test_masterfx.py` covers the effects themselves, `tools/emu/test_masterfx_rig.py` the
-page, graph, stress, encoder wait and test project, and `tools/emu/test_sound_rig.py` the rig. Not
-covered, and left to the device: boot itself, CPU, the real screen, and the sequencer's own note
-path (`tools/emu/make_masterfx_test_project.py`'s pattern is read back through CE's reader, and its
-notes are played through `Synth`'s calls).
+page, graph, stress, encoder wait, test project and Play path, and `tools/emu/test_sound_rig.py` the
+rig. Not covered, and left to the device: boot itself, CPU, the real screen, and the main loop while
+playing.
+
+The first device test went ahead without the Play path, though
+[SOUND_TEST_PLAN.md](SOUND_TEST_PLAN.md) called for `Sequencer::tick` on mod tests. A device test
+shouldn't be asked for until a rig run has gone through it, Play included.
+
+On the rig, part 1's patch (`1.patch`) doesn't load, on the reference build too, so that part plays
+CE's init patch. Whether a device does the same isn't known, and it doesn't change these results.
 
 The UI test found one bug the plan had missed, now fixed: the lists stayed on the Reverb page,
 because CE's `showReverbScreen` never had to hide them.

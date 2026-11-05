@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """masterfx on the sound rig: the Master page, the real switch, the real graph with the synths in.
 
-Usage: python tools/emu/test_masterfx_rig.py <mods.axf> <reference.axf> [only: ui|graph|stress|debounce]
+Usage: python tools/emu/test_masterfx_rig.py <mods.axf> <reference.axf> [only: ui|graph|stress|debounce|project|play]
 
 test_masterfx.py checks each effect against 1.2.0 on its own. This one checks what's around them:
 - ui: CE's real cMasterParams with display commands caught at API_*. With the mod Off the page
@@ -11,6 +11,9 @@ test_masterfx.py checks each effect against 1.2.0 on its own. This one checks wh
   through CE's sends to the chosen effect.
 - stress: 8 synth voices with the heaviest pair, then switches, knobs and notes while playing.
 - debounce: the encoder's wait before an effect changes.
+- project: make_masterfx_test_project.py's output through the firmware's readers.
+- play: that project opened through CE's load steps, Play pressed, and TrackerImpl's real audio
+  interrupt run, so the sequencer plays the notes. On both builds, with each effect.
 """
 import random
 import struct
@@ -18,14 +21,13 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from sound_rig import SoundRig, peak  # noqa: E402
+from sound_rig import PlayRig, SoundRig, find_project_path, peak, set_names  # noqa: E402
 from unicorn import UC_HOOK_MEM_WRITE  # noqa: E402
 from unicorn.arm_const import UC_ARM_REG_PC, UC_ARM_REG_S0  # noqa: E402
 
 SWITCHES = "_ZN4mods8switchesE"
 SETTINGS = "_ZN4mods8masterfx8settingsE"
 MASTERFX = 3                        # mods::Mod::masterfx
-PATCH_SIZE = 255
 ENGINE_IDS = (1, 2, 4, 5, 6, 7, 8)  # Synth::kSynthTypes, as project.mt's models number them
 LIMIT = 8172                        # cDisplay::step3
 CONTROLS = 65                       # controlsCount
@@ -661,7 +663,7 @@ def test_project(mods, ref):
     import tempfile
     import make_masterfx_test_project as maker
     with tempfile.TemporaryDirectory() as temp:
-        out = maker.make(source, Path(temp), "MFX test")
+        out = maker.make(source, Path(temp), "MFX test", keep_masterfx=True)
         original = {p.relative_to(source): p.read_bytes() for p in source.rglob("*") if p.is_file()}
         copied = {p.relative_to(out): p.read_bytes() for p in out.rglob("*") if p.is_file()}
         changed = [str(k) for k in original if copied.get(k) != original[k]]
@@ -715,45 +717,90 @@ def test_project(mods, ref):
         g.set_instrument(part, ENGINE_IDS[model])
         g.reverb_send(part, maker.SEND)
         g.delay_send(part, maker.SEND)
-    for track, part, note in maker.HELD:
+    for track, part, note in maker.held():
         g.note(part, note, True)
     a = g.blocks(40)
     check(peak(a[0]) > 100 and not g.failures, f"its 8 voices sound, no asserts (peak {peak(a[0])})")
     check(g.pool_peak() <= 80, f"audio pool peak {g.pool_peak()} of 80")
 
 
-def find_project_path(r):
-    """cFileManager's path and name fields: wherever the hooks read them from."""
-    m, sd = r.m, r.sd
-    fm = m.sym("newFileManager")
-    sd.files["?//mods.bin"] = b"not a real one"
-    for at in range(fm.addr, fm.addr + fm.size):
-        before = m.read(at, 2)
-        m.write(at, b"?\0")
-        sd.calls.clear()
-        try:
-            m.call(m.addr("_ZN4mods17onProjectOpenCopyEv"))
-        except RuntimeError:
-            pass
-        found = any("readFile" in c for c in sd.calls)
-        m.write(at, before)
-        if found:
-            del sd.files["?//mods.bin"]
-            return at
-    raise RuntimeError("no project path field in cFileManager")
+def source_project():
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "hellish downtown" / "project.mt").exists():
+            return parent / "hellish downtown"
+    return None
 
 
-def set_names(r, path_at, folder, name):
-    m = r.m
-    m.write(path_at, folder.encode() + b"\0")
-    m.write(path_at + PATCH_SIZE, name.encode() + b"\0")
+def rms(x):
+    return (sum(v * v for v in x) / max(len(x), 1)) ** 0.5
+
+
+def played(axf, folder, choice, blocks):
+    """Open, choose, press Play: what comes out, and the rig."""
+    r = PlayRig(axf)
+    loaded = r.open_project(folder)
+    if choice is not None:
+        set_mod(r, *choice)
+    r.count_notes()
+    low = bytes(r.m.read(0, 0x20000))       # the ITCM: a write through NULL would land here
+    r.press_play()
+    out = r.interrupts_run(blocks)
+    r.itcm_intact = bytes(r.m.read(0, 0x20000)) == low
+    r.loaded = loaded
+    return out, r
+
+
+def test_play(mods, ref):
+    """The path that locked a device up: open the project, press Play, run the real interrupt."""
+    print("-- Play, through the sequencer and TrackerImpl's interrupt --")
+    source = source_project()
+    if source is None:
+        print("     no project beside the repo to copy: skipped")
+        return
+    import math
+    import tempfile
+    import make_masterfx_test_project as maker
+    with tempfile.TemporaryDirectory() as temp:
+        for voices, name in (((1, 4, 0), "five"), (maker.VOICES, "eight")):
+            count = sum(voices)
+            folder = maker.make(source, Path(temp), name, voices)
+            blocks = 300                    # 0.9 s, long enough for the delay to come round
+
+            base, rb = played(ref, folder, None, blocks)
+            check(not rb.failures and rb.notes == count,
+                  f"{count} voices, reference: {rb.notes} notes through the sequencer, no asserts {rb.failures}")
+            print(f"     reference peak {max(peak(base[0]), peak(base[1]))}, rms {rms(base[0]):.0f} {rms(base[1]):.0f}, "
+                  f"audio pool {rb.pool_peak()} of 80, patches loaded {rb.loaded}")
+
+            off, r = played(mods, folder, None, blocks)
+            check(off == base, f"{count} voices, a new project with no masterfx.bin plays exactly as the reference")
+            active = (r.m.read(r.m.addr("_ZN4mods8switchesE") + MASTERFX, 1)[0],)
+            check(active == (0,), f"{count} voices: Master FX starts Off ({active})")
+
+            on_stock, r = played(mods, folder, (True, 0, 0), blocks)
+            check(on_stock == base, f"{count} voices, On with Stock plays exactly as the reference")
+
+            stock_level = [rms(base[0]), rms(base[1])]
+            # The heaviest pair at full load, and each effect at the project's own 5 voices
+            pairs = [(4, 2)] if count == 8 else [(reverb, 0) for reverb in range(1, 7)] + [(0, delay) for delay in (1, 2)]
+            for reverb, delay in pairs:
+                out, r = played(mods, folder, (True, reverb, delay), blocks)
+                name = f"{REVERBS[reverb]} + {DELAYS[delay]}"
+                check(not r.failures and r.notes == count and len(out[0]) == blocks * 128,
+                      f"{count} voices, {name}: Play runs {blocks} blocks, no hang, no asserts {r.failures}")
+                check(r.itcm_intact, f"{count} voices, {name}: nothing written over the code")
+                # Without this, the level check below would also pass with an effect that hears nothing
+                check(out != base, f"{count} voices, {name}: it hears the sends, the output differs from Stock")
+                db = [20 * math.log10(max(rms(x), 1) / max(y, 1)) for x, y in zip(out, stock_level)]
+                check(max(db) < 1.5, f"{count} voices, {name}: output against Stock {db[0]:+.1f} dB, {db[1]:+.1f} dB "
+                                     f"(peak {max(peak(out[0]), peak(out[1]))}, audio pool {r.pool_peak()})")
 
 
 def main():
     mods, ref = Path(sys.argv[1]), Path(sys.argv[2])
     only = sys.argv[3] if len(sys.argv) > 3 else None
     for name, fn in (("ui", test_ui), ("graph", test_graph), ("stress", test_stress), ("debounce", test_debounce),
-                     ("project", test_project)):
+                     ("project", test_project), ("play", test_play)):
         if only in (None, name):
             fn(mods, ref)
     print(f"{failures} failures")

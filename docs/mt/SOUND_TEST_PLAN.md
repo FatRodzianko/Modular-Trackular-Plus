@@ -259,8 +259,14 @@ measurements.
 - The same on two fresh machines gives identical samples. All 7 engines sound. 8 voices run at 94
   ms per block, with a block pool peak of 65 of 80.
 
+**Built with masterfx's device-test failure, 2026-11-04:** `PlayRig` in `tools/emu/sound_rig.py`.
+It opens a real project through CE's load steps and its mods files, presses Play, and runs
+`TrackerImpl::updateAudioBuffers`, so the sequencer plays the notes. `SoundRig` now uses TrackerImpl's
+own `Synth`, which that path needs. Every mod test that touches audio or the sequencer should go
+through it before a device test. The main loop while playing still isn't covered.
+
 **Not tried yet:**
-- `artificial_isr` and `renderMode`, and the sequencer's real note path.
+- `artificial_isr` and `renderMode`.
 - Whether Level A links without the closed libraries. The SDK's base class looks header-only,
   but `InstrumentTypeRegistry` and the host are in the library, so level A would call the
   voice directly.

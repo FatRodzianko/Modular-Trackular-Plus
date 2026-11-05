@@ -27,6 +27,7 @@ LIBS = ("synth/lib/libPolySynth.a", "synth/lib/libPolyDSP.a")
 HEAP_SIZE = 138_752                 # CE's fixed heap
 BLOCK = 128
 BLOCK_MS = 3                        # the fake clock's step per block: 128 samples at 44.1 kHz
+PATCH_SIZE = 255
 
 
 class ClosedCode(Exception):
@@ -131,7 +132,7 @@ class SoundRig:
         """Call func(machine) on entry to an open function, which then runs as usual."""
         a = addr & ~1
         self.guard.check(a, a)
-        self.m.uc.hook_add(UC_HOOK_CODE, lambda uc, x, s, u: func(self.m), begin=a, end=a)
+        return self.m.uc.hook_add(UC_HOOK_CODE, lambda uc, x, s, u: func(self.m), begin=a, end=a)
 
     def hook_range(self, begin, end, func):
         """A code hook over a range of open code. There is no hook without a range."""
@@ -223,8 +224,10 @@ class SoundRig:
 
     def _init_synth(self):
         m = self.m
-        self.synth = m.alloc(0x4000, 8)
-        m.call(self.first("_ZN5SynthC1"), self.synth)
+        # TrackerImpl's own Synth, which its static constructor built: the sequencer's notes reach
+        # it through TrackerImpl::getInstance()->getSynth()
+        self.tracker = m.call(m.addr("_ZN11TrackerImpl11getInstanceEv"))
+        self.synth = m.call(m.addr("_ZN11TrackerImpl8getSynthEv"), self.tracker)
 
         def tempo(mm):
             bits = struct.unpack("<I", struct.pack("<f", 120.0))[0]
@@ -277,6 +280,137 @@ class SoundRig:
 
     def pool_peak(self):
         return struct.unpack("<H", self.m.read(self.m.addr("_ZN11AudioStream15memory_used_maxE"), 2))[0]
+
+
+class PlayRig(SoundRig):
+    """A real project opened and played: the path a device takes when you press Play.
+
+    open_project runs the load steps of WorkspaceProjectLoad on the project's own files, and press_play
+    calls what the pattern screen's Play calls. interrupt() is TrackerImpl::updateAudioBuffers itself:
+    midiUpdate, sequencer.tick, engine.update, the audio engine. So notes go through the sequencer and
+    the sends are the project's. Still not here: the main loop, and CPU, which only a device can measure.
+    """
+
+    def __init__(self, axf):
+        super().__init__(axf)
+        m = self.m
+        self.fm = m.addr("newFileManager")
+        self.seq = m.addr("sequencer")
+        self._interrupt = m.addr("_ZN11TrackerImpl18updateAudioBuffersEPvS0_i")
+        self.has_mods = "_ZN4mods4initEP10FileSystem" in self.syms
+        self.notes = 0
+
+        crc_vtable = m.alloc(64, 4)
+        for i in range(16):
+            m.w32(crc_vtable + 4 * i, m.add_stub(lambda mm: 0))
+        crc = m.alloc(16, 4)
+        m.w32(crc, crc_vtable)
+        m.call(m.addr("_ZN9Sequencer4initEv"), self.seq, max_insns=50_000_000)
+        m.call(m.addr("_ZN9Sequencer16setCrcCalculatorEP13CrcCalculator"), self.seq, crc)
+        m.call(m.addr("_ZN12cFileManager4initEP10FileSystemP5Synthb"), self.fm, self.sd.obj, self.synth, 0,
+               max_insns=30_000_000)
+        m.call(m.addr("_ZN12cFileManager16setCrcCalculatorEP13CrcCalculator"), self.fm, crc)
+        if self.has_mods:
+            m.stub_function(m.addr("_ZN12cFileManager23setProjectStructChangedEv"), lambda mm: None)
+            m.call(m.addr("_ZN4mods4initEP10FileSystem"), self.sd.obj)
+            self.stub(m.addr("_ZN11TrackerImpl11getPlatformEv"), lambda mm: self.platform)
+            m.call(m.addr("_ZN4mods15masterfxStartedEv"), max_insns=50_000_000)
+
+    def open_project(self, folder, name="Test"):
+        """`folder` as if at /Projects/<name> and in the Workspace. Returns which patches loaded."""
+        m, sd = self.m, self.sd
+        sd.dirs |= {"Workspace", "Workspace/patterns", "Workspace/instruments", "Workspace/samples", "Projects",
+                    f"Projects/{name}"}
+        if self.has_mods:
+            # before any project is in: finding the path field needs the fields empty
+            path_at = find_project_path(self)
+        folder = Path(folder)
+        for f in folder.iterdir():
+            if f.is_file():
+                sd.files[f"Workspace/{f.name}"] = sd.files[f"Projects/{name}/{f.name}"] = f.read_bytes()
+        for f in (folder / "patterns").iterdir():
+            sd.files[f"Workspace/patterns/{f.name}"] = f.read_bytes()
+
+        if self.has_mods:
+            set_names(self, path_at, "Projects", name)
+            m.call(m.addr("_ZN4mods17onProjectOpenCopyEv"), max_insns=30_000_000)
+            m.call(m.addr("_ZN4mods17onWorkspaceLoadedEv"), max_insns=50_000_000)
+
+        project = sd.files["Workspace/project.mt"]
+        buf = m.alloc(len(project) + 64, 8)
+        m.write(buf, project)
+        # strMtProject's values are the last thing the reader copies in. Its offset isn't in the symbols.
+        copies = []
+        hook = self.watch(m.addr("memcpy"), lambda mm: copies.append(mm.arg(0)))
+        ok = m.call(m.addr("_ZN12cFileManager29loadProjectFileFormFileStructEP12strMtProjectP14strProjectFile"),
+                    self.fm, m.addr("mtProject"), buf, max_insns=50_000_000)
+        m.uc.hook_del(hook)
+        if not ok & 0xFF:
+            raise RuntimeError("CE's reader refused project.mt")
+        self.values = copies[-1]
+
+        m.call(m.addr("_ZN12cFileManager24loadPatternFromWorkspaceEh"), self.fm, 1, max_insns=50_000_000)
+        m.call(m.addr("_ZN9Sequencer20switchRamPatternsNowEv"), self.seq, max_insns=50_000_000)
+        m.call(m.addr("_ZN5Synth16updateToSettingsERK11strMtValuesb"), self.synth, self.values, 1,
+               max_insns=400_000_000)
+        no_name = m.alloc(32, 8)                    # std::optional<std::string>, empty
+        m.write(no_name, bytes(32))
+        load = m.addr("_ZN5Synth22loadPatchFromWorkspaceEiSt8optionalINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEE")
+        loaded = [m.call(load, self.synth, part, no_name, max_insns=400_000_000) & 0xFF for part in range(3)]
+        m.call(m.addr("_ZN12cFileManager17loadProjectValuesEv"), self.fm, max_insns=100_000_000)
+        return loaded
+
+    def count_notes(self):
+        def f(mm):
+            self.notes += 1
+        self.watch(self.m.addr("_ZN9Sequencer10sendNoteOnEhPNS_9strPlayer14strPlayerTrack11strSendStepE"), f)
+
+    def press_play(self):
+        self.m.call(self.m.addr("_ZN9Sequencer11playPatternEh"), self.seq, 0, max_insns=50_000_000)
+
+    def interrupt(self):
+        """One audio block. max_insns is how a hang shows up."""
+        self.m.call(self._interrupt, self.tracker, self.left, self.right, BLOCK, max_insns=100_000_000)
+        self.now += BLOCK_MS
+        return (struct.unpack(f"<{BLOCK}h", self.m.read(self.left, 2 * BLOCK)),
+                struct.unpack(f"<{BLOCK}h", self.m.read(self.right, 2 * BLOCK)))
+
+    def interrupts_run(self, n):
+        left, right = [], []
+        for _ in range(n):
+            a, b = self.interrupt()
+            left += a
+            right += b
+            if self.failures:
+                break
+        return left, right
+
+
+def find_project_path(r):
+    """cFileManager's path and name fields: wherever the hooks read them from."""
+    m, sd = r.m, r.sd
+    fm = m.sym("newFileManager")
+    sd.files["?//mods.bin"] = b"not a real one"
+    for at in range(fm.addr, fm.addr + fm.size):
+        before = m.read(at, 2)
+        m.write(at, b"?\0")
+        sd.calls.clear()
+        try:
+            m.call(m.addr("_ZN4mods17onProjectOpenCopyEv"))
+        except RuntimeError:
+            pass
+        found = any("readFile" in c for c in sd.calls)
+        m.write(at, before)
+        if found:
+            del sd.files["?//mods.bin"]
+            return at
+    raise RuntimeError("no project path field in cFileManager")
+
+
+def set_names(r, path_at, folder, name):
+    m = r.m
+    m.write(path_at, folder.encode() + b"\0")
+    m.write(path_at + PATCH_SIZE, name.encode() + b"\0")
 
 
 def peak(x):

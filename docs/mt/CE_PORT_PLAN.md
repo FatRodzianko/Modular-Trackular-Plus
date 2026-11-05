@@ -569,7 +569,8 @@ id stays unused. The notes below are what was built.
 
 ### 3.13 masterfx
 
-- **Status:** built and passing in the emulator, waiting on its device test.
+- **Status:** built and passing in the emulator. Its first device test locked up on Play; see
+  section 8 of its plan.
 - **CE today:** master reverb (Polyverb) and delay are open source (`MixerAndFxs`,
   `getDelay()`, `getPolyverb()`).
 - **Plan:** [MASTERFX_PORT_PLAN.md](MASTERFX_PORT_PLAN.md), which replaces what this section
