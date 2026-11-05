@@ -140,6 +140,12 @@ void cSamplePlayback::update()
         {
             voiceStreamManager.refreshInstrumentSliceCache(mtProject.values.lastUsedInstrument);
         }
+        // The selection could still be moved among the old slices while detection ran.
+        if (editorInstrument->selectedSlice >= editorInstrument->sliceNumber)
+        {
+            editorInstrument->selectedSlice =
+              (editorInstrument->sliceNumber > 0) ? editorInstrument->sliceNumber - 1 : 0;
+        }
         refreshSlicePoints = 1;
         if (!sliceScreenMode2)
         {
