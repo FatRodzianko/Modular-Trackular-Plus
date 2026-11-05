@@ -2301,7 +2301,9 @@ void cSampleImporter::initDeleteUnusedInstruments()
                 const struct Sequencer::strPattern::strTrack::strStep& step =
                   pattern->track[trackIdx].step[stepIdx];
 
-                if (step.note > Sequencer::STEP_NOTE_EMPTY)
+                // Sample tracks can also hold MIDI and synth instruments, which have no slot.
+                if (step.note > Sequencer::STEP_NOTE_EMPTY &&
+                    step.instrument < kSampleInstrumentsCount)
                 {
                     instrUseMap[step.instrument] = 1;
                 }
