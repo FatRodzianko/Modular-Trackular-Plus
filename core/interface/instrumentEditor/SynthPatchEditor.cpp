@@ -52,6 +52,13 @@ static void functSynthInitCancel();
 
 void cInstrumentEditor::cleanPatchEditorResources()
 {
+    // The section grid and the parameter list are only hidden when the editor is left,
+    // and a hidden control is still redrawn while it waits in the refresh queue. Both
+    // skip their texts when these pointers are null.
+    imgGridData.textList = nullptr;
+    paramsListData.params = nullptr;
+    paramsListData.values = nullptr;
+
     if (sectionNamesBufor != nullptr)
     {
         delete[] sectionNamesBufor;
