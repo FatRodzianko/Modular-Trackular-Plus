@@ -52,6 +52,10 @@ to stop. Nothing needs judging by ear.
 Each step sounds every voice all the time, which no normal song does, so it's a load test and not a
 promise about songs. If L7 stops the unit, Master FX isn't the cause of that stop.
 
+The first run, 2026-11-05: fine to `L4`, choppy screen at `L5` and `L6`, stalled at `L7` and `L8`.
+[MASTERFX_PORT_PLAN.md](MASTERFX_PORT_PLAN.md) section 8 has the readings. These projects use the
+source project's patches, so `L1` to `L6` measure CHIP.
+
 ## What a firmware comes with
 
 Each one handed over says what ran, what didn't, and the risk to the unit.

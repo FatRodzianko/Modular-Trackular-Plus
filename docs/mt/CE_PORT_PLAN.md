@@ -569,9 +569,10 @@ id stays unused. The notes below are what was built.
 
 ### 3.13 masterfx
 
-- **Status:** built and passing in the emulator. Its first device test locked up on Play, cause
-  not found yet; see section 8 of its plan. Next is the stepped device test in
-  [DEVICE_TEST_LADDER.md](DEVICE_TEST_LADDER.md), not run yet.
+- **Status:** built and passing in the emulator. Its first device test locked up on Play. The stepped
+  test in [DEVICE_TEST_LADDER.md](DEVICE_TEST_LADDER.md) found sustained overload, which also happens with
+  Master FX on Stock, and Master FX adds 2 to 3 points; see section 8 of its plan. Its sound hasn't been
+  checked on the unit.
 - **CE today:** master reverb (Polyverb) and delay are open source (`MixerAndFxs`,
   `getDelay()`, `getPolyverb()`).
 - **Plan:** [MASTERFX_PORT_PLAN.md](MASTERFX_PORT_PLAN.md), which replaces what this section

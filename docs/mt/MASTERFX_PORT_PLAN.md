@@ -1,11 +1,10 @@
 # masterfx on CE: build plan
 
 Status: steps 1 to 4 are built and pass in the emulator, 2026-11-04. Step 5, the first device test,
-locked up the unit on Play. The cause isn't known, and the rig, now on the real boot, Open, Play button
-and main loop, doesn't reproduce it. The next device test is the stepped one in
-[DEVICE_TEST_LADDER.md](DEVICE_TEST_LADDER.md), on a diagnostic firmware that records any lockup; it
-hasn't run. Sections 2, 3 and 4 give what was built; the effects' own cost is now measured, but the
-CPU readings aren't in. Based on CE's source at `af01d47`, a reference build of it, and 1.2.0's
+locked up the unit on Play. The stepped device test, 2026-11-05, found why: sustained overload of the
+audio interrupt, which also happens with Master FX on Stock, so Master FX isn't the cause. Its sound
+hasn't been checked on the unit yet. Section 8 has the readings. Sections 2, 3 and 4 give what was
+built. Based on CE's source at `af01d47`, a reference build of it, and 1.2.0's
 `patch/masterfx` (mf8) compiled with CE's FPU flags. Section 3.13 of
 [CE_PORT_PLAN.md](CE_PORT_PLAN.md) points here.
 
@@ -419,7 +418,40 @@ use the model above: instructions, plus 350 cycles per SDRAM or flash line.
 
 CE's stock reverb is 32,233 instructions, so these are close to the estimates in section 3.
 
-### Device test: stepped, on a diagnostic firmware
+### Device test: stepped, 2026-11-05
+
+Run on `TrackerPlus_mfx_recorder.ptf`, from `/mfx_log.txt`. `L1` to `L6` play 1 or 4 voices of CHIP
+(`0.patch`, engine 8). `L7` and `L8` add part 1's DIRT (2 voices) and part 2's VAP (2 voices).
+
+| Project | Average | Slowest | Blocks over time | Longest main loop gap | What the unit did |
+| --- | --- | --- | --- | --- | --- |
+| `L1` 1 voice, Stock + Stock | 35 % | 59 % | 0 | 11 ms | Fine |
+| `L2` 1 voice, Stock + Tape | 37 % | 82 % | 0 | 11 ms | Fine |
+| `L3` 1 voice, Spring + Stock | 35 % | 59 % | 0 | 11 ms | Fine |
+| `L4` 1 voice, Shimmer + BBD | 38 % | 68 % | 0 | 11 ms | Fine |
+| `L5` 4 voices, Stock + Stock | 87 % | 125 % | 22 of 6,988 | 147 ms | Sound right, screen choppy |
+| `L6` 4 voices, Shimmer + BBD | 89 % | 114 % | 88 of 8,987 | 141 ms | Sound right, screen a little choppier |
+| `L7` 8 voices, Stock + Stock | Over 100 % | 3,861 us of 2,902 | 914 of 952 | Stalled | Screen stopped, sound distorted, recorder restarted it |
+| `L8` 8 voices, Shimmer + BBD | Over 100 % | 3,917 us of 2,902 | 897 of 934 | Stalled | The same |
+
+All four stalls read the same: inside the audio interrupt, 1,023 or 1,024 of the last 1,024 ms in it,
+and no fault (`cfsr` and `hfsr` 0). The plain firmware has no recorder to restart it, so it stayed that
+way, with the buttons and power button unread. That is the lockup of 2026-11-04, on the same load as `L8`.
+
+- **Master FX adds 2 to 3 points on average** (35 to 38 at 1 voice, 87 to 89 at 4), less than section 3's
+  estimate of 5 to 7. `L7` shows the stall needs no Master FX.
+- **CHIP costs about 17 points a voice** on this patch: 35 % at 1 voice, 87 % at 4. At 600 MHz that's about
+  2,300 cycles a sample per voice. `renderVoiceAudio` calls `std::pow` and `std::sin` per sample for the
+  filter, on top of what the model itself calls. 22 of the recorder's 32 address samples were in CHIP or
+  the maths library, in flash, and the saved stacks show CHIP calling `powf` and `sinf`. That's a small
+  sample, and the closed engines' share wasn't looked into.
+- **What isn't known:** whether 8 voices stall without CHIP. 1.2.0, which has no CHIP, read 107-110 % at
+  8 voices. And whether unmodified CE stalls the same way: the rig says the mods add 83 instructions a
+  block on average, but it hasn't run on the unit.
+- **Recorder bug:** its `voices` field prints `getMaxVoiceCount`, so `8 7 7` at 1 voice is what each part
+  could take, not what it has. Project names above give the real count.
+
+### The stepped device test
 
 The four-step test written here on 2026-11-04 is withdrawn. It reused the firmware that locked up,
 with no fix and no way to tell why it stopped. Its reading of a plain 8-voice result was also wrong:
@@ -450,7 +482,7 @@ interrupt does to the screen, card and buttons), the real screen, the card's tim
 fault reaching the recorder's handlers, and the record surviving a real reset.
 
 On the worst-case project one main loop during Play is about 360,000 instructions, against about
-11,000 with held notes. It's the same on the reference build, and I don't know yet what share of a
+11,000 with held notes, from the interrupts that fired inside it. It's the same on the reference build, and I don't know yet what share of a
 device's time that is.
 
 The first device test went ahead without the Play path, though
