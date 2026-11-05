@@ -373,11 +373,6 @@ void cSampleRecorder::start(uint32_t options)
 
     activateLabelsBorder();
 
-    if (options > 0 && options != interfaceButtonSampleRec)
-    {
-        functSwitchModule(options);
-    }
-
     globalLastUsedInstrumentIndex = mtProject.values.lastUsedInstrument;
 
     if (mtProject.values.lastUsedInstrument >= MIDI_INSTRUMENTS_START_IDX &&
@@ -393,6 +388,13 @@ void cSampleRecorder::start(uint32_t options)
                      MIDI_INSTRUMENTS_START_IDX + kMidiInstrumentsCount - 1);
 
         mtProject.values.lastUsedInstrument = recorderMidiLastUsedInstrumentIndex;
+    }
+
+    // This can leave the recorder for another module. It has to come last, so that stop()
+    // puts back the instrument replaced above before that module starts.
+    if (options > 0 && options != interfaceButtonSampleRec)
+    {
+        functSwitchModule(options);
     }
 }
 
