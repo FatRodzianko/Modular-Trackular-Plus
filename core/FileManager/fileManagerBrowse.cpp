@@ -111,6 +111,16 @@ bool cFileManager::browseSdCard(uint8_t* index)
         return true;
     }
 
+    // Entering a folder adds its list entry to the path. A folder that would not fit is not
+    // entered; the files in it could not be addressed anyway.
+    size_t pathLength = explorerDirLevel == 0 ? 0 : strlen(explorerCurrentPath);
+
+    if ((explorerDirLevel == 0 || *index > 0) &&
+        pathLength + strlen(explorerList[*index]) >= sizeof(explorerCurrentPath))
+    {
+        return false;
+    }
+
     if (explorerDirLevel == 0)
     {
         explorerDirLevel = 1;
