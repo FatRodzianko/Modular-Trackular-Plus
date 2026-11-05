@@ -3615,7 +3615,13 @@ void Sequencer::handleMidiInStart(bool continuePlay, bool songMode)
         auto songPosToStart = newFileManager.getPatternPosInSong(currentPattern);
         if (songPosToStart.has_value())
         {
-            playSongFromPosition(songPosToStart.value());
+            // Not playSongFromPosition(): it saves the pattern to the SD card first, which
+            // the audio callback must not do. The slot holds the pattern that is loaded,
+            // so nothing is replaced yet; the pattern is saved before the song moves on,
+            // when the next one is loaded.
+            newFileManager.setSongPos(songPosToStart.value());
+            player.songMode = 1;
+            play();
             if (startStep > 0)
             {
                 player.globalPos = startStep;
