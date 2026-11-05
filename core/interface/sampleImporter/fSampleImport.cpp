@@ -2284,7 +2284,11 @@ void cSampleImporter::initDeleteUnusedInstruments()
 {
     memset(instrUseMap, 0, sizeof(instrUseMap));
 
-    for (int patternIdx = PATTERN_INDEX_MIN; patternIdx < PATTERN_INDEX_MAX; patternIdx++)
+    // The scan reads the pattern files, and the pattern in memory can be newer than its file
+    // until the next autosave.
+    newFileManager.saveWorkspacePatternNow(mtProject.values.actualPattern);
+
+    for (int patternIdx = PATTERN_INDEX_MIN; patternIdx <= PATTERN_INDEX_MAX; patternIdx++)
     {
         const Sequencer::strPattern* pattern =
           newFileManager.loadWorkspacePatternToTempBuffer(patternIdx);
@@ -2296,7 +2300,8 @@ void cSampleImporter::initDeleteUnusedInstruments()
 
         for (int trackIdx = 0; trackIdx < kSampleTracks; trackIdx++)
         {
-            for (int stepIdx = 0; stepIdx < pattern->track[trackIdx].length; stepIdx++)
+            // The length of a track is the index of its last step.
+            for (int stepIdx = 0; stepIdx <= pattern->track[trackIdx].length; stepIdx++)
             {
                 const struct Sequencer::strPattern::strTrack::strStep& step =
                   pattern->track[trackIdx].step[stepIdx];
