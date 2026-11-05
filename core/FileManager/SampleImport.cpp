@@ -210,6 +210,15 @@ bool SampleImport::importSamplesToProject(uint8_t fileFrom,
     if (dataFrom >= dataTo || dataFrom > std::numeric_limits<uint16_t>::max() ||
         dataTo > std::numeric_limits<uint16_t>::max())
         return false;
+    if (instrumentSlot >= kSampleInstrumentsCount)
+        return false;
+
+    // the files that have no instrument slot left are not imported
+    const int slotsAfterFirst = kSampleInstrumentsCount - 1 - instrumentSlot;
+    if (fileTo - fileFrom > slotsAfterFirst)
+    {
+        fileTo = fileFrom + slotsAfterFirst;
+    }
 
     sampleChannelMode = sampleMode;
     importLoadMode = loadMode;
