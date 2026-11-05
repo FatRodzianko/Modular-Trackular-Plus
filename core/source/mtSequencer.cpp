@@ -1224,7 +1224,10 @@ void Sequencer::setStepRepeater(uint8_t track, int8_t stepRepeat)
 }
 void Sequencer::setPerformancePlayMode(uint8_t track, int8_t playmode)
 {
-    player.track[track].performancePlayMode = playmode;
+    // The value indexes the custom play orders. Stored performance values are
+    // loaded from the project and the config without the range of their effect.
+    player.track[track].performancePlayMode =
+      clamp<int>(playmode, PLAYMODE_MIN, PLAYMODE_CUSTOM_20);
 }
 
 // zamienia fx val na enRollPeriod
@@ -3212,8 +3215,11 @@ void Sequencer::setPerformancePatternLength(int length)
 void Sequencer::setPerformancePatternLengthFromFxVal(int8_t val)
 {
     int16_t performancePatternLengthValues[] = { -1, 1, 2, 4, 8, 16, 32, 64, 128 };
+    const int lastValue =
+      sizeof(performancePatternLengthValues) / sizeof(performancePatternLengthValues[0]) - 1;
 
-    setPerformancePatternLength(performancePatternLengthValues[val]);
+    // Stored performance values are loaded without the range of their effect.
+    setPerformancePatternLength(performancePatternLengthValues[clamp<int>(val, 0, lastValue)]);
 }
 // laduje track do bufora i czeka na switch
 void Sequencer::setTrackToLoadOnSwitch(uint8_t track, uint8_t sourcePattern)
