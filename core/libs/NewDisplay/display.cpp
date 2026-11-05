@@ -856,6 +856,12 @@ void cDisplay::destroyModulesControls()
 
     for (uint8_t i = destroyPoint; i < controlsCount; i++)
     {
+        // A refresh takes several update() calls and keeps this pointer in between. Once it
+        // is cleared, validateCurrentUpdateData() gives the refresh up.
+        if (controlsTable[i] == actualUpdating)
+        {
+            actualUpdating = nullptr;
+        }
         delete controlsTable[i];
         controlsTable[i] = nullptr;
     }
@@ -866,6 +872,11 @@ void cDisplay::freeControlResources(int8_t controlsTableIndex)
     if (controlsTableIndex < 0 || controlsTableIndex > controlsCount - 1)
         return;
 
+    // see destroyModulesControls()
+    if (controlsTable[controlsTableIndex] == actualUpdating)
+    {
+        actualUpdating = nullptr;
+    }
     delete controlsTable[controlsTableIndex];
     controlsTable[controlsTableIndex] = nullptr;
 
