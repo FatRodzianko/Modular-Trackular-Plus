@@ -155,6 +155,11 @@ bool FileSystemImpl::initSdDriver()
     return true;
 }
 
+bool FileSystemImpl::remount()
+{
+    return f_mount(&g_fileSystem, driverNumberBuffer, 1U) == FR_OK;
+}
+
 void FileSystemImpl::deinitSdDriver()
 {
     f_mount(0, driverNumberBuffer, 1);

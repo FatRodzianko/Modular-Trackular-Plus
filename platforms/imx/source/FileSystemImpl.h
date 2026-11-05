@@ -87,6 +87,8 @@ class FileSystemImpl final : public FileSystem
 
     void init();
     void update();
+    // Re-reads the volume from the card. Invalidates every open file.
+    bool remount();
     ~FileSystemImpl() {}
 
 #ifdef TEST_FILESYSTEM

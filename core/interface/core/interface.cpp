@@ -394,6 +394,23 @@ void Interface::handleFileTransferMode(uint8_t state)
     usb->reset();
 }
 
+bool Interface::setFileTransferMode(bool enable)
+{
+    bool active = specialScreenMode == usbStorageScreenMode;
+
+    if (enable != active)
+    {
+        if (!enable)
+        {
+            ip->unblockAllInputs();
+        }
+
+        handleFileTransferMode(enable ? 1 : 0);
+    }
+
+    return specialScreenMode == usbStorageScreenMode;
+}
+
 void Interface::refreshInterfaceControlsColors()
 {
     songTimer.refreshColors();

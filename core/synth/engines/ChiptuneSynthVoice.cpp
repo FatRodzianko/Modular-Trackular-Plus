@@ -101,9 +101,50 @@ inline float polyBlep(float t, float dt)
     return 0.0f;
 }
 
-inline float fastSine(float phase01)
+// renderVoiceAudio runs these for every sample of every voice, in the audio interrupt, so std::sin,
+// std::pow, std::exp and std::fmod there are what makes 8 voices overrun the audio block. These cost a
+// few multiplies and are accurate well past what the voice can show: fastPow2 to 0.001 cents, fastSine
+// to -120 dB.
+//
+// The constants are fits to sin(2*pi*t) on [-0.25, 0.25] and 2^f on [0, 1]. They start from the Taylor
+// series, adjusted to spread the error evenly across the range, which makes the worst error far smaller
+// for the same number of multiplies.
+
+// Any phase, in turns.
+inline float fastSine(float phase)
 {
-    return std::sin(phase01 * 2.0f * std::numbers::pi_v<float>);
+    float t = phase - static_cast<float>(static_cast<int>(phase + (phase >= 0.0f ? 0.5f : -0.5f)));
+    if (t > 0.25f)
+    {
+        t = 0.5f - t;
+    }
+    else if (t < -0.25f)
+    {
+        t = -0.5f - t;
+    }
+    const float t2 = t * t;
+    return t * (6.283164f + t2 * (-41.337143f + t2 * (81.340782f + t2 * -70.993568f)));
+}
+
+inline float fastPow2(float x)
+{
+    x = std::clamp(x, -126.0f, 127.0f);
+    const int whole = static_cast<int>(x) - (x < 0.0f ? 1 : 0);
+    const float f = x - static_cast<float>(whole);
+    const float mantissa =
+      1.0f + f * (0.69315249f + f * (0.24015281f + f * (0.05583591f + f * (0.0089734f + f * 0.00188529f))));
+    const union
+    {
+        uint32_t bits;
+        float value;
+    } scale = { static_cast<uint32_t>(whole + 127) << 23 };
+    return mantissa * scale.value;
+}
+
+// The same as std::fmod(x, 1.0f) for x in [0, 2), which is all the pulse oscillators give it.
+inline float wrapPhase(float x)
+{
+    return (x >= 1.0f) ? x - 1.0f : x;
 }
 
 inline float nesSteppedTriangle(float phase01)
@@ -298,7 +339,8 @@ class ChiptuneSynthVoice : public sdk::CustomSynthVoice<ChiptuneSynthVoice, Chip
             const float totalNote = currentGlideNote + tuneSemitones + (fineCents * 0.01f) +
                                     pitchBendSemitones + static_cast<float>(arpSemi) +
                                     vibSemitones + activeSweepSemi;
-            const float freq = std::clamp(sdk::noteToFreq(0, totalNote), 16.0f, 18000.0f);
+            // sdk::noteToFreq(0, totalNote), as note 0 is MIDI note 0
+            const float freq = std::clamp(8.1757989f * fastPow2(totalNote / 12.0f), 16.0f, 18000.0f);
             const float dt = freq * invSr;
 
             // Duty cycle with PWM modulation
@@ -324,7 +366,7 @@ class ChiptuneSynthVoice : public sdk::CustomSynthVoice<ChiptuneSynthVoice, Chip
                 {
                     float pulse = (phase < duty) ? 1.0f : -1.0f;
                     pulse += polyBlep(phase, dt);
-                    pulse -= polyBlep(std::fmod(phase - duty + 1.0f, 1.0f), dt);
+                    pulse -= polyBlep(wrapPhase(phase - duty + 1.0f), dt);
                     sig = pulse * 0.75f;
                     break;
                 }
@@ -395,13 +437,13 @@ class ChiptuneSynthVoice : public sdk::CustomSynthVoice<ChiptuneSynthVoice, Chip
                     }
                     float p1 = (phase < duty) ? 1.0f : -1.0f;
                     p1 += polyBlep(phase, dt) -
-                          polyBlep(std::fmod(phase - duty + 1.0f, 1.0f), dt);
+                          polyBlep(wrapPhase(phase - duty + 1.0f), dt);
                     float p2 = (osc2Phase < duty) ? 1.0f : -1.0f;
                     p2 += polyBlep(osc2Phase, dt2) -
-                          polyBlep(std::fmod(osc2Phase - duty + 1.0f, 1.0f), dt2);
+                          polyBlep(wrapPhase(osc2Phase - duty + 1.0f), dt2);
                     float p3 = (osc3Phase < duty) ? 1.0f : -1.0f;
                     p3 += polyBlep(osc3Phase, dt3) -
-                          polyBlep(std::fmod(osc3Phase - duty + 1.0f, 1.0f), dt3);
+                          polyBlep(wrapPhase(osc3Phase - duty + 1.0f), dt3);
                     sig = (p1 + 0.8f * p2 + 0.8f * p3) * 0.34f;
                     break;
                 }
@@ -409,8 +451,9 @@ class ChiptuneSynthVoice : public sdk::CustomSynthVoice<ChiptuneSynthVoice, Chip
                 case ChipModel::kChipDrum:
                 {
                     // Morphs from Kick (0..0.33) -> Snare (0.33..0.67) -> Metallic Hat (0.67..1.0)
+                    // e^x is 2^(x * log2(e))
                     const float drumDecay =
-                      std::exp(-static_cast<float>(noteAgeSamples) / (0.08f * sr));
+                      fastPow2(-1.4426950f * static_cast<float>(noteAgeSamples) / (0.08f * sr));
                     const float drumFreq =
                       freq * (1.0f + 3.5f * (1.0f - shape * 0.7f) * drumDecay * drumDecay);
                     osc2Phase += drumFreq * invSr;
@@ -459,14 +502,13 @@ class ChiptuneSynthVoice : public sdk::CustomSynthVoice<ChiptuneSynthVoice, Chip
 
             // 9. State-Variable Lowpass Filter with envelope modulation
             const float envCutoff =
-              std::clamp(filterCutoffHz *
-                           std::pow(2.0f, filterEnvAmount * envLevel * 4.0f),
+              std::clamp(filterCutoffHz * fastPow2(filterEnvAmount * envLevel * 4.0f),
                          40.0f,
                          18000.0f);
             if (envCutoff < 17500.0f || filterResonance > 0.02f)
             {
                 const float f =
-                  std::min(0.85f, 2.0f * std::sin(std::numbers::pi_v<float> * envCutoff * invSr));
+                  std::min(0.85f, 2.0f * fastSine(0.5f * envCutoff * invSr));
                 svfLow += f * svfBand;
                 const float high = postCrush - svfLow - qDamper * svfBand;
                 svfBand += f * high;

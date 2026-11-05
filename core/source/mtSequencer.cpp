@@ -5,6 +5,7 @@
 #include "Synth.h"
 #endif
 #include "fileManager.h"
+#include "log.h"
 #include "mtAudioEngine.h"
 #include "mtSequencer.h"
 #include "mtStructs.h"
@@ -1309,6 +1310,8 @@ AUDIO_CORE_RAM void Sequencer::play(uint8_t fromPos)
 {
     fromPos = clamp<int>(fromPos, 0, MAXSTEP);
 
+    LOGF("sequencer play from step %d (%s mode)\n", fromPos, player.songMode ? "song" : "pattern");
+
     if (!(isRec() && isPreRollConfigOn()))
     {
         stopAllOpenNotes();
@@ -1557,6 +1560,8 @@ AUDIO_CORE_RAM void Sequencer::stopManualNotes(void)
 
 void Sequencer::stop(void)
 {
+    LOG("sequencer stop");
+
     songTimer.stop();
     stopAllOpenNotes();
     cancelFxes();
