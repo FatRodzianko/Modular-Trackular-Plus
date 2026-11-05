@@ -5,6 +5,7 @@
         [--voices 1,4,0] [--keep-masterfx] [--effects 4,2] [--worst]
     python tools/emu/make_masterfx_test_project.py "<project>" "<out folder>" --ladder
     python tools/emu/make_masterfx_test_project.py "<project>" "<out folder>" --engines
+    python tools/emu/make_masterfx_test_project.py "<project>" "<out folder>" --sound
 
 The project given is only read. In the copy:
 - project.mt: the new name, the voices given on the three synth parts, both sends at 60.
@@ -19,6 +20,10 @@ Everything else stays byte for byte, the synth patches and other mods' files inc
 starts with them. --ladder writes the projects of docs/mt/DEVICE_TEST_LADDER.md, in order. --engines
 writes that file's second set: all three parts on one engine with its Init patch, so nothing depends
 on the source project's sound. The engine comes from project.mt's synthType, not from the patch file.
+
+--sound writes that file's last set. `A1 Master FX sound` is one voice of ACD Init with a short note every 16
+steps, so the gaps let the reverb and delay be heard, with no masterfx.bin. `R1 Real project` is the source
+itself with only its name changed, its patterns and its own masterfx.bin kept.
 
 Every voice sounds all the time here, which is a CPU test and no kind of normal song: 8 held voices
 take the audio pool to its limit on a build without masterfx too.
@@ -55,6 +60,9 @@ WORST_TEMPO = 800.0
 FX_MICROMOVE, FX_ROLL, FX_CHANCE, FX_MIDI_CHORD = 2, 3, 4, 14    # Sequencer::enFxType
 STEP_VOLUME = 30                        # of 100, CE's own per-step volume
 STEP_VOLUME_AT = 6                      # note, instrument, 2 fx of 2 bytes, volume, micromove
+SOUND_NOTES = (48, 55, 60, 67)
+SOUND_VOLUME = 60                       # one voice, so still below the 8 held voices at 30
+NOTE_OFF_DEFAULT = 0xFC                 # Sequencer::STEP_NOTE_OFF_DEFAULT, -4
 
 
 def held(voices=VOICES) -> tuple:
@@ -96,6 +104,19 @@ def worst_pattern(voices=VOICES) -> bytes:
                 fx = (FX_MIDI_CHORD, step % 16, FX_CHANCE, 100)
             data[at:at + 6] = bytes((note, instrument)) + bytes(fx)
             data[at + STEP_VOLUME_AT] = STEP_VOLUME
+    return bytes(data)
+
+
+def sound_pattern() -> bytes:
+    """One short note every 16 steps on track 1, each with a note off 2 steps later."""
+    data = bytearray(pattern((0, 0, 0)))
+    start = ce.PATTERN_HEADER + 1
+    for bar, note in enumerate(SOUND_NOTES):
+        at = start + bar * 16 * ce.STEP_V6
+        data[at:at + 2] = bytes((note, SYNTH_INSTRUMENTS))
+        data[at + STEP_VOLUME_AT] = SOUND_VOLUME
+        off = at + 2 * ce.STEP_V6
+        data[off] = NOTE_OFF_DEFAULT
     return bytes(data)
 
 
@@ -180,6 +201,23 @@ def make_engines(source: Path, parent: Path) -> list:
     return out
 
 
+def make_sound(source: Path, parent: Path) -> list:
+    sound = make(source, parent, "A1 Master FX sound", (1, 0, 0), engine="ACD")
+    for path in (sound / "patterns").glob("pattern_*.mtp"):
+        path.write_bytes(sound_pattern())
+
+    name = "R1 Real project"
+    real = parent / name
+    if real.exists():
+        raise ce.Refused(f"{real} already exists, and I won't write over it.")
+    shutil.copytree(source, real)
+    mt = bytearray((real / "project.mt").read_bytes())
+    mt[ce.PROJECT_NAME:ce.PROJECT_NAME + ce.PROJECT_NAME_SIZE] = name.encode("ascii").ljust(ce.PROJECT_NAME_SIZE, b"\0")
+    mt[PROJECT_CRC:PROJECT_CRC + 4] = bytes(4)
+    (real / "project.mt").write_bytes(mt)
+    return [sound, real]
+
+
 def make(source: Path, parent: Path, name: str, voices=VOICES, keep_masterfx: bool = False, worst: bool = False,
          engine=None) -> Path:
     out = parent / name
@@ -212,10 +250,12 @@ def main() -> int:
     parser.add_argument("--effects", help="reverb,delay numbers for masterfx.bin")
     parser.add_argument("--ladder", action="store_true")
     parser.add_argument("--engines", action="store_true")
+    parser.add_argument("--sound", action="store_true")
     args = parser.parse_args()
     try:
-        if args.ladder or args.engines:
-            for folder in (make_ladder if args.ladder else make_engines)(args.project, args.out):
+        if args.ladder or args.engines or args.sound:
+            maker = make_ladder if args.ladder else make_engines if args.engines else make_sound
+            for folder in maker(args.project, args.out):
                 print(f"Copy written: {folder}")
             return 0
         voices = tuple(int(v) for v in args.voices.split(","))
