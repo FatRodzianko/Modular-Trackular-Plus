@@ -982,8 +982,11 @@ void cPatternEditor::moveCursorByStep(uint8_t val)
     }
     else
     {
-        trackerPattern.actualStep = mtProject.values.patternEditStep + val -
-                                    ((patternLength + 1) - trackerPattern.actualStep);
+        // The move can be longer than the pattern, as after pasting a tall block into a
+        // short pattern, so wrapping once is not enough.
+        trackerPattern.actualStep =
+          (trackerPattern.actualStep + mtProject.values.patternEditStep + val) %
+          (patternLength + 1);
     }
 
     PTE->trackerPattern.selectState = 1;
@@ -1011,7 +1014,7 @@ void cPatternEditor::moveCursorByStepParallel()
     else
     {
         trackerPattern.actualStep =
-          mtProject.values.patternEditStep - ((patternLength + 1) - trackerPattern.actualStep);
+          (trackerPattern.actualStep + mtProject.values.patternEditStep) % (patternLength + 1);
     }
     PTE->trackerPattern.selectStartStep = trackerPattern.actualStep;
     PTE->trackerPattern.selectEndStep = trackerPattern.actualStep;
