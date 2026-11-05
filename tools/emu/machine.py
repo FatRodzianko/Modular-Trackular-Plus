@@ -19,10 +19,13 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+import cpu_limit
 from unicorn import (UC_ARCH_ARM, UC_HOOK_CODE, UC_HOOK_MEM_INVALID, UC_MODE_MCLASS,
                      UC_MODE_THUMB, Uc, UcError)
 from unicorn.arm_const import (UC_ARM_REG_LR, UC_ARM_REG_PC, UC_ARM_REG_R0, UC_ARM_REG_R1,
                                UC_ARM_REG_R2, UC_ARM_REG_R3, UC_ARM_REG_SP)
+
+cpu_limit.apply()
 
 # Our own region for stubs (unused by the chip's map).
 STUB_BASE = 0x70000000
@@ -189,9 +192,9 @@ class Machine:
         return False
 
     # -- calls ----------------------------------------------------------------
-    def call(self, func: int, *args: int, max_insns: int = 5_000_000) -> int:
+    def call(self, func: int, *args: int, max_insns: int = 5_000_000, stack: int | None = None) -> int:
         regs = (UC_ARM_REG_R0, UC_ARM_REG_R1, UC_ARM_REG_R2, UC_ARM_REG_R3)
-        sp = STACK_TOP - 0x100
+        sp = STACK_TOP - 0x100 if stack is None else stack
         stack_args = list(args[4:])
         sp -= 4 * len(stack_args)
         for i, v in enumerate(stack_args):

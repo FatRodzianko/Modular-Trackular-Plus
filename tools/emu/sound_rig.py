@@ -102,6 +102,7 @@ class SoundRig:
         self.now = 0
         self.failures = []
         self.interrupts = {"disable": 0, "enable": 0}
+        self.audio_masked = False
         self.heap_base = self.heap_brk = SCRATCH + 0x400000
         self.heap_peak = 0
 
@@ -171,6 +172,7 @@ class SoundRig:
         def counted(kind):
             def f(mm):
                 self.interrupts[kind] += 1
+                self.audio_masked = kind == "disable"
                 return 0
             return f
         for name, s in self.syms.items():

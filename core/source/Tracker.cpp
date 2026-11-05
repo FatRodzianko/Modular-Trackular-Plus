@@ -15,6 +15,7 @@
 #include "mtSleep.h"
 #include "mtSliceDetector.h"
 #include "mods.h" // MT:
+#include "lockupRecorder.h" // MT:
 
 #include <cr_section_macros.h>
 
@@ -171,6 +172,9 @@ void TrackerImpl::update()
     mtInterface.update();
     engine.updateSdStream();
     sequencer.update();
+#if MT_LOCKUP_RECORDER // MT: diagnostic builds
+    mods::lockup::update();
+#endif
 }
 
 void TrackerImpl::updateAudioBuffers(void* left, void* right, int length)
@@ -179,6 +183,9 @@ void TrackerImpl::updateAudioBuffers(void* left, void* right, int length)
     {
         return;
     }
+#if MT_LOCKUP_RECORDER // MT: diagnostic builds
+    mods::lockup::audioStart();
+#endif
     if (platform != nullptr)
     {
         midiSetAudioBlockStartUs(platform->getTimer()->micros());
@@ -202,6 +209,9 @@ void TrackerImpl::updateAudioBuffers(void* left, void* right, int length)
 
     engine.updateAudioBuffers(left, right, length);
     Profiler::getInstance()->stopMeasuringAudio();
+#if MT_LOCKUP_RECORDER // MT: diagnostic builds
+    mods::lockup::audioStop();
+#endif
 }
 
 void TrackerImpl::updateInputAudioBuffers(void* dataI2s, void* dataUsb, int length)

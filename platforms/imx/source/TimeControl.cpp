@@ -133,6 +133,100 @@ void delayMicroseconds(uint32_t valueUs)
     timeControl.delayMicroseconds(valueUs);
 }
 
+#ifdef MT_LOCKUP_RECORDER // MT: diagnostic builds: core/mods/lockupRecorder.cpp's side of the chip,
+                          // and handlers that replace startup's, which spin for ever
+#include "MIMXRT1051.h"
+
+extern "C"
+{
+    void mtLockupFault(uint32_t kind, uint32_t* frame);
+
+    uint32_t mtLockupCycles()
+    {
+        return DWT->CYCCNT;
+    }
+
+    uint32_t mtLockupAudioActive()
+    {
+        return NVIC_GetActive(DMA0_DMA16_IRQn);
+    }
+
+    uint32_t mtLockupAudioPending()
+    {
+        return NVIC_GetPendingIRQ(DMA0_DMA16_IRQn);
+    }
+
+    // A bus access with SNVS's clocks gated would fault, here of all places, so they're forced on.
+    static inline void snvsClocksOn()
+    {
+        CCM->CCGR5 |= CCM_CCGR5_CG14_MASK | CCM_CCGR5_CG15_MASK;
+    }
+
+    uint32_t mtLockupSavedRead(uint32_t index)
+    {
+        snvsClocksOn();
+        return SNVS->LPGPR[index];
+    }
+
+    void mtLockupSavedWrite(uint32_t index, uint32_t value)
+    {
+        snvsClocksOn();
+        SNVS->LPGPR[index] = value;
+    }
+
+    void mtLockupFaultRegisters(uint32_t* out)
+    {
+        out[0] = SCB->CFSR;
+        out[1] = SCB->HFSR;
+        out[2] = SCB->BFAR;
+        out[3] = SCB->MMFAR;
+    }
+
+    void mtLockupCleanAndReset()
+    {
+        SCB_CleanDCache();
+        __NVIC_SystemReset();
+        for (;;)
+        {
+            __asm volatile("nop");
+        }
+    }
+}
+
+#define MT_FAULT_HANDLER(name, kind)                                                                                   \
+    extern "C" __attribute__((naked)) void name(void)                                                                  \
+    {                                                                                                                  \
+        __asm volatile("tst lr, #4\n"                                                                                  \
+                       "ite eq\n"                                                                                      \
+                       "mrseq r1, msp\n"                                                                               \
+                       "mrsne r1, psp\n"                                                                               \
+                       "movs r0, #" #kind "\n"                                                                         \
+                       "b mtLockupFault\n");                                                                           \
+    }
+
+MT_FAULT_HANDLER(HardFault_Handler, 2)
+MT_FAULT_HANDLER(MemManage_Handler, 3)
+MT_FAULT_HANDLER(BusFault_Handler, 4)
+MT_FAULT_HANDLER(UsageFault_Handler, 5)
+
+extern "C"
+{
+    void mtLockupTick(uint32_t* frame);
+
+    void timeControlTick(uint32_t* frame)
+    {
+        msTicks++;
+        cyclesTicks = DWT->CYCCNT;
+        mtLockupTick(frame);
+    }
+
+    __attribute__((naked)) void SysTick_Handler()
+    {
+        __asm volatile("mov r0, sp\n"
+                       "b timeControlTick\n");
+    }
+}
+#else
 extern "C"
 {
     void SysTick_Handler()
@@ -141,3 +235,4 @@ extern "C"
         cyclesTicks = DWT->CYCCNT;
     }
 }
+#endif

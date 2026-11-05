@@ -11,6 +11,7 @@
 
 #include "colorsong.h"
 #include "humanize.h"
+#include "lockupRecorder.h"
 #include "masterfx.h"
 #include "modsConfig.h"
 #include "modsProject.h"
@@ -171,6 +172,9 @@ void projectMasterfxSwitchChanged()
 void masterfxStarted()
 {
     masterfx::started();
+#if MT_LOCKUP_RECORDER
+    lockup::arm();
+#endif
 }
 
 void masterfxChosen()

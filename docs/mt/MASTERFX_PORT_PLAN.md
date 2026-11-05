@@ -1,9 +1,11 @@
 # masterfx on CE: build plan
 
-Status: steps 1 to 4 are built and pass in the emulator, 2026-11-04. Step 5, the device test in
-section 8, locked up the unit on its first attempt. The cause isn't known. **Don't run the device
-test below:** its reasoning was wrong, and testing is being re-thought. Sections 2, 3 and 4 give what was built; the
-effects' own cost is now measured, but the CPU readings aren't in. Based on CE's source at `af01d47`, a reference build of it, and 1.2.0's
+Status: steps 1 to 4 are built and pass in the emulator, 2026-11-04. Step 5, the first device test,
+locked up the unit on Play. The cause isn't known, and the rig, now on the real boot, Open, Play button
+and main loop, doesn't reproduce it. The next device test is the stepped one in
+[DEVICE_TEST_LADDER.md](DEVICE_TEST_LADDER.md), on a diagnostic firmware that records any lockup; it
+hasn't run. Sections 2, 3 and 4 give what was built; the effects' own cost is now measured, but the
+CPU readings aren't in. Based on CE's source at `af01d47`, a reference build of it, and 1.2.0's
 `patch/masterfx` (mf8) compiled with CE's FPU flags. Section 3.13 of
 [CE_PORT_PLAN.md](CE_PORT_PLAN.md) points here.
 
@@ -356,36 +358,40 @@ Each one is a commit, tested in the emulator. Effort overall: M.
   the same commands as CE, On draws the lists and names, Left/Right stops, Delete, byte count.
 - **Stress:** 1.2.0's randomized sessions with switches, and guard bytes around the buffers.
 
-Emulator limits: it doesn't run boot, it doesn't model the cache (line counts are my stand-in),
-and it can't see the screen.
+Limits of these two: they don't run boot, the cache isn't modelled (line counts are my stand-in),
+and they can't see the screen. "What ran" below has what came after the lockup.
 
 ### Device test, first attempt: locked up on Play
 
 On 2026-11-04 the unit locked up when Play was pressed in the Pattern screen, on the first test
 project, and had to be unplugged. That project held 8 voices with Shimmer + BBD on from the first
-Play, and no other test ran. Nothing in the emulator reproduces it. What was ruled out, and how:
+Play, and no other test ran. Nothing in the emulator reproduces it. What the rig has shown so far:
 
 | Suspect | Result |
 | --- | --- |
-| A fault or hang on the real path | None. Project opened through CE's load steps with its own mods files, then `TrackerImpl::updateAudioBuffers` for 3,000 blocks, past the pattern's end |
+| A fault or hang on the real path | None. `boot_rig.py`: real boot, Open, Play button, main loop and interrupt, also with the interrupt fired inside main-loop code. Mods and reference, 8 held voices and the worst-case project |
 | Asserts, or writes over the code | None |
-| Failed audio allocations | None in 159,000 calls. The pool does reach 80 of 80 at 8 voices, on the reference build too |
+| Failed audio allocations | None. The pool peaks at 55 of 80 at 8 voices on the real path. The 80 of 80 first written here came from a rig that took a wrong path |
 | Unaligned accesses in our code (the emulator doesn't fault on them) | None, Shimmer and BBD |
 | Slow first block | No. After a clear, Shimmer and BBD cost about what any block does |
 | Loops that could spin | The effects have no `while` or `do` |
 | Power-up contents of the buffers | 0xA5 in all three before CE's clear gives the same output as zeros |
 | Stack | Largest effect frame 1,184 B, against 7,777 of 20,480 read on a device |
 
-That list only covers what the rig runs. The cause is still open, and these records from 1.2.0
+That list only covers what the rig runs, and the rig has no clock. The cause is still open, and these records from 1.2.0
 (Modular-Trackular) should have been read before the test project was made:
 
 - **8 voices were already known to overload stock.** `docs/TIMING_HEADROOM_PLAN.md` section 14: with
   Polyphony 3/3/2, stock read 107-110 % on the device, and with Shimmer and "Gated" 130 %. With 8
   voices allocated and nothing playing it read about 80 %. So this test project was over the limit
   by design, and section 3's "Not known yet" missed that.
-- **But overload alone didn't lock 1.2.0 up.** Those 130 % runs lasted about 3 minutes with glitches,
-  and Config stayed readable. So "the interrupt overruns and starves the main loop", as this plan
-  first said, isn't an explanation until CE is shown to behave differently.
+- **Overload is the leading suspect, not shown.** This section used to say overload alone didn't lock
+  1.2.0 up, because those 130 % runs lasted about 3 minutes and Config stayed readable. That was too
+  strong: 130 % is the worst block in each second, not an average, so those runs weren't sustained
+  overload. This project sounds all 8 voices on every block with the heaviest pair. If that takes
+  over 100 % block after block, the interrupt takes all the CPU, and the main loop, which reads the
+  buttons and the power button, never runs. That would look just like what happened. The diagnostic
+  firmware tells it apart from a fault or a stuck main loop.
 - **A masterfx hang the emulator passed has happened before.** `docs/FINDINGS.md` section 19: the first
   Freeverb hung the unit at boot while every emulator test passed, and needed the pinhole to power
   on. Stress runs found no stray writes or runaway loops, which pointed at timing: heavier DSP in the
@@ -413,18 +419,39 @@ use the model above: instructions, plus 350 cycles per SDRAM or flash line.
 
 CE's stock reverb is 32,233 instructions, so these are close to the estimates in section 3.
 
-### Device test: withdrawn
+### Device test: stepped, on a diagnostic firmware
 
 The four-step test written here on 2026-11-04 is withdrawn. It reused the firmware that locked up,
 with no fix and no way to tell why it stopped. Its reading of a plain 8-voice result was also wrong:
 over 100 % is what 1.2.0's records predict, so it wouldn't clear masterfx.
 
+[DEVICE_TEST_LADDER.md](DEVICE_TEST_LADDER.md) replaces it: `L1` to `L8`, lightest first, stopping at
+the first problem. The firmware adds only the recorder; with it off, the build is byte-identical to the
+one that locked up. The rest of the mod hasn't changed, so this test finds the cause and doesn't fix it.
+
 ### What ran
 
 `tools/emu/test_masterfx.py` covers the effects themselves, `tools/emu/test_masterfx_rig.py` the
 page, graph, stress, encoder wait, test project and Play path, and `tools/emu/test_sound_rig.py` the
-rig. Not covered, and left to the device: boot itself, CPU, the real screen, and the main loop while
-playing.
+rig. After the lockup, on the firmware going to the device (`tools/run_tests.py --tier release`, all
+passing, 2026-11-04):
+
+| Test | Ran | Result |
+| --- | --- | --- |
+| `boot_rig.py`, real boot, Open, Play button, main loop | Mods and reference, 8 held voices and the worst-case project, 300 blocks | No fault, hang or failed malloc. Pool 55 of 80, heap steady, stack 7,280 |
+| The same, interrupt fired inside main-loop code | 8 held voices, mods and reference: about 9,900 interrupts in the main loop. Worst case, mods, reference and diagnostic: about 4,500 | Same |
+| Ladder projects on the diagnostic build | `L1` to `L8`, 200 main loops each, about 1,700 interrupts in the main loop | Same, with the effects and notes each should have. Pool 49 at 1 and 4 voices, 55 at 8 |
+| `stress_masterfx.py` | 20,000 blocks with garbage settings and memory guards | No stray access; each effect recovers |
+| `test_bundle_cost.py` | Own code only | Heaviest effects 48,379 (Shimmer) and 23,261 (BBD) instructions a block, about the same right after a clear. No unaligned word access. The mods add at most 1,753 instructions to the sequencer's worst block, 83 on average |
+| `test_lockup_recorder.py` | Each recorder path on the diagnostic build | Passes |
+
+Still not covered, so left to the device: anything that takes real time (CPU, overload, what a long
+interrupt does to the screen, card and buttons), the real screen, the card's timing, the cache, a real
+fault reaching the recorder's handlers, and the record surviving a real reset.
+
+On the worst-case project one main loop during Play is about 360,000 instructions, against about
+11,000 with held notes. It's the same on the reference build, and I don't know yet what share of a
+device's time that is.
 
 The first device test went ahead without the Play path, though
 [SOUND_TEST_PLAN.md](SOUND_TEST_PLAN.md) called for `Sequencer::tick` on mod tests. A device test
@@ -490,6 +517,10 @@ Answered 2026-11-04:
 
 ## 11. Added beyond the brief
 
+- For the re-think of the tests after the lockup: `tools/run_tests.py`, `tools/emu/boot_rig.py`,
+  `tools/emu/stress_masterfx.py`, `tools/emu/test_bundle_cost.py`, the lockup recorder
+  (`MT_LOCKUP_RECORDER`, in no normal build), its log line for each Stop, and the test project maker's
+  `--worst`, `--effects` and `--ladder`.
 - Clearing in the main loop instead of per block, and the 150 ms wait on the encoder. This changes
   1.2.0's behaviour: the interrupt carries no clearing load, and a switch takes effect just after
   you stop turning.

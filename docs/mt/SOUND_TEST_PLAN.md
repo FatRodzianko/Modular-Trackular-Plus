@@ -222,7 +222,7 @@ Each stage is written with the mod that first needs it, and reused after that.
 | 0 | Now | This plan. Mod tests run on a full build too | `test_step0.py` and `test_humanize.py` pass on a full build (they do) |
 | 1 | masterfx for the rig, and the synths for level A | `sound_rig.py`, the symbol guard, reference build. **Built, level A isn't** | All 7 engines: note gives sound, note off gives silence, same twice, Off = CE |
 | 2 | interpolate | Parameters and Macros at level B | A ramp moves the sound on CHIP and on a closed engine |
-| 3 | masterfx | Level C, object-level effect rig, WAV output. **Built** | The Master FX checks, and the block pool at 8 voices: 65 of 80, the same as stock |
+| 3 | masterfx | Level C, object-level effect rig, WAV output. **Built** | The Master FX checks, and the block pool at 8 voices: 55 of 80 on the real path (`boot_rig.py`) |
 | 4 | resample | Recorder tap at level C | Recorded blocks equal the source |
 | 5 | synths | Everything under [Our engines](#our-engines-wave-phase-later-ones-and-chip), ported from `test_synths.py` | WAVE and PHASE match their 1.2.0 references |
 
@@ -263,7 +263,13 @@ measurements.
 It opens a real project through CE's load steps and its mods files, presses Play, and runs
 `TrackerImpl::updateAudioBuffers`, so the sequencer plays the notes. `SoundRig` now uses TrackerImpl's
 own `Synth`, which that path needs. Every mod test that touches audio or the sequencer should go
-through it before a device test. The main loop while playing still isn't covered.
+through it before a device test.
+
+**Added after that lockup, 2026-11-04:** `BootRig` in `tools/emu/boot_rig.py` on top of it, with real boot,
+real Open with samples, the Pattern screen's Play button, the main loop while playing, heap and stack,
+and `--preempt` to fire the audio interrupt inside main-loop code. `tools/run_tests.py --tier release`
+runs it. The rig still has no clock, so it can't show overload or anything else that takes real time;
+[DEVICE_TEST_LADDER.md](DEVICE_TEST_LADDER.md) covers that.
 
 **Not tried yet:**
 - `artificial_isr` and `renderMode`.

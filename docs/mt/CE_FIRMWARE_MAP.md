@@ -307,7 +307,10 @@ for `platforms/imx` only, whose largest frame is 592 bytes. `core/` has no `.su`
 SDRAM reads as nearly full only because CE gives whatever is left to one constant. Its comment,
 "~60 MB minus 64 KB for pattern buffers", shows Polyend already carving from it the same way.
 Mod builds lower it by 1 MiB under `MT_MODS` (`mtStructs.h`); a project file doesn't store the
-limit, and builds with `MT_NO_MODS` stay byte-identical to upstream CE.
+limit, and builds with `MT_NO_MODS` stay byte-identical to upstream CE. A new source file in
+`platforms/imx/source` breaks that by changing the link order, even with its contents compiled out
+(same size, 3,142 bytes differ), so flagged chip code goes in an existing file there. New files in
+`core/mods` don't.
 
 ### What the whole 1.2.0 mod set needed
 

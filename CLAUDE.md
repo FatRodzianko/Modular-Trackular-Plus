@@ -48,6 +48,10 @@ Many `core/` files are CRLF in the blob and a few are mixed; keep each file's st
 
 ## Tests and the closed synth libraries
 
+Tests stay under 75 % of the CPU unless the user says otherwise. `tools/emu/cpu_limit.py` enforces it for anything that imports `machine.py` and for `tools/run_tests.py`; anything else long-running has to hold to it too.
+
+Before planning a mod's tests, read `docs/mt/PAST_FAILURES.md`. Before any device test, `tools/run_tests.py --tier release`, then the steps in `docs/mt/DEVICE_TEST_LADDER.md`. A pass doesn't mean safe on the unit: say what ran, what didn't, and the risk.
+
 Run mod tests on a full build, with `libPolySynth.a` and `libPolyDSP.a` in. Their licence allows it, but section 2(c) bans reverse engineering, so they're a black box: no disassembly, no tracing, no hooks inside them, no reading their objects by offset, and no measuring an engine to work out how it works. Sound test plan, including when each part gets built: `docs/mt/SOUND_TEST_PLAN.md`. CPU cost is measured on the device with the Profiler, with all 8 synth voices sounding.
 
 ## PRs to polyend/tracker-ce

@@ -110,6 +110,10 @@ Cpu mainCpu;
 const uint32_t end_dummy[4096] __attribute__((section(".end")))
 __attribute__((used)) = { 0xdeadbeef };
 
+#ifdef MT_LOCKUP_RECORDER // MT: diagnostic builds
+extern "C" void mtLockupBeat();
+#endif
+
 int main(void)
 {
     /* Init board hardware. */
@@ -146,6 +150,9 @@ int main(void)
 
     while (1)
     {
+#ifdef MT_LOCKUP_RECORDER // MT: diagnostic builds
+        mtLockupBeat();
+#endif
         usb->update();
 #ifdef BLINK_LED_ENABLED
         if (timeControl.millis() > timeCounterMs + kLedTestBlinkTimeMs)
