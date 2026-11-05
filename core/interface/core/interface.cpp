@@ -563,6 +563,11 @@ void Interface::toggleActiveModule(uint8_t state)
                 uint32_t prevModuleOptions = previousModuleOptions;
 
                 activateModule(prevModule, prevModuleOptions);
+
+                // Hiding the module recorded it as its own predecessor. Put back the one
+                // it had, or it can no longer switch back to the previous module.
+                previousModule = moduleBeforeToggle;
+                previousModuleOptions = moduleBeforeToggleOptions;
                 return;
             }
         }
@@ -571,6 +576,9 @@ void Interface::toggleActiveModule(uint8_t state)
     {
         if (onScreenModule != nullptr)
         {
+            moduleBeforeToggle = previousModule;
+            moduleBeforeToggleOptions = previousModuleOptions;
+
             mtInterface.deactivateModule(onScreenModule);
             toggledState = 1;
         }
