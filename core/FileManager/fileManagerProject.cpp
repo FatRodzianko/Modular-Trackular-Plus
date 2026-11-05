@@ -401,11 +401,17 @@ void cFileManager::getCurrentProjectPathWithName(char* path, int maxLen)
     strncat(path, currentProjectName, nameMaxLen);
 }
 
-void cFileManager::createCurrentProjectFolderTree()
+bool cFileManager::createCurrentProjectFolderTree()
 {
     char fullProjectPath[PATCH_SIZE];
     getCurrentProjectPathWithName(fullProjectPath, PATCH_SIZE);
     char tempPath[PATCH_SIZE];
+
+    // A pass creates the next missing folder of the path, so one pass per character is
+    // always enough. The limit ends the loop for a path that never comes to exist even
+    // though no mkdir fails.
+    int passesLeft = strlen(fullProjectPath);
+    bool mkdirFailed = false;
 
     while (1)
     {
@@ -413,7 +419,12 @@ void cFileManager::createCurrentProjectFolderTree()
         tempPath[PATCH_SIZE - 1] = 0;
         if (fileSystem->exists(tempPath))
         {
-            break;
+            return true;
+        }
+
+        if (mkdirFailed || passesLeft-- <= 0)
+        {
+            return false;
         }
 
         int pathLen = strlen(tempPath);
@@ -433,7 +444,7 @@ void cFileManager::createCurrentProjectFolderTree()
                 {
                     strncpy(tempPath, fullProjectPath, PATCH_SIZE);
                     tempPath[lastSlash] = 0;
-                    fileSystem->mkdir(0, tempPath);
+                    mkdirFailed |= !fileSystem->mkdir(0, tempPath);
                 }
             }
             pathLen--;

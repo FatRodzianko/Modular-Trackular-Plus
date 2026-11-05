@@ -115,7 +115,11 @@ float ProjectSave::getProgress()
 //=================================================================================================
 void ProjectSave::saveProjectInit()
 {
-    newFileManager.createCurrentProjectFolderTree();
+    if (!newFileManager.createCurrentProjectFolderTree())
+    {
+        operationError();
+        return;
+    }
 
     char projectSavePath[PATCH_SIZE];
     volatile int pathSize = sizeof(projectSavePath);
