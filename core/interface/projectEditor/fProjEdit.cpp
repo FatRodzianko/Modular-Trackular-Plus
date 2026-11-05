@@ -1635,6 +1635,12 @@ static void makeMoveOnActiveList(int16_t moveDir)
         PE->currentBrowserMode == cProjectEditor::kOpenMod ||
         PE->currentBrowserMode == cProjectEditor::kSaveAsProject)
     {
+        // An empty list has no entry to move to; the clamp below would give position -1.
+        if (PE->fileBrowserData.browserListLength <= 0)
+        {
+            return;
+        }
+
         PE->fileBrowserData.browserListPosition =
           clamp<int>(PE->fileBrowserData.browserListPosition + moveDir,
                      0,
