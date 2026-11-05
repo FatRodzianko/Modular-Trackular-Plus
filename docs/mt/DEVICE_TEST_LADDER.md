@@ -86,11 +86,8 @@ optimisations.
 
 | Project | Voices | What it isolates |
 |---|---|---|
-| `L1 1 voice none` | 1 | The firmware itself |
-| `L6 4 voices Shimmer BBD` | 4 | Against the old 89 % |
-| `L7 8 voices none` | 8 | Stalled before the fix |
 | `L8 8 voices Shimmer BBD` | 8 | The load that locked up |
-| `R1 Real project` | The project's own | A real project with its own Shimmer + BBD from `masterfx.bin` |
+| `R2 Real project sends` | The project's own | A real project with its own Shimmer + BBD, and every instrument and part sending 40 to both. The source's samples send nothing |
 | `A1 Master FX sound` | 1 | Short notes with gaps, to hear each effect and check the screens |
 
 ## What a firmware comes with

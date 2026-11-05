@@ -22,8 +22,9 @@ writes that file's second set: all three parts on one engine with its Init patch
 on the source project's sound. The engine comes from project.mt's synthType, not from the patch file.
 
 --sound writes that file's last set. `A1 Master FX sound` is one voice of ACD Init with a short note every 16
-steps, so the gaps let the reverb and delay be heard, with no masterfx.bin. `R1 Real project` is the source
-itself with only its name changed, its patterns and its own masterfx.bin kept.
+steps, so the gaps let the reverb and delay be heard, with no masterfx.bin. `R2 Real project sends` is the source
+with its patterns and masterfx.bin kept, and every instrument and synth part sending to both effects: hellish
+downtown's samples send nothing, so without this its effects would have nothing to process.
 
 Every voice sounds all the time here, which is a CPU test and no kind of normal song: 8 held voices
 take the audio pool to its limit on a build without masterfx too.
@@ -63,6 +64,9 @@ STEP_VOLUME_AT = 6                      # note, instrument, 2 fx of 2 bytes, vol
 SOUND_NOTES = (48, 55, 60, 67)
 SOUND_VOLUME = 60                       # one voice, so still below the 8 held voices at 30
 NOTE_OFF_DEFAULT = 0xFC                 # Sequencer::STEP_NOTE_OFF_DEFAULT, -4
+REAL_SEND = 40
+INSTRUMENT_DELAY_SEND = ce.INSTRUMENT + 262    # strInstrument::delaySend
+INSTRUMENT_REVERB_SEND = ce.INSTRUMENT + 368   # strInstrument::reverbSend
 
 
 def held(voices=VOICES) -> tuple:
@@ -206,15 +210,24 @@ def make_sound(source: Path, parent: Path) -> list:
     for path in (sound / "patterns").glob("pattern_*.mtp"):
         path.write_bytes(sound_pattern())
 
-    name = "R1 Real project"
+    name = "R2 Real project sends"
     real = parent / name
     if real.exists():
         raise ce.Refused(f"{real} already exists, and I won't write over it.")
     shutil.copytree(source, real)
     mt = bytearray((real / "project.mt").read_bytes())
     mt[ce.PROJECT_NAME:ce.PROJECT_NAME + ce.PROJECT_NAME_SIZE] = name.encode("ascii").ljust(ce.PROJECT_NAME_SIZE, b"\0")
+    for slot in range(3):
+        record = ce.SLOT_RECORDS + slot * ce.SLOT_RECORD_SIZE
+        struct.pack_into("<f", mt, record + SLOT_REVERB_SEND, float(REAL_SEND))
+        struct.pack_into("<f", mt, record + SLOT_DELAY_SEND, float(REAL_SEND))
     mt[PROJECT_CRC:PROJECT_CRC + 4] = bytes(4)
     (real / "project.mt").write_bytes(mt)
+    for path in (real / "instruments").glob("*.pti"):
+        data = bytearray(path.read_bytes())
+        data[INSTRUMENT_DELAY_SEND] = data[INSTRUMENT_REVERB_SEND] = REAL_SEND
+        data[ce.INSTRUMENT_CRC:ce.INSTRUMENT_CRC + 4] = bytes(4)  # as 1.2.0 writes it; CE doesn't check it
+        path.write_bytes(data)
     return [sound, real]
 
 

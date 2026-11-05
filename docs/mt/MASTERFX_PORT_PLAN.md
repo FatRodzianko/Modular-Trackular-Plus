@@ -511,9 +511,10 @@ passing, 2026-11-04):
 The same 24 passed again, 0 failed, on the firmware for the fourth set in
 [DEVICE_TEST_LADDER.md](DEVICE_TEST_LADDER.md): this branch with the CHIP fix and upstream's optimisations of
 2026-11-05. Its reference build is byte-identical to upstream `main` with `ChiptuneSynthVoice.cpp` from
-polyend/tracker-ce#52. `boot_rig.py` opened and played `A1` and `R1` with the right parts and effects, with no fault.
-`R1`'s output is silent on the rig, on the reference build too, so the rig says nothing about how it sounds. The
-rig has no model of the display's SPI bus, so upstream's rewrite of it is left to the device.
+polyend/tracker-ce#52. `boot_rig.py` opened and played `A1` and `R2` with the right parts and effects, with no fault.
+`R2`'s output is silent on the rig, on the reference build too, so the rig says nothing about how it sounds. On `A1`, 300 blocks
+with Shimmer + BBD give different output from Stock, with the same peak and 0.4 dB less energy, so its sends reach
+the effects on the real path and add no level. The rig has no model of the display's SPI bus, so upstream's rewrite of it is left to the device.
 
 Still not covered, so left to the device: anything that takes real time (CPU, overload, what a long
 interrupt does to the screen, card and buttons), the real screen, the card's timing, the cache, a real
