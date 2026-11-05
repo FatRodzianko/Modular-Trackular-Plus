@@ -191,7 +191,7 @@ void cFileManager::browseCurrentLocation()
 
 void cFileManager::listOnlyFolderNames()
 {
-    uint8_t allFoldersNum;
+    int allFoldersNum;
     uint8_t parentFolder = explorerDirLevel == 0 ? 0 : 1;
     FileSystem::enListFileFilter folderSizeFilter = FileSystem::enListFileFilter_all;
 
@@ -213,9 +213,13 @@ void cFileManager::listOnlyFolderNames()
                                                 list_length_max - 1,
                                                 folderSizeFilter);
 
-    explorerFolderCount = allFoldersNum - parentFolder;
+    // A folder that cannot be opened is shown as an empty one, which leaves the way back up.
+    // The list still holds the entries of the previous folder then and has to be cleared here.
+    bool listFailed = allFoldersNum == FileSystem::kListError;
 
-    if (explorerCurrentOffset != 0)
+    explorerFolderCount = listFailed ? 0 : allFoldersNum - parentFolder;
+
+    if (explorerCurrentOffset != 0 || listFailed)
     {
         allFoldersNum = parentFolder;
 
@@ -247,7 +251,7 @@ void cFileManager::listOnlyWavFromActualPath()
 
     if (listWavStage == 0) // stage 0
     {
-        uint8_t filesFound =
+        int filesFound =
           fileSystem->createFilesList(explorerCurrentPath,
                                       0,
                                       explorerList + explorerListLength,
