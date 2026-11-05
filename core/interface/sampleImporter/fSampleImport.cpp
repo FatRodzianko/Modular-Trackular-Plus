@@ -988,7 +988,7 @@ static void functConfirmRename()
             // SI->displayDelete(SI->selectedPlace);
 
             //	fileManager.setInstrumentChangeFlag(mtProject.values.lastUsedInstrument);
-            newFileManager.setInstrumentStructChanged(mtProject.values.lastUsedInstrument);
+            newFileManager.setInstrumentStructChanged(SI->selectedSlot);
 
             SI->keyboardManager.deactivateKeyboard();
         }
