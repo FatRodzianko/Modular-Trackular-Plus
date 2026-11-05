@@ -371,6 +371,13 @@ void cPerformEngine::loadSlotFxValues(uint8_t slot)
         return;
     }
 
+    // Row 4 marks a slot driven by MIDI CC. It has no stored value to load: the value in
+    // use came from the controller.
+    if (slotToRow[slot] >= 4)
+    {
+        return;
+    }
+
     slotsTempValues[slot] = *(slotRowToValue + (slot * 4) + slotToRow[slot]);
 
     int fxIdx = slotToFx[slot];
@@ -500,7 +507,9 @@ void cPerformEngine::changeSlotFxValue(uint8_t slot, int16_t value)
     else
         slotsTempValues[slot] += value;
 
-    if (editState && slotToRow[slot] > 0) // zapis jesli edit mode, tylko jesli nie pierwszy wiersz
+    // The CC row (4) has no place in the table of saved values.
+    bool rowIsSaved = slotToRow[slot] > 0 && slotToRow[slot] < 4;
+    if (editState && rowIsSaved) // zapis jesli edit mode, tylko jesli nie pierwszy wiersz
     {
         *(slotRowToValue + (slot * 4) + slotToRow[slot]) = slotsTempValues[slot];
         if (sourceDataSaveFunct != nullptr)
