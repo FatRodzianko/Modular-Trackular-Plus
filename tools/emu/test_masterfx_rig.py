@@ -340,7 +340,7 @@ def test_ui(mods, ref):
     stock_title = [e[1] for e in log if e[0] == "title"]
     p.press("cancel")
 
-    words = {1: ("Delay: Tape", "Intensity", "Tone"), 2: ("Delay: BBD", "Feedback", "Tone")}
+    words = {1: ("Delay: Tape", "Feedback", "Filter"), 2: ("Delay: BBD", "Feedback", "Filter")}
     for choice, (title, feedback, tone) in words.items():
         p.m.write(p.m.addr(SETTINGS) + 1, bytes([choice]))
         p.take_log()

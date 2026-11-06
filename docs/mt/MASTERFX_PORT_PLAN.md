@@ -277,8 +277,7 @@ A flash table per effect, applied in `showReverbScreen` and `showDelayScreen` wi
 | Spring | Size → Decay, Diffusion → Drip |
 | Shimmer | Size → Decay, Damping → Tone, Diffusion → Shimmer |
 | "Gated", Reverse | Size → Length, Damping → Tone, Diffusion → Release |
-| Tape | Feedback → Intensity, Filter → Tone |
-| BBD | Filter → Tone |
+| Tape, BBD | None. They were Intensity and Tone until 2026-11-05: Tape's Intensity is the stock Feedback value, and Tone is the stock Filter, a real lowpass in Hz |
 
 Values still show as CE shows them: Size is a percentage, not a time.
 
@@ -605,7 +604,8 @@ Answered 2026-11-04:
 1. **UI:** Master page only for now (options B and C). A stays possible later.
 2. **Rig:** built with masterfx: stage 1 and stage 3's level C. Level A and later stages stay with
    their mods.
-3. **Names:** no changes, so section 4's table stands.
+3. **Names:** no changes, so section 4's table stands. After the device test, Tape and BBD went back to Feedback and
+   Filter, at the user's choice.
 4. **ITCM:** left to me: 5.3 KB, Shimmer and BBD, with the project-wide table in section 3.
 
 ## 11. Added beyond the brief

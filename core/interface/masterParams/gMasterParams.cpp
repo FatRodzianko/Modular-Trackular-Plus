@@ -288,8 +288,8 @@ constexpr MasterfxReverbWords kMasterfxReverbWords[mods::masterfx::kReverbCount]
 };
 constexpr MasterfxDelayWords kMasterfxDelayWords[mods::masterfx::kDelayCount] = {
     { "Master Delay", "Feedback", "Filter" },
-    { "Delay: Tape", "Intensity", "Tone" },
-    { "Delay: BBD", "Feedback", "Tone" },
+    { "Delay: Tape", "Feedback", "Filter" },
+    { "Delay: BBD", "Feedback", "Filter" },
 };
 
 } // namespace

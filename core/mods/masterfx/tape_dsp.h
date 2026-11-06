@@ -15,17 +15,17 @@
  *    6.3 Hz and 0.13 Hz; about 0.35 %, 0.18 % and 0.1 % of pitch, or 6, 3 and 1.7
  *    cents), interpolated across the block. The playback head reads between samples
  *    (4-point Hermite interpolation).
- *  - Intensity: the stock Feedback byte (0..252) sets the loop gain, up to 1.04
+ *  - Feedback: the stock Feedback byte (0..252) sets the loop gain, up to 1.04
  *    at the top, so the echoes can build up and sustain as on a Space Echo; the record
  *    head's saturation keeps them from growing without limit.
- *  - Tone: the stock Filter's one-pole lowpass (its pole, from the Q10 coefficient)
+ *  - Filter: the stock Filter's one-pole lowpass (its pole, from the Q10 coefficient)
  *    on the playback head, so every repeat, the first one included, is filtered
  *    as with the stock delay; the tape's own high-frequency loss, a one-pole lowpass at
  *    7 kHz on the record head, so every pass round the loop is a little darker; and a
  *    70 Hz low cut in the feedback, so repeats get thinner as they go round.
  *  - Saturation: the record head is driven 1.7 times into a soft clip (u - 4u^3/27, flat
  *    from 1.5 on) and scaled back, so ordinary send levels pick up a little harmonic
- *    warmth, and loud sends and high Intensity compress instead of clipping hard.
+ *    warmth, and loud sends and high Feedback compress instead of clipping hard.
  *  - PingPong: off, tape A only (also written to tape B), the same echo on both
  *    sides, like the mono original; on, the two tapes feed each other, so the repeats
  *    alternate right and left (the first on the right), as the stock delay's do.
