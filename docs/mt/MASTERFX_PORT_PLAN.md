@@ -191,8 +191,8 @@ Measured on the build, with `tools/mem_budget.py`:
 
 | Region | Cost | Free now | Floor |
 |---|---|---|---|
-| Flash | 19,384 B | 14,876,900 B | 1 MiB |
-| ITCM | 5,584 B | 11,040 B | 1,024 B |
+| Flash | 19,384 B | 14,876,972 B | 1 MiB |
+| ITCM | 5,584 B | 11,112 B | 1,024 B |
 | DTCM | 1,144 B | 15,480 B gap | 4,096 B |
 | SDRAM | 0: CE's own buffers | 1,042,508 B | 256 KiB |
 | OCRAM, heap | 0 | 9,556 B OCRAM | Mods stay out |

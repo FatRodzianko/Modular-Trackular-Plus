@@ -136,6 +136,8 @@ def jobs_for(args, projects):
                 jobs.append(Job(f"boot {label} {firmware}", boot, axf, folder, "--blocks", 300, inputs=[axf, folder]))
                 jobs.append(Job(f"preempt {label} {firmware}", boot, axf, folder, "--blocks", worst_loops[label],
                                 "--preempt", "3000,120000", "--preempt-play", play_gaps, inputs=[axf, folder]))
+        jobs.append(Job("send leak", e / "test_send_leak.py", mods, ref, projects["held"],
+                        inputs=[mods, ref, projects["held"]]))
         jobs.append(Job("cost", e / "test_bundle_cost.py", mods, ref, projects["worst"], inputs=[mods, ref, projects["worst"]]))
     return jobs
 

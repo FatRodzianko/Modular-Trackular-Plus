@@ -241,8 +241,8 @@ the 1 MiB taken from sample memory.
 
 | Region | Size | Plain CE free | Mods free | Floor | Notes |
 | --- | --- | --- | --- | --- | --- |
-| Flash | 16,580,608 | 14,909,748 | 14,876,900 | 1 MiB | 1.2.0 images up to 8 MB flashed whole |
-| ITCM | 131,064 | 16,672 | 11,040 | 1,024 | closed libs, audio code, masterfx's 5,584 |
+| Flash | 16,580,608 | 14,909,748 | 14,876,972 | 1 MiB | 1.2.0 images up to 8 MB flashed whole |
+| ITCM | 131,064 | 16,672 | 11,112 | 1,024 | closed libs, audio code, masterfx's 5,584 |
 | DTCM unreserved | gap | 17,432 | 15,480 | 4,096 | heap end to stack base |
 | OCRAM | 32,768 | 9,556 | 9,556 | 1,024 | mods stay out |
 | SDRAM unreserved | 67,108,864 | 12,716 | 1,042,508 | 256 KiB | the pool takes all the rest in plain CE |

@@ -1,9 +1,14 @@
 #include "ampLogarythmicValues.h"
+#include "modsBuild.h" // MT:
 #include "mtAudioEngine.h"
 #include "mtSequencer.h"
 #include "polyassert.h"
 
 using namespace mtAudioEngineConstans;
+
+#if MT_MODS // MT: as modDelaySend and modReverbSend count them
+static constexpr int kInputsChannels = 2;
+#endif
 
 //********************************** NOTE_ON
 uint8_t playerEngine ::noteOn(uint8_t instr_idx, int8_t note, int8_t _velocity)
@@ -489,6 +494,10 @@ AUDIO_CORE_RAM void playerEngine::handleNoteOnDelaySend()
     {
         preDelayMixer->gain(nChannel, 0.0f);
         preDelayMixer->gain(nChannel, 0.0f);
+#if MT_MODS // MT: the right send too, or this note's first block goes out on the last note's send
+        preDelayMixer->gain(nChannel + audioEngine::kVoices + kInputsChannels, 0.0f);
+        preDelayMixer->gain(nChannel + audioEngine::kVoices + kInputsChannels, 0.0f);
+#endif
     }
     setRefreshBit(DELAY_SEND_MASK);
 }
@@ -500,6 +509,10 @@ AUDIO_CORE_RAM void playerEngine::handleNoteOnReverbSend()
     {
         prePolyverbMixer->gain(nChannel, 0.0f);
         prePolyverbMixer->gain(nChannel, 0.0f);
+#if MT_MODS // MT: the right send too, or this note's first block goes out on the last note's send
+        prePolyverbMixer->gain(nChannel + audioEngine::kVoices + kInputsChannels, 0.0f);
+        prePolyverbMixer->gain(nChannel + audioEngine::kVoices + kInputsChannels, 0.0f);
+#endif
     }
 
     setRefreshBit(REVERB_SEND_MASK);
