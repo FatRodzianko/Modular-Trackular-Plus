@@ -4,8 +4,8 @@ Status: steps 1 to 4 are built and pass in the emulator, 2026-11-04. Step 5, the
 locked up the unit on Play. The stepped device test, 2026-11-05, found why: sustained overload of the
 audio interrupt, which also happens with Master FX on Stock, so Master FX isn't the cause. The load was
 CHIP: every other engine ran 8 voices, and so did Shimmer + BBD on ACD. CHIP is now fixed, and this branch has
-the fix and upstream's optimisations of 2026-11-05. On that firmware the unit ran the load that locked up, a real
-project through Shimmer + BBD, and every effect, with no problem. Section 8 has the readings. Sections 2, 3 and 4 give what was
+upstream's `main` of 2026-11-06, CHIP fix included. On firmware before that merge the unit ran every effect, and on
+both the load that locked up and a real project through the effects, with no problem. Section 8 has the readings. Sections 2, 3 and 4 give what was
 built. Based on CE's source at `af01d47`, a reference build of it, and 1.2.0's
 `patch/masterfx` (mf8) compiled with CE's FPU flags. Section 3.13 of
 [CE_PORT_PLAN.md](CE_PORT_PLAN.md) points here.
@@ -503,6 +503,23 @@ record. The log's project names are from the order of the plays, and its `voices
 Not asked for on the unit: `L1`, `L6` and `L7`, lighter than `L8`, nor the Reverb and Delay pages' knobs, Delete and
 the Off/On switch as set steps. Those three have the emulator's UI tests. No Export or Saving test.
 
+### Device test: with upstream's `main` of 2026-11-06
+
+`TrackerPlus_mfx_main_recorder.ptf`, from `/mfx_log.txt`. 36,910 blocks, none over time, no stall and no lockup record.
+Lowest free heap 79,116 B, pool peak 42 of 80, max stack 7,729 of 20,480.
+
+| Project | Length | Average | Slowest | Longest main loop gap | Free heap |
+| --- | --- | --- | --- | --- | --- |
+| `L8 8 voices Shimmer BBD` | 22 s | 60 % | 78 % | 14 ms | 79,116 B |
+| `R2 Real project sends`, effects switched while playing | 45 s | 38 % | 54 % | 18 ms | 81,044 B |
+| `R2`, Shimmer + BBD | 22 s | 39 % | 50 % | 13 ms | 81,044 B |
+
+- `L8` is 4 points lower than before the merge, on both figures. Upstream's further work on CHIP is the likely reason,
+  as this project sounds CHIP. That isn't shown separately.
+- `R2` loaded and played normally with samples in RAM by default, and its figures didn't rise.
+- The user read about 78 % on `L8`, as the log has. On `R2` the user read about 50 %, and up to about 66 % while switching
+  effects, recalled from the Config screen. The log's slowest is 54 %, and the gap hasn't been looked into.
+
 ### The stepped device test
 
 The four-step test written here on 2026-11-04 is withdrawn. It reused the firmware that locked up,
@@ -538,8 +555,7 @@ with Shimmer + BBD give different output from Stock, with the same peak and 0.4 
 the effects on the real path and add no level. The rig has no model of the display's SPI bus, so upstream's rewrite of it is left to the device.
 
 The same 24 passed again, 0 failed, with upstream's `main` of 2026-11-06 merged, which has the CHIP fix itself, samples
-in RAM by default and the USB storage changes. Its reference build is byte-identical to `main`. That firmware hasn't
-been on the unit, so its readings for `L8` and `R2` are still to come.
+in RAM by default and the USB storage changes. Its reference build is byte-identical to `main`.
 
 Still not covered, so left to the device: anything that takes real time (CPU, overload, what a long
 interrupt does to the screen, card and buttons), the real screen, the card's timing, the cache, a real
