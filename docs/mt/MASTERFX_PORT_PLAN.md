@@ -484,12 +484,22 @@ of that reading.
 
 ### Device test: after the CHIP fix, 2026-11-05
 
-`TrackerPlus_mfx_fixed_recorder.ptf`, the user's readings from the screen. The recorder's log wasn't read for this.
+`TrackerPlus_mfx_fixed_recorder.ptf`, from `/mfx_log.txt`. 67,057 blocks, none over time, no stall and no lockup
+record. The log's project names are from the order of the plays, and its `voices` field still has the old bug.
 
-- `L8 8 voices Shimmer BBD`, the load that locked up: worked, about 80 % CPU.
-- `R2 Real project sends`: worked, about 60 % CPU.
-- `A1 Master FX sound`, Master FX switched On, each reverb and delay chosen on the Master screen and played: all
-  seemed to work.
+| Project | Length | Average | Slowest | Longest main loop gap | Free heap |
+| --- | --- | --- | --- | --- | --- |
+| `R1`, no sends, Shimmer + BBD | 21 s | 37 % | 55 % | 11 ms | 80,780 B |
+| `L8 8 voices Shimmer BBD`, the load that locked up | 15 s | 64 % | 82 % | 16 ms | 79,244 B |
+| `R2 Real project sends`, Shimmer + BBD | 31 s | 38 % | 54 % | 10 ms | 80,840 B |
+| `A1 Master FX sound`, stepping through the effects | 120 s | 20 % | 30 % | 16 ms | 85,392 B |
+
+- Before the fix, `L8` read about 109 % when it stalled.
+- Lowest free heap 77,344 B, on a short Play of `L8` repeated by hand. Pool peak 42 of 80, max stack 7,825 of 20,480.
+- The user read about 80 % on `L8`, which agrees with the log, and about 60 % on `R2`, a little over the log's 54 %.
+- `R1` and `R2` differ by 1 point at most, so these effects cost about the same with or without input.
+- By ear, `A1` with each reverb and delay chosen on the Master screen: all seemed to work. A line in the log gives only
+  the pair active at Stop, so the log doesn't confirm each effect separately.
 
 Not asked for on the unit: `L1`, `L6` and `L7`, lighter than `L8`, nor the Reverb and Delay pages' knobs, Delete and
 the Off/On switch as set steps. Those three have the emulator's UI tests. No Export or Saving test.
