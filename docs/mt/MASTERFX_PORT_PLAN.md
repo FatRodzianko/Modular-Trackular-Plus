@@ -4,8 +4,8 @@ Status: steps 1 to 4 are built and pass in the emulator, 2026-11-04. Step 5, the
 locked up the unit on Play. The stepped device test, 2026-11-05, found why: sustained overload of the
 audio interrupt, which also happens with Master FX on Stock, so Master FX isn't the cause. The load was
 CHIP: every other engine ran 8 voices, and so did Shimmer + BBD on ACD. CHIP is now fixed, and this branch has
-the fix and upstream's optimisations of 2026-11-05. That firmware passes the release tests and hasn't been on the
-unit, and Master FX's sound hasn't been checked there. Section 8 has the readings. Sections 2, 3 and 4 give what was
+the fix and upstream's optimisations of 2026-11-05. On that firmware the unit ran the load that locked up, a real
+project through Shimmer + BBD, and every effect, with no problem. Section 8 has the readings. Sections 2, 3 and 4 give what was
 built. Based on CE's source at `af01d47`, a reference build of it, and 1.2.0's
 `patch/masterfx` (mf8) compiled with CE's FPU flags. Section 3.13 of
 [CE_PORT_PLAN.md](CE_PORT_PLAN.md) points here.
@@ -481,6 +481,18 @@ of that reading.
 - **Master FX adds 2 points at 8 voices of ACD,** with the same slowest block.
 - **These are Init patches.** A real patch on the same engine can cost more or less, and 1.2.0's records
   show 8 voices over 100 % on real patches. Nothing here promises every project fits.
+
+### Device test: after the CHIP fix, 2026-11-05
+
+`TrackerPlus_mfx_fixed_recorder.ptf`, the user's readings from the screen. The recorder's log wasn't read for this.
+
+- `L8 8 voices Shimmer BBD`, the load that locked up: worked, about 80 % CPU.
+- `R2 Real project sends`: worked, about 60 % CPU.
+- `A1 Master FX sound`, Master FX switched On, each reverb and delay chosen on the Master screen and played: all
+  seemed to work.
+
+Not asked for on the unit: `L1`, `L6` and `L7`, lighter than `L8`, nor the Reverb and Delay pages' knobs, Delete and
+the Off/On switch as set steps. Those three have the emulator's UI tests. No Export or Saving test.
 
 ### The stepped device test
 

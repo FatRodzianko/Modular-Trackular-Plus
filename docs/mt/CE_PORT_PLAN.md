@@ -575,7 +575,7 @@ id stays unused. The notes below are what was built.
   test in [DEVICE_TEST_LADDER.md](DEVICE_TEST_LADDER.md) found sustained overload from CHIP, which also
   happens with Master FX on Stock, and Master FX adds 2 to 3 points; see section 8 of its plan. CHIP is fixed
   (polyend/tracker-ce#52). The firmware with the fix and upstream's
-  optimisations passes the emulator tests and hasn't been on the unit. Nor has Master FX's sound.
+  optimisations passes the emulator tests and worked on the unit, sound included.
 - **CE today:** master reverb (Polyverb) and delay are open source (`MixerAndFxs`,
   `getDelay()`, `getPolyverb()`).
 - **Plan:** [MASTERFX_PORT_PLAN.md](MASTERFX_PORT_PLAN.md), which replaces what this section

@@ -90,6 +90,9 @@ optimisations.
 | `R2 Real project sends` | The project's own | A real project with its own Shimmer + BBD, and every instrument and part sending 40 to both. The source's samples send nothing |
 | `A1 Master FX sound` | 1 | Short notes with gaps, to hear each effect and check the screens |
 
+The first run, 2026-11-05: all three worked, `L8` at about 80 % and `R2` at about 60 %.
+[MASTERFX_PORT_PLAN.md](MASTERFX_PORT_PLAN.md) section 8 has the readings.
+
 ## What a firmware comes with
 
 Each one handed over says what ran, what didn't, and the risk to the unit.
