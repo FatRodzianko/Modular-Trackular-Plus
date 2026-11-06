@@ -484,7 +484,7 @@ of that reading.
 
 ### Device test: after the CHIP fix, 2026-11-05
 
-`TrackerPlus_mfx_fixed_recorder.ptf`, from `/mfx_log.txt`. 67,057 blocks, none over time, no stall and no lockup
+`TrackerPlus_mfx_fixed_recorder.ptf`, from `/mfx_log.txt`. 68,456 blocks, none over time, no stall and no lockup
 record. The log's project names are from the order of the plays, and its `voices` field still has the old bug.
 
 | Project | Length | Average | Slowest | Longest main loop gap | Free heap |
