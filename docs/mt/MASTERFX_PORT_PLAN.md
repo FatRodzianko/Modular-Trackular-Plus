@@ -191,10 +191,10 @@ Measured on the build, with `tools/mem_budget.py`:
 
 | Region | Cost | Free now | Floor |
 |---|---|---|---|
-| Flash | 19,384 B | 14,884,004 B | 1 MiB |
+| Flash | 19,384 B | 14,876,900 B | 1 MiB |
 | ITCM | 5,584 B | 11,040 B | 1,024 B |
-| DTCM | 1,144 B | 15,520 B gap | 4,096 B |
-| SDRAM | 0: CE's own buffers | 1,042,700 B | 256 KiB |
+| DTCM | 1,144 B | 15,480 B gap | 4,096 B |
+| SDRAM | 0: CE's own buffers | 1,042,508 B | 256 KiB |
 | OCRAM, heap | 0 | 9,556 B OCRAM | Mods stay out |
 
 **ITCM choice:** `shimmer_process` and its passes (2,832 B) and `bbd_process` and `bbd_coefs`
@@ -536,6 +536,10 @@ polyend/tracker-ce#52. `boot_rig.py` opened and played `A1` and `R2` with the ri
 `R2`'s output is silent on the rig, on the reference build too, so the rig says nothing about how it sounds. On `A1`, 300 blocks
 with Shimmer + BBD give different output from Stock, with the same peak and 0.4 dB less energy, so its sends reach
 the effects on the real path and add no level. The rig has no model of the display's SPI bus, so upstream's rewrite of it is left to the device.
+
+The same 24 passed again, 0 failed, with upstream's `main` of 2026-11-06 merged, which has the CHIP fix itself, samples
+in RAM by default and the USB storage changes. Its reference build is byte-identical to `main`. That firmware hasn't
+been on the unit, so its readings for `L8` and `R2` are still to come.
 
 Still not covered, so left to the device: anything that takes real time (CPU, overload, what a long
 interrupt does to the screen, card and buttons), the real screen, the card's timing, the cache, a real

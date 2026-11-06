@@ -241,17 +241,17 @@ the 1 MiB taken from sample memory.
 
 | Region | Size | Plain CE free | Mods free | Floor | Notes |
 | --- | --- | --- | --- | --- | --- |
-| Flash | 16,580,608 | 14,916,860 | 14,884,004 | 1 MiB | 1.2.0 images up to 8 MB flashed whole |
+| Flash | 16,580,608 | 14,909,748 | 14,876,900 | 1 MiB | 1.2.0 images up to 8 MB flashed whole |
 | ITCM | 131,064 | 16,672 | 11,040 | 1,024 | closed libs, audio code, masterfx's 5,584 |
-| DTCM unreserved | gap | 17,472 | 15,520 | 4,096 | heap end to stack base |
+| DTCM unreserved | gap | 17,432 | 15,480 | 4,096 | heap end to stack base |
 | OCRAM | 32,768 | 9,556 | 9,556 | 1,024 | mods stay out |
-| SDRAM unreserved | 67,108,864 | 12,908 | 1,042,700 | 256 KiB | the pool takes all the rest in plain CE |
+| SDRAM unreserved | 67,108,864 | 12,716 | 1,042,508 | 256 KiB | the pool takes all the rest in plain CE |
 
 Mods use 18,816 bytes of SDRAM so far: `projectBuffer` 6,144, `configBuffer` 512, Color Song
 12,144 and alignment.
 
 **DTCM layout** (mods): `.data` 6,120, `.bss` about 123 KB, `.noinit` 32,768 (reverb), heap
-138,752 fixed (`_HeapSize`), free gap 15,520, stack 20,480 at 0x20053000–0x20058000. The
+138,752 fixed (`_HeapSize`), free gap 15,480, stack 20,480 at 0x20053000–0x20058000. The
 `.heap2stackfill` reservation of 20,480 is a linker check, not memory in use. About 1.8 KB
 before `.bss` (0x200068F0–0x20007000) is alignment padding for the buffer `.bss` starts with.
 

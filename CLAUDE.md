@@ -16,7 +16,7 @@ Before hooking a function, grep its callers up to an entry point above or to mai
 
 **CE breaks these rules itself, so a function can run in the interrupt even if it looks like main-loop code:**
 - MIDI Start in Song mode → `playSongFromPosition` → `saveWorkspacePatternNow`, `loadWorkspacePatternNow`. Never hook slow work onto these.
-- `Sequencer::stop` can call `loadWorkspacePatternNow`, and MIDI Stop reaches `stop`.
+- `Sequencer::stop()` from the main loop can call `loadWorkspacePatternNow`. Interrupt paths, MIDI Stop included, use `stop(StopContext::audioCallback)`, which leaves that to `update()`.
 - `Sequencer::loadNextPattern` → `loadWorkspacePattern` → `stopAutosave` → `WorkspaceProjectSave::stop`, which spins on `update()` while the step is `saveInstrumentSample`. Keep hooks out of that step. `finishStep`, where `mods::onWorkspaceSaved` runs, isn't reached this way.
 - MIDI note-off on the Sample Recorder screen → `hidePreviewValue` → `display.setControlText`.
 

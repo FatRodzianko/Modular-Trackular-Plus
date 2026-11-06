@@ -75,9 +75,7 @@ core/mods/tests/           host tests (built and run in CI with the host gcc)
   BUILD_TAG=9b9a13b` it gives Polyend's CE 1.0.0 `.ptf` byte for byte (checked with
   chords in), so every hook really is compiled out. It is the plain-CE reference the
   emulator tests compare against, with `MT_NO_SYNTH=1` so far and a full build for the
-  sound tests. Until polyend/tracker-ce#52 is merged, `modular` also has that PR's CHIP
-  fix, so this build matches Polyend's `main` plus `ChiptuneSynthVoice.cpp` from the PR,
-  not `main` alone. Merging `main` after the PR lands ends the difference.
+  sound tests.
 - **Licence.** Files under `core/mods/` are ours and can carry MIT. The one-line
   hooks are changes to CE files and fall under CE's licence, as does the fork as a
   whole (review section 1). Nothing from the fork goes back into Modular-Trackular,
