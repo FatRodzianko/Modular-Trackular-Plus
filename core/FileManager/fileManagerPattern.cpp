@@ -72,6 +72,7 @@ void cFileManager::loadPatternFromWorkspace(uint8_t index)
         if (validatePatternFileData(patternFilename, &fileManagerPatternBuffer, fileSize) &&
             sequencer.copyBufferToBufferPattern((uint8_t*)&fileManagerPatternBuffer))
         {
+            preloadedPattern = loadedPattern;
             report(" no blocking pattern load - success ", loadedPattern);
             moveToNextOperationStep();
             return;
@@ -81,6 +82,7 @@ void cFileManager::loadPatternFromWorkspace(uint8_t index)
     {
         sequencer.clearPattern(&fileManagerPatternBuffer);
         sequencer.copyBufferToBufferPattern((uint8_t*)&fileManagerPatternBuffer);
+        preloadedPattern = loadedPattern;
 
         report(" no blocking pattern load - file no exist ", patternFilename);
         sequencer.clearPattern(&fileManagerPatternBuffer);
@@ -191,6 +193,7 @@ bool cFileManager::loadWorkspacePatternNow(uint8_t index)
 
     snprintf(patternToLoad, PATCH_SIZE, cWorkspacePatternFileFormat, index);
     loadedPattern = index;
+    preloadedPattern = 0;
     Sequencer::strPattern* destPattern = sequencer.getPatternToLoadFromFile();
 
     if (!fileSystem->exists(patternToLoad))
@@ -604,6 +607,16 @@ bool cFileManager::loadPerformanceTrackToBuffer(uint8_t pattIndex, uint8_t track
     Sequencer::strPattern* patternFrom =
       (Sequencer::strPattern*)sequencer.getPatternToLoadFromFile();
     Sequencer::strPattern* patternTo = &fileManagerPerformancePatternBuffer;
+
+    // The file is read through the buffer in which a preloaded next pattern waits for the
+    // end of the current one. Ask for that pattern again.
+    DISABLE_GLOBAL_INTERRUPTS();
+    if (preloadedPattern != 0 && requestedPattern == 0)
+    {
+        requestedPattern = preloadedPattern;
+    }
+    preloadedPattern = 0;
+    ENABLE_GLOBAL_INTERRUPTS();
 
     if (fileSystem->exists(patternToLoad))
     {

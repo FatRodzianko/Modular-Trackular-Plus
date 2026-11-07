@@ -322,6 +322,7 @@ void cFileManager::loadWorkspacePattern(uint8_t index)
 {
     assert(index > 0);
 
+    preloadedPattern = 0;
     requestedPattern = index;
 }
 
@@ -631,6 +632,16 @@ void cFileManager::startAudioEngine()
 //-----------------------------------------------------------------------------------------------------
 //------------------------------------- -----------------------------------------------
 //-----------------------------------------------------------------------------------------------------
+bool cFileManager::isPatternPreloaded(uint8_t index)
+{
+    return index > 0 && preloadedPattern == index;
+}
+
+void cFileManager::forgetPreloadedPattern()
+{
+    preloadedPattern = 0;
+}
+
 bool cFileManager::isPatternLoading()
 {
     return (status == fmLoadingPatternFromWorkspace) ||

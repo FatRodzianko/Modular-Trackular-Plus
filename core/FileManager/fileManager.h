@@ -299,6 +299,8 @@ class cFileManager
     bool saveWorkspacePatternNow(uint8_t index);
     bool loadPerformanceTrackToBuffer(uint8_t pattIndex, uint8_t trackIndex);
     bool isPatternLoading();
+    bool isPatternPreloaded(uint8_t index);
+    void forgetPreloadedPattern();
     bool isPatternEmpty(uint8_t index);
 
     uint8_t getNextSongPattern();
@@ -472,6 +474,9 @@ class cFileManager
     uint8_t currentOperationStep;
     // Pattern that loadWorkspacePattern() was asked for and update() has not started yet.
     volatile uint8_t requestedPattern = 0;
+    // Pattern that a finished loadWorkspacePattern() left in the sequencer's buffer pattern;
+    // 0 once the buffer has been used for anything else.
+    volatile uint8_t preloadedPattern = 0;
     char currentCopyDestPath[PATCH_SIZE];
     bool forceOperation;
 

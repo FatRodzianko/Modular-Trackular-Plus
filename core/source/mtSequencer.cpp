@@ -1921,6 +1921,12 @@ void Sequencer::switchRowStep(uint8_t row) // przełączamy stepy w zależności
 
         if (player.sequencialSwitch_isArmed && player.sequencialSwitch_loaded)
         {
+            if (!newFileManager.isPatternPreloaded(player.sequencialSwitch_pattern))
+            {
+                stopForMissingNextPattern();
+                return;
+            }
+
             player.songMode = 0;
 
             reset_actual_pos();
@@ -1931,6 +1937,12 @@ void Sequencer::switchRowStep(uint8_t row) // przełączamy stepy w zależności
         }
         else if (player.songMode)
         {
+            if (!newFileManager.isPatternPreloaded(newFileManager.getNextSongPattern()))
+            {
+                stopForMissingNextPattern();
+                return;
+            }
+
             isNextPatternAvailable = newFileManager.switchNextPatternInSong();
 
             reset_actual_pos();
@@ -1959,6 +1971,21 @@ void Sequencer::switchRowStep(uint8_t row) // przełączamy stepy w zależności
             PM->refreshTrackPattern = 1;
         }
     }
+}
+
+// The next pattern is asked for one step before it is needed and loaded by the main loop.
+// When it is not in the buffer pattern by then, switching would play whatever the buffer
+// holds under the next pattern's number, and a later save would write that into its file.
+void Sequencer::stopForMissingNextPattern()
+{
+    if (player.onPatternOrSelectionEnd == cbkSetCurrentExporterOnLastStep ||
+        player.onSongEnd == cbkSetCurrentExporterOnLastStep)
+    {
+        cbkSetCurrentExporterOnLastStep();
+        return;
+    }
+
+    stop(StopContext::audioCallback);
 }
 
 AUDIO_CORE_FLASH void Sequencer::applyRowCustomFx(uint8_t tr, uint8_t stepInCustomOrder)
@@ -3356,6 +3383,8 @@ void Sequencer::switchRamPatternsNow()
 
     int bufferPatternIdx = newFileManager.getLoadedPatternIndex();
     assert(bufferPatternIdx >= 0);
+    // The buffer pattern now holds what was playing.
+    newFileManager.forgetPreloadedPattern();
     mtProject.values.actualPattern = bufferPatternIdx;
 
     if (bufferPatternIdx != player.activePatternIdx)
