@@ -279,6 +279,11 @@ boot: free heap 84,636 at `L1`, 78,892 at `L8`, 75,560 in a new project, then 73
 It steps down at project and voice-count changes and stays flat in between. Variable Track Length
 doesn't allocate; the steps haven't been looked into. Max stack 7,761.
 
+**Device reading, 2026-11-07, after merging upstream's `main` (`bc3a758`),** recorder build: `L1`, `L5` and
+`L8` slowest 34 %, 50 % and 80 %, `L8` averaging 63 % over 25 s, 1 to 2 points above the readings before the
+merge. 23,705 blocks, none over time, no stall and no lockup record. Longest main loop gap 22 ms, lowest free
+heap 78,624, max stack 7,721.
+
 **Heap:** 138,752 fixed. A failed malloc hangs the unit, so this is the one with a hard edge.
 About 58 KB is in use with a project open, and 1.2.0 measured at least 42 KB free. In the
 emulator the break pointer reached 23,968 after the static constructors and 67,112 by the time
