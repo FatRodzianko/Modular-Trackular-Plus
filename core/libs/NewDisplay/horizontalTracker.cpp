@@ -845,6 +845,16 @@ void cHorizontalTracker::notes()
             {
                 if (tracks->inactive[firstVisibleTrack + j])
                     actualColor = colors[12];
+#if MT_HAS_TRACKLEN // MT: past a short track's length: grey, and blank where it's empty
+                else if ((tracks->pastLengthRows[firstVisibleTrack + j] >> (i + stepsDataStructOffset)) & 1)
+                {
+                    if (*text == '-')
+                    {
+                        continue;
+                    }
+                    actualColor = colors[12];
+                }
+#endif
                 else if (*text == '-')
                     actualColor = colors[6];
                 else
@@ -902,6 +912,16 @@ void cHorizontalTracker::instruments()
             {
                 if (tracks->inactive[track])
                     actualColor = colors[12];
+#if MT_HAS_TRACKLEN // MT: past a short track's length: grey, and blank where it's empty
+                else if ((tracks->pastLengthRows[track] >> (i + stepsDataStructOffset)) & 1)
+                {
+                    if (*text == '-')
+                    {
+                        continue;
+                    }
+                    actualColor = colors[12];
+                }
+#endif
                 else if (*text == '-')
                     actualColor = colors[7];
                 else
@@ -966,6 +986,16 @@ void cHorizontalTracker::fxes1()
             {
                 if (tracks->inactive[firstVisibleTrack + j])
                     actualColor = colors[12];
+#if MT_HAS_TRACKLEN // MT: past a short track's length: grey, and blank where it's empty
+                else if ((tracks->pastLengthRows[firstVisibleTrack + j] >> (i + stepsDataStructOffset)) & 1)
+                {
+                    if (*text == '-')
+                    {
+                        continue;
+                    }
+                    actualColor = colors[12];
+                }
+#endif
                 else if (*text == '-')
                     actualColor = colors[8];
                 else
@@ -1019,6 +1049,16 @@ void cHorizontalTracker::fxes2()
             {
                 if (tracks->inactive[firstVisibleTrack + j])
                     actualColor = colors[12];
+#if MT_HAS_TRACKLEN // MT: past a short track's length: grey, and blank where it's empty
+                else if ((tracks->pastLengthRows[firstVisibleTrack + j] >> (i + stepsDataStructOffset)) & 1)
+                {
+                    if (*text == '-')
+                    {
+                        continue;
+                    }
+                    actualColor = colors[12];
+                }
+#endif
                 else if (*text == '-')
                     actualColor = colors[9];
                 else

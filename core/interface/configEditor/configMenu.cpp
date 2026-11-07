@@ -132,6 +132,15 @@ const strItemTypeListTextWithAction projectMasterfxSetup{
 cMenuItem melProjectMasterfx(menuProjectMods, "Master FX", projectMasterfxDesc, menuTypeItemListTextWithAction, &projectMasterfxSetup);
 #endif
 
+#if MT_HAS_TRACKLEN
+const char projectTracklenDesc[] = { "Variable Track Length for this project: hold Trk Len on the Pattern "
+                                     "screen's third page and turn the encoder to give the cursor's track "
+                                     "its own length. Off plays every track whole and keeps the lengths. " };
+const strItemTypeListTextWithAction projectTracklenSetup{
+    &mods::switches[static_cast<size_t>(mods::Mod::tracklen)], 2, onOffStateTexts, mods::projectSwitchChanged };
+cMenuItem melProjectTracklen(menuProjectMods, "Track Length", projectTracklenDesc, menuTypeItemListTextWithAction, &projectTracklenSetup);
+#endif
+
 const strItemTypeLabel projectModsDefaultsSetup{ "Config > Mods" };
 cMenuItem melProjectModsDefaults(menuProjectMods, "Defaults", nullptr, menuTypeItemLabel, &projectModsDefaultsSetup);
 
@@ -420,6 +429,15 @@ const char modsMasterfxDesc[] = { "Whether new projects start with Master FX on.
 const strItemTypeListTextWithAction modsMasterfxSetup{
     &mods::defaults[static_cast<size_t>(mods::Mod::masterfx)], 2, onOffStateTexts, mods::defaultsChanged };
 cMenuItem melModsMasterfx(menuMods, "Master FX", modsMasterfxDesc, menuTypeItemListTextWithAction, &modsMasterfxSetup);
+#endif
+
+#if MT_HAS_TRACKLEN
+const char modsTracklenDesc[] = { "Whether new projects start with Variable Track Length on. Each project "
+                                  "has its own switch in Project Settings > Mods. Variable Track Length: "
+                                  "each track of a pattern can have its own length. " };
+const strItemTypeListTextWithAction modsTracklenSetup{
+    &mods::defaults[static_cast<size_t>(mods::Mod::tracklen)], 2, onOffStateTexts, mods::defaultsChanged };
+cMenuItem melModsTracklen(menuMods, "Track Length", modsTracklenDesc, menuTypeItemListTextWithAction, &modsTracklenSetup);
 #endif
 #endif
 

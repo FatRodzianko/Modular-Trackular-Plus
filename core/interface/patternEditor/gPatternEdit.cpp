@@ -1632,10 +1632,15 @@ void cPatternEditor::showActionButtonPage3Labels()
         const uint8_t index = mods::kPatternButtonFirst + i;
         display.setControlText(label[index], button->text);
         display.setControlColors(label[index],
-                                 editMode ? display.getTheme().activeButtonLabelsColors
-                                          : display.getTheme().inactiveButtonLabelsColors);
-        display.setControlData(label[index], &labelDataRed);
-        display.setControlValue(label[index], 0);
+                                 editMode || button->hold != nullptr
+                                   ? display.getTheme().activeButtonLabelsColors
+                                   : display.getTheme().inactiveButtonLabelsColors);
+        display.setControlData(label[index], button->hold != nullptr ? &labelDataGreen : &labelDataRed);
+        display.setControlValue(label[index], button->text2 != nullptr ? 1 : 0);
+        if (button->text2 != nullptr)
+        {
+            display.setControlText2(label[index], button->text2());
+        }
         display.setControlStyle(label[index],
                                 controlStyleCenterX | controlStyleCenterY | controlStyleFont3 |
                                   controlStyleShow |

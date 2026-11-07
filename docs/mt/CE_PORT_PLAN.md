@@ -22,8 +22,8 @@ every CE release.
   with the settings. A device-wide default set in `Mods/mods.cfg` (our own file, not
   CE's config struct) is what New Project starts with. Project templates, later,
   carry both (section 1.12).
-- **Order:** step 0 (groundwork, no mods), then chords, condtrig, swing, humanize,
-  copypattern, tracklen, legato, interpolate, songloop, colorsong, visualizer,
+- **Order:** step 0 (groundwork, no mods), then swing, humanize, copypattern, tracklen,
+  legato, interpolate, songloop, colorsong, visualizer,
   slicethru Loop, masterfx, resample, synths. One mod at a time: port, test,
   hardware check, merge, then the next.
 - **Eight decisions are yours**, listed in [section 5](#5-decisions-for-you). None
@@ -58,7 +58,6 @@ core/mods/                 our code; MIT header on files that are wholly ours
   modsProject.cpp          per-project mods.bin: records, Workspace copy, dirty flag
   modsImport.cpp           reads 1.2.0 side files (swing.bin …) once
   chords.cpp/.h            one pair per mod
-  condtrig.cpp/.h
   …
 core/mods/tests/           host tests (built and run in CI with the host gcc)
 ```
@@ -164,12 +163,12 @@ One file per project instead of eight side files.
   "unsaved changes" warns and Discard really discards. This differs from 1.2.0,
   where settings saved themselves a moment after a change (decision 2).
 - **Size:** settings are a few bytes each. The largest records: colorsong (up to
-  ~5 KB), tracklen if kept here (decision 5), slicethru Loop bits (6 bytes).
+  ~5 KB), tracklen (up to 4,335 B), slicethru Loop bits (6 bytes).
 - **Plain CE** opening a project saved with mods ignores `mods.bin`. CE's Save As
   doesn't copy it (it copies only its own files), so the copy made by plain CE loses
   the mod settings. Acceptable: nothing breaks.
 
-**Chords and condtrig in old projects.** Their values live in the patterns, so no side
+**Chords in old projects.** Their values live in the patterns, so no side
 file shows them in use. Scanning a project's pattern files on Open is left out for now:
 a 1.2.0 project with chords 30–69 opens with Chords Off (those steps play the note
 alone, as plain CE) until Chords is turned on in Project Settings → Mods.
@@ -179,9 +178,8 @@ alone, as plain CE) until Chords is turned on in Project Settings → Mods.
 `masterfx.bin`, `slicethru.bin`, `resample.bin`, `tracklen.bin`, `colorsong.bin`,
 `synths.bin`), check its own checksum, convert, mark the project changed, and turn
 that mod On in the project's set (the rest stay Off; the user turns more on in
-Project Settings → Mods). Mods whose data is in the patterns (chords, condtrig)
-switch on when the importer finds their values there. The old files stay. Their formats are ours, documented in the patch READMEs. Pattern contents
-are converted at load time (condtrig, below).
+Project Settings → Mods). Mods whose data is in the patterns (chords)
+switch on when the importer finds their values there. The old files stay. Their formats are ours, documented in the patch READMEs.
 
 ### 1.7 Memory
 
@@ -242,7 +240,7 @@ are converted at load time (condtrig, below).
 Three layers replace today's tiers.
 
 1. **Host tests** (CI, Linux gcc, seconds): our logic with no CE headers where
-   practical: chord tables, condtrig decisions per pass, humanize ranges, interpolate
+   practical: chord tables, humanize ranges, interpolate
    ramps and wrap, swing values, colorsong colour allocation, `mods.bin`/`mods.cfg`
    read and write (damaged files included), every 1.2.0 importer against real
    sample files.
@@ -261,8 +259,8 @@ Three layers replace today's tiers.
    CPU checks on the device, which replaces the timing-headroom estimates.
 
 **Switch matrix**, not mix cover sets: all Off (golden), all On, each mod alone,
-and pairs that share a hook: chords + legato (note order), condtrig + tracklen
-(pass counts per track length), tracklen + copypattern, swing + humanize (timing),
+and pairs that share a hook: chords + legato (note order), tracklen + CE's conditions
+(pass counts per track length, in `test_tracklen.py`), tracklen + copypattern, swing + humanize (timing),
 interpolate + tracklen (ramp wrap at a track's own length), humanize + colorsong
 (colours ignore `m`/`V`).
 
@@ -378,6 +376,11 @@ id stays unused. The notes below are what was built.
 
 ### 3.2 condtrig
 
+**Dropped, 2026-11-06: CE's own conditions on the Chance FX do this job, and nothing below is
+built.** What a short track needs from them is in 3.6. Mod id 6 stays unused. A 1.2.0 project's
+Chance 101-137 aren't converted, so they read as CE's `GL`, `!L` and Play/Skip. The old plan, for
+the record:
+
 - **CE today:** its own conditions on Chance 101–174 (`GL`, `!L`, Play N/Skip M,
   Skip N/Play M), not the same as ours (`1st`, `!1s`, `A:B` = pass A of every B).
 - **Values:** ours move to 175–211 (`1st` 175, `!1s` 176, `1:2` … `8:8` 177–211,
@@ -456,26 +459,71 @@ id stays unused. The notes below are what was built.
 
 ### 3.6 tracklen (Variable Track Length)
 
-- **Port after the 1.2.0 version is final.**
-- **CE today:** every track is forced to track 0's length: `updateTrackLengths`
-  (`mtSequencer.cpp` L3092) and in several file paths (`fileManagerPattern.cpp`
-  L485, L549, L583, the last for Performance mode). Performance mode alone has
-  per-track lengths at play time.
-- **Hooks:** `switchRowStep` (L1695–1860): each track wraps at its own length (CE's
-  Performance-mode code shows the shape); `updateTrackLengths`: skip the forcing when
-  on; Pattern grid: grey ghost loop past a track's end (`gPatternEdit.cpp`); live
-  recording: `getDestRecordingStep` (L2523) per track length; Trk Len button
-  (dynamic placement).
-- **Where lengths live (decision 5):**
-  - in the pattern's own per-track `length` field: natural, copies with the
-    pattern, plain CE plays it flat; but CE writes that field in several places, and
-    an edit saved while the mod is Off flattens it;
-  - or in a `mods.bin` record per pattern, as `tracklen.bin` on 1.2.0: patterns stay
-    pure CE; copypattern and CE's Copy/Paste must carry it.
-  Recommendation: the `mods.bin` record, to keep Off = CE including the files.
-- **Old projects:** `tracklen.bin` import.
-- **Tests:** emulator: polymeter over many passes, with condtrig and interpolate;
-  recording; song mode.
+Built 2026-11-06, passed its hardware test 2026-11-07. Id 12, `MT_HAS_TRACKLEN`, switch in Project
+Settings > Mods and Config > Mods.
+
+- **What it does:** each track of a pattern can have its own length, 1 to the pattern's. A short
+  track plays its own steps over and over, and every track starts again together when the pattern
+  ends, as on 1.2.0. It isn't polymeter: in 16 steps a track of 6 plays 1-6, 1-6, 1-4.
+- **Positions stay whole-pattern.** Only the step a track reads changes, to position mod length, so
+  the pattern's end, song mode, the metronome and the play row are CE's untouched.
+- **Hooks:** `play_microStep` (the step read); `switchRowStep` (CE's `passCount`, below);
+  `calcStepLength` (Roll's look-ahead); `getDestRecordingStep`, `handleNoteOn`, `handleNoteOff` (live
+  recording); `refreshPattern` and the four drawing functions of both trackers (the grid); page 3's
+  labels and functions and `functEncoder` (the button).
+- **CE's conditions:** with the mod on, a short track's pass ends at its own length, so Play/Skip,
+  Skip/Play and the `GL` and `!L` after them count its loops. At length 6 in 16 steps: steps 0-5 are
+  count 0, 6-11 are 1, 12-15 are 2, and the next pass goes on from 3. Full-length tracks count as CE.
+  Only forward play counts this way: in performance mode, a track playing another direction counts
+  as CE does.
+- **Where lengths live:** one `mods.bin` record, id 13: 17 bytes for each pattern with a length, its
+  number and 16 lengths. No record when there are none, so a project with no lengths has the same
+  `mods.bin` as before. Pattern files aren't touched, so Off = CE includes the files. The pattern's
+  own per-track field was no use: CE's length edits write only tracks 1-7.
+- **A length counts** when it's 1 to the pattern's length - 1. Anything else plays the whole pattern,
+  so a pattern that shrinks below a length and grows back has it again.
+- **Interrupt:** per-step reads use a DTCM copy of the playing pattern's 16 lengths, refilled when the
+  pattern number changes or an edit marks it stale. Recording reads the table: it's one byte, and it
+  also comes from the main loop. Any table contents are memory-safe: position mod length never goes
+  past the position.
+- **Button:** Trk Len, on page 3's first free slot, is held, not pressed, and works in every mode. Its
+  second line shows the cursor's track's length or `--`. While it's held the encoder sets the length.
+  Whether it's held is read from the button itself when the encoder turns, so a popup that takes the
+  release can't leave the encoder stuck on the length.
+- **Grid:** past a track's length, rows show the loop in grey. Empty ghost cells are blank. A length
+  change redraws at once.
+- **Display list:** checked in `test_tracklen.py`, each view CE has. A ghost cell has CE's characters,
+  blank ones draw nothing, and grey needs a colour command only where the ghost rows start. CE's worst
+  grid is 4,976 B (vertical) and 2,368 B (horizontal). Short tracks stay under that. The one case over it
+  is every track of a 2-step pattern at length 1 in the revolver view, alternating grey and not: 5,264 B,
+  288 B more. The limit is 8,172 B for all the screen's controls. The button's second line is at most 2
+  characters, on a page with fewer labels than page 1.
+- **Live recording:** a hit goes on the step the track is playing. A short track's loops share its
+  steps, so its first loop's note-offs would soon leave none free, which is what stopped recording after
+  one loop on 1.2.0 until its `tl7`. So on a short track a new note may replace a step holding only a
+  note-off. A note is never replaced.
+- **Memory:** 272 B of ITCM, 104 B of DTCM (`activeLengths`, the grid's marks, the button's text),
+  12,800 B of SDRAM (table 4,096, a file buffer 4,347, `projectBuffer` from 6,144 to 10,496), 3,512 B
+  of flash. No heap, no OCRAM.
+- **Old projects:** `tracklen.bin` imports into the record, and turns the mod on if it holds a length.
+  `tools/ce_to_120.py` doesn't write it back.
+- **What CE's own actions do with lengths:** they stay with the pattern number. Copy and Paste Pattern and
+  Song's track copy don't carry them. Duplicate, Expand and Shrink keep the length, so the track just
+  goes on looping. Undo doesn't restore them, as on 1.2.0. They save with the project, so Discard drops
+  them, where 1.2.0 saved them at once. Performance mode's per-track pattern load plays with the playing
+  pattern's lengths, not the source's. Editing a step past the length edits the hidden step, as on 1.2.0.
+  A larger `mods.bin` reads as damaged on test builds older than this one, whose buffer was 6,144 B.
+- **Tests:** host `test_tracklen.cpp`. Emulator `test_tracklen.py`: Off and full length as plain CE note
+  for note; a short track as its loop written out, all 16 tracks, with Micro-move, Roll, Break, song mode,
+  Play from a position, a looped selection and performance mode; CE's conditions; recording; grid, button,
+  Config and files. Release tier: real boot, Open and Play with the interrupt firing inside main-loop code,
+  and the cost limit, on the worst-case project with a length on every track of every pattern.
+- **Device test, 2026-11-07:** recorder build, from `/mfx_log.txt`. The log has no markers, so the projects are
+  matched by order and settings. `L1`, `L5` and `L8`, with lengths 4-8 on every track of every pattern: slowest
+  26 %, 49 % and 79 %. `L8` averaged 61 % over 34 s, against 60 % and 78 % without the mod's lengths. No block over
+  time, no stall and no lockup record. The button, grid, loops, CE's Play/Skip, live recording, Off and On, and
+  saving and reopening all behaved as designed. Not on the unit, emulator only: Break FX, performance mode, Export,
+  per-mod Saving, and the revolver view's 288 B display case.
 - **Effort:** M.
 
 ### 3.7 legato
@@ -640,7 +688,7 @@ id stays unused. The notes below are what was built.
 | 0 | groundwork | switches, Config, `mods.cfg`, `mods.bin`, emulator, golden | L |
 | 0b | per-project mod sets | project's set in `mods.bin`, defaults in `mods.cfg` | S |
 | 1 | chords | pattern value range, encoder limit, grid text | S |
-| 2 | condtrig | pattern upgrade hook | M |
+| 2 | condtrig | dropped: CE's own conditions do it | |
 | 3 | swing | per-project setting, import | S |
 | 4 | humanize | first Pattern button, dynamic placement | S–M |
 | 5 | copypattern | second button; after 1.2.0 final | S |
@@ -670,7 +718,7 @@ candidate.
    from 5:56 to 5:50, and large Wavetable and Granular samples, which can't stream, have
    1 MiB less room.
 4. **Edition name** for `version.mk` and the `.ptf` name. Suggested: `MT`.
-5. **tracklen lengths:** pattern field or `mods.bin` record. Recommended: `mods.bin`.
+5. **tracklen lengths:** pattern field or `mods.bin` record. Chosen 2026-11-06: `mods.bin`.
 6. **Old WAVE/PHASE instruments:** convert to the new engines, or not supported.
 7. **Pull requests to Polyend:** they'd get relicensing rights over the change.
    Recommended: not for mods; maybe for plain bug fixes.

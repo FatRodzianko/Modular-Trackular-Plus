@@ -11,6 +11,7 @@
 #include "masterfx.h"
 #include "modsSwitches.h"
 #include "swing.h"
+#include "tracklen.h"
 
 #include <cstdio>
 #include <cstring>
@@ -25,6 +26,9 @@ namespace
 
 // 1.2.0 side-file importers, added with each mod.
 constexpr ImporterEntry kBuiltInImporters[] = {
+#if MT_HAS_TRACKLEN
+    { static_cast<uint8_t>(Mod::tracklen), tracklen::importSideFile },
+#endif
 #if MT_HAS_COLORSONG
     { static_cast<uint8_t>(Mod::colorsong), colorsong::importSideFile },
 #endif

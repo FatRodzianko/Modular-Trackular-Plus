@@ -57,6 +57,9 @@ constexpr size_t kBuiltModCount = 0
 #if MT_HAS_SWING
                                   + 1
 #endif
+#if MT_HAS_TRACKLEN
+                                  + 1
+#endif
   ;
 
 // One byte per mod, 0 Off or 1 On, so Config list items can point at them.
@@ -124,6 +127,11 @@ void projectColorsongSwitchChanged();
 
 // Song screen update, with Color Song on.
 void colorsongUpdate();
+#endif
+
+#if MT_HAS_TRACKLEN
+// A length changed on the Pattern screen: into the project's record.
+void projectTracklenEdited();
 #endif
 
 // After any Config menu edit: mods' settings the menu edits directly are stored if they

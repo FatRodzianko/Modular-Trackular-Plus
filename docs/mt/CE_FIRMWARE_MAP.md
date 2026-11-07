@@ -241,14 +241,14 @@ the 1 MiB taken from sample memory.
 
 | Region | Size | Plain CE free | Mods free | Floor | Notes |
 | --- | --- | --- | --- | --- | --- |
-| Flash | 16,580,608 | 14,909,748 | 14,876,972 | 1 MiB | 1.2.0 images up to 8 MB flashed whole |
-| ITCM | 131,064 | 16,672 | 11,112 | 1,024 | closed libs, audio code, masterfx's 5,584 |
-| DTCM unreserved | gap | 17,432 | 15,480 | 4,096 | heap end to stack base |
+| Flash | 16,580,608 | 14,909,748 | 14,873,460 | 1 MiB | 1.2.0 images up to 8 MB flashed whole |
+| ITCM | 131,064 | 16,672 | 10,840 | 1,024 | closed libs, audio code, masterfx's 5,584 |
+| DTCM unreserved | gap | 17,432 | 15,376 | 4,096 | heap end to stack base |
 | OCRAM | 32,768 | 9,556 | 9,556 | 1,024 | mods stay out |
-| SDRAM unreserved | 67,108,864 | 12,716 | 1,042,508 | 256 KiB | the pool takes all the rest in plain CE |
+| SDRAM unreserved | 67,108,864 | 12,716 | 1,029,708 | 256 KiB | the pool takes all the rest in plain CE |
 
-Mods use 18,816 bytes of SDRAM so far: `projectBuffer` 6,144, `configBuffer` 512, Color Song
-12,144 and alignment.
+Mods use 31,616 bytes of SDRAM so far: `projectBuffer` 10,496, `configBuffer` 512, Color Song
+12,144, Variable Track Length 8,443 and alignment.
 
 **DTCM layout** (mods): `.data` 6,120, `.bss` about 123 KB, `.noinit` 32,768 (reverb), heap
 138,752 fixed (`_HeapSize`), free gap 15,480, stack 20,480 at 0x20053000–0x20058000. The
@@ -273,6 +273,11 @@ The colorsong2 reading was taken after the Sample Recorder, the Sample Editor an
 of song playback, with Color Song On. Free heap is a total, not the largest block. Max stack is
 the most used since boot, so it only covers what had run by then. Hellish downtown is a small
 project (6 MB).
+
+**Device reading, 2026-11-07,** tracklen recorder build, across the ladder and a new project in one
+boot: free heap 84,636 at `L1`, 78,892 at `L8`, 75,560 in a new project, then 73,852, the lowest logged.
+It steps down at project and voice-count changes and stays flat in between. Variable Track Length
+doesn't allocate; the steps haven't been looked into. Max stack 7,761.
 
 **Heap:** 138,752 fixed. A failed malloc hangs the unit, so this is the one with a hard edge.
 About 58 KB is in use with a project open, and 1.2.0 measured at least 42 KB free. In the
