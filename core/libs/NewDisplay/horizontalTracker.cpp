@@ -112,6 +112,8 @@ cHorizontalTracker::cHorizontalTracker(strControlProperties* properties)
 {
     colorsCount = 20;
     colors = display.getTheme().patternTrackerColors;
+    dimFx1Color = ((colors[8] & 0xFEFEFE) >> 1) + ((colors[1] & 0xFEFEFE) >> 1);
+    dimFx2Color = ((colors[9] & 0xFEFEFE) >> 1) + ((colors[1] & 0xFEFEFE) >> 1);
 
     refreshStep = 0;
 
@@ -127,7 +129,7 @@ cHorizontalTracker::cHorizontalTracker(strControlProperties* properties)
         return;
     }
 
-    colors = (properties->colors == nullptr) ? colors : properties->colors;
+    setColors((properties->colors == nullptr) ? colors : properties->colors);
 
     tracks = (strTrackerPattern*)properties->data;
     posX = properties->x;
@@ -167,6 +169,8 @@ void cHorizontalTracker::setValue(int value)
 void cHorizontalTracker::setColors(const uint32_t* colors)
 {
     this->colors = colors;
+    dimFx1Color = ((colors[8] & 0xFEFEFE) >> 1) + ((colors[1] & 0xFEFEFE) >> 1);
+    dimFx2Color = ((colors[9] & 0xFEFEFE) >> 1) + ((colors[1] & 0xFEFEFE) >> 1);
 }
 
 void cHorizontalTracker::setData(void* data)
@@ -998,6 +1002,8 @@ void cHorizontalTracker::fxes1()
 #endif
                 else if (*text == '-')
                     actualColor = colors[8];
+                else if (text[1] == '-' && text[2] == '-')
+                    actualColor = dimFx1Color;
                 else
                     actualColor = colors[4];
             }
@@ -1061,6 +1067,8 @@ void cHorizontalTracker::fxes2()
 #endif
                 else if (*text == '-')
                     actualColor = colors[9];
+                else if (text[1] == '-' && text[2] == '-')
+                    actualColor = dimFx2Color;
                 else
                     actualColor = colors[5];
             }
@@ -1137,7 +1145,7 @@ void cHorizontalTracker::String2Bitmaps(int16_t x,
             }
         }
 
-        if (string[0] == '-' && string[1] == '-')
+        if ((string[0] == '-' && string[1] == '-') || (string[1] == '-' && string[2] == '-'))
         {
             x += 11; // font->data['o'];
         }

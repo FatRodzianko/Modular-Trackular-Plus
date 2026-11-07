@@ -111,7 +111,7 @@ class cSampleImporter : public ModuleBase
 
     // void setInstrumentsListPos(uint8_t pos);
 
-    void showAddOrEnter();
+    void showAddOrEnter(bool isShiftPressed);
     void showRename();
 
     void addNextColorControl();
@@ -141,6 +141,7 @@ class cSampleImporter : public ModuleBase
 
     // instrumenty
     void listInstrumentSlots();
+    std::optional<uint8_t> getFirstEmptyInstrumentSlot();
     uint8_t selectedSlot = 0;
 
     uint8_t instrUseMap[kSampleInstrumentsCount + 1];

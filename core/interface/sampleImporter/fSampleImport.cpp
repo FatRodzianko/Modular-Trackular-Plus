@@ -1127,6 +1127,7 @@ static void functShift(uint8_t state)
         // cancelAnotherSelect();
 
         SI->selectionActive[SI->selectedPlace] = 1;
+        SI->showAddOrEnter(true);
 
         //		if(SI->currSelectPlace != SI->selectedPlace)
         //		{
@@ -1161,6 +1162,7 @@ static void functShift(uint8_t state)
     else if (state == buttonRelease)
     {
         SI->selectionActive[SI->selectedPlace] = 0;
+        SI->showAddOrEnter(false);
     }
 }
 
@@ -1316,6 +1318,7 @@ uint8_t cSampleImporter::changeFileSelection(int16_t value)
         }
         selectedFile = handleSelecting(selectedFile, locationExplorerCount, value, 1);
         updateSelection();
+        showAddOrEnter(buttons->isButtonPressed(interfaceButtonShift));
     }
     else
     {
@@ -1400,7 +1403,7 @@ void cSampleImporter::refreshGuiAfterDelay()
 
 void cSampleImporter::refreshActionButtons()
 {
-    showAddOrEnter();
+    showAddOrEnter(buttons->isButtonPressed(interfaceButtonShift));
 
     renameColorControl();
     addNextColorControl();
@@ -1423,12 +1426,30 @@ void cSampleImporter::BrowseOrAdd()
 
             if (newFileManager.browseSdCard(&selectedFile))
             {
-                SI->ip->blockAllInputs();
+                SI->ip->blockAllInputsExcept(interfaceButtonShift);
             }
         }
     }
     else
     {
+        if (SI->buttons->isButtonPressed(interfaceButtonShift) &&
+            SI->selectionLength[listFiles] == 0)
+        {
+            auto firstEmptyInstrumentSlot = SI->getFirstEmptyInstrumentSlot();
+
+            if (!firstEmptyInstrumentSlot)
+            {
+                mtPopups.show(0, "No empty instrument slots");
+                return;
+            }
+
+            SI->cancelSelect(listInstruments);
+            SI->selectedSlot = *firstEmptyInstrumentSlot;
+            mtProject.values.lastUsedInstrument = SI->selectedSlot;
+            SI->refreshInstrumentsList();
+            SI->handleMemoryBar();
+        }
+
         functInstrumentAdd();
     }
 }
@@ -1452,7 +1473,7 @@ void cSampleImporter::importSamples()
 
         if (result)
         {
-            SI->ip->blockAllInputs();
+            SI->ip->blockAllInputsExcept(interfaceButtonShift);
         }
     }
     else
@@ -1496,6 +1517,19 @@ void cSampleImporter::listInstrumentSlots()
 
         interfaceGlobals.ptrIntrumentsNames[i] = &interfaceGlobals.intrumentsNames[i][0];
     }
+}
+
+std::optional<uint8_t> cSampleImporter::getFirstEmptyInstrumentSlot()
+{
+    for (uint8_t i = 0; i < kSampleInstrumentsCount; i++)
+    {
+        if (mtProject.instrument[i].isActive == 0)
+        {
+            return i;
+        }
+    }
+
+    return std::nullopt;
 }
 
 void cSampleImporter::handleMemoryBar()

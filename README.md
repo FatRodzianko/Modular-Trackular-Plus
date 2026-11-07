@@ -83,12 +83,20 @@ Welcome to the **Polyend Tracker Community Edition** repository!
 
 Built directly from the original Polyend firmware source code, Tracker CE opens up the Polyend Tracker platform to musicians, sound designers, and developers around the world. Whether you are here to flash the latest Community Edition firmware, want to build your own idea on the Tracker, design custom themes and fonts, write Sample Editor plugins, or build new synthesizer engines, we are excited to have you here.
 
+### What's New:
+See [`CHANGELOG.md`](CHANGELOG.md) for the full list of new features and improvements in the stable releases.
+
 ### Download Firmware:
 
-See [Releases](https://github.com/polyend/tracker-ce/releases) for the latest downloads for all devices.
+###### Stable Releases: 
+For the latest official downloads for all devices, see [Releases](https://github.com/polyend/tracker-ce/releases).
 
-### What's New:
-See [`CHANGELOG.md`](CHANGELOG.md) for the full list of new features and improvements.
+###### Latest Beta Builds: 
+Automatically built from the latest changes (includes OG Tracker, Tracker+ and Tracker Mini):
+
+* [Download Latest Beta Firmware (`.zip`)](https://nightly.link/polyend/tracker-ce/workflows/build.yml/main/polyend-tracker-ce-firmware.zip)
+* [Download Latest Sample Editor Effects (`.zip`)](https://nightly.link/polyend/tracker-ce/workflows/build.yml/main/polyend-tracker-ce-effects.zip)
+
 
 ---
 
