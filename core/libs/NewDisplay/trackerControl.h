@@ -3,6 +3,7 @@
 #define _TACKER_CONTROL_H_
 
 #include "displayControls.h"
+#include "modsBuild.h" // MT:
 
 struct strTrackerPattern
 {
@@ -57,6 +58,10 @@ struct strTrackerPattern
     bool showTrackNames;
     const char* tracksNames[kTrackCount];
 
+#if MT_HAS_TRACKLEN // MT: bit r: row r is past the track's length, showing its loop
+    uint16_t pastLengthRows[kTrackCount];
+#endif
+
     void init()
     {
         for (uint8_t t = 0; t < kTrackCount; t++)
@@ -76,6 +81,9 @@ struct strTrackerPattern
             }
             inactive[t] = 0;
             tracksNames[t] = nullptr;
+#if MT_HAS_TRACKLEN // MT:
+            pastLengthRows[t] = 0;
+#endif
         }
         actualTrack = 0;
         actualStep = 0;

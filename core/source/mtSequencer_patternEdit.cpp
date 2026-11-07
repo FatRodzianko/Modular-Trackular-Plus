@@ -4,6 +4,7 @@
 #include "mtSequencer.h"
 #include "mtStructs.h"
 #include "patternEditor/patternEditor.h"
+#include "tracklen.h" // MT:
 
 #include "ctype.h"
 #include "util_math.h"
@@ -2071,6 +2072,20 @@ char Sequencer::getRollTypeChar(uint8_t val)
 AUDIO_CORE_RAM uint8_t Sequencer::calcStepLength(uint8_t track, uint8_t step)
 {
     uint8_t trackLen = getActualPattern()->track[0].length;
+
+#if MT_HAS_TRACKLEN // MT: Roll looks ahead through a short track's own loop
+    if (mods::on(mods::Mod::tracklen))
+    {
+        const int length = mods::tracklen::ownLength(
+          mods::tracklen::activeStored(mtProject.values.actualPattern, track), trackLen + 1);
+        if (length <= trackLen)
+        {
+            const strPattern::strTrack& pattern = getActualPattern()->track[track];
+            return mods::tracklen::stepsToNextNote(
+              step, trackLen, length, [&](int s) { return pattern.step[s].note != STEP_NOTE_EMPTY; });
+        }
+    }
+#endif
 
     uint8_t b = 1;
     for (uint8_t a = step + 1; a <= trackLen; a++, b++)

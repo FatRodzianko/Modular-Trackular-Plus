@@ -10,6 +10,7 @@
 #include "mtSequencer.h"
 #include "mtStructs.h"
 #include "swing.h" // MT:
+#include "tracklen.h" // MT:
 #include "sampleRecorder/sampleRecorder.h"
 
 #include "configEditor/configEditor.h"
@@ -44,6 +45,24 @@ cSampleRecorder* SR = &sampleRecorder;
 #include "performanceMode/performanceMode.h"
 extern cPerformanceMode performanceMode;
 static cPerformanceMode* PM = &performanceMode;
+
+#if MT_HAS_TRACKLEN // MT: Variable Track Length
+// The length a track plays, with the mod on, from the audio interrupt's copy.
+__attribute__((always_inline)) static inline int tracklenPlaying(uint8_t row, int patternLength)
+{
+    return mods::tracklen::ownLength(mods::tracklen::activeStored(mtProject.values.actualPattern, row),
+                                     patternLength);
+}
+
+// The same for live recording, which also comes from the main loop: it reads the table.
+static inline int tracklenRecording(uint8_t row, int patternLength)
+{
+    return mods::on(mods::Mod::tracklen)
+             ? mods::tracklen::ownLength(mods::tracklen::stored(mtProject.values.actualPattern, row),
+                                         patternLength)
+             : patternLength;
+}
+#endif
 
 extern void cbkSetCurrentExporterOnLastStep();
 
@@ -282,9 +301,20 @@ AUDIO_CORE_RAM void Sequencer::play_microStep(int row)
 
     if (playerRow.uStep == 1)
     {
+#if MT_HAS_TRACKLEN // MT: a short track reads its own loop
+        const int stepToRead =
+          mods::on(mods::Mod::tracklen)
+            ? mods::tracklen::playedStep(playerRow.actual_pos,
+                                         tracklenPlaying(row, currentPattern->track[0].length + 1))
+            : playerRow.actual_pos;
+        memcpy((uint8_t*)&stepToSend,
+               (uint8_t*)&patternRow.step[stepToRead],
+               sizeof(strPattern::strTrack::strStep));
+#else
         memcpy((uint8_t*)&stepToSend,
                (uint8_t*)&patternRow.step[playerRow.actual_pos],
                sizeof(strPattern::strTrack::strStep));
+#endif
 
         if (isCustomPlayMode(row))
         {
@@ -1834,6 +1864,18 @@ void Sequencer::switchRowStep(uint8_t row) // przełączamy stepy w zależności
                     player.endOfPattern = true;
                 }
             }
+#if MT_HAS_TRACKLEN // MT: a short track's pass ends at its own length, for CE's conditions
+            else if (mods::on(mods::Mod::tracklen))
+            {
+                const int patternLength = currentPattern->track[0].length + 1;
+                if (mods::tracklen::startsOwnLoop(player.track[row].actual_pos,
+                                                  tracklenPlaying(row, patternLength),
+                                                  patternLength))
+                {
+                    player.track[row].passCount++;
+                }
+            }
+#endif
         }
         break;
         case PLAYMODE_BACKWARD:
@@ -2576,6 +2618,19 @@ AUDIO_CORE_RAM void Sequencer::loadNextPattern(uint8_t patternNumber)
 
 uint8_t Sequencer::getDestRecordingStep(uint8_t track, bool quantize, bool noteOff)
 {
+#if MT_HAS_TRACKLEN // MT: onto the step a short track is playing
+    if (mods::on(mods::Mod::tracklen))
+    {
+        const int patternLength = getActualPattern()->track[0].length + 1;
+        return mods::tracklen::recordingStep(player.track[track].actual_pos,
+                                             tracklenRecording(track, patternLength),
+                                             patternLength,
+                                             quantize && player.track[track].uStep > 24,
+                                             noteOff,
+                                             player.track[track].recNoteOnStepIdx);
+    }
+#endif
+
     int destPos = player.track[track].actual_pos;
 
     if (quantize && player.track[track].uStep > 24)
@@ -2735,7 +2790,15 @@ AUDIO_CORE_FLASH void Sequencer::handleNoteOn(
              * spr warunek wejscia w track
              */
             bool isPrerollPreviewOnly = player.preRecMetronomeActive && !isAnticipatedBeat1;
+#if MT_HAS_TRACKLEN // MT: on a short track a note may replace a note-off from an earlier loop
+            const int recPatternLength = getActualPattern()->track[0].length + 1;
+            const bool replacesNoteOff =
+              tracklenRecording(tr, recPatternLength) < recPatternLength &&
+              mods::tracklen::holdsOnlyNoteOff(*step, STEP_NOTE_OFF_DEFAULT);
+            if ((isPrerollPreviewOnly || (step->isNoteEmpty() && !step->hasAnyFx()) || replacesNoteOff) && isRecArmedOnTrack(tr))
+#else
             if ((isPrerollPreviewOnly || (step->isNoteEmpty() && !step->hasAnyFx())) && isRecArmedOnTrack(tr))
+#endif
             {
                 if (singleArmedTrack < 0 && player.track[tr].noteOpen && !padInstrumentEdit)
                 {
@@ -2773,6 +2836,12 @@ AUDIO_CORE_FLASH void Sequencer::handleNoteOn(
                 if (!player.preRecMetronomeActive || isAnticipatedBeat1)
                 {
                     newFileManager.storePatternUndoRevision();
+#if MT_HAS_TRACKLEN // MT: the note-off's own timing goes with it
+                    if (replacesNoteOff)
+                    {
+                        step->micromove = -1;
+                    }
+#endif
                     step->note = note;
                     step->instrument = inst;
                     wasChangeInPattern = true;
@@ -3018,7 +3087,14 @@ void Sequencer::handleNoteOff(byte channel, // pochodzenie grida np. GRID_OUTSID
 
                             step->note = STEP_NOTE_OFF_DEFAULT;
 
+#if MT_HAS_TRACKLEN // MT: the step a short track is playing
+                            const int recPatternLength = getActualPattern()->track[0].length + 1;
+                            if (recMicrotiming() &&
+                                destinationStep == mods::tracklen::playedStep(player.track[tr].actual_pos,
+                                                                              tracklenRecording(tr, recPatternLength)))
+#else
                             if (recMicrotiming() && destinationStep == player.track[tr].actual_pos)
+#endif
                             {
                                 step->micromove =
                                   clamp<int>(mapClamped<int>(player.uStep, 1, 48, 0, 100),
@@ -3089,7 +3165,14 @@ void Sequencer::handleNoteOff(byte channel, // pochodzenie grida np. GRID_OUTSID
 
                             step->note = STEP_NOTE_OFF_DEFAULT;
 
+#if MT_HAS_TRACKLEN // MT: the step a short track is playing
+                            const int recPatternLength = getActualPattern()->track[0].length + 1;
+                            if (recMicrotiming() &&
+                                destinationStep == mods::tracklen::playedStep(player.track[tr].actual_pos,
+                                                                              tracklenRecording(tr, recPatternLength)))
+#else
                             if (recMicrotiming() && destinationStep == player.track[tr].actual_pos)
+#endif
                             {
                                 step->micromove =
                                   clamp<int>(mapClamped<int>(player.uStep, 1, 48, 0, 100),

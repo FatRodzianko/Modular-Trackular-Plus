@@ -1036,6 +1036,16 @@ void cTracker::notes()
             {
                 if (tracks->inactive[tracks->firstVisibleTrack + i])
                     actualColor = colors[12];
+#if MT_HAS_TRACKLEN // MT: past a short track's length: grey, and blank where it's empty
+                else if ((tracks->pastLengthRows[tracks->firstVisibleTrack + i] >> j) & 1)
+                {
+                    if (*text == '-')
+                    {
+                        continue;
+                    }
+                    actualColor = colors[12];
+                }
+#endif
                 else if (*text == '-')
                     actualColor = colors[6];
                 else
@@ -1092,6 +1102,16 @@ void cTracker::instruments()
             {
                 if (tracks->inactive[track])
                     actualColor = colors[12];
+#if MT_HAS_TRACKLEN // MT: past a short track's length: grey, and blank where it's empty
+                else if ((tracks->pastLengthRows[track] >> j) & 1)
+                {
+                    if (*text == '-')
+                    {
+                        continue;
+                    }
+                    actualColor = colors[12];
+                }
+#endif
                 else if (*text == '-')
                     actualColor = colors[7];
                 else
@@ -1159,6 +1179,16 @@ void cTracker::fxes1()
             {
                 if (tracks->inactive[tracks->firstVisibleTrack + i])
                     actualColor = colors[12];
+#if MT_HAS_TRACKLEN // MT: past a short track's length: grey, and blank where it's empty
+                else if ((tracks->pastLengthRows[tracks->firstVisibleTrack + i] >> j) & 1)
+                {
+                    if (*text == '-')
+                    {
+                        continue;
+                    }
+                    actualColor = colors[12];
+                }
+#endif
                 else if (*text == '-')
                     actualColor = colors[8];
                 else
@@ -1211,6 +1241,16 @@ void cTracker::fxes2()
             {
                 if (tracks->inactive[tracks->firstVisibleTrack + i])
                     actualColor = colors[12];
+#if MT_HAS_TRACKLEN // MT: past a short track's length: grey, and blank where it's empty
+                else if ((tracks->pastLengthRows[tracks->firstVisibleTrack + i] >> j) & 1)
+                {
+                    if (*text == '-')
+                    {
+                        continue;
+                    }
+                    actualColor = colors[12];
+                }
+#endif
                 else if (*text == '-')
                     actualColor = colors[9];
                 else

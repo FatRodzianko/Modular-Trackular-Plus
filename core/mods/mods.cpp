@@ -17,6 +17,7 @@
 #include "modsProject.h"
 #include "modsSwitches.h"
 #include "swing.h"
+#include "tracklen.h"
 
 #include "Platform.h"
 #include "fileManager.h"
@@ -96,7 +97,8 @@ class CeFileIo : public FileIo
 };
 
 constexpr size_t kConfigBufferSize = 512;
-constexpr size_t kProjectBufferSize = 6144; // Color Song's record is the largest, up to 5,124
+// Color Song's record is the largest, up to 5,124, then Variable Track Length's, up to 4,335.
+constexpr size_t kProjectBufferSize = 10496;
 
 __NOINIT(EXTERNAL_RAM) uint8_t configBuffer[kConfigBufferSize];
 __NOINIT(EXTERNAL_RAM) uint8_t projectBuffer[kProjectBufferSize];
@@ -139,6 +141,9 @@ void init(FileSystem* fileSystem)
     projectStore.clear();
 #if MT_HAS_COLORSONG
     colorsong::init();
+#endif
+#if MT_HAS_TRACKLEN
+    tracklen::init();
 #endif
     project::setChangedCallback(markProjectChanged);
     config::load(fileIo, configStore, defaults.data(), kModCount);
@@ -203,6 +208,24 @@ void colorsongUpdate()
 }
 #endif
 
+#if MT_HAS_TRACKLEN
+void projectTracklenEdited()
+{
+    if (tracklen::store(projectStore))
+    {
+        project::markChanged();
+    }
+}
+
+void tracklenTracksPasted(uint8_t sourcePattern, uint8_t destPattern, uint8_t sourceTrack, uint8_t destTrack, uint8_t tracks)
+{
+    if (on(Mod::tracklen) && tracklen::copyTracks(sourcePattern, destPattern, sourceTrack, destTrack, tracks))
+    {
+        projectTracklenEdited();
+    }
+}
+#endif
+
 void projectSettingEdited()
 {
 #if MT_HAS_HUMANIZE
@@ -260,6 +283,9 @@ void onWorkspaceLoaded()
 #endif
 #if MT_HAS_COLORSONG
     colorsong::reset();
+#endif
+#if MT_HAS_TRACKLEN
+    tracklen::load(projectStore);
 #endif
 }
 

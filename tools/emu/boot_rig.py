@@ -264,6 +264,8 @@ def main():
     ap.add_argument("--blocks", type=int, default=300)
     ap.add_argument("--preempt", default="", help="shortest,longest instructions between interrupts in the main loop")
     ap.add_argument("--preempt-play", default="", help="the same, once Play is pressed; a main loop is short then")
+    ap.add_argument("--expect-tracklen", action="store_true",
+                    help="fail unless the project's lengths are what the audio interrupt played")
     args = ap.parse_args()
     r = BootRig(args.axf)
     m = r.m
@@ -370,6 +372,12 @@ def main():
         where()
         return 1
     print("sd unexpected", sorted(set(r.sd.unexpected))[:12])
+    if args.expect_tracklen:
+        lengths = bytes(m.read(m.addr("_ZN4mods8tracklen13activeLengthsE"), 16))
+        print("track lengths in the interrupt's copy:", list(lengths), "notes", notes[0], flush=True)
+        if not any(lengths) or notes[0] == 0:
+            print("FAILED: the lengths aren't in play")
+            return 1
     return 0
 
 

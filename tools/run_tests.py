@@ -103,6 +103,7 @@ def jobs_for(args, projects):
         Job("colorsong", e / "test_colorsong.py", mods, ref, inputs=both),
         Job("humanize", e / "test_humanize.py", mods, inputs=[mods]),
         Job("swing", e / "test_swing.py", mods, ref, inputs=both),
+        Job("tracklen", e / "test_tracklen.py", mods, ref, inputs=both),
         Job("sound rig", e / "test_sound_rig.py", mods, ref, inputs=both),
         Job("masterfx objects", e / "test_masterfx.py", mods, ref, *([args.rig] if args.rig else []),
             inputs=both + ((args.rig,) if args.rig else ())),
@@ -132,6 +133,8 @@ def jobs_for(args, projects):
                             inputs=[args.diag, projects["worst"]]))
     if projects:
         for label, folder in projects.items():
+            if label == "tracklen":
+                continue
             for firmware, axf in (("mods", mods), ("reference", ref)):
                 jobs.append(Job(f"boot {label} {firmware}", boot, axf, folder, "--blocks", 300, inputs=[axf, folder]))
                 jobs.append(Job(f"preempt {label} {firmware}", boot, axf, folder, "--blocks", worst_loops[label],
@@ -139,14 +142,25 @@ def jobs_for(args, projects):
         jobs.append(Job("send leak", e / "test_send_leak.py", mods, ref, projects["held"],
                         inputs=[mods, ref, projects["held"]]))
         jobs.append(Job("cost", e / "test_bundle_cost.py", mods, ref, projects["worst"], inputs=[mods, ref, projects["worst"]]))
+        short = projects["tracklen"]
+        jobs.append(Job("boot tracklen", boot, mods, short, "--blocks", 300, "--expect-tracklen", inputs=[mods, short]))
+        jobs.append(Job("preempt tracklen", boot, mods, short, "--blocks", worst_loops["worst"], "--expect-tracklen",
+                        "--preempt", "3000,120000", "--preempt-play", play_gaps, inputs=[mods, short]))
+        jobs.append(Job("cost tracklen", e / "test_bundle_cost.py", mods, ref, short, inputs=[mods, ref, short]))
     return jobs
 
 
 def make_projects(source, parent):
-    """The test projects, in a temporary folder: 8 voices held, and the worst case. Both with their effects."""
+    """The test projects, in a temporary folder: 8 voices held, and the worst case. Both with their effects.
+    The third is the worst case with a track length on every track of every pattern, from a 1.2.0 tracklen.bin."""
     import make_masterfx_test_project as maker
+    from test_tracklen import side_file
+    short = maker.make(source, parent, "tracklen", keep_masterfx=True, worst=True)
+    (short / "mods.bin").unlink(missing_ok=True)
+    (short / "tracklen.bin").write_bytes(side_file([(p, {t: t % 7 + 1 for t in range(16)}) for p in range(1, 256)]))
     return {"held": maker.make(source, parent, "held", keep_masterfx=True),
-            "worst": maker.make(source, parent, "worst", keep_masterfx=True, worst=True)}
+            "worst": maker.make(source, parent, "worst", keep_masterfx=True, worst=True),
+            "tracklen": short}
 
 
 def main():

@@ -24,6 +24,7 @@
 #include "humanize.h"           // MT:
 #include "mods.h"               // MT:
 #include "modsPatternButtons.h" // MT:
+#include "tracklen.h"           // MT:
 
 strTrackerPattern cPatternEditor::trackerPattern;
 cPatternEditor::strFill cPatternEditor::fillData[6];
@@ -46,6 +47,12 @@ static void functExportSelection();
 static void functInvert();
 #if MT_HAS_HUMANIZE // MT:
 static void functHumanize();
+#endif
+#if MT_HAS_TRACKLEN // MT:
+static void functTrackLength(uint8_t state);
+static bool trackLengthIsHeld();
+static const char* trackLengthText();
+static void updateTrackLengthButton();
 #endif
 static void functDuplicatePattern();
 static void functExpandPattern();
@@ -179,6 +186,9 @@ void cPatternEditor::update()
 {
 #if MT_HAS_MASTERFX // MT: the unit has started, so the project's effects may play
     mods::masterfxStarted();
+#endif
+#if MT_HAS_TRACKLEN // MT: the button's second line follows the cursor's track
+    updateTrackLengthButton();
 #endif
 
     // zarzadznie renderowaniem zaznaczenia ---------------------------
@@ -632,6 +642,15 @@ void cPatternEditor::refreshPattern()
                                               ? mtProject.values.trackMute[trackIdx]
                                               : mtProject.values.midiTrackMute[trackIdx % 8];
 
+#if MT_HAS_TRACKLEN // MT: past a short track's length, a row shows the step it plays there
+        const int trackLength =
+          mods::on(mods::Mod::tracklen)
+            ? mods::tracklen::ownLength(mods::tracklen::stored(mtProject.values.actualPattern, trackIdx),
+                                        trackerPattern.patternLength)
+            : trackerPattern.patternLength;
+        trackerPattern.pastLengthRows[trackIdx] = 0;
+#endif
+
         for (uint8_t rowIdx = 0; rowIdx < 15; rowIdx++)
         {
             strTrackerPattern::strTracks::strRow& row = trackerPattern.track[trackIdx].row[rowIdx];
@@ -687,6 +706,14 @@ void cPatternEditor::refreshPattern()
                 row.fx[1][4] = 0;
                 continue;
             }
+
+#if MT_HAS_TRACKLEN // MT:
+            if (seqStepIdx >= trackLength)
+            {
+                seqStepIdx = mods::tracklen::playedStep(seqStepIdx, trackLength);
+                trackerPattern.pastLengthRows[trackIdx] |= static_cast<uint16_t>(1u << rowIdx);
+            }
+#endif
 
             bool showInstrument = false;
             Sequencer::strPattern::strTrack::strStep& seqStep =
@@ -2024,6 +2051,22 @@ void functEncoder(int16_t value)
 
         return;
     }
+
+#if MT_HAS_TRACKLEN // MT: while Trk Len is held, the encoder sets the cursor's track's length
+    if (trackLengthIsHeld())
+    {
+        if (mods::tracklen::edit(mtProject.values.actualPattern,
+                                 PTE->trackerPattern.actualTrack,
+                                 value,
+                                 sequencer.getPatternLength()))
+        {
+            mods::projectTracklenEdited();
+            PTE->refreshPattern();
+            updateTrackLengthButton();
+        }
+        return;
+    }
+#endif
 
     if (PTE->buttons->isButtonPressed(interfaceButtonPattern))
     {
@@ -3959,6 +4002,83 @@ static void functInvert()
     newFileManager.setActualPatternStructChanged();
 }
 
+#if MT_HAS_TRACKLEN // MT: Trk Len
+// Whether it's held is read from the button itself when it's needed, so nothing can leave
+// the encoder stuck on the length if a popup or another screen takes the release.
+static void functTrackLength(uint8_t)
+{
+}
+
+// The button's slot on page 3, or -1 when the page or the button isn't showing.
+static int trackLengthSlot()
+{
+    if (!mods::on(mods::Mod::tracklen) || PTE->actualActionButtonsPage != 2 ||
+        PTE->keyboardManager.getState() || PTE->fillState != 0 ||
+        mtPopups.getStepPopupState() != stepPopupNone || mtMenuPopup.isPopupVisible())
+    {
+        return -1;
+    }
+
+    for (uint8_t i = 0; i < mods::kPatternButtonSlots; i++)
+    {
+        const mods::PatternButton* button = mods::patternEditorButton(i);
+        if (button == nullptr)
+        {
+            break;
+        }
+        if (button->hold == functTrackLength)
+        {
+            return mods::kPatternButtonFirst + i;
+        }
+    }
+    return -1;
+}
+
+static bool trackLengthIsHeld()
+{
+    const int slot = trackLengthSlot();
+    return slot >= 0 && PTE->buttons->isButtonPressed(interfaceButton0 + slot);
+}
+
+// The cursor's track's length, 0 when it plays the whole pattern.
+static int trackLengthShown()
+{
+    const int patternLength = sequencer.getPatternLength();
+    const int length = mods::tracklen::ownLength(
+      mods::tracklen::stored(mtProject.values.actualPattern, PTE->trackerPattern.actualTrack),
+      patternLength);
+    return length < patternLength ? length : 0;
+}
+
+static char trackLengthLine[4]; // the label keeps the pointer
+static int trackLengthDrawn = -1;
+
+static const char* trackLengthText()
+{
+    trackLengthDrawn = trackLengthShown();
+    if (trackLengthDrawn > 0)
+    {
+        snprintf(trackLengthLine, sizeof(trackLengthLine), "%d", trackLengthDrawn);
+    }
+    else
+    {
+        strcpy(trackLengthLine, "--");
+    }
+    return trackLengthLine;
+}
+
+// Main loop, each frame: draws only when the number changed.
+static void updateTrackLengthButton()
+{
+    const int slot = trackLengthSlot();
+    if (slot >= 0 && trackLengthShown() != trackLengthDrawn)
+    {
+        display.setControlText2(PTE->label[slot], trackLengthText());
+        display.refreshControl(PTE->label[slot]);
+    }
+}
+#endif
+
 #if MT_HAS_HUMANIZE // MT: without a selection, the cursor's whole track
 static void functHumanize()
 {
@@ -5190,6 +5310,9 @@ static const mods::PatternButton modPatternButtons[] = {
 #if MT_HAS_HUMANIZE
     { mods::Mod::humanize, "Humanize", functHumanize },
 #endif
+#if MT_HAS_TRACKLEN
+    { mods::Mod::tracklen, "Trk Len", nullptr, functTrackLength, trackLengthText },
+#endif
     { mods::Mod::kCount, nullptr, nullptr },
 };
 
@@ -5210,15 +5333,19 @@ void cPatternEditor::setActionButtonPage3Funct()
     ip->setButtonObj(interfaceButton1, buttonPress, functNameTrack);
 
 #if MT_MODS // MT:
-    if (editMode)
+    for (uint8_t i = 0; i < mods::kPatternButtonSlots; i++)
     {
-        for (uint8_t i = 0; i < mods::kPatternButtonSlots; i++)
+        const mods::PatternButton* button = mods::patternEditorButton(i);
+        if (button == nullptr)
         {
-            const mods::PatternButton* button = mods::patternEditorButton(i);
-            if (button == nullptr)
-            {
-                break;
-            }
+            break;
+        }
+        if (button->hold != nullptr)
+        {
+            ip->setButtonObj(interfaceButton0 + mods::kPatternButtonFirst + i, button->hold);
+        }
+        else if (editMode)
+        {
             ip->setButtonObj(interfaceButton0 + mods::kPatternButtonFirst + i, buttonPress, button->press);
         }
     }
