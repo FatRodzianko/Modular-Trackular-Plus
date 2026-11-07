@@ -255,6 +255,77 @@ void testTable()
     check(activePattern == 1, "the copy is marked");
 }
 
+void testCopyTracks()
+{
+    init();
+    edit(1, 0, -10, 16); // 6
+    edit(1, 1, -13, 16); // 3
+    edit(2, 0, -4, 16);  // 12
+    edit(2, 5, -2, 16);  // 14
+
+    check(copyTracks(1, 3, 0, 0, 16) && stored(3, 0) == 6 && stored(3, 1) == 3 && stored(3, 2) == 0,
+          "a whole pattern's lengths");
+    check(stored(1, 0) == 6 && stored(1, 1) == 3, "the source keeps its own");
+    check(!copyTracks(1, 3, 0, 0, 16), "again changes nothing");
+
+    check(copyTracks(1, 2, 0, 0, 16) && stored(2, 0) == 6 && stored(2, 5) == 0,
+          "a track with no length clears the one it's pasted over");
+
+    init();
+    edit(1, 2, -10, 16); // 6
+    edit(1, 3, -13, 16); // 3
+    edit(4, 8, -4, 16);  // 12
+    edit(4, 11, -2, 16); // 14
+    check(copyTracks(1, 4, 2, 9, 2) && stored(4, 9) == 6 && stored(4, 10) == 3, "a block, to other tracks");
+    check(stored(4, 8) == 12 && stored(4, 11) == 14, "tracks outside the block stay");
+
+    // One pattern, overlapping: every length is from before the paste.
+    init();
+    edit(1, 0, -15, 16); // 1
+    edit(1, 1, -14, 16); // 2
+    edit(1, 2, -13, 16); // 3
+    edit(1, 3, -12, 16); // 4
+    check(copyTracks(1, 1, 0, 1, 3) && stored(1, 0) == 1 && stored(1, 1) == 1 && stored(1, 2) == 2 &&
+            stored(1, 3) == 3,
+          "overlapping, onto later tracks");
+    init();
+    edit(1, 0, -15, 16);
+    edit(1, 1, -14, 16);
+    edit(1, 2, -13, 16);
+    edit(1, 3, -12, 16);
+    check(copyTracks(1, 1, 1, 0, 3) && stored(1, 0) == 2 && stored(1, 1) == 3 && stored(1, 2) == 4 &&
+            stored(1, 3) == 4,
+          "overlapping, onto earlier tracks");
+    check(!copyTracks(1, 1, 1, 1, 3), "onto itself changes nothing");
+
+    init();
+    edit(1, 15, -10, 16);
+    check(!copyTracks(1, 2, 15, 15, 2) && stored(2, 15) == 0, "past track 16: nothing");
+    check(!copyTracks(1, 2, 0, 15, 2) && !copyTracks(1, 2, 15, 0, 2), "either side past track 16: nothing");
+    check(!copyTracks(1, 2, 0, 0, 0), "no tracks: nothing");
+
+    // The interrupt's copy.
+    init();
+    edit(1, 0, -10, 16);
+    check(activeStored(2, 0) == 0, "the copy holds the destination");
+    copyTracks(1, 2, 0, 0, 1);
+    check(activeStored(2, 0) == 6, "a paste reaches the copy");
+    check(activePattern == 2, "the copy is marked");
+
+    // The record.
+    uint8_t buffer[6144 + 4352];
+    init();
+    edit(1, 0, -10, 16);
+    copyTracks(1, 9, 0, 0, 1);
+    Store s(buffer, sizeof(buffer), "MTP1");
+    s.clear();
+    check(store(s), "a pasted length stores");
+    init();
+    load(s);
+    check(stored(9, 0) == 6 && stored(1, 0) == 6, "and comes back");
+    init();
+}
+
 void testRecord()
 {
     uint8_t buffer[6144 + 4352];
@@ -378,6 +449,7 @@ int main()
     testNoteOffRule();
     testRoll();
     testTable();
+    testCopyTracks();
     testRecord();
     testImport();
     printf("test_tracklen: %d checks, %d failures\n", checks, failures);

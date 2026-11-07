@@ -453,7 +453,9 @@ the record:
 - **Hooks:** a Copy to New button (dynamic placement); the action copies the open
   pattern, unsaved edits included, to the first free pattern number through CE's file
   manager (Workspace pattern file plus pattern metadata), then opens it.
-- **With tracklen:** lengths come along (per decision 5).
+- **With tracklen:** the copy must carry the track lengths. They aren't in the pattern file, so copying through
+  CE's file manager leaves them behind, and the new pattern would play every track whole.
+  `tracklen::copyTracks`, which Song's paste uses, does it. Test it.
 - **Tests:** emulator: copy with unsaved edits, all slots full, button placement.
 - **Effort:** S.
 
@@ -470,7 +472,7 @@ Settings > Mods and Config > Mods.
 - **Hooks:** `play_microStep` (the step read); `switchRowStep` (CE's `passCount`, below);
   `calcStepLength` (Roll's look-ahead); `getDestRecordingStep`, `handleNoteOn`, `handleNoteOff` (live
   recording); `refreshPattern` and the four drawing functions of both trackers (the grid); page 3's
-  labels and functions and `functEncoder` (the button).
+  labels and functions and `functEncoder` (the button); `copySongTracks` (Song's paste).
 - **CE's conditions:** with the mod on, a short track's pass ends at its own length, so Play/Skip,
   Skip/Play and the `GL` and `!L` after them count its loops. At length 6 in 16 steps: steps 0-5 are
   count 0, 6-11 are 1, 12-15 are 2, and the next pass goes on from 3. Full-length tracks count as CE.
@@ -503,12 +505,15 @@ Settings > Mods and Config > Mods.
   one loop on 1.2.0 until its `tl7`. So on a short track a new note may replace a step holding only a
   note-off. A note is never replaced.
 - **Memory:** 272 B of ITCM, 104 B of DTCM (`activeLengths`, the grid's marks, the button's text),
-  12,800 B of SDRAM (table 4,096, a file buffer 4,347, `projectBuffer` from 6,144 to 10,496), 3,512 B
+  12,800 B of SDRAM (table 4,096, a file buffer 4,347, `projectBuffer` from 6,144 to 10,496), 3,720 B
   of flash. No heap, no OCRAM.
 - **Old projects:** `tracklen.bin` imports into the record, and turns the mod on if it holds a length.
   `tools/ce_to_120.py` doesn't write it back.
-- **What CE's own actions do with lengths:** they stay with the pattern number. Copy and Paste Pattern and
-  Song's track copy don't carry them. Duplicate, Expand and Shrink keep the length, so the track just
+- **What CE's own actions do with lengths:** they stay with the pattern number. Song's paste carries them, whole
+  patterns and track blocks, each length with its track and none included, once the notes have landed. Song's
+  Undo restores the notes and the pattern's length but not the track lengths. CE takes the pattern's length only
+  for all 16 tracks or an empty destination, so a length that no longer fits plays the whole pattern. Copy and
+  Paste Pattern on the Pattern screen don't carry them, as they don't carry the pattern's length. Duplicate, Expand and Shrink keep the length, so the track just
   goes on looping. Undo doesn't restore them, as on 1.2.0. They save with the project, so Discard drops
   them, where 1.2.0 saved them at once. Performance mode's per-track pattern load plays with the playing
   pattern's lengths, not the source's. Editing a step past the length edits the hidden step, as on 1.2.0.
@@ -516,13 +521,14 @@ Settings > Mods and Config > Mods.
 - **Tests:** host `test_tracklen.cpp`. Emulator `test_tracklen.py`: Off and full length as plain CE note
   for note; a short track as its loop written out, all 16 tracks, with Micro-move, Roll, Break, song mode,
   Play from a position, a looped selection and performance mode; CE's conditions; recording; grid, button,
-  Config and files. Release tier: real boot, Open and Play with the interrupt firing inside main-loop code,
+  Config, files and Song's paste on real pattern files. Release tier: real boot, Open and Play with the interrupt firing inside main-loop code,
   and the cost limit, on the worst-case project with a length on every track of every pattern.
 - **Device test, 2026-11-07:** recorder build, from `/mfx_log.txt`. The log has no markers, so the projects are
   matched by order and settings. `L1`, `L5` and `L8`, with lengths 4-8 on every track of every pattern: slowest
   26 %, 49 % and 79 %. `L8` averaged 61 % over 34 s, against 60 % and 78 % without the mod's lengths. No block over
-  time, no stall and no lockup record. The button, grid, loops, CE's Play/Skip, live recording, Off and On, and
-  saving and reopening all behaved as designed. Not on the unit, emulator only: Break FX, performance mode, Export,
+  time, no stall and no lockup record. The button, grid, loops, CE's Play/Skip, live recording, Off and On,
+  saving and reopening, and a song of a pattern with lengths then one without all behaved as designed.
+  A second firmware with Song's paste passed the same day: whole pattern, track block, Undo, Off, Save and Open. Not on the unit, emulator only: Break FX, performance mode, Export,
   per-mod Saving, and the revolver view's 288 B display case.
 - **Effort:** M.
 

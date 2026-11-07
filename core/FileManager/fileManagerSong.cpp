@@ -153,7 +153,14 @@ void cFileManager::copySongTracks(char* currentProjectPath,
         setProjectStructChanged();
     }
 
+#if MT_HAS_TRACKLEN // MT: a track's length goes with its notes, once they've landed
+    if (writePatternFile(currentPath, destPattern))
+    {
+        mods::tracklenTracksPasted(srcPatternIdx, destPaternIdx, trackStartSrc, trackStartDest, tracksNum);
+    }
+#else
     writePatternFile(currentPath, destPattern);
+#endif
 }
 
 void cFileManager::deleteTracks(char* currentProjectPath,

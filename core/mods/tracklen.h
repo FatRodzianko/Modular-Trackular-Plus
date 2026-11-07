@@ -132,6 +132,10 @@ inline uint8_t activeStored(uint8_t pattern, uint8_t track)
 // length, where the pattern's length means none. True if it changed.
 bool edit(uint8_t pattern, uint8_t track, int delta, int patternLength);
 
+// Song's paste: each pasted track's length goes with its notes, none included, so a track
+// pasted over a short one plays whole. True if a length changed.
+bool copyTracks(uint8_t sourcePattern, uint8_t destPattern, uint8_t sourceTrack, uint8_t destTrack, uint8_t tracks);
+
 // The record into the table: none if the project has none. A damaged record gives none.
 void load(const Store& store);
 

@@ -216,6 +216,14 @@ void projectTracklenEdited()
         project::markChanged();
     }
 }
+
+void tracklenTracksPasted(uint8_t sourcePattern, uint8_t destPattern, uint8_t sourceTrack, uint8_t destTrack, uint8_t tracks)
+{
+    if (on(Mod::tracklen) && tracklen::copyTracks(sourcePattern, destPattern, sourceTrack, destTrack, tracks))
+    {
+        projectTracklenEdited();
+    }
+}
 #endif
 
 void projectSettingEdited()

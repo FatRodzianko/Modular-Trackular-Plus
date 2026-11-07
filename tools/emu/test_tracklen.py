@@ -24,6 +24,9 @@ the synth libraries.
    it's held with something else on the screen.
 7. Config and files: the switches, mods.bin through Save, Save As and New Project, a 1.2.0
    project's tracklen.bin, pattern files untouched. Where the mod's memory is.
+8. Song's paste: CE's own copySongTracks on real pattern files. Lengths go with the tracks,
+   whole patterns and blocks, and reach the interrupt's copy and mods.bin. Off, no source
+   pattern and a failed write leave the lengths as they were.
 
 The file rules are also in the host tests (core/mods/tests/test_tracklen.cpp).
 
@@ -1327,16 +1330,131 @@ def test_files(mt: Path) -> None:
           f"{sd.unexpected} {sd.handles}")
 
 
+class SongPaste:
+    """CE's copySongTracks, with real pattern files on the fake card."""
+
+    def __init__(self, r: Rig, p: Projects):
+        self.r, self.m, self.sd = r, r.m, p.sd
+        m = self.m
+        self.fm = m.addr("newFileManager")
+        m.stub_function(m.addr("_ZN12cFileManager21storeSongUndoRevisionEh"), lambda mm: None)
+        m.call(m.addr("_ZN12cFileManager4initEP10FileSystemP5Synthb"), self.fm, self.sd.obj, m.alloc(4096, 4), 0,
+               max_insns=30_000_000)
+        vtable = m.alloc(64, 4)
+        for i in range(16):
+            m.w32(vtable + 4 * i, m.add_stub(lambda mm: 0))
+        crc = m.alloc(16, 4)
+        m.w32(crc, vtable)
+        m.call(m.addr("_ZN9Sequencer16setCrcCalculatorEP13CrcCalculator"), r.seq, crc)
+        m.call(m.addr("_ZN12cFileManager16setCrcCalculatorEP13CrcCalculator"), self.fm, crc)
+        self.workspace = m.put_str("Workspace")
+        self.write_fn = m.addr("_ZN12cFileManager16writePatternFileEPKcPN9Sequencer10strPatternE")
+
+    @staticmethod
+    def path(pattern: int) -> str:
+        return f"Workspace/patterns/pattern_{pattern:02d}.mtp"
+
+    def write_pattern(self, number: int, length: int, note: int) -> None:
+        """Through CE's own writer, with a note on the first step of every track."""
+        r, m = self.r, self.m
+        r.clear(length)
+        for track in range(TRACKS):
+            r.put(0, track, 0, note + track)
+        ok = m.call(self.write_fn, self.fm, m.put_str(self.path(number)), r.pattern(0), max_insns=30_000_000)
+        check(ok & 0xFF == 1, f"pattern {number} written", str(ok))
+
+    def paste(self, source: int, dest: int, source_track: int, dest_track: int, tracks: int) -> None:
+        self.m.call(self.m.addr("_ZN12cFileManager14copySongTracksEPchhhhh"), self.fm, self.workspace, source, dest,
+                    source_track, dest_track, tracks, max_insns=100_000_000)
+
+
+def test_paste(mt: Path) -> None:
+    r = Rig(mt)
+    p = Projects(r)
+    s = SongPaste(r, p)
+    m, sd = r.m, p.sd
+    edited = m.addr("_ZN4mods21projectTracklenEditedEv")
+
+    p.new_project()
+    r.set_switch(True)
+    m.call(m.addr("_ZN4mods20projectSwitchChangedEv"))
+    s.write_pattern(1, 16, 30)
+    s.write_pattern(2, 32, 60)
+    s.write_pattern(3, 32, 60)
+    r.set_length(0, 6, 16, 1)
+    r.set_length(1, 3, 16, 1)
+    r.set_length(5, 20, 32, 2)
+    m.call(edited)
+
+    # a whole pattern: the Song screen's pattern list
+    before = sd.files[s.path(2)]
+    s.paste(1, 2, 0, 0, TRACKS)
+    check(sd.files[s.path(2)] != before, "CE's paste ran: the file changed")
+    check((r.stored(0, 2), r.stored(1, 2)) == (6, 3), "a whole pattern: its lengths",
+          str((r.stored(0, 2), r.stored(1, 2))))
+    check(r.stored(5, 2) == 0, "a track with no length clears the one it was pasted over", str(r.stored(5, 2)))
+    check((r.stored(0, 1), r.stored(1, 1)) == (6, 3), "the source keeps its own")
+
+    # the interrupt's copy, then the project's record
+    m.call(m.addr("_ZN4mods8tracklen10fillActiveEh"), 3)
+    s.paste(1, 3, 0, 0, TRACKS)
+    marked = struct.unpack("<H", bytes(m.read(m.addr("_ZN4mods8tracklen13activePatternE"), 2)))[0]
+    check(marked == 0xFFFF, "the interrupt's copy is marked stale", hex(marked))
+    m.call(m.addr("_ZN4mods8tracklen10fillActiveEh"), 3)
+    got = m.r8(m.addr("_ZN4mods8tracklen13activeLengthsE"))
+    check(got == 6, "and fills with the new length", str(got))
+    p.save("Projects", "Pasted")
+    p.new_project()
+    p.open("Projects", "Pasted")
+    check((r.stored(0, 3), r.stored(1, 3)) == (6, 3), "Save and Open bring them back",
+          str((r.stored(0, 3), r.stored(1, 3))))
+
+    # a block, to other tracks
+    r.set_length(9, 11, 32, 3)
+    r.set_length(12, 5, 32, 3)
+    m.call(edited)
+    s.paste(1, 3, 0, 10, 2)
+    check((r.stored(10, 3), r.stored(11, 3)) == (6, 3), "a block: lengths go with their tracks",
+          str((r.stored(10, 3), r.stored(11, 3))))
+    check((r.stored(9, 3), r.stored(12, 3)) == (11, 5), "tracks beside the block stay",
+          str((r.stored(9, 3), r.stored(12, 3))))
+
+    # past the last track: CE trims the block, and the lengths follow what it copied
+    r.set_length(15, 7, 32, 3)
+    s.paste(1, 3, 0, 15, 2)
+    check(r.stored(15, 3) == 6, "a block trimmed at track 16: the first track's length", str(r.stored(15, 3)))
+
+    # no source file: CE returns before copying
+    r.set_length(0, 9, 32, 3)
+    s.paste(77, 3, 0, 0, TRACKS)
+    check(r.stored(0, 3) == 9, "no source pattern: nothing changes", str(r.stored(0, 3)))
+
+    # Off: CE's paste, and the lengths stay
+    r.set_switch(False)
+    s.paste(1, 3, 0, 0, TRACKS)
+    check(r.stored(0, 3) == 9, "Off: lengths stay as they were", str(r.stored(0, 3)))
+    r.set_switch(True)
+
+    # a paste that can't be written: the notes didn't land, so neither do the lengths
+    m.stub_function(s.write_fn, lambda mm: 0)
+    s.paste(1, 3, 0, 0, TRACKS)
+    check(r.stored(0, 3) == 9, "a failed write: lengths stay as they were", str(r.stored(0, 3)))
+
+    check(not sd.unexpected, "only expected file calls", str(sd.unexpected))
+    check(not sd.handles, "every file closed", str(sd.handles))
+
+
 def main() -> int:
     if len(sys.argv) < 3:
         print(__doc__)
         return 2
     mt, ref = Path(sys.argv[1]), Path(sys.argv[2])
-    sections = sys.argv[3:] or ["config", "off", "written", "roll", "conditions", "recording", "grid", "drawing", "button", "files"]
+    sections = sys.argv[3:] or ["config", "off", "written", "roll", "conditions", "recording", "grid", "drawing", "button", "files", "paste"]
     tests = {"config": lambda: test_config(mt), "off": lambda: test_off(mt, ref), "written": lambda: test_written_out(mt),
              "roll": lambda: test_roll_look_ahead(mt), "conditions": lambda: test_conditions(mt, ref),
              "recording": lambda: test_recording(mt, ref), "grid": lambda: test_grid(mt),
-             "drawing": lambda: test_drawing(mt), "button": lambda: test_button(mt), "files": lambda: test_files(mt)}
+             "drawing": lambda: test_drawing(mt), "button": lambda: test_button(mt), "files": lambda: test_files(mt),
+             "paste": lambda: test_paste(mt)}
     for name in sections:
         print(f"-- {name}")
         tests[name]()

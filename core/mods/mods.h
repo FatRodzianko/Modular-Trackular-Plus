@@ -132,6 +132,8 @@ void colorsongUpdate();
 #if MT_HAS_TRACKLEN
 // A length changed on the Pattern screen: into the project's record.
 void projectTracklenEdited();
+// Song pasted tracks: their lengths go with them, if the mod is on. Main loop.
+void tracklenTracksPasted(uint8_t sourcePattern, uint8_t destPattern, uint8_t sourceTrack, uint8_t destTrack, uint8_t tracks);
 #endif
 
 // After any Config menu edit: mods' settings the menu edits directly are stored if they

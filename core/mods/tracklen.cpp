@@ -147,6 +147,33 @@ bool edit(uint8_t pattern, uint8_t track, int delta, int patternLength)
     return true;
 }
 
+bool copyTracks(uint8_t sourcePattern, uint8_t destPattern, uint8_t sourceTrack, uint8_t destTrack, uint8_t tracks)
+{
+    if (sourceTrack + tracks > kTracks || destTrack + tracks > kTracks)
+    {
+        return false;
+    }
+
+    // A block pasted over itself in one pattern reads the lengths from before the paste.
+    uint8_t lengths[kTracks];
+    memcpy(lengths, table[sourcePattern], kTracks);
+
+    bool changed = false;
+    for (size_t t = 0; t < tracks; t++)
+    {
+        if (table[destPattern][destTrack + t] != lengths[sourceTrack + t])
+        {
+            table[destPattern][destTrack + t] = lengths[sourceTrack + t];
+            changed = true;
+        }
+    }
+    if (changed)
+    {
+        activePattern = kNoPattern; // after the table, as in edit()
+    }
+    return changed;
+}
+
 void load(const Store& source)
 {
     clearTable();
