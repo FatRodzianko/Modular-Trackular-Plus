@@ -281,7 +281,7 @@ doesn't allocate; the steps haven't been looked into. Max stack 7,761.
 
 **Device reading, 2026-11-07, after merging upstream's `main` (`bc3a758`),** recorder build: `L1`, `L5` and
 `L8` slowest 34 %, 50 % and 80 %, `L8` averaging 63 % over 25 s, 1 to 2 points above the readings before the
-merge. 23,705 blocks, none over time, no stall and no lockup record. Longest main loop gap 22 ms, lowest free
+merge. 23,747 blocks, none over time, no stall and no lockup record. Longest main loop gap 22 ms, lowest free
 heap 78,624, max stack 7,721.
 
 **Heap:** 138,752 fixed. A failed malloc hangs the unit, so this is the one with a hard edge.
