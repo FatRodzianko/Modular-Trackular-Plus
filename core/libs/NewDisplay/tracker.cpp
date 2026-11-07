@@ -1186,7 +1186,7 @@ void cTracker::fxes1()
 #if MT_HAS_TRACKLEN // MT: past a short track's length: grey, and blank where it's empty
                 else if ((tracks->pastLengthRows[tracks->firstVisibleTrack + i] >> j) & 1)
                 {
-                    if (*text == '-')
+                    if (*text == '-' || (text[1] == '-' && text[2] == '-')) // CE's empty FX: m--- or V---
                     {
                         continue;
                     }
@@ -1250,7 +1250,7 @@ void cTracker::fxes2()
 #if MT_HAS_TRACKLEN // MT: past a short track's length: grey, and blank where it's empty
                 else if ((tracks->pastLengthRows[tracks->firstVisibleTrack + i] >> j) & 1)
                 {
-                    if (*text == '-')
+                    if (*text == '-' || (text[1] == '-' && text[2] == '-')) // CE's empty FX: m--- or V---
                     {
                         continue;
                     }

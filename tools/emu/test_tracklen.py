@@ -987,6 +987,11 @@ def test_drawing(mt: Path) -> None:
         ghost_empty = d.draw()
         check(len(ghost_empty) < len(all_empty), f"{cls}: an empty cell past the length draws nothing",
               f"{len(ghost_empty)} vs {len(all_empty)}")
+        placeholders = ("---", "--", "m---", "V---")   # CE's empty FX columns, as refreshPattern writes them
+        d.fill(lambda t, row: placeholders, past=0x7FFF)
+        ghost_placeholders = d.draw()
+        check(len(ghost_placeholders) == len(ghost_empty), f"{cls}: CE's m--- and V--- past the length draw nothing",
+              f"{len(ghost_placeholders)} vs {len(ghost_empty)}")
 
         d.fill(lambda t, row: full)
         all_full = d.draw()

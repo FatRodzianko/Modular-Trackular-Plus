@@ -75,10 +75,9 @@ core/mods/tests/           host tests (built and run in CI with the host gcc)
   chords in), so every hook really is compiled out. It is the plain-CE reference the
   emulator tests compare against, with `MT_NO_SYNTH=1` so far and a full build for the
   sound tests.
-- **A CE fix carried here.** `handleNoteOnDelaySend` and `handleNoteOnReverbSend` clear both send channels in mods
-  builds, so a note doesn't leak the last note's send (`PAST_FAILURES.md`). The reference build keeps CE's behaviour.
-  It's 42 B more in each function, but `handleFxNoteOn*Send` stop being inlined copies of them, so ITCM ends 72 B
-  freer. Merging a fixed upstream `main` means dropping the `// MT:` lines from `mtAudioNoteOnHandle.cpp`.
+- **A CE fix, now upstream.** `handleNoteOnDelaySend` and `handleNoteOnReverbSend` clear both send channels, so a
+  note doesn't leak the last note's send (`PAST_FAILURES.md`). Modular carried it for mods builds until upstream's
+  `main` took it on 2026-11-07; the merge took main's version, so the reference build has it too.
 - **Licence.** Files under `core/mods/` are ours and can carry MIT. The one-line
   hooks are changes to CE files and fall under CE's licence, as does the fork as a
   whole (review section 1). Nothing from the fork goes back into Modular-Trackular,
