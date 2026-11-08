@@ -5,7 +5,8 @@
 // the build (MT_HAS_<NAME>=0) has no descriptor.
 //
 // Within each event the mods run in the table's order, which keeps the order mods.cpp
-// had before the registry: Humanize, Global Swing, Master FX, Color Song, Track Length.
+// had before the registry: Humanize, Global Swing, Master FX, Color Song, Copy to New,
+// Track Length.
 // Main loop only, every event: none of them is called from the audio interrupt.
 
 #ifndef MODS_MODSREGISTRY_H_

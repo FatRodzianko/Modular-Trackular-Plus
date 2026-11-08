@@ -290,6 +290,12 @@ once and came back after the restart. 7 plays, 25,711 blocks, none over time, no
 Audio interrupt average 37 to 63 %, slowest 78 %. Longest main loop gap 34 ms, lowest free heap 78,856, max
 stack 7,713.
 
+**Device reading, 2026-11-08, Copy to New (`1ff23e7`),** recorder build: `L1`, then a new project with copies
+made stopped, playing, in song mode and while recording, with Humanize, Track Length and Color Song in turn.
+50 plays, 71,397 blocks, none over time, no stall and no lockup record. Audio interrupt average 20 to 31 %,
+slowest 49 %. Longest main loop gap 22 ms, lowest free heap 74,760, max stack 7,841. The mod allocates
+nothing; the lowest heap figures are all from the new project, and `L1`'s play shows 84,344.
+
 **Heap:** 138,752 fixed. A failed malloc hangs the unit, so this is the one with a hard edge.
 About 58 KB is in use with a project open, and 1.2.0 measured at least 42 KB free. In the
 emulator the break pointer reached 23,968 after the static constructors and 67,112 by the time

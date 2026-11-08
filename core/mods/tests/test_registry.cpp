@@ -8,6 +8,7 @@
 #include "modsRegistry.h"
 
 #include "colorsong.h"
+#include "copypattern.h"
 #include "humanize.h"
 #include "masterfx.h"
 #include "modsProject.h"
@@ -99,6 +100,10 @@ const std::vector<Expected> kExpected = {
     { Mod::colorsong, colorsong::kRecord, colorsong::kRecordVersion, colorsong::init, nullptr, nullptr,
       colorsong::reset, nullptr, nullptr },
 #endif
+#if MT_HAS_COPYPATTERN
+    { Mod::copypattern, copypattern::kRecord, copypattern::kRecordVersion, copypattern::init, nullptr, nullptr,
+      copypattern::cancel, nullptr, nullptr },
+#endif
 #if MT_HAS_TRACKLEN
     { Mod::tracklen, tracklen::kRecord, tracklen::kRecordVersion, tracklen::init, tracklen::load, nullptr,
       nullptr, nullptr, nullptr },
@@ -110,6 +115,7 @@ bool built(Mod id)
     switch (id)
     {
     case Mod::colorsong: return MT_HAS_COLORSONG != 0;
+    case Mod::copypattern: return MT_HAS_COPYPATTERN != 0;
     case Mod::humanize: return MT_HAS_HUMANIZE != 0;
     case Mod::masterfx: return MT_HAS_MASTERFX != 0;
     case Mod::swing: return MT_HAS_SWING != 0;
@@ -235,7 +241,7 @@ void testSettingEdited()
 
 void testInit()
 {
-    // Color Song's and Track Length's init only clear their tables; this checks the walk
+    // Color Song's, Copy to New's and Track Length's init only clear their state; this checks the walk
     // runs without the firmware.
     calls.clear();
     registry::init();

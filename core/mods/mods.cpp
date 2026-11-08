@@ -10,6 +10,7 @@
 #include "mods.h"
 
 #include "colorsong.h"
+#include "copypattern.h"
 #include "lockupRecorder.h"
 #include "masterfx.h"
 #include "modsConfig.h"
@@ -153,6 +154,18 @@ void projectSwitchChanged()
 {
     project::setSwitches(projectStore, switches.data(), kModCount);
 }
+
+#if MT_HAS_COPYPATTERN
+void copypatternPressed()
+{
+    copypattern::press(copypattern::ceSide());
+}
+
+void copypatternUpdate()
+{
+    copypattern::update(copypattern::ceSide());
+}
+#endif
 
 #if MT_HAS_SWING
 void projectSwingSwitchChanged()

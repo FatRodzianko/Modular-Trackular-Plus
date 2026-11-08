@@ -10,6 +10,7 @@
 #include "modsRegistry.h"
 
 #include "colorsong.h"
+#include "copypattern.h"
 #include "humanize.h"
 #include "masterfx.h"
 #include "modsProject.h"
@@ -74,6 +75,20 @@ constexpr std::array<ModDescriptor, kBuiltModCount> kMods{ {
     .load = nullptr,
     .apply = nullptr,
     .reset = colorsong::reset,
+    .storeIfEdited = nullptr,
+    .stored = nullptr,
+  },
+#endif
+#if MT_HAS_COPYPATTERN
+  {
+    .id = Mod::copypattern,
+    .name = "Copy to New",
+    .record = copypattern::kRecord,
+    .recordVersion = copypattern::kRecordVersion,
+    .init = copypattern::init,
+    .load = nullptr,
+    .apply = nullptr,
+    .reset = copypattern::cancel, // a copy started in the last project
     .storeIfEdited = nullptr,
     .stored = nullptr,
   },
