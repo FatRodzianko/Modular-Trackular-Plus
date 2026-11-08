@@ -447,7 +447,8 @@ the record:
 
 ### 3.5 copypattern (Copy to New)
 
-Plan written and its decisions made 2026-11-07: [COPYPATTERN_PLAN.md](COPYPATTERN_PLAN.md). Id 9,
+Built 2026-11-07 on `mod/copypattern`, hardware test not run yet. Plan and its decisions:
+[COPYPATTERN_PLAN.md](COPYPATTERN_PLAN.md). Id 9,
 `MT_HAS_COPYPATTERN`. The 1.2.0 version is final (cp5).
 
 - **CE today:** Duplicate doubles a pattern inside itself. Copy and Paste Pattern copy steps but not the
@@ -459,7 +460,7 @@ Plan written and its decisions made 2026-11-07: [COPYPATTERN_PLAN.md](COPYPATTER
   `tracklenTracksPasted`, the call Song's paste uses.
 - **Hooks:** the button entry and an `update()` call in `fPatternEdit.cpp`, two Config items. No
   change to the sequencer or the file manager. Nothing in the audio interrupt.
-- **Memory:** about 16.5 KB of SDRAM (a snapshot of the pattern), about 2.5 KB of flash.
+- **Memory:** 16,480 B of SDRAM (a snapshot of the pattern and the job), 2,840 B of flash, 56 B of DTCM.
 - **Decisions:** five, in the plan's section 11, all as recommended: stay on your pattern, 1.2.0's
   strict "empty", button order Humanize, Copy to New, Trk Len, no lengths copied while Trk Len is Off.
 - **Effort:** S.

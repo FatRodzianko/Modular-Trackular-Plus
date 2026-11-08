@@ -1,6 +1,8 @@
 # Copy to New on MT+: build plan
 
-Status (2026-11-07): plan only, no code yet. The five decisions are made (section 11).
+Status (2026-11-07): built on `mod/copypattern`, not merged. The host and emulator tests pass
+(section 9); the hardware checklist (section 10) hasn't been run. The five decisions are made
+(section 11).
 Mod id 9 (`Mod::copypattern`, already reserved in `core/mods/mods.h`), flag `MT_HAS_COPYPATTERN`,
 branch `mod/copypattern` off `modular`. Section 3.5 of [CE_PORT_PLAN.md](CE_PORT_PLAN.md) points here.
 
@@ -219,8 +221,8 @@ reads, and matches Shift + Add Slot, but it can lose hidden notes and change the
   it Off (section 1.6 of the port plan) until it's switched on in Project Settings → Mods. New
   projects take Config → Mods.
 - **`MT_NO_MODS`:** every hook in a CE file sits in `#if MT_HAS_COPYPATTERN`, so the reference
-  build stays byte-identical to plain CE. That gets checked by building `main` at the merged commit
-  and the `MT_NO_MODS` build of the branch and comparing the `.ptf` files.
+  build stays byte-identical to plain CE. Checked 2026-11-07: `main` at the merged commit (`bc3a758`)
+  and the branch's `MT_NO_MODS` build, both `EDITION_NAME=CE`, give the same `.ptf` byte for byte.
 - **Code changes:**
   - Ours: `core/mods/copypattern.h/.cpp` (the rules as plain functions for host tests, the job and
     `update()`), `modsBuild.h` (`MT_HAS_COPYPATTERN`), `mods.h` (`kBuiltModCount`, the calls),
@@ -239,17 +241,19 @@ reads, and matches Shift + Add Slot, but it can lose hidden notes and change the
   against page 2's 90 (Render Selection, Duplicate Pattern, and so on), so page 3 stays below a
   page CE already draws. The popup is CE's own, with a shorter text than CE's on this screen. The
   test measures both against the 8,172-byte limit on the worst grid view, and page 3 against page 2.
-- **Memory**, estimated; the build gives the real figures through `tools/mem_budget.py`:
+- **Memory**, measured: `tools/mem_budget.py` on the full build against the same build with
+  `-DMT_HAS_COPYPATTERN=0`:
 
 | Where | What | Bytes |
 |---|---|---|
 | SDRAM, `__NOINIT(EXTERNAL_RAM)` | the snapshot (one `strPattern`), zeroed by `copypattern::init` at boot | 16,432 |
-| SDRAM | the job (source, search position, start time) and the message text | about 40 |
-| Flash | code and texts (1.2.0's code was 1,597 B) | about 2,500 |
-| DTCM | two Config menu items and their setups, as every mod has | about 100 |
+| SDRAM | the job (source, search position, start time) and the message text | 48 |
+| Flash | code, texts, the Config items' setups and descriptions, the button entry (1.2.0's code was 1,597 B) | 2,840 |
+| DTCM | two Config menu items (28 each) | 56 |
 | ITCM, OCRAM, heap | none | 0 |
 
-Mods' SDRAM goes from 31,616 to about 48,100 bytes of the 1 MiB. The snapshot could share CE's own
+Mods' SDRAM goes from 18,868 to 35,348 bytes of the 1 MiB (1,013,228 left). DTCM has 15,320 bytes
+between heap end and stack base, above the 4,096 floor. The snapshot could share CE's own
 temporary pattern buffer (`fileManagerPatternBuffer`, which the search already uses through
 `loadWorkspacePatternToTempBuffer`) and save the 16 KB, but then the mod would depend on CE only
 ever using that buffer from the main loop. At 1.6 % of the 1 MiB, its own buffer is the safer
@@ -302,6 +306,28 @@ in, `fakefs`, against the mods `.axf` and the `MT_NO_MODS` reference; `machine.p
 
 No sound test stage: the mod doesn't change what plays. `tools/run_tests.py` gets a `copypattern`
 job; `--tier release` runs before the device test, with the boot rig's real Open and Play.
+
+**As built.** The list above was the plan. What the tests do now:
+
+- **Host:** 60 checks. Besides the rules above, the job on a fake CE: the copy in the first update,
+  RAM rule-outs that skip the card, one card check per update, the 5 s busy limit, the playing gap
+  (below), pattern changed, a second press ignored, Off and cancel, and performance mode at the press
+  and during the search. Queued patterns and performance tracks are checked here only.
+- **Emulator:** 88 checks, through CE's own file manager, writer, reader and sequencer on a fake
+  card. The interrupt is simulated by a code hook: it swaps the RAM patterns inside
+  `copyCurrentPatternToBuff` ("Pattern changed", nothing written), and changes both RAM patterns
+  inside the card write (the file is still the snapshot). A real MIDI Start isn't run there.
+- **Playing gap:** while playing, at most one card check per 100 ms, so a long search can't take the
+  card from CE's own streaming for long. Not in the plan; added while building.
+- **Button:** it checks that the press is bound only through edit mode's flag. The grey drawing is
+  CE's, not checked.
+- **Display list:** the test compares the label text page 3 draws with all three mods on (Humanize,
+  Copy to / New, Trk Len) against page 2's, which CE already draws. Page 3 has less. It doesn't
+  measure the 8,172-byte list itself.
+- **Left out:** the old-version empty file (CE converts it before the mod sees it), the busy file
+  manager (host only), Save and Open of a copy (CE's own project copy; on the device, checklist
+  step 13), and Off giving the same files as the reference build (the test checks that Off writes
+  nothing, and the reference build has none of the mod's symbols).
 
 **Not covered by the tests:** the card's real timing (how long a search and a write take on a real
 SD card), the popup as you see it, and two card operations at once from MIDI Start.

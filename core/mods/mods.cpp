@@ -10,6 +10,7 @@
 #include "mods.h"
 
 #include "colorsong.h"
+#include "copypattern.h"
 #include "humanize.h"
 #include "lockupRecorder.h"
 #include "masterfx.h"
@@ -142,6 +143,9 @@ void init(FileSystem* fileSystem)
 #if MT_HAS_COLORSONG
     colorsong::init();
 #endif
+#if MT_HAS_COPYPATTERN
+    copypattern::init();
+#endif
 #if MT_HAS_TRACKLEN
     tracklen::init();
 #endif
@@ -158,6 +162,18 @@ void projectSwitchChanged()
 {
     project::setSwitches(projectStore, switches.data(), kModCount);
 }
+
+#if MT_HAS_COPYPATTERN
+void copypatternPressed()
+{
+    copypattern::press(copypattern::ceSide());
+}
+
+void copypatternUpdate()
+{
+    copypattern::update(copypattern::ceSide());
+}
+#endif
 
 #if MT_HAS_SWING
 void projectSwingSwitchChanged()
@@ -271,6 +287,9 @@ void onWorkspaceLoaded()
                                defaults.data(),
                                switches.data(),
                                kModCount);
+#if MT_HAS_COPYPATTERN
+    copypattern::cancel(); // a copy started in the last project
+#endif
 #if MT_HAS_HUMANIZE
     humanize::load(projectStore);
 #endif

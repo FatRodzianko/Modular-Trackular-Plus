@@ -3,9 +3,9 @@
 
 CXX      ?= g++
 CXXFLAGS := -std=gnu++20 -Wall -Wextra -Werror -g -fsanitize=address,undefined -DMT_HOST_TEST -I..
-COMMON   := ../modsStore.cpp ../modsSwitches.cpp ../modsProject.cpp ../humanize.cpp ../swing.cpp ../colorsong.cpp ../masterfx.cpp ../tracklen.cpp
+COMMON   := ../modsStore.cpp ../modsSwitches.cpp ../modsProject.cpp ../humanize.cpp ../swing.cpp ../colorsong.cpp ../masterfx.cpp ../tracklen.cpp ../copypattern.cpp
 BUILD    := build
-TESTS    := test_mods test_humanize test_swing test_colorsong test_masterfx test_tracklen
+TESTS    := test_mods test_humanize test_swing test_colorsong test_masterfx test_tracklen test_copypattern
 
 .PHONY: all clean
 
@@ -33,6 +33,10 @@ $(BUILD)/test_masterfx: $(COMMON) test_masterfx.cpp $(wildcard ../*.h)
 	$(CXX) $(CXXFLAGS) -o $@ $(filter %.cpp,$^)
 
 $(BUILD)/test_tracklen: $(COMMON) test_tracklen.cpp $(wildcard ../*.h)
+	@mkdir -p $(BUILD)
+	$(CXX) $(CXXFLAGS) -o $@ $(filter %.cpp,$^)
+
+$(BUILD)/test_copypattern: $(COMMON) test_copypattern.cpp $(wildcard ../*.h)
 	@mkdir -p $(BUILD)
 	$(CXX) $(CXXFLAGS) -o $@ $(filter %.cpp,$^)
 

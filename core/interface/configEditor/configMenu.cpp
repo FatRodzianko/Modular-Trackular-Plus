@@ -106,6 +106,15 @@ const strItemTypeListTextWithAction projectColorsongSetup{
 cMenuItem melProjectColorsong(menuProjectMods, "Color Song", projectColorsongDesc, menuTypeItemListTextWithAction, &projectColorsongSetup);
 #endif
 
+#if MT_HAS_COPYPATTERN
+const char projectCopypatternDesc[] = { "Copy to New for this project: a button on the Pattern screen's third "
+                                        "page that copies the pattern, unsaved edits included, into the next "
+                                        "empty pattern. You stay on your pattern. " };
+const strItemTypeListTextWithAction projectCopypatternSetup{
+    &mods::switches[static_cast<size_t>(mods::Mod::copypattern)], 2, onOffStateTexts, mods::projectSwitchChanged };
+cMenuItem melProjectCopypattern(menuProjectMods, "Copy to New", projectCopypatternDesc, menuTypeItemListTextWithAction, &projectCopypatternSetup);
+#endif
+
 #if MT_HAS_SWING
 const char projectSwingDesc[] = { "Global Swing for this project: every take and every pattern starts "
                                   "with the Swing amount. A Swing FX still changes it until the pattern "
@@ -402,6 +411,15 @@ const char modsColorsongDesc[] = { "Whether new projects start with Color Song o
 const strItemTypeListTextWithAction modsColorsongSetup{
     &mods::defaults[static_cast<size_t>(mods::Mod::colorsong)], 2, onOffStateTexts, mods::defaultsChanged };
 cMenuItem melModsColorsong(menuMods, "Color Song", modsColorsongDesc, menuTypeItemListTextWithAction, &modsColorsongSetup);
+#endif
+
+#if MT_HAS_COPYPATTERN
+const char modsCopypatternDesc[] = { "Whether new projects start with Copy to New on. Each project has its "
+                                     "own switch in Project Settings > Mods. Copy to New: a Pattern button "
+                                     "that copies the pattern into the next empty one. " };
+const strItemTypeListTextWithAction modsCopypatternSetup{
+    &mods::defaults[static_cast<size_t>(mods::Mod::copypattern)], 2, onOffStateTexts, mods::defaultsChanged };
+cMenuItem melModsCopypattern(menuMods, "Copy to New", modsCopypatternDesc, menuTypeItemListTextWithAction, &modsCopypatternSetup);
 #endif
 
 #if MT_HAS_SWING

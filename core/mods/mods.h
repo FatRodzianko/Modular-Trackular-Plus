@@ -48,6 +48,9 @@ constexpr size_t kBuiltModCount = 0
 #if MT_HAS_COLORSONG
                                   + 1
 #endif
+#if MT_HAS_COPYPATTERN
+                                  + 1
+#endif
 #if MT_HAS_HUMANIZE
                                   + 1
 #endif
@@ -103,6 +106,12 @@ void defaultsChanged();
 
 // Config -> Project Settings -> Mods action for every item: the project changed.
 void projectSwitchChanged();
+
+#if MT_HAS_COPYPATTERN
+// Copy to New's button and the Pattern screen's update.
+void copypatternPressed();
+void copypatternUpdate();
+#endif
 
 #if MT_HAS_SWING
 // The same for Global Swing's switch, which also takes effect at once when playing.

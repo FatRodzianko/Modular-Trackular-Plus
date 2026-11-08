@@ -48,6 +48,10 @@ static void functInvert();
 #if MT_HAS_HUMANIZE // MT:
 static void functHumanize();
 #endif
+#if MT_HAS_COPYPATTERN // MT:
+static void functCopyToNew();
+static const char* copyToNewText();
+#endif
 #if MT_HAS_TRACKLEN // MT:
 static void functTrackLength(uint8_t state);
 static bool trackLengthIsHeld();
@@ -189,6 +193,9 @@ void cPatternEditor::update()
 #endif
 #if MT_HAS_TRACKLEN // MT: the button's second line follows the cursor's track
     updateTrackLengthButton();
+#endif
+#if MT_HAS_COPYPATTERN // MT: Copy to New's search and copy, main loop
+    mods::copypatternUpdate();
 #endif
 
     // zarzadznie renderowaniem zaznaczenia ---------------------------
@@ -4103,6 +4110,18 @@ static void functHumanize()
 }
 #endif
 
+#if MT_HAS_COPYPATTERN // MT: Copy to New: the press only starts the job; update() does the work
+static void functCopyToNew()
+{
+    mods::copypatternPressed();
+}
+
+static const char* copyToNewText()
+{
+    return "New";
+}
+#endif
+
 // ##############################################################################################
 // ###############################       Duplicate pattern      #################################
 // ##############################################################################################
@@ -5309,6 +5328,9 @@ void cPatternEditor::setActionButtonPage2Funct()
 static const mods::PatternButton modPatternButtons[] = {
 #if MT_HAS_HUMANIZE
     { mods::Mod::humanize, "Humanize", functHumanize },
+#endif
+#if MT_HAS_COPYPATTERN
+    { mods::Mod::copypattern, "Copy to", functCopyToNew, nullptr, copyToNewText },
 #endif
 #if MT_HAS_TRACKLEN
     { mods::Mod::tracklen, "Trk Len", nullptr, functTrackLength, trackLengthText },
