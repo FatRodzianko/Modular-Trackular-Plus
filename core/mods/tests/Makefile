@@ -5,7 +5,9 @@ CXX      ?= g++
 CXXFLAGS := -std=gnu++20 -Wall -Wextra -Werror -g -fsanitize=address,undefined -DMT_HOST_TEST -I..
 COMMON   := ../modsStore.cpp ../modsSwitches.cpp ../modsProject.cpp ../humanize.cpp ../swing.cpp ../colorsong.cpp ../masterfx.cpp ../tracklen.cpp ../copypattern.cpp
 BUILD    := build
-TESTS    := test_mods test_humanize test_swing test_colorsong test_masterfx test_tracklen test_copypattern
+TESTS    := test_mods test_registry test_registry_partial test_humanize test_swing test_colorsong test_masterfx test_tracklen test_copypattern
+# The registry again with some mods left out of the build.
+PARTIAL  := -DMT_HAS_SWING=0 -DMT_HAS_COLORSONG=0
 
 .PHONY: all clean
 
@@ -15,6 +17,14 @@ all: $(addprefix $(BUILD)/,$(TESTS))
 $(BUILD)/test_mods: $(COMMON) ../modsConfig.cpp test_mods.cpp $(wildcard ../*.h)
 	@mkdir -p $(BUILD)
 	$(CXX) $(CXXFLAGS) -o $@ $(filter %.cpp,$^)
+
+$(BUILD)/test_registry: $(COMMON) ../modsRegistry.cpp test_registry.cpp $(wildcard ../*.h)
+	@mkdir -p $(BUILD)
+	$(CXX) $(CXXFLAGS) -o $@ $(filter %.cpp,$^)
+
+$(BUILD)/test_registry_partial: $(COMMON) ../modsRegistry.cpp test_registry.cpp $(wildcard ../*.h)
+	@mkdir -p $(BUILD)
+	$(CXX) $(CXXFLAGS) $(PARTIAL) -o $@ $(filter %.cpp,$^)
 
 $(BUILD)/test_humanize: $(COMMON) test_humanize.cpp $(wildcard ../*.h)
 	@mkdir -p $(BUILD)

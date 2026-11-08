@@ -30,6 +30,11 @@ namespace mods
 namespace copypattern
 {
 
+// Its mods.bin record id, as the registry gives every mod one. Copy to New keeps nothing in
+// mods.bin, so the record is never written.
+constexpr uint8_t kRecord = static_cast<uint8_t>(Mod::copypattern) + 1;
+constexpr uint8_t kRecordVersion = 0;
+
 constexpr uint8_t kFirstPattern = 1;
 constexpr uint8_t kLastPattern = 255;
 constexpr size_t kTracks = 16;

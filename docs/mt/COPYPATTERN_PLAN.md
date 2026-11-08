@@ -186,9 +186,9 @@ reads, and matches Shift + Add Slot, but it can lose hidden notes and change the
 ## 6. Threads
 
 - **Nothing runs in the audio interrupt.** The press is a button handler and the work is in the
-  Pattern screen's `update()`, both main loop. The cancel is in `mods::onWorkspaceLoaded`, called
-  from `WorkspaceProjectLoad`'s finish, which no interrupt path reaches (`CLAUDE.md` lists the
-  ones that exist). No CE function that the interrupt can reach gets a hook.
+  Pattern screen's `update()`, both main loop. The cancel is the mod's `reset` in the registry,
+  which `mods::onWorkspaceLoaded` walks from `WorkspaceProjectLoad`'s finish. No interrupt path
+  reaches that (`CLAUDE.md` lists the ones that exist). No CE function that the interrupt can reach gets a hook.
 - **Reads of what the interrupt writes:** `actualPattern` and the RAM pattern pointers, which
   `switchRamPatternsNow` changes together. They're read before and after the snapshot (section 3,
   step 2). The song's `playlist` and the queued pattern number are only read.
@@ -226,7 +226,8 @@ reads, and matches Shift + Add Slot, but it can lose hidden notes and change the
 - **Code changes:**
   - Ours: `core/mods/copypattern.h/.cpp` (the rules as plain functions for host tests, the job and
     `update()`), `modsBuild.h` (`MT_HAS_COPYPATTERN`), `mods.h` (`kBuiltModCount`, the calls),
-    `mods.cpp` (the cancel in `onWorkspaceLoaded`).
+    `mods.cpp` (the two calls), `modsRegistry.cpp` (its entry: `init` at boot, and `cancel` as
+    its `reset` when a Workspace loads).
   - CE files, each marked `// MT:`: `fPatternEdit.cpp` (the list entry, the press function, the
     `update()` call) and `configMenu.cpp` (the switch in Project Settings → Mods and in Config →
     Mods, with descriptions).
