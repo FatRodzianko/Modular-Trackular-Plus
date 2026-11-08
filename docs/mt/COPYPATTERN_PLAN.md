@@ -1,8 +1,8 @@
 # Copy to New on MT+: build plan
 
-Status (2026-11-07): built on `mod/copypattern`, not merged. The host and emulator tests pass
-(section 9); the hardware checklist (section 10) hasn't been run. The five decisions are made
-(section 11).
+Status (2026-11-08): built, and merged into `modular` after its hardware test. The host and
+emulator tests pass (section 9), and every step of the hardware checklist passed (section 10). The
+five decisions are made (section 11).
 Mod id 9 (`Mod::copypattern`, already reserved in `core/mods/mods.h`), flag `MT_HAS_COPYPATTERN`,
 branch `mod/copypattern` off `modular`. Section 3.5 of [CE_PORT_PLAN.md](CE_PORT_PLAN.md) points here.
 
@@ -376,6 +376,13 @@ Projects: `L1 1 voice none` from the ladder, and a new project you make on the u
 
 Not on the unit, emulator only: all 255 patterns full, a write error, a busy file manager, MIDI
 Start during a copy, performance mode.
+
+**Result, 2026-11-08,** recorder build of `1ff23e7` (after the mod registry merge): all 15 steps
+passed. In step 10 every press gave "Copied to pattern N"; "Pattern changed - try again" never came
+up, as the copy usually finishes in the update after the press, before the song can move on. The
+emulator test covers that message. `/mfx_log.txt`: 50 plays, 71,397 blocks, none over time, no
+stall and no lockup or fault record. Audio interrupt average 20 to 31 %, slowest 49 %. Longest main
+loop gap 22 ms, lowest free heap 74,760, max stack 7,841.
 
 ## 11. Decisions
 

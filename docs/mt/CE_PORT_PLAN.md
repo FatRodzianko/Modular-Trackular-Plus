@@ -447,7 +447,7 @@ the record:
 
 ### 3.5 copypattern (Copy to New)
 
-Built 2026-11-07 on `mod/copypattern`, hardware test not run yet. Plan and its decisions:
+Built 2026-11-07, passed its hardware test 2026-11-08. Plan and its decisions:
 [COPYPATTERN_PLAN.md](COPYPATTERN_PLAN.md). Id 9,
 `MT_HAS_COPYPATTERN`. The 1.2.0 version is final (cp5).
 
