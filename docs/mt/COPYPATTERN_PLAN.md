@@ -1,6 +1,6 @@
 # Copy to New on MT+: build plan
 
-Status (2026-11-07): plan only, no code yet. Building starts when the plan is OK'd.
+Status (2026-11-07): plan only, no code yet. The five decisions are made (section 11).
 Mod id 9 (`Mod::copypattern`, already reserved in `core/mods/mods.h`), flag `MT_HAS_COPYPATTERN`,
 branch `mod/copypattern` off `modular`. Section 3.5 of [CE_PORT_PLAN.md](CE_PORT_PLAN.md) points here.
 
@@ -350,22 +350,24 @@ Projects: `L1 1 voice none` from the ladder, and a new project you make on the u
 Not on the unit, emulator only: all 255 patterns full, a write error, a busy file manager, MIDI
 Start during a copy, performance mode.
 
-## 11. Decisions for you
+## 11. Decisions
+
+All five chosen on 2026-11-07, each as recommended.
 
 1. **Port it at all**, now that CE's Song screen can do a full copy (Shift + Add Slot, Copy,
-   Paste). Recommended: yes. It's one press on the Pattern screen, it leaves the song alone, and it
-   has a safer "empty".
-2. **After the copy:** stay on your pattern (1.2.0) or jump to the copy. Recommended: stay. It's
-   what 1.2.0 did and was tested, and jumping while the song plays would take the screen off the
-   song's pattern.
+   Paste). Chosen: yes. It's one press on the Pattern screen, it leaves the song alone, and it has
+   a safer "empty".
+2. **After the copy:** stay on your pattern (1.2.0) or jump to the copy. Chosen: stay. It's what
+   1.2.0 did and was tested, and jumping while the song plays would take the screen off the song's
+   pattern.
 3. **Which pattern counts as empty:** the 1.2.0 rule, with CE's `m` and `V` (section 4), or CE's
-   Song-screen rule alone. Recommended: the 1.2.0 rule. CE's alone can lose notes past a
-   pattern's end and change what the song plays.
+   Song-screen rule alone. Chosen: the 1.2.0 rule. CE's alone can lose notes past a pattern's end
+   and change what the song plays.
 4. **Button order:** Humanize, Copy to New, Trk Len (1.2.0's) or Humanize, Trk Len, Copy to New
-   (Trk Len stays where its MT+ hardware test had it). Recommended: 1.2.0's, as 1.2.0 users know it
-   and MT+ hasn't been released.
+   (Trk Len stays where its MT+ hardware test had it). Chosen: 1.2.0's, as 1.2.0 users know it and
+   MT+ hasn't been released.
 5. **Trk Len lengths when that mod is Off:** not copied, as Song's paste does, or copied anyway.
-   Recommended: not copied, so a mod that's Off keeps its data unchanged.
+   Chosen: not copied, so a mod that's Off keeps its data unchanged.
 
 Mine, unless you say otherwise: the search starts after your pattern and wraps (1.2.0). Pattern
 names stay with their pattern number. The label is "Copy to / New", and the messages are 1.2.0's. A
