@@ -10,11 +10,11 @@
 #include "mods.h"
 
 #include "colorsong.h"
-#include "humanize.h"
 #include "lockupRecorder.h"
 #include "masterfx.h"
 #include "modsConfig.h"
 #include "modsProject.h"
+#include "modsRegistry.h"
 #include "modsSwitches.h"
 #include "swing.h"
 #include "tracklen.h"
@@ -139,12 +139,7 @@ void init(FileSystem* fileSystem)
     fileIo.fileSystem = fileSystem;
     configStore.clear();
     projectStore.clear();
-#if MT_HAS_COLORSONG
-    colorsong::init();
-#endif
-#if MT_HAS_TRACKLEN
-    tracklen::init();
-#endif
+    registry::init();
     project::setChangedCallback(markProjectChanged);
     config::load(fileIo, configStore, defaults.data(), kModCount);
 }
@@ -228,26 +223,7 @@ void tracklenTracksPasted(uint8_t sourcePattern, uint8_t destPattern, uint8_t so
 
 void projectSettingEdited()
 {
-#if MT_HAS_HUMANIZE
-    if (humanize::storeIfEdited(projectStore))
-    {
-        project::markChanged();
-    }
-#endif
-#if MT_HAS_SWING
-    if (swing::storeIfEdited(projectStore))
-    {
-        project::markChanged();
-        swing::amountEdited();
-    }
-#endif
-#if MT_HAS_MASTERFX
-    if (masterfx::storeIfEdited(projectStore))
-    {
-        project::markChanged();
-        masterfx::apply();
-    }
-#endif
+    registry::settingEdited(projectStore);
 }
 
 void onProjectOpenCopy()
@@ -271,22 +247,7 @@ void onWorkspaceLoaded()
                                defaults.data(),
                                switches.data(),
                                kModCount);
-#if MT_HAS_HUMANIZE
-    humanize::load(projectStore);
-#endif
-#if MT_HAS_SWING
-    swing::load(projectStore);
-#endif
-#if MT_HAS_MASTERFX
-    masterfx::load(projectStore);
-    masterfx::apply();
-#endif
-#if MT_HAS_COLORSONG
-    colorsong::reset();
-#endif
-#if MT_HAS_TRACKLEN
-    tracklen::load(projectStore);
-#endif
+    registry::workspaceLoaded(projectStore);
 }
 
 void onWorkspaceSaved()
