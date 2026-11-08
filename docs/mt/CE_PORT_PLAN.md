@@ -447,15 +447,20 @@ the record:
 
 ### 3.5 copypattern (Copy to New)
 
-- **Port after the 1.2.0 version is final** (in progress now).
-- **CE today:** Duplicate doubles a pattern's length; Copy/Paste Pattern exists.
-- **Hooks:** a Copy to New button (dynamic placement); the action copies the open
-  pattern, unsaved edits included, to the first free pattern number through CE's file
-  manager (Workspace pattern file plus pattern metadata), then opens it.
-- **With tracklen:** the copy must carry the track lengths. They aren't in the pattern file, so copying through
-  CE's file manager leaves them behind, and the new pattern would play every track whole.
-  `tracklen::copyTracks`, which Song's paste uses, does it. Test it.
-- **Tests:** emulator: copy with unsaved edits, all slots full, button placement.
+Plan written 2026-11-07, waiting for your OK: [COPYPATTERN_PLAN.md](COPYPATTERN_PLAN.md). Id 9,
+`MT_HAS_COPYPATTERN`. The 1.2.0 version is final (cp5).
+
+- **CE today:** Duplicate doubles a pattern inside itself. Copy and Paste Pattern copy steps but not the
+  pattern's length. The Song screen can make a full copy (Shift + Add Slot, Copy, Paste), but the copy
+  goes into the song.
+- **What it does:** a Copy to New button on page 3 copies the pattern from RAM, unsaved edits included,
+  into the next empty pattern, playing or stopped, and you stay on your pattern (as on 1.2.0, not "then
+  opens it" as this section said before). With Variable Track Length On, the lengths go with it through
+  `tracklenTracksPasted`, the call Song's paste uses.
+- **Hooks:** the button entry and an `update()` call in `fPatternEdit.cpp`, two Config items. No
+  change to the sequencer or the file manager. Nothing in the audio interrupt.
+- **Memory:** about 16.5 KB of SDRAM (a snapshot of the pattern), about 2.5 KB of flash.
+- **Decisions:** five, in the plan's section 11.
 - **Effort:** S.
 
 ### 3.6 tracklen (Variable Track Length)
@@ -696,7 +701,7 @@ Settings > Mods and Config > Mods.
 | 2 | condtrig | dropped: CE's own conditions do it | |
 | 3 | swing | per-project setting, import | S |
 | 4 | humanize | first Pattern button, dynamic placement | S–M |
-| 5 | copypattern | second button; after 1.2.0 final | S |
+| 5 | copypattern | a Pattern button that writes files; plan in COPYPATTERN_PLAN.md | S |
 | 6 | tracklen | sequencer per-track wrap, grid; after 1.2.0 final | M |
 | 7 | legato | note order | S–M |
 | 8 | interpolate | hot microstep path | M |
