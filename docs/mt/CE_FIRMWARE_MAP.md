@@ -241,7 +241,7 @@ the 1 MiB taken from sample memory.
 
 | Region | Size | Plain CE free | Mods free | Floor | Notes |
 | --- | --- | --- | --- | --- | --- |
-| Flash | 16,580,608 | 14,908,540 | 14,871,876 | 1 MiB | 1.2.0 images up to 8 MB flashed whole |
+| Flash | 16,580,608 | 14,908,540 | 14,871,636 | 1 MiB | 1.2.0 images up to 8 MB flashed whole |
 | ITCM | 131,064 | 16,416 | 10,512 | 1,024 | closed libs, audio code, masterfx's 5,584 |
 | DTCM unreserved | gap | 17,432 | 15,376 | 4,096 | heap end to stack base |
 | OCRAM | 32,768 | 9,556 | 9,556 | 1,024 | mods stay out |
@@ -283,6 +283,12 @@ doesn't allocate; the steps haven't been looked into. Max stack 7,761.
 `L8` slowest 34 %, 50 % and 80 %, `L8` averaging 63 % over 25 s, 1 to 2 points above the readings before the
 merge. 23,747 blocks, none over time, no stall and no lockup record. Longest main loop gap 22 ms, lowest free
 heap 78,624, max stack 7,721.
+
+**Device reading, 2026-11-08, mod registry (`b772fa6`),** recorder build: a project with Global Swing and Master
+FX On, Swing and Master FX changed while playing, saved, then the unit powered off and on. Both took effect at
+once and came back after the restart. 7 plays, 25,711 blocks, none over time, no stall and no lockup record.
+Audio interrupt average 37 to 63 %, slowest 78 %. Longest main loop gap 34 ms, lowest free heap 78,856, max
+stack 7,713.
 
 **Heap:** 138,752 fixed. A failed malloc hangs the unit, so this is the one with a hard edge.
 About 58 KB is in use with a project open, and 1.2.0 measured at least 42 KB free. In the
