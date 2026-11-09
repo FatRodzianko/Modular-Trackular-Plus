@@ -296,6 +296,12 @@ made stopped, playing, in song mode and while recording, with Humanize, Track Le
 slowest 49 %. Longest main loop gap 22 ms, lowest free heap 74,760, max stack 7,841. The mod allocates
 nothing; the lowest heap figures are all from the new project, and `L1`'s play shows 84,344.
 
+**Device reading, 2026-11-09, Song Loop (on `19a1f1a`),** recorder build: `L1`, then a new project with a
+looped song, the block moved while playing, the font switched during the loop, and the mod switched Off
+and On. 5 plays, 57,901 blocks, none over time, no stall and no lockup record. Audio interrupt average 20
+to 38 %, slowest 50 %. Longest main loop gap 105 ms (likely the font loads), lowest free heap 76,120, max
+stack 7,849.
+
 **Heap:** 138,752 fixed. A failed malloc hangs the unit, so this is the one with a hard edge.
 About 58 KB is in use with a project open, and 1.2.0 measured at least 42 KB free. In the
 emulator the break pointer reached 23,968 after the static constructors and 67,112 by the time

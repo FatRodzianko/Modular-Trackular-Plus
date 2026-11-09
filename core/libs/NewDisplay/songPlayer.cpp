@@ -3,6 +3,7 @@
 #include "displayControls.h"
 #include "songPlayerControl.h"
 #include "colorsong.h" // MT:
+#include "songloop.h" // MT:
 #include <algorithm>
 #include <string.h>
 
@@ -256,6 +257,14 @@ void cSongPlayer::showList()
             x_pos = posX + 3;
             y_pos = posY + (barPos * h_row);
 
+#if MT_HAS_SONGLOOP // MT: Song Loop: the block's frame, and its grey frame with the cursor in the grid
+            int frameTop = y_pos, frameBottom = y_pos + h_row;
+            if (mods::on(mods::Mod::songloop))
+            {
+                mods::songloop::drawFrames(
+                  posY, textListPos, barPos, listAnimationStep, x_pos, x_pos + w_bar, frameTop, frameBottom);
+            }
+#endif
             // ramka
             if (controlData->isListActive == 0)
             {
@@ -272,11 +281,19 @@ void cSongPlayer::showList()
 
             API_LINE_WIDTH(kRedFrameWidth);
             API_BEGIN(LINE_STRIP);
+#if MT_HAS_SONGLOOP // MT: Song Loop: CE's own range unless the mod moved it
+            API_VERTEX2F(x_pos, frameTop);
+            API_VERTEX2F(x_pos + w_bar, frameTop);
+            API_VERTEX2F(x_pos + w_bar, frameBottom);
+            API_VERTEX2F(x_pos, frameBottom);
+            API_VERTEX2F(x_pos, frameTop);
+#else
             API_VERTEX2F(x_pos, y_pos);
             API_VERTEX2F(x_pos + w_bar, y_pos);
             API_VERTEX2F(x_pos + w_bar, y_pos + h_row);
             API_VERTEX2F(x_pos, y_pos + h_row);
             API_VERTEX2F(x_pos, y_pos);
+#endif
             API_END();
         }
 
@@ -425,6 +442,14 @@ void cSongPlayer::showList()
             if (list->length > list->linesCount)
                 w_bar = width - 13;
 
+#if MT_HAS_SONGLOOP // MT: Song Loop: the block's frame, and its grey frame with the cursor in the grid
+            int frameTop = y_pos, frameBottom = y_pos + h_row;
+            if (mods::on(mods::Mod::songloop))
+            {
+                mods::songloop::drawFrames(
+                  posY, textListPos, barPos, listAnimationStep, x_pos, x_pos + w_bar, frameTop, frameBottom);
+            }
+#endif
             // ramka
             if (controlData->isListActive == 0)
             {
@@ -441,11 +466,19 @@ void cSongPlayer::showList()
 
             API_LINE_WIDTH(kRedFrameWidth);
             API_BEGIN(LINE_STRIP);
+#if MT_HAS_SONGLOOP // MT: Song Loop: CE's own range unless the mod moved it
+            API_VERTEX2F(x_pos, frameTop);
+            API_VERTEX2F(x_pos + w_bar, frameTop);
+            API_VERTEX2F(x_pos + w_bar, frameBottom);
+            API_VERTEX2F(x_pos, frameBottom);
+            API_VERTEX2F(x_pos, frameTop);
+#else
             API_VERTEX2F(x_pos, y_pos);
             API_VERTEX2F(x_pos + w_bar, y_pos);
             API_VERTEX2F(x_pos + w_bar, y_pos + h_row);
             API_VERTEX2F(x_pos, y_pos + h_row);
             API_VERTEX2F(x_pos, y_pos);
+#endif
             API_END();
         }
 
@@ -601,6 +634,12 @@ void cSongPlayer::drawIcon(int pos, int row, int x, int y, int h)
     {
         if ((list->icon.iconPositionInList) == pos)
         {
+#if MT_HAS_SONGLOOP // MT: Song Loop: the repeat signs in place of the play icon
+            if (mods::on(mods::Mod::songloop) && mods::songloop::drawListIcon(x, y + (row * h) - 10 + 1))
+            {
+                return;
+            }
+#endif
             uint8_t idx = list->icon.iconNum;
 
             API_BITMAP_SOURCE(bitmaps[idx].address);

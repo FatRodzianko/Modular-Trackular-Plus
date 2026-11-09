@@ -36,6 +36,7 @@
 #include "images/battery_ch_28x19_L4.h"
 #include "images/songIcons.h"
 #include "log.h"
+#include "songloop.h" // MT:
 #include <cr_section_macros.h>
 
 #ifdef FEATURE_SYNTH
@@ -289,6 +290,10 @@ void cDisplay::loadFont(const CompressedFontData* fontsData, uint8_t fontCount)
     API_DISPLAY();
     API_CMD_SWAP();
     displayDriver->endCoProList();
+
+#if MT_HAS_SONGLOOP // MT: Song Loop: its glyphs again after a font load
+    mods::songloop::fontsLoaded();
+#endif
 }
 
 void cDisplay::begin(DisplayDriver* displayDriver, Timer* timer)
@@ -1372,6 +1377,10 @@ bool cDisplay::loadCustomFontFromSD(FileSystem* fs, const char* fontFilePath)
     API_DISPLAY();
     API_CMD_SWAP();
     displayDriver->endCoProList();
+
+#if MT_HAS_SONGLOOP // MT: Song Loop: its glyphs again after a font load
+    mods::songloop::fontsLoaded();
+#endif
 
     return true;
 }

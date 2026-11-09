@@ -141,6 +141,15 @@ const strItemTypeListTextWithAction projectMasterfxSetup{
 cMenuItem melProjectMasterfx(menuProjectMods, "Master FX", projectMasterfxDesc, menuTypeItemListTextWithAction, &projectMasterfxSetup);
 #endif
 
+#if MT_HAS_SONGLOOP
+const char projectSongloopDesc[] = { "Song Loop for this project, by P-N-E-M: on the Song screen with Rec "
+                                     "on, Shift + Down selects a block of positions and Play Selection "
+                                     "repeats it. Continue Song plays on. " };
+const strItemTypeListTextWithAction projectSongloopSetup{
+    &mods::switches[static_cast<size_t>(mods::Mod::songloop)], 2, onOffStateTexts, mods::projectSongloopSwitchChanged };
+cMenuItem melProjectSongloop(menuProjectMods, "Song Loop", projectSongloopDesc, menuTypeItemListTextWithAction, &projectSongloopSetup);
+#endif
+
 #if MT_HAS_TRACKLEN
 const char projectTracklenDesc[] = { "Variable Track Length for this project: hold Trk Len on the Pattern "
                                      "screen's third page and turn the encoder to give the cursor's track "
@@ -447,6 +456,15 @@ const char modsMasterfxDesc[] = { "Whether new projects start with Master FX on.
 const strItemTypeListTextWithAction modsMasterfxSetup{
     &mods::defaults[static_cast<size_t>(mods::Mod::masterfx)], 2, onOffStateTexts, mods::defaultsChanged };
 cMenuItem melModsMasterfx(menuMods, "Master FX", modsMasterfxDesc, menuTypeItemListTextWithAction, &modsMasterfxSetup);
+#endif
+
+#if MT_HAS_SONGLOOP
+const char modsSongloopDesc[] = { "Whether new projects start with Song Loop on. Each project has its own "
+                                  "switch in Project Settings > Mods. Song Loop, by P-N-E-M: repeat a "
+                                  "block of song positions. " };
+const strItemTypeListTextWithAction modsSongloopSetup{
+    &mods::defaults[static_cast<size_t>(mods::Mod::songloop)], 2, onOffStateTexts, mods::defaultsChanged };
+cMenuItem melModsSongloop(menuMods, "Song Loop", modsSongloopDesc, menuTypeItemListTextWithAction, &modsSongloopSetup);
 #endif
 
 #if MT_HAS_TRACKLEN

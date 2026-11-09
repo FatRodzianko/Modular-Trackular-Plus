@@ -567,16 +567,117 @@ Settings > Mods and Config > Mods.
   [plan](SOUND_TEST_PLAN.md)); CPU via the Profiler on hardware.
 - **Effort:** M.
 
-### 3.9 songloop
+### 3.9 songloop (Song Loop)
 
-- **What it does:** Shift+Down marks a song selection; Play Selection loops it;
-  Continue Song. Nothing saved. Keep the PR author's design.
+Built 2026-11-08, passed its hardware test 2026-11-09. Designed and written by P-N-E-M for 1.2.0 (the
+`songloop` patch, sl4, Modular-Trackular PR #1). This is their design on CE's source: the
+behaviour and the test cases are ported, none of the 1.2.0 address hooks. Id 13, `MT_HAS_SONGLOOP`,
+switch in Project Settings > Mods and Config > Mods. Nothing is stored in projects, so there is no
+`mods.bin` record and no 1.2.0 import.
+
+- **What it does:** in the Song screen's pattern column, with Rec on, Shift + Down selects a block
+  of positions from the cursor and Shift + Up takes the bottom back (the top is the anchor). The left
+  softkey reads Play Selection. Stopped, the song plays from the block's first position and repeats
+  the block. Playing, a block further down waits until the song reaches it (armed), and a block
+  behind the play position is jumped to at the end of the pattern. While it repeats, the softkey
+  reads Continue Song: the block plays out and the song goes on. During the loop Shift + Up/Down
+  resize the block, and Up/Down or the jog wheel move the whole block, both as the author intended.
+  Stop ends the loop. With a block, Undo, Add Slot, Delete Slot (and the Delete key) and
+  << Pattern >> (and Shift + jog) do nothing and are greyed out. The status bar shows |: :| (looping)
+  or |: (armed) in place of the play icon, and so does the Song list next to the play position.
+  With the cursor in the grid during the loop, the block has a grey frame. The loop keeps
+  Performance on over its pattern ends. With a track-1 Performance play mode other than Fwd, the
+  next pattern is asked for on track 16's last two rows, from the main loop (also without a block,
+  as sl4 does).
 - **CE today:** the Song screen can preview a selection once.
-- **Hooks:** selection keys and buttons in `fSongEdit.cpp`; the song-mode pattern
-  change where the sequencer asks `getNextSongPattern()` (`mtSequencer.cpp` L369,
-  L781): wrap to the selection's start while looping.
-- **Tests:** emulator: pattern order over several loops, Continue, stop/start.
+- **Hooks**, each under `MT_HAS_SONGLOOP` and `mods::on`:
+  - `getNextSongPattern` (ITCM, in the interrupt): the preload, the block's first pattern at its end.
+  - `switchRowStep`'s song-mode pattern end (in the interrupt): to the block's start as the preload
+    decided, and Performance kept on while looping. CE's `switchRamPatternsNow` finds the position
+    again from the loaded pattern, so without this hook a song that uses a pattern twice would loop
+    on a later slot. The emulator test has that case.
+  - `Sequencer::stop` (both contexts): the loop ends. It only clears two bytes.
+  - `fSongEdit.cpp`: the labels in `update()`, `functPlayPattern` (softkey 0 and Shift + Play),
+    Up/Down and the jog in the pattern column, the locks in Undo, Add, Delete and
+    `changeSelectedPlayListPattern`, and the grey softkeys in `refreshEditMode`.
+  - `songPlayer.cpp`: the block's range for the cursor frame, the grey frame, the list icon.
+  - `songTimer.cpp`: the status icon, and a redraw when it changes.
+  - `display.cpp`: the glyphs again after both font loads. `Tracker.cpp`: the main-loop preload.
+- **Status bar glyphs:** two glyph pairs of the status font (`` ` ^ `` and `{ }`), drawn into RAM_G
+  with the play icon's widths, as on 1.2.0. Unlike 1.2.0, they go in only while the mod is On. The
+  originals are read back first and written back when it goes Off, so Off shows CE's characters.
+  Both CE fonts (Config > General > Display font) take them. With a font they don't fit, the bar
+  and the list keep CE's play icon. While the mod is On those four characters show as repeat signs
+  in the status font. The UI and its keyboard don't use them.
+- **RAM_G:** the list icons at 140,000 and 140,200 (200 B each), between CE's last bitmap (ends at
+  128,780) and the controls (150,000). 1.2.0's 0x1F000 is inside CE's synth bitmaps.
+- **Display list:** the grey frame is 36 B, only with the cursor in the grid during a loop. The
+  frame and the list icon are CE's own commands with other values.
+- **Memory** (against `modular` 19a1f1a, `tools/mem_budget.py`): 7,008 B of flash, 32 B of ITCM
+  (the hook in `getNextSongPattern` and its veneer), 80 B of DTCM (the 12-byte state the interrupt
+  reads, and alignment), 4,224 B of SDRAM (the glyph backups and a work buffer), no OCRAM, no heap.
+  The interrupt's part (`preload`, `atPatternEnd`, `noteEntered`, `stopped`) runs from flash, once
+  per pattern end.
+- **What differs from sl4, all small:** the glyphs only while On (above), new RAM_G addresses, a
+  check that the glyphs fit the font, the state reset on a Workspace load and when the switch
+  changes, and the jog value goes through CE's `invertValForList` (always false on Tracker+).
+- **Tests:** host: `core/mods/tests/test_songloop.cpp`, the patch's own cases plus the frames and
+  icons. Emulator: `tools/emu/test_songloop.py`, on CE's sequencer, file manager and Song screen
+  handlers. It covers song order over several loops (also with a pattern used twice, and with
+  Break), Continue, armed and behind, the block moved during the loop, and Off and On without a block
+  note for note against the `MT_NO_MODS` build. It also covers Performance, stop, the locks, the
+  labels, the status icon, both fonts and the frames. A deliberate wrong change in the logic, and
+  another in the pattern-end hook, were both caught.
 - **Effort:** M.
+
+#### Song Loop hardware checklist
+
+Run it after `tools/run_tests.py --tier release` passes, on the lockup recorder build
+(`DEVICE_TEST_LADDER.md`). The mod runs a little code in the audio interrupt at each pattern end and
+nothing per sample, so only the ladder's lightest step is needed. It leaves out Break FX, performance
+mode, Export and per-mod Saving, which are emulator only. Projects: `L1 1 voice none` from the
+ladder, and a new project you make on the unit, called `SL test` here.
+
+1. Open `L1 1 voice none`, press Play, wait 10 s, press Play again. `/mfx_log.txt` gets its line
+   with no lockup.
+2. New Project, save it as `SL test`. Project Settings > Mods: Song Loop On.
+3. Make patterns 1 to 6, each with one note on track 1 at a different pitch, so you can hear
+   where the song is. Song screen: a song of 1 2 3 4 5 6.
+4. Pattern column, Rec on, cursor on position 2. Hold Shift and press Down twice: the frame covers
+   2 to 4. Shift + Up: 2 to 3. Shift + Down: 2 to 4 again. The left softkey reads Play Selection,
+   the right Play Song. Undo, Add, Delete and << Pattern >> are greyed out and do nothing, and so
+   do the Delete key and Shift + jog.
+5. Press Play Selection: 2 3 4 2 3 4 and on. The status bar shows |: :| in place of the play icon,
+   and the list shows it next to the position playing.
+6. The left softkey reads Continue Song. Press Down: the block moves to 3 to 5, and the song follows
+   at the next pattern end. Turn the jog wheel: the block moves with it. Shift + Up: one position
+   less.
+7. Press Continue Song: the block plays out, then the song goes on to 6. The frame is back on the
+   position playing, the softkeys are CE's again, and the status bar shows the play icon.
+8. While the song plays from 1, select 5 to 6 and press Play Selection: the status bar shows |:
+   until the song reaches 5, then |: :|, and 5 6 repeat.
+9. While 5 or 6 play, select 1 to 2 and press Play Selection: at the end of that pattern the song
+   goes to 1, and 1 2 repeat.
+10. During the loop, press Left to put the cursor in the grid: the block has a grey frame in the
+    pattern column.
+11. Press Play to stop: the loop ends and the status bar is back to normal. The block is still
+    selected. Rec off: the selection goes.
+12. Shift + Play with a block, stopped: the same as Play Selection.
+13. Make the song 1 2 1 2 3. Select positions 3 to 4 and press Play Selection: the list icon stays on
+    3 and 4, never on 1 and 2.
+14. Config > General > Display font: switch to the other font and back while the loop plays. The
+    status bar still shows |: :|, not stray characters.
+15. Project Settings > Mods: Song Loop Off. Shift + Down moves the cursor as CE does, the left
+    softkey is CE's, and the status bar shows CE's icons. Turn it On again: it works again.
+16. Read `/mfx_log.txt`: no lockup or fault record.
+
+Not on the unit, emulator only: Break FX, performance mode and the track-1 play modes.
+
+**Result, 2026-11-09,** recorder build of the uncommitted port on `19a1f1a`: all 16 steps passed.
+`/mfx_log.txt`: 5 plays, 57,901 blocks, none over time, no stall and no lockup or fault record.
+Audio interrupt average 20 to 38 %, slowest 50 %. Longest main loop gap 105 ms, in the 129 s play
+with Master FX on, which is likely step 14's font loads from SD; it wasn't timed on its own. Lowest
+free heap 76,120, max stack 7,849.
 
 ### 3.10 colorsong
 

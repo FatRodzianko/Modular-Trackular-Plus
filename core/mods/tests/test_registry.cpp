@@ -13,6 +13,7 @@
 #include "masterfx.h"
 #include "modsProject.h"
 #include "modsStore.h"
+#include "songloop.h"
 #include "swing.h"
 #include "tracklen.h"
 
@@ -64,6 +65,15 @@ void amountEdited()
 }
 } // namespace swing
 #endif
+#if MT_HAS_SONGLOOP
+namespace songloop
+{
+void apply()
+{
+    calls.push_back("songloop::apply");
+}
+} // namespace songloop
+#endif
 } // namespace mods
 
 namespace
@@ -108,6 +118,10 @@ const std::vector<Expected> kExpected = {
     { Mod::tracklen, tracklen::kRecord, tracklen::kRecordVersion, tracklen::init, tracklen::load, nullptr,
       nullptr, nullptr, nullptr },
 #endif
+#if MT_HAS_SONGLOOP
+    { Mod::songloop, songloop::kRecord, songloop::kRecordVersion, songloop::init, nullptr, songloop::apply,
+      songloop::reset, nullptr, nullptr },
+#endif
 };
 
 bool built(Mod id)
@@ -120,6 +134,7 @@ bool built(Mod id)
     case Mod::masterfx: return MT_HAS_MASTERFX != 0;
     case Mod::swing: return MT_HAS_SWING != 0;
     case Mod::tracklen: return MT_HAS_TRACKLEN != 0;
+    case Mod::songloop: return MT_HAS_SONGLOOP != 0;
     default: return false; // not ported, or retired
     }
 }
@@ -191,11 +206,14 @@ void testWorkspaceLoaded()
 #if MT_HAS_SWING
     check(swing::settings.amount == amount, "Workspace loaded: Swing's record read");
 #endif
+    std::vector<std::string> applied;
 #if MT_HAS_MASTERFX
-    check(calls == std::vector<std::string>{ "masterfx::apply" }, "Workspace loaded: Master FX applied once");
-#else
-    check(calls.empty(), "Workspace loaded: nothing else called");
+    applied.push_back("masterfx::apply");
 #endif
+#if MT_HAS_SONGLOOP
+    applied.push_back("songloop::apply");
+#endif
+    check(calls == applied, "Workspace loaded: each mod's apply once, in the table's order, nothing else");
 }
 
 void testSettingEdited()

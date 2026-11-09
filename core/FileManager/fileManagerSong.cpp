@@ -1,4 +1,5 @@
 #include "colorsong.h" // MT:
+#include "songloop.h" // MT:
 #include "fileManagerDefs.h"
 #include "mtStructs.h"
 
@@ -16,8 +17,18 @@ void setPatternBitmask(int patternIdx, int trackIdx, bool value);
 AUDIO_CORE_RAM uint8_t cFileManager::getNextSongPattern()
 {
     strSong* song = &mtProject.song;
+#if MT_HAS_SONGLOOP // MT: Song Loop: at the block's end, the block's first pattern (interrupt)
+    const uint8_t next = song->playlist[song->playlistPos + 1] > 0 ? song->playlist[song->playlistPos + 1]
+                                                                   : song->playlist[0];
+    if (mods::on(mods::Mod::songloop))
+    {
+        return mods::songloop::preload(song->playlistPos, song->playlist, next);
+    }
+    return next;
+#else
     return song->playlist[song->playlistPos + 1] > 0 ? song->playlist[song->playlistPos + 1]
                                                      : song->playlist[0];
+#endif
 }
 uint8_t cFileManager::getSongPattern(uint8_t pos)
 {

@@ -9,6 +9,7 @@
 #include "mtAudioEngine.h"
 #include "mtSequencer.h"
 #include "mtStructs.h"
+#include "songloop.h" // MT:
 #include "swing.h" // MT:
 #include "tracklen.h" // MT:
 #include "sampleRecorder/sampleRecorder.h"
@@ -1598,6 +1599,13 @@ void Sequencer::stop(StopContext context)
 {
     LOG("sequencer stop");
 
+#if MT_HAS_SONGLOOP // MT: Song Loop: every stop ends the loop (interrupt too)
+    if (mods::on(mods::Mod::songloop))
+    {
+        mods::songloop::stopped();
+    }
+#endif
+
     songTimer.stop();
     stopAllOpenNotes();
     cancelFxes();
@@ -1991,6 +1999,21 @@ void Sequencer::switchRowStep(uint8_t row) // przełączamy stepy w zależności
         }
         else if (player.songMode)
         {
+#if MT_HAS_SONGLOOP // MT: Song Loop: to the block's start, as the preload decided
+            if (mods::on(mods::Mod::songloop))
+            {
+                // while the loop is on, Performance stays on, as Loop Performance keeps it
+                if (mods::songloop::holdsPerformance() && player.performanceMode &&
+                    player.onPatternOrSelectionEnd == cbkTurnOffPerformanceMode)
+                {
+                    player.onPatternOrSelectionEnd = nullCallback;
+                }
+                isNextPatternAvailable = mods::songloop::atPatternEnd(mtProject.song.playlistPos) ||
+                                         newFileManager.switchNextPatternInSong();
+                mods::songloop::noteEntered(mtProject.song.playlistPos);
+            }
+            else
+#endif
             isNextPatternAvailable = newFileManager.switchNextPatternInSong();
 
             reset_actual_pos();

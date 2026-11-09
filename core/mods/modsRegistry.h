@@ -6,7 +6,7 @@
 //
 // Within each event the mods run in the table's order, which keeps the order mods.cpp
 // had before the registry: Humanize, Global Swing, Master FX, Color Song, Copy to New,
-// Track Length.
+// Track Length, then Song Loop.
 // Main loop only, every event: none of them is called from the audio interrupt.
 
 #ifndef MODS_MODSREGISTRY_H_
