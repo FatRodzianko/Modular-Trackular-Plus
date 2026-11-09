@@ -93,6 +93,27 @@ optimisations.
 The first run, 2026-11-05: all three worked, `L8` at about 80 % and `R2` at about 60 %.
 [MASTERFX_PORT_PLAN.md](MASTERFX_PORT_PLAN.md) section 8 has the readings.
 
+## The Synths set: WAVE and PHASE
+
+`python tools/emu/make_masterfx_test_project.py "<project>" build/device/synths --synths` writes them,
+the same way as the second set: all three parts on one engine with its Init patch. The firmware is a
+mod build (plain CE resets a part on an engine it doesn't know). Lightest first; stop at the first
+problem.
+
+| Project | Voices | Engine | Reverb + delay | What it isolates |
+|---|---|---|---|---|
+| `S1 1 voice WAVE Init` | 1 | WAVE | Stock + Stock | The engine itself |
+| `S2 1 voice PHASE Init` | 1 | PHASE | Stock + Stock | |
+| `S3 4 voices WAVE Init` | 4 | WAVE | Stock + Stock | |
+| `S4 8 voices PHASE Init` | 8 | PHASE | Stock + Stock | The lighter engine at the limit |
+| `S5 8 voices WAVE Init` | 8 | WAVE | Stock + Stock | |
+| `S6 8 WAVE Shimmer BBD` | 8 | WAVE | Shimmer + BBD | Master FX on top |
+
+The heaviest case can't be written into a project (patches are the closed library's format), so it
+is set by hand on `S5`: on each of the three parts, Wave 1 and Wave 2 on Super Saw, Distortion on
+Distortion with Placement Pre, Effect on Phaser. Instructions per block for that, from
+[CE_PORT_PLAN.md](CE_PORT_PLAN.md) 3.15: about 719,000, against 528,000 for 8 voices of VAP.
+
 ## What a firmware comes with
 
 Each one handed over says what ran, what didn't, and the risk to the unit.

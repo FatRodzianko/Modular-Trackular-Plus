@@ -1,0 +1,153 @@
+#!/usr/bin/env python3
+# Modular-Trackular mods. SPDX-License-Identifier: MIT
+"""WAVE's and PHASE's model badges, as CE's: an L2 (2 bits a pixel) pill with the name
+knocked out, mini 80x28 and medium 108x40.
+
+The pill's outline is taken from CE's CHIP badges (core/libs/images), so the new ones sit
+with CE's; its inside is filled and the name drawn with this script's own block letters,
+supersampled 4x and rounded to the 4 levels. Writes core/mods/synths/images/*.h.
+
+    python tools/synths/gen_badges.py          (from the repository's root)
+"""
+
+import os
+import re
+import sys
+
+import numpy as np
+
+ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+IMAGES = os.path.join(ROOT, "core", "libs", "images")
+OUT = os.path.join(ROOT, "core", "mods", "synths", "images")
+SS = 4  # supersampling
+
+
+def load_l2(name, w, h):
+    text = open(os.path.join(IMAGES, name), encoding="utf-8").read()
+    data = [int(x, 16) for x in re.findall(r"0x([0-9A-Fa-f]{2})", text[text.index("{"):])]
+    assert len(data) == w * h // 4, name
+    px = np.zeros((h, w), dtype=np.uint8)
+    for i in range(w * h):
+        px[i // w, i % w] = (data[i // 4] >> (6 - 2 * (i % 4))) & 3
+    return px
+
+
+def pill(px, left_from):
+    """The outline filled: each row's pill (from x >= left_from) solid between its edges."""
+    out = px.copy()
+    h, w = px.shape
+    for y in range(h):
+        xs = [x for x in range(left_from, w) if px[y, x] > 0]
+        if not xs:
+            continue
+        a, b = xs[0], xs[-1]
+        while a < b and px[y, a] < 3:  # keep the anti-aliased edges
+            a += 1
+        while b > a and px[y, b] < 3:
+            b -= 1
+        out[y, a:b + 1] = 3
+    return out
+
+
+# Block letters on a unit box (x 0..1, y 0..1, y down): strokes as segments
+GLYPHS = {
+    "W": [((0, 0), (0, 1)), ((0.5, 0.35), (0.5, 1)), ((1, 0), (1, 1)), ((0, 1), (1, 1))],
+    "A": [((0, 1), (0, 0.25)), ((0, 0.25), (0.25, 0)), ((0.25, 0), (0.75, 0)), ((0.75, 0), (1, 0.25)),
+          ((1, 0.25), (1, 1)), ((0, 0.6), (1, 0.6))],
+    "V": [((0, 0), (0, 0.6)), ((0, 0.6), (0.5, 1)), ((0.5, 1), (1, 0.6)), ((1, 0.6), (1, 0))],
+    "E": [((0, 0), (0, 1)), ((0, 0), (1, 0)), ((0, 0.5), (0.8, 0.5)), ((0, 1), (1, 1))],
+    "P": [((0, 0), (0, 1)), ((0, 0), (0.8, 0)), ((0.8, 0), (1, 0.2)), ((1, 0.2), (1, 0.4)),
+          ((1, 0.4), (0.8, 0.6)), ((0.8, 0.6), (0, 0.6))],
+    "H": [((0, 0), (0, 1)), ((1, 0), (1, 1)), ((0, 0.5), (1, 0.5))],
+    "S": [((1, 0), (0.2, 0)), ((0.2, 0), (0, 0.2)), ((0, 0.2), (0, 0.3)), ((0, 0.3), (0.2, 0.5)),
+          ((0.2, 0.5), (0.8, 0.5)), ((0.8, 0.5), (1, 0.7)), ((1, 0.7), (1, 0.8)),
+          ((1, 0.8), (0.8, 1)), ((0.8, 1), (0, 1))],
+}
+WIDTH = {"W": 1.25, "A": 0.95, "V": 0.95, "E": 0.8, "P": 0.85, "H": 0.9, "S": 0.85}
+
+
+def text_mask(word, h, w, x0, y0, height, stroke, gap, ws=1.0):
+    """Coverage 0..1 of `word` set from (x0, y0), `height` tall, strokes `stroke` wide."""
+    ys, xs = np.mgrid[0:h * SS, 0:w * SS]
+    px = (xs + 0.5) / SS
+    py = (ys + 0.5) / SS
+    cover = np.zeros((h * SS, w * SS), dtype=bool)
+    inner = height - stroke  # the strokes' centres stay inside the letter's box
+    x = x0
+    for ch in word:
+        gw = WIDTH[ch] * inner * ws
+        for (ax, ay), (bx, by) in GLYPHS[ch]:
+            ax_, ay_ = x + stroke / 2 + ax * gw, y0 + stroke / 2 + ay * inner
+            bx_, by_ = x + stroke / 2 + bx * gw, y0 + stroke / 2 + by * inner
+            dx, dy = bx_ - ax_, by_ - ay_
+            t = np.clip(((px - ax_) * dx + (py - ay_) * dy) / (dx * dx + dy * dy), 0, 1)
+            d2 = (px - ax_ - t * dx) ** 2 + (py - ay_ - t * dy) ** 2
+            cover |= d2 <= (stroke / 2) ** 2
+        x += gw + stroke + gap
+    return cover.reshape(h, SS, w, SS).mean(axis=(1, 3)), x - gap
+
+
+def word_width(word, height, stroke, gap, ws=1.0):
+    inner = height - stroke
+    return sum(WIDTH[c] * inner * ws + stroke for c in word) + gap * (len(word) - 1)
+
+
+def badge(base, word, pill_from, text_box, height, stroke, gap):
+    """base: the filled pill; text_box: (left, right) where the name is centred."""
+    h, w = base.shape
+    box = text_box[1] - text_box[0]
+    ws = 1.0
+    if word_width(word, height, stroke, gap) > box:  # narrower letters, to fit the box
+        fixed = len(word) * stroke + gap * (len(word) - 1)
+        ws = (box - fixed) / (word_width(word, height, stroke, gap) - fixed)
+    tw = word_width(word, height, stroke, gap, ws)
+    x0 = text_box[0] + (box - tw) / 2
+    y0 = (h - height) / 2
+    cover, _ = text_mask(word, h, w, x0, y0, height, stroke, gap, ws)
+    level = base.astype(float) * (1.0 - cover)
+    out = np.clip(np.rint(level), 0, 3).astype(np.uint8)
+    return out
+
+
+def write_l2(name, px, note):
+    h, w = px.shape
+    flat = px.flatten()
+    data = []
+    for i in range(0, len(flat), 4):
+        b = 0
+        for k in range(4):
+            b |= int(flat[i + k]) << (6 - 2 * k)
+        data.append(b)
+    lines = [f"// {note}", f"// Generated by tools/synths/gen_badges.py; do not edit.", "",
+             "#pragma once", "", "#include <cstdint>", "",
+             f"const uint8_t {name}[{len(data)}] = {{"]
+    for i in range(0, len(data), 16):
+        lines.append("    " + ", ".join(f"0x{b:02X}" for b in data[i:i + 16]) + ",")
+    lines.append("};")
+    os.makedirs(OUT, exist_ok=True)
+    with open(os.path.join(OUT, name + ".h"), "w", encoding="utf-8", newline="\n") as f:
+        f.write("\n".join(lines) + "\n")
+    return px
+
+
+def ascii(px):
+    return "\n".join("".join(" .+#"[v] for v in row) for row in px)
+
+
+def main():
+    mini = pill(load_l2("chip_mini_nomark_80x28_L2.h", 80, 28), 10)
+    med = pill(load_l2("chip_med_108x40_L2.h", 108, 40), 0)
+    made = []
+    for word in ("WAVE", "PHASE"):
+        m = badge(mini, word, 10, (12, 68), 13, 2.5, 2.5)
+        d = badge(med, word, 0, (17, 91), 20, 3.5, 3.0)
+        made.append(write_l2(f"{word.lower()}_mini_80x28_L2", m, f"{word}'s mini model badge (80x28, L2)"))
+        made.append(write_l2(f"{word.lower()}_med_108x40_L2", d, f"{word}'s medium model badge (108x40, L2)"))
+    if "--show" in sys.argv:
+        for px in made:
+            print(ascii(px))
+            print()
+
+
+if __name__ == "__main__":
+    main()

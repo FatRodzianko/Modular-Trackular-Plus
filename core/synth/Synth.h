@@ -1,5 +1,6 @@
 #pragma once
 #include "config.h"
+#include "modsBuild.h"
 #ifdef FEATURE_SYNTH
 #include "AudioStream.h"
 #include "Platform.h"
@@ -39,7 +40,11 @@ class Synth
                                                 polysynth::InstrumentTypeId::kVASynth,
                                                 polysynth::InstrumentTypeId::kFMSynth,
                                                 polysynth::InstrumentTypeId::kDrumSynth,
-                                                polysynth::InstrumentTypeId::kShapingSynth, polysynth::InstrumentTypeId::kChiptuneSynth };
+                                                polysynth::InstrumentTypeId::kShapingSynth, polysynth::InstrumentTypeId::kChiptuneSynth
+#if MT_HAS_SYNTHS // MT: WAVE and PHASE (core/mods/synths/synthsMod.h has the ids); the project stores the index
+                                                , static_cast<polysynth::InstrumentTypeId>(64), static_cast<polysynth::InstrumentTypeId>(65)
+#endif
+                                                };
     static constexpr auto kInitPatchName = "Init";
 
     Synth();

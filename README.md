@@ -22,14 +22,14 @@ Off/On switch, so there's no separate build for each mix of mods.
 | **Variable Track Length** | Each track of a pattern can have its own length. A short track loops until the pattern ends, then every track starts again together. Hold Trk Len on page 3 of the Pattern screen's bottom bar and turn the encoder. Past its length a track shows its loop in grey, and CE's conditions on the Chance FX count its own loops. Lengths are saved with the project. | On/Off only |
 | **Copy to New** | A Copy to New button on page 3 of the Pattern screen's bottom bar copies the pattern you're on into the next empty pattern, with your unsaved edits and every track's length, playing or stopped. You stay on your pattern. A pattern counts as empty only if it isn't in the song and has nothing in any step, even past its length. With Variable Track Length on, the copy gets the Trk Len lengths too. It works in edit mode. | On/Off only |
 | **Song Loop** | Repeat a block of song positions. In the Song screen's pattern column, with Rec on, Shift + Down selects the block and Play Selection repeats it; Continue Song plays the block out and goes on. During the loop Up/Down and the jog wheel move the block. The status bar shows the loop. Designed by P-N-E-M for 1.2.0. | On/Off only |
+| **Synths** | Two more synth models in the picker: WAVE (wavetable, two oscillators, a filter, three envelopes, two LFOs and a mod matrix) and PHASE (phase distortion, after the Casio CZ). Each has an FX page: Chorus, Flanger or Phaser, and a Distortion that is Overdrive (Tube Screamer style), Distortion (DS-1 style) or Bit Crusher, with Level. Its two knobs are named for the type: Gain and Tone, or Bits and Rate. On WAVE the Distortion can go before the filter (Pre, in each voice) or after (Post); on PHASE Pre and Post are the same. Patches save as CE's do. Off hides the models; a part already playing one keeps it. 1.2.0 projects' WAVE and PHASE parts aren't converted. | Project Settings → Synths |
 
-All seven are tested on hardware.
+All but Synths are tested on hardware.
 
 The chord inversions and conditional trigs from the 1.2.0 mods are now part of CE itself, though CE's
 conditions differ, so a 1.2.0 project's conditional trigs read as CE's. Still to port, with no
 dates: Legato, FX Interpolation,
-the pad visualizer, slice Loop, live resampling, and the WAVE and
-PHASE synths. The plan is in [`docs/mt/CE_PORT_PLAN.md`](docs/mt/CE_PORT_PLAN.md).
+the pad visualizer, slice Loop and live resampling. The plan is in [`docs/mt/CE_PORT_PLAN.md`](docs/mt/CE_PORT_PLAN.md).
 
 ## Turning mods on and off
 

@@ -5,6 +5,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "modsBuild.h"
+
 class cDisplayControl;
 class cDebugLog;
 class cDisplay;
@@ -80,6 +82,12 @@ enum enDisplayBitmaps
     kBitmapShaper,
     kBitmapMiniCHIP,
     kBitmapCHIP,
+#if MT_HAS_SYNTHS // MT: WAVE's and PHASE's model badges (core/mods/synths/images)
+    kBitmapMiniWAVE,
+    kBitmapWAVE,
+    kBitmapMiniPHASE,
+    kBitmapPHASE,
+#endif
 
 #endif
 

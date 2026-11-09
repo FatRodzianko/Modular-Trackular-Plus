@@ -12,6 +12,9 @@
 #include "util_string.h"
 
 #include "mtAudioEngine.h"
+#if MT_HAS_SYNTHS // MT: WAVE's and PHASE's tiles and controls
+#include "synths/synthsMod.h"
+#endif
 
 #include <cmath>
 
@@ -19,6 +22,9 @@ const char* const OffOnNames[] = { "Off", "On" };
 static const int synthModelListImages[Synth::kSynthTypes.size()] = {
     enDisplayBitmaps::kBitmapACD,  enDisplayBitmaps::kBitmapFAT,  enDisplayBitmaps::kBitmapVAP,
     enDisplayBitmaps::kBitmapWTFM, enDisplayBitmaps::kBitmapPERC, enDisplayBitmaps::kBitmapDIRT, enDisplayBitmaps::kBitmapCHIP
+#if MT_HAS_SYNTHS // MT: WAVE and PHASE
+    , enDisplayBitmaps::kBitmapWAVE, enDisplayBitmaps::kBitmapPHASE
+#endif
 };
 
 static cInstrumentEditor* IE = &instrumentEditor;
@@ -825,7 +831,20 @@ void cInstrumentEditor::changeSynthPatchParamValue(int16_t value)
 
     getSynth()->setPatchDirty(syntPartIdx);
 
+#if MT_HAS_SYNTHS // MT: WAVE's and PHASE's Distortion and LFO Sync rename or redisplay other controls: the list again
+    bool mtRebuild = false;
+    if (!isMacroSelected())
+    {
+        const auto& mtMetadata = patch.getMetadata();
+        const int mtParam = sectionParamsIds[paramListPos];
+        mtRebuild = mods::synths::ownsLayout(mtMetadata.instrumentTypeId) && mtParam >= 0 &&
+                    mtParam < std::ssize(mtMetadata.params) &&
+                    mtMetadata.params[mtParam].invalidatesOtherMetadata;
+    }
+    showSynthPatchSectionParam(mtRebuild);
+#else
     showSynthPatchSectionParam();
+#endif
     showSynthPatchSectionParamValue();
     showSynthPatchMacroParam(refreshParamList);
     showSynthPatchMacroParamValue();
@@ -1285,6 +1304,14 @@ void cInstrumentEditor::showSynthPatchSection(bool refreshList)
                     number = 0;
                     sectionImgList[idx] = -1;
                 }
+
+#if MT_HAS_SYNTHS // MT: WAVE's and PHASE's tiles show their sections' short names
+                if (mods::synths::ownsLayout(metadata.instrumentTypeId) && !section.shortName.empty())
+                {
+                    shortName = section.shortName.c_str();
+                    number = 0;
+                }
+#endif
 
                 sectionNamesList[idx] = &sectionNamesGridBuff[kMaxSynthGridStringLen * idx];
 

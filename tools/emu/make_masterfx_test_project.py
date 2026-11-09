@@ -5,6 +5,7 @@
         [--voices 1,4,0] [--keep-masterfx] [--effects 4,2] [--worst]
     python tools/emu/make_masterfx_test_project.py "<project>" "<out folder>" --ladder
     python tools/emu/make_masterfx_test_project.py "<project>" "<out folder>" --engines
+    python tools/emu/make_masterfx_test_project.py "<project>" "<out folder>" --synths
     python tools/emu/make_masterfx_test_project.py "<project>" "<out folder>" --sound
 
 The project given is only read. In the copy:
@@ -20,6 +21,8 @@ Everything else stays byte for byte, the synth patches and other mods' files inc
 starts with them. --ladder writes the projects of docs/mt/DEVICE_TEST_LADDER.md, in order. --engines
 writes that file's second set: all three parts on one engine with its Init patch, so nothing depends
 on the source project's sound. The engine comes from project.mt's synthType, not from the patch file.
+--synths writes the Synths mod's set the same way, on WAVE and PHASE (a mod build only: plain CE
+resets a part whose synthType it doesn't know).
 
 --sound writes that file's last set. `A1 Master FX sound` is one voice of ACD Init with a short note every 16
 steps, so the gaps let the reverb and delay be heard, with no masterfx.bin. `R2 Real project sends` is the source
@@ -155,8 +158,9 @@ def masterfx_file(reverb: int, delay: int) -> bytes:
     return b"HMF1" + data + struct.pack("<I", h)
 
 
-# In the order of Synth::kSynthTypes, which project.mt's synthType counts in.
-ENGINES = ("ACD", "FAT", "VAP", "WTFM", "PERC", "DIRT", "CHIP")
+# In the order of Synth::kSynthTypes, which project.mt's synthType counts in. WAVE and PHASE are the
+# Synths mod's, after CE's seven in mod builds (core/synth/Synth.h).
+ENGINES = ("ACD", "FAT", "VAP", "WTFM", "PERC", "DIRT", "CHIP", "WAVE", "PHASE")
 
 # name, voices, (reverb, delay), the parts' engine. 8 voices split as L7 and L8 do: with all 8 on one
 # part, the pattern sounded only 4 notes.
@@ -169,6 +173,16 @@ ENGINE_LADDER = (
     ("N6 8 voices PERC", (4, 2, 2), None, "PERC"),
     ("N7 8 voices DIRT", (4, 2, 2), None, "DIRT"),
     ("N8 8 ACD Shimmer BBD", (4, 2, 2), (4, 2), "ACD"),
+)
+
+# The Synths mod's set: name, voices, (reverb, delay), engine; lightest first, Init patches.
+SYNTHS_LADDER = (
+    ("S1 1 voice WAVE Init", (1, 0, 0), None, "WAVE"),
+    ("S2 1 voice PHASE Init", (1, 0, 0), None, "PHASE"),
+    ("S3 4 voices WAVE Init", (4, 0, 0), None, "WAVE"),
+    ("S4 8 voices PHASE Init", (4, 2, 2), None, "PHASE"),
+    ("S5 8 voices WAVE Init", (4, 2, 2), None, "WAVE"),
+    ("S6 8 WAVE Shimmer BBD", (4, 2, 2), (4, 2), "WAVE"),
 )
 
 # name, voices, (reverb, delay), lightest first. Spring and Tape are the lightest of each kind,
@@ -195,9 +209,9 @@ def make_ladder(source: Path, parent: Path) -> list:
     return out
 
 
-def make_engines(source: Path, parent: Path) -> list:
+def make_engines(source: Path, parent: Path, ladder=ENGINE_LADDER) -> list:
     out = []
-    for name, voices, effects, engine in ENGINE_LADDER:
+    for name, voices, effects, engine in ladder:
         folder = make(source, parent, name, voices, engine=engine)
         if effects:
             (folder / "masterfx.bin").write_bytes(masterfx_file(*effects))
@@ -263,11 +277,13 @@ def main() -> int:
     parser.add_argument("--effects", help="reverb,delay numbers for masterfx.bin")
     parser.add_argument("--ladder", action="store_true")
     parser.add_argument("--engines", action="store_true")
+    parser.add_argument("--synths", action="store_true")
     parser.add_argument("--sound", action="store_true")
     args = parser.parse_args()
     try:
-        if args.ladder or args.engines or args.sound:
-            maker = make_ladder if args.ladder else make_engines if args.engines else make_sound
+        if args.ladder or args.engines or args.sound or args.synths:
+            maker = (make_ladder if args.ladder else make_engines if args.engines else make_sound if args.sound
+                     else lambda source, parent: make_engines(source, parent, SYNTHS_LADDER))
             for folder in maker(args.project, args.out):
                 print(f"Copy written: {folder}")
             return 0

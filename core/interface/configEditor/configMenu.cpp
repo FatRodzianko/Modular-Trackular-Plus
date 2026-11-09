@@ -150,6 +150,15 @@ const strItemTypeListTextWithAction projectSongloopSetup{
 cMenuItem melProjectSongloop(menuProjectMods, "Song Loop", projectSongloopDesc, menuTypeItemListTextWithAction, &projectSongloopSetup);
 #endif
 
+#if MT_HAS_SYNTHS
+const char projectSynthsDesc[] = { "Synths for this project: WAVE (wavetable) and PHASE (phase distortion) "
+                                   "in the synth model picker. Off hides them; a part already playing one "
+                                   "keeps it. " };
+const strItemTypeListTextWithAction projectSynthsSetup{
+    &mods::switches[static_cast<size_t>(mods::Mod::synths)], 2, onOffStateTexts, mods::projectSwitchChanged };
+cMenuItem melProjectSynths(menuProjectMods, "Synths", projectSynthsDesc, menuTypeItemListTextWithAction, &projectSynthsSetup);
+#endif
+
 #if MT_HAS_TRACKLEN
 const char projectTracklenDesc[] = { "Variable Track Length for this project: hold Trk Len on the Pattern "
                                      "screen's third page and turn the encoder to give the cursor's track "
@@ -465,6 +474,15 @@ const char modsSongloopDesc[] = { "Whether new projects start with Song Loop on.
 const strItemTypeListTextWithAction modsSongloopSetup{
     &mods::defaults[static_cast<size_t>(mods::Mod::songloop)], 2, onOffStateTexts, mods::defaultsChanged };
 cMenuItem melModsSongloop(menuMods, "Song Loop", modsSongloopDesc, menuTypeItemListTextWithAction, &modsSongloopSetup);
+#endif
+
+#if MT_HAS_SYNTHS
+const char modsSynthsDesc[] = { "Whether new projects start with Synths on. Each project has its own "
+                                "switch in Project Settings > Mods. Synths: the WAVE and PHASE synth "
+                                "models. " };
+const strItemTypeListTextWithAction modsSynthsSetup{
+    &mods::defaults[static_cast<size_t>(mods::Mod::synths)], 2, onOffStateTexts, mods::defaultsChanged };
+cMenuItem melModsSynths(menuMods, "Synths", modsSynthsDesc, menuTypeItemListTextWithAction, &modsSynthsSetup);
 #endif
 
 #if MT_HAS_TRACKLEN

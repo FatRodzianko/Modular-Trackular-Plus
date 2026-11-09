@@ -11,6 +11,10 @@
 #include "mtAudioEngine.h"
 #include "util_math.h"
 #include "util_string.h"
+#if MT_HAS_SYNTHS // MT: Synths: the picker shows WAVE and PHASE only with the mod on
+#include "mods.h"
+#include "synths/synthsMod.h"
+#endif
 
 extern uint8_t externalRamScratchBuff[];
 static_assert(kMaxFilesListLength * (kMaxFileNameLen + 1) + kMaxFilesListLength * sizeof(char**) <=
@@ -23,6 +27,9 @@ static const uint16_t framesPlacesSynth[1][4] = {
 
 const char* const synthModelNames[Synth::kSynthTypes.size()] = {
     "ACD", "FAT", "VAP", "WTFM", "PERC", "DIRT", "CHIP",
+#if MT_HAS_SYNTHS // MT: WAVE and PHASE
+    "WAVE", "PHASE",
+#endif
 };
 
 static const int synthModelListImages[Synth::kSynthTypes.size()] = {
@@ -30,9 +37,25 @@ static const int synthModelListImages[Synth::kSynthTypes.size()] = {
     enDisplayBitmaps::kBitmapMiniVAP,  enDisplayBitmaps::kBitmapMiniWTFM,
     enDisplayBitmaps::kBitmapMiniPERC, enDisplayBitmaps::kBitmapMiniDIRT,
     enDisplayBitmaps::kBitmapMiniCHIP
+#if MT_HAS_SYNTHS // MT: WAVE and PHASE
+    , enDisplayBitmaps::kBitmapMiniWAVE, enDisplayBitmaps::kBitmapMiniPHASE
+#endif
 };
 
 static cInstrumentEditor* IE = &instrumentEditor;
+
+#if MT_HAS_SYNTHS // MT: Synths Off: the picker ends at CE's models, or at the part's own if it is ours
+static_assert(static_cast<int>(Synth::kSynthTypes[Synth::kSynthTypes.size() - 2]) == mods::synths::kWaveTypeId &&
+                static_cast<int>(Synth::kSynthTypes[Synth::kSynthTypes.size() - 1]) == mods::synths::kPhaseTypeId,
+              "Synth.h's last two models are WAVE and PHASE");
+static size_t synthPickerModels(int part)
+{
+    return mods::synths::modelCount(mods::on(mods::Mod::synths),
+                                    mtProject.values.synthPart[part].synthType,
+                                    Synth::kSynthTypes.size() - mods::synths::kModels,
+                                    Synth::kSynthTypes.size());
+}
+#endif
 
 static void functSynthActionButtons(uint8_t button);
 static void functSynthLoad();
@@ -397,6 +420,10 @@ void cInstrumentEditor::changeSynthModel(int16_t value)
     assert(syntPartIdx >= 0 && syntPartIdx < kSynthInstrumentsCount);
 
     int modelMaxValue = (Synth::kSynthTypes.size() - 1);
+
+#if MT_HAS_SYNTHS // MT: Synths Off: WAVE and PHASE hidden
+    modelMaxValue = static_cast<int>(synthPickerModels(syntPartIdx)) - 1;
+#endif
 
     int32_t previousSynthType = mtProject.values.synthPart[syntPartIdx].synthType;
 
@@ -818,6 +845,10 @@ void cInstrumentEditor::showSynthParamsScreen()
     modelListData.start = mtProject.values.synthPart[syntPartIdx].synthType;
     modelListData.length = Synth::kSynthTypes.size();
     modelListData.linesCount = std::min<uint16_t>(Synth::kSynthTypes.size(), 7);
+#if MT_HAS_SYNTHS // MT: Synths Off: WAVE and PHASE hidden
+    modelListData.length = synthPickerModels(syntPartIdx);
+    modelListData.linesCount = std::min<uint16_t>(modelListData.length, 7);
+#endif
     modelListData.rowHeight = 50;
     modelListData.params = nullptr;
     modelListData.imageIds = synthModelListImages;
