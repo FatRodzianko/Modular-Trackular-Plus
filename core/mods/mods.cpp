@@ -17,6 +17,7 @@
 #include "modsProject.h"
 #include "modsRegistry.h"
 #include "modsSwitches.h"
+#include "songloop.h"
 #include "swing.h"
 #include "tracklen.h"
 
@@ -231,6 +232,14 @@ void tracklenTracksPasted(uint8_t sourcePattern, uint8_t destPattern, uint8_t so
     {
         projectTracklenEdited();
     }
+}
+#endif
+
+#if MT_HAS_SONGLOOP
+void projectSongloopSwitchChanged()
+{
+    projectSwitchChanged();
+    songloop::switchEdited();
 }
 #endif
 

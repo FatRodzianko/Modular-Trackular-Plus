@@ -16,6 +16,7 @@
 #include "mtSliceDetector.h"
 #include "mods.h" // MT:
 #include "lockupRecorder.h" // MT:
+#include "songloop.h" // MT:
 
 #include <cr_section_macros.h>
 
@@ -180,6 +181,12 @@ void TrackerImpl::update()
     sliceDetector.update();
     newFileManager.update();
     mtInterface.update();
+#if MT_HAS_SONGLOOP // MT: Song Loop: the next pattern on time in Performance
+    if (mods::on(mods::Mod::songloop))
+    {
+        mods::songloop::tick(mods::songloop::ceSide());
+    }
+#endif
     engine.updateSdStream();
     sequencer.update();
 #if MT_LOCKUP_RECORDER // MT: diagnostic builds

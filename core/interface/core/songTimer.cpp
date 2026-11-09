@@ -6,6 +6,7 @@
 
 #include "mtSequencer.h"
 #include "patternEditor/patternEditor.h"
+#include "songloop.h" // MT:
 
 cSongTimer songTimer;
 
@@ -74,6 +75,13 @@ void cSongTimer::refresh()
     else
         actualData.step = patternEditor.trackerPattern.actualStep;
 
+#if MT_HAS_SONGLOOP // MT: Song Loop: its icon changed
+    if (mods::on(mods::Mod::songloop) && mods::songloop::takeStatusDirty())
+    {
+        lastData.minutes = -1;
+    }
+#endif
+
     // przerwanie operacji jesli dane do wyswietlenia nie ulegly zmianie
     if (lastData.step == actualData.step && lastData.seconds == actualData.seconds &&
         lastData.minutes == actualData.minutes && lastData.pattern == actualData.pattern &&
@@ -110,6 +118,17 @@ void cSongTimer::refresh()
     {
         seqState = "  ";
     }
+
+#if MT_HAS_SONGLOOP // MT: Song Loop: the repeat signs in place of the play icon
+    if (mods::on(mods::Mod::songloop) && mods::songloop::glyphsReady())
+    {
+        const Sequencer::strPlayer* player = sequencer.ptrPlayer;
+        seqState = mods::songloop::statusIcon(
+          seqState,
+          !player->isStop && player->isPlay && !player->selectionMode && player->songMode,
+          mtProject.song.playlistPos);
+    }
+#endif
 
     const char* timerFormat = "%3im:%02is %2s P%i.%03i%2s";
 

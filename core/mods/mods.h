@@ -63,6 +63,9 @@ constexpr size_t kBuiltModCount = 0
 #if MT_HAS_TRACKLEN
                                   + 1
 #endif
+#if MT_HAS_SONGLOOP
+                                  + 1
+#endif
   ;
 
 // One byte per mod, 0 Off or 1 On, so Config list items can point at them.
@@ -143,6 +146,11 @@ void colorsongUpdate();
 void projectTracklenEdited();
 // Song pasted tracks: their lengths go with them, if the mod is on. Main loop.
 void tracklenTracksPasted(uint8_t sourcePattern, uint8_t destPattern, uint8_t sourceTrack, uint8_t destTrack, uint8_t tracks);
+#endif
+
+#if MT_HAS_SONGLOOP
+// The same for Song Loop's switch, which also changes the status bar's glyphs.
+void projectSongloopSwitchChanged();
 #endif
 
 // After any Config menu edit: mods' settings the menu edits directly are stored if they

@@ -52,6 +52,13 @@
 #define MT_HAS_TRACKLEN 0
 #endif
 
+#ifndef MT_HAS_SONGLOOP
+#define MT_HAS_SONGLOOP MT_MODS
+#elif !MT_MODS
+#undef MT_HAS_SONGLOOP
+#define MT_HAS_SONGLOOP 0
+#endif
+
 #ifndef MT_HAS_SWING
 #define MT_HAS_SWING MT_MODS
 #elif !MT_MODS

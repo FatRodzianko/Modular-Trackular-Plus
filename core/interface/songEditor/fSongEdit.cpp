@@ -10,6 +10,7 @@
 #include "Platform.h"
 #include "mtPadBoard.h"
 #include "mods.h" // MT:
+#include "songloop.h" // MT:
 #include "mtPadsBacklight.h"
 #include "mtStructs.h"
 #include "util_math.h"
@@ -71,6 +72,9 @@ void cSongEditor::update()
     if (songPlayerRefreshTimer > 100)
     {
         songPlayerRefreshTimer = 0;
+#if MT_HAS_SONGLOOP // MT: Song Loop: Play Selection / Continue Song, and the selection's upkeep
+        if (!mods::on(mods::Mod::songloop) || !mods::songloop::labels(mods::songloop::ceSide()))
+#endif
         refreshButtonsLabels();
 
         Sequencer::enSeqState seqState = sequencer.getSeqState();
@@ -246,6 +250,12 @@ void cSongEditor::lightUpPadBoard()
 
 static void functPlayPattern()
 {
+#if MT_HAS_SONGLOOP // MT: Song Loop: Play Selection / Continue Song (softkey 0 and Shift + Play)
+    if (mods::on(mods::Mod::songloop) && mods::songloop::playPatternPressed(mods::songloop::ceSide()))
+    {
+        return;
+    }
+#endif
     Sequencer::enSeqState seqState = sequencer.getSeqState();
 
     if (seqState == Sequencer::SEQ_STATE_STOP)
@@ -434,6 +444,12 @@ static void functDecPattern(uint8_t state)
 
 static void functAddSlot()
 {
+#if MT_HAS_SONGLOOP // MT: Song Loop: locked with a block
+    if (mods::on(mods::Mod::songloop) && mods::songloop::locked(SE->songLength))
+    {
+        return;
+    }
+#endif
     if (SE->isBusy)
     {
         return;
@@ -508,6 +524,12 @@ static void functAddSlot()
 
 static void functDeleteSlot()
 {
+#if MT_HAS_SONGLOOP // MT: Song Loop: locked with a block (the softkey and the Delete key)
+    if (mods::on(mods::Mod::songloop) && mods::songloop::locked(SE->songLength))
+    {
+        return;
+    }
+#endif
     if (SE->isBusy)
     {
         return;
@@ -672,6 +694,14 @@ static void functEncoder(int16_t value)
             }
             else
             {
+#if MT_HAS_SONGLOOP // MT: Song Loop: selecting, or the whole block moves during the loop
+                if (mods::on(mods::Mod::songloop))
+                {
+                    mods::songloop::move(mods::songloop::ceSide(),
+                                         interfaceGlobals.invertValForList ? -value : value);
+                    break;
+                }
+#endif
                 SE->changeSongPositionSelection(interfaceGlobals.invertValForList ? -value : value);
             }
             break;
@@ -714,7 +744,16 @@ static void functUp()
     switch (SE->selectedPlace)
     {
         case 0: SE->walkOnSongPlayer(playerUp); break;
-        case 1: SE->changeSongPositionSelection(-1); break;
+        case 1:
+#if MT_HAS_SONGLOOP // MT: Song Loop: Shift selects, or the whole block moves during the loop
+            if (mods::on(mods::Mod::songloop))
+            {
+                mods::songloop::move(mods::songloop::ceSide(), -1);
+                break;
+            }
+#endif
+            SE->changeSongPositionSelection(-1);
+            break;
         case 2:
             if (SE->buttons->isButtonPressed(interfaceButtonShift))
             {
@@ -738,7 +777,16 @@ static void functDown()
     switch (SE->selectedPlace)
     {
         case 0: SE->walkOnSongPlayer(playerDown); break;
-        case 1: SE->changeSongPositionSelection(1); break;
+        case 1:
+#if MT_HAS_SONGLOOP // MT: Song Loop: Shift selects, or the whole block moves during the loop
+            if (mods::on(mods::Mod::songloop))
+            {
+                mods::songloop::move(mods::songloop::ceSide(), 1);
+                break;
+            }
+#endif
+            SE->changeSongPositionSelection(1);
+            break;
         case 2:
         {
             if (SE->buttons->isButtonPressed(interfaceButtonShift))
@@ -951,6 +999,16 @@ void cSongEditor::refreshEditMode()
 {
     for (uint8_t i = 2; i < 6; i++)
     {
+#if MT_HAS_SONGLOOP // MT: Song Loop: greyed out while locked
+        if (mods::on(mods::Mod::songloop))
+        {
+            display.setControlColors(label[i],
+                                     editMode && !mods::songloop::locked(songLength)
+                                       ? display.getTheme().activeButtonLabelsColors
+                                       : display.getTheme().inactiveButtonLabelsColors);
+        }
+        else
+#endif
         display.setControlColors(label[i],
                                  editMode ? display.getTheme().activeButtonLabelsColors
                                           : display.getTheme().inactiveButtonLabelsColors);
@@ -1110,6 +1168,12 @@ void cSongEditor::setDefaultGlobalTempo()
 
 void cSongEditor::changeSelectedPlayListPattern(int value)
 {
+#if MT_HAS_SONGLOOP // MT: Song Loop: locked with a block (<< Pattern >> and Shift + jog)
+    if (mods::on(mods::Mod::songloop) && mods::songloop::locked(songLength))
+    {
+        return;
+    }
+#endif
     if (!SE->editMode)
     {
         return;
@@ -1604,6 +1668,12 @@ static void functPaste()
 
 static void functUndo()
 {
+#if MT_HAS_SONGLOOP // MT: Song Loop: locked with a block
+    if (mods::on(mods::Mod::songloop) && mods::songloop::locked(SE->songLength))
+    {
+        return;
+    }
+#endif
     if (SE->isBusy)
     {
         return;

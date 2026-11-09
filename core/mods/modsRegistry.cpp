@@ -14,6 +14,7 @@
 #include "humanize.h"
 #include "masterfx.h"
 #include "modsProject.h"
+#include "songloop.h"
 #include "swing.h"
 #include "tracklen.h"
 
@@ -103,6 +104,20 @@ constexpr std::array<ModDescriptor, kBuiltModCount> kMods{ {
     .load = tracklen::load,
     .apply = nullptr,
     .reset = nullptr,
+    .storeIfEdited = nullptr,
+    .stored = nullptr,
+  },
+#endif
+#if MT_HAS_SONGLOOP
+  {
+    .id = Mod::songloop,
+    .name = "Song Loop",
+    .record = songloop::kRecord,
+    .recordVersion = songloop::kRecordVersion,
+    .init = songloop::init,
+    .load = nullptr,
+    .apply = songloop::apply,    // the status bar's glyphs on, or back to CE's
+    .reset = songloop::reset,    // a selection or loop from the last project
     .storeIfEdited = nullptr,
     .stored = nullptr,
   },

@@ -19,13 +19,14 @@ Off/On switch, so there's no separate build for each mix of mods.
 | **Global Swing** | Every take and pattern start uses the project's Swing amount (25–75). A Swing FX still works for the rest of its pattern. | Project Settings → Global Swing |
 | **Color Song** | Song screen blocks get a colour from their content, so the same material is easy to follow through a song. Colours stay put and are saved with the project. | On/Off only |
 | **Variable Track Length** | Each track of a pattern can have its own length. A short track loops until the pattern ends, then every track starts again together. Hold Trk Len on page 3 of the Pattern screen's bottom bar and turn the encoder. Past its length a track shows its loop in grey, and CE's conditions on the Chance FX count its own loops. Lengths are saved with the project. | On/Off only |
+| **Song Loop** | Repeat a block of song positions. In the Song screen's pattern column, with Rec on, Shift + Down selects the block and Play Selection repeats it; Continue Song plays the block out and goes on. During the loop Up/Down and the jog wheel move the block. The status bar shows the loop. Designed by P-N-E-M for 1.2.0. | On/Off only |
 
-All four are tested on hardware.
+All five are tested on hardware.
 
 The chord inversions and conditional trigs from the 1.2.0 mods are now part of CE itself, though CE's
 conditions differ, so a 1.2.0 project's conditional trigs read as CE's. Still to port, with no
 dates: Copy to New, Legato, FX Interpolation,
-Song Loop, the pad visualizer, slice Loop, Master FX, live resampling, and the WAVE and
+the pad visualizer, slice Loop, Master FX, live resampling, and the WAVE and
 PHASE synths. The plan is in [`docs/mt/CE_PORT_PLAN.md`](docs/mt/CE_PORT_PLAN.md).
 
 ## Turning mods on and off
