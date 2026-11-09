@@ -4392,7 +4392,7 @@ void cPatternEditor::lightUpPadBoard()
 
     //--------------------------------------------
 
-    if (editMode > 0)
+    if (editMode > 0 || sequencer.isRec())
     {
         Sequencer::strPattern* seq = sequencer.getPatternToUI();
 
@@ -4404,8 +4404,9 @@ void cPatternEditor::lightUpPadBoard()
             case EditNote:
             {
                 bool isBeatSlice =
+                  mtProject.values.lastUsedInstrument < kSampleInstrumentsCount &&
                   mtProject.instrument[mtProject.values.lastUsedInstrument].playMode ==
-                  playModeBeatSlice;
+                    playModeBeatSlice;
 
                 if (isBeatSlice)
                 {

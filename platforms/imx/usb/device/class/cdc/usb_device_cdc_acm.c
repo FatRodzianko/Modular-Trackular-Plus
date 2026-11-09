@@ -206,6 +206,9 @@ static usb_status_t USB_DeviceCdcAcmEndpointsInit(usb_device_cdc_acm_struct_t* c
     {
         return error;
     }
+    cdcAcmHandle->interfaceNumber = 0xFFU;
+    cdcAcmHandle->commInterfaceHandle = NULL;
+    cdcAcmHandle->dataInterfaceHandle = NULL;
     epCallback.callbackFn = (usb_device_endpoint_callback_t)NULL;
     /* return error when configuration is invalid (0 or more than the configuration number) */
     if ((cdcAcmHandle->configuration == 0U) ||
@@ -219,6 +222,10 @@ static usb_status_t USB_DeviceCdcAcmEndpointsInit(usb_device_cdc_acm_struct_t* c
 
     for (count = 0; count < interfaceList->count; count++)
     {
+        if (0xFFU == interfaceList->interfaces[count].interfaceNumber)
+        {
+            continue;
+        }
         if (USB_DEVICE_CONFIG_CDC_COMM_CLASS_CODE == interfaceList->interfaces[count].classCode)
         {
             for (index = 0; index < interfaceList->interfaces[count].count; index++)
@@ -407,6 +414,9 @@ usb_status_t USB_DeviceCdcAcmEvent(void* handle, uint32_t event, void* param)
         case kUSB_DeviceClassEventDeviceReset:
             /* Bus reset, clear the configuration. */
             cdcAcmHandle->configuration = 0;
+            cdcAcmHandle->interfaceNumber = 0xFFU;
+            cdcAcmHandle->commInterfaceHandle = NULL;
+            cdcAcmHandle->dataInterfaceHandle = NULL;
             error = kStatus_USB_Success;
             break;
         case kUSB_DeviceClassEventSetConfiguration:
@@ -851,6 +861,9 @@ usb_status_t USB_DeviceCdcAcmInit(uint8_t controllerId,
     cdcAcmHandle->configStruct = config;
     cdcAcmHandle->configuration = 0;
     cdcAcmHandle->alternate = 0xFF;
+    cdcAcmHandle->interfaceNumber = 0xFFU;
+    cdcAcmHandle->commInterfaceHandle = NULL;
+    cdcAcmHandle->dataInterfaceHandle = NULL;
 
     cdcAcmHandle->bulkIn.mutex = (osa_mutex_handle_t)&cdcAcmHandle->bulkIn.mutexBuffer[0];
     if (KOSA_StatusSuccess != OSA_MutexCreate((cdcAcmHandle->bulkIn.mutex)))

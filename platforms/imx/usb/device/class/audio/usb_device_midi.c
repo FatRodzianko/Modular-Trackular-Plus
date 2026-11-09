@@ -129,6 +129,8 @@ static usb_status_t USB_DeviceMidiEndpointsInit(usb_device_midi_struct_t* midiHa
     {
         return error;
     }
+    midiHandle->interfaceNumber = 0xFFU;
+    midiHandle->interfaceHandle = NULL;
     epCallback.callbackFn = (usb_device_endpoint_callback_t)NULL;
     /* return error when configuration is invalid (0 or more than the
      * configuration number) */
@@ -143,7 +145,12 @@ static usb_status_t USB_DeviceMidiEndpointsInit(usb_device_midi_struct_t* midiHa
 
     for (count = 0; count < interfaceList->count; count++)
     {
-        if (USB_MIDI_CLASS == interfaceList->interfaces[count].classCode)
+        if (0xFFU == interfaceList->interfaces[count].interfaceNumber)
+        {
+            continue;
+        }
+        if ((USB_MIDI_CLASS == interfaceList->interfaces[count].classCode) &&
+            (USB_MIDI_SUBCLASS == interfaceList->interfaces[count].subclassCode))
         {
             for (index = 0; index < interfaceList->interfaces[count].count; index++)
             {
@@ -278,6 +285,10 @@ usb_status_t USB_DeviceMidiEvent(void* handle, uint32_t event, void* param)
         case kUSB_DeviceClassEventDeviceReset:
             /* Bus reset, clear the configuration. */
             midiHandle->configuration = 0;
+            midiHandle->interfaceNumber = 0xFFU;
+            midiHandle->interfaceHandle = NULL;
+            midiHandle->bulkIn.isBusy = 0U;
+            midiHandle->bulkOut.isBusy = 0U;
             error = kStatus_USB_Success;
             break;
         case kUSB_DeviceClassEventSetConfiguration:
@@ -503,6 +514,8 @@ usb_status_t USB_DeviceMidiInit(uint8_t controllerId,
     midiHandle->configStruct = config;
     midiHandle->configuration = 0;
     midiHandle->alternate = 0xFF;
+    midiHandle->interfaceNumber = 0xFFU;
+    midiHandle->interfaceHandle = NULL;
 
     midiHandle->bulkIn.mutex = (osa_mutex_handle_t)&midiHandle->bulkIn.mutexBuffer[0];
     if (KOSA_StatusSuccess != OSA_MutexCreate((midiHandle->bulkIn.mutex)))

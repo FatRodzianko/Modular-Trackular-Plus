@@ -123,13 +123,13 @@ usb_device_interfaces_struct_t g_cdcVcomInterfaces[USB_CDC_VCOM_INTERFACE_COUNT]
     { USB_CDC_VCOM_CIC_CLASS,
       USB_CDC_VCOM_CIC_SUBCLASS,
       USB_CDC_VCOM_CIC_PROTOCOL,
-      USB_CDC_VCOM_CIC_INTERFACE_INDEX,
+      0xFFU,
       g_cdcVcomCicInterface,
       sizeof(g_cdcVcomCicInterface) / sizeof(usb_device_interface_struct_t) },
     { USB_CDC_VCOM_DIC_CLASS,
       USB_CDC_VCOM_DIC_SUBCLASS,
       USB_CDC_VCOM_DIC_PROTOCOL,
-      USB_CDC_VCOM_DIC_INTERFACE_INDEX,
+      0xFFU,
       g_cdcVcomDicInterface,
       sizeof(g_cdcVcomDicInterface) / sizeof(usb_device_interface_struct_t) },
 };
@@ -271,19 +271,19 @@ usb_device_interface_struct_t g_UsbDeviceAudioPlayStreamInterface[] = {
 usb_device_interfaces_struct_t
   g_UsbDeviceAudioRecorderInterfaces[USB_AUDIO_RECORDER_INTERFACE_COUNT] = {
       {
-        USB_AUDIO_CLASS,                   /* Audio class code */
-        USB_SUBCLASS_AUDIOCONTROL,         /* Audio control subclass code */
-        USB_AUDIO_PROTOCOL,                /* Audio protocol code */
-        USB_AUDIO_CONTROL_INTERFACE_INDEX, /* The interface number of the Audio control */
-        g_UsbDeviceAudioControInterface,   /* The handle of Audio control */
+        USB_AUDIO_CLASS,                 /* Audio class code */
+        USB_SUBCLASS_AUDIOCONTROL,       /* Audio control subclass code */
+        USB_AUDIO_PROTOCOL,              /* Audio protocol code */
+        0xFFU,                           /* The interface number of the Audio control */
+        g_UsbDeviceAudioControInterface, /* The handle of Audio control */
         sizeof(g_UsbDeviceAudioControInterface) / sizeof(usb_device_interface_struct_t),
       },
       {
-        USB_AUDIO_CLASS,                           /* Audio class code */
-        USB_SUBCLASS_AUDIOSTREAM,                  /* Audio stream subclass code */
-        USB_AUDIO_PROTOCOL,                        /* Audio protocol code */
-        USB_AUDIO_RECORDER_STREAM_INTERFACE_INDEX, /* The interface number of the Audio control */
-        g_UsbDeviceAudioRecStreamInterface,        /* The handle of Audio stream */
+        USB_AUDIO_CLASS,                    /* Audio class code */
+        USB_SUBCLASS_AUDIOSTREAM,           /* Audio stream subclass code */
+        USB_AUDIO_PROTOCOL,                 /* Audio protocol code */
+        0xFFU,                              /* The interface number of the Audio control */
+        g_UsbDeviceAudioRecStreamInterface, /* The handle of Audio stream */
         sizeof(g_UsbDeviceAudioRecStreamInterface) / sizeof(usb_device_interface_struct_t),
       },
   };
@@ -292,19 +292,19 @@ usb_device_interfaces_struct_t
 usb_device_interfaces_struct_t
   g_UsbDeviceAudioPlayerInterfaces[USB_AUDIO_PLAYER_INTERFACE_COUNT] = {
       {
-        USB_AUDIO_CLASS,                   /* Audio class code */
-        USB_SUBCLASS_AUDIOCONTROL,         /* Audio control subclass code */
-        USB_AUDIO_PROTOCOL,                /* Audio protocol code */
-        USB_AUDIO_CONTROL_INTERFACE_INDEX, /* The interface number of the Audio control */
-        g_UsbDeviceAudioControInterface,   /* The handle of Audio control */
+        USB_AUDIO_CLASS,                 /* Audio class code */
+        USB_SUBCLASS_AUDIOCONTROL,       /* Audio control subclass code */
+        USB_AUDIO_PROTOCOL,              /* Audio protocol code */
+        0xFFU,                           /* The interface number of the Audio control */
+        g_UsbDeviceAudioControInterface, /* The handle of Audio control */
         sizeof(g_UsbDeviceAudioControInterface) / sizeof(usb_device_interface_struct_t),
       },
       {
-        USB_AUDIO_CLASS,                         /* Audio class code */
-        USB_SUBCLASS_AUDIOSTREAM,                /* Audio stream subclass code */
-        USB_AUDIO_PROTOCOL,                      /* Audio protocol code */
-        USB_AUDIO_PLAYER_STREAM_INTERFACE_INDEX, /* The interface number of the Audio control */
-        g_UsbDeviceAudioPlayStreamInterface,     /* The handle of Audio stream */
+        USB_AUDIO_CLASS,                     /* Audio class code */
+        USB_SUBCLASS_AUDIOSTREAM,            /* Audio stream subclass code */
+        USB_AUDIO_PROTOCOL,                  /* Audio protocol code */
+        0xFFU,                               /* The interface number of the Audio control */
+        g_UsbDeviceAudioPlayStreamInterface, /* The handle of Audio stream */
         sizeof(g_UsbDeviceAudioPlayStreamInterface) / sizeof(usb_device_interface_struct_t),
       },
   };
@@ -367,7 +367,7 @@ usb_device_interfaces_struct_t g_mscDiskInterfaces[USB_MSC_DISK_INTERFACE_COUNT]
   USB_MSC_DISK_CLASS,
   USB_MSC_DISK_SUBCLASS,
   USB_MSC_DISK_PROTOCOL,
-  USB_MSC_DISK_INTERFACE_INDEX,
+  0xFFU,
   g_mscDiskInterface,
   sizeof(g_mscDiskInterface) / sizeof(usb_device_interface_struct_t),
 } };
@@ -434,7 +434,7 @@ usb_midi_interface_descriptor_t g_UsbMidiInterfaceDescriptor = {
       USB_MIDI_CLASS,
       USB_MIDI_SUBCLASS,
       USB_MIDI_PROTOCOL,
-      0x04, /* Interface Description String Index*/
+      0x04, /* Interface Description String Index */
     },
     .cs_iface = {
       /* MIDI CS Interface Descriptor */
@@ -1770,40 +1770,38 @@ usb_status_t USB_DeviceGetConfigurationDescriptor(
         g_UsbDeviceAudioPlayerInterfaces[1].interfaceNumber = 0xFF;
         g_UsbDeviceAudioRecorderInterfaces[0].interfaceNumber = 0xFF;
         g_UsbDeviceAudioRecorderInterfaces[1].interfaceNumber = 0xFF;
+        g_MidiInterfaces[0].interfaceNumber = 0xFF;
 
         if (g_UsbState.isSerialEnabled)
         {
-            memcpy(&descriptor[wTotalLength],
-                   &g_UsbSerialInterfaceDescriptor,
-                   sizeof(g_UsbSerialInterfaceDescriptor));
-            wTotalLength += sizeof(g_UsbSerialInterfaceDescriptor);
             g_cdcVcomInterfaces[0].interfaceNumber = interfaceNum;
             g_UsbSerialInterfaceDescriptor.iad.bFirstInterface = interfaceNum;
             g_UsbSerialInterfaceDescriptor.func3.bControlInterface = interfaceNum;
             g_UsbSerialInterfaceDescriptor.iface0.bInterfaceNumber = interfaceNum++;
             g_cdcVcomInterfaces[1].interfaceNumber = interfaceNum;
+            g_UsbSerialInterfaceDescriptor.func1.bDataInterface = interfaceNum;
             g_UsbSerialInterfaceDescriptor.func3.bSubordinateInterface0 = interfaceNum;
             g_UsbSerialInterfaceDescriptor.iface1.bInterfaceNumber = interfaceNum++;
+            memcpy(&descriptor[wTotalLength],
+                   &g_UsbSerialInterfaceDescriptor,
+                   sizeof(g_UsbSerialInterfaceDescriptor));
+            wTotalLength += sizeof(g_UsbSerialInterfaceDescriptor);
         }
 
         if (g_UsbState.isStorageEnabled)
         {
+            g_mscDiskInterfaces[0].interfaceNumber = interfaceNum;
+            g_UsbStorageInterfaceDescriptor.iface.bInterfaceNumber = interfaceNum++;
             memcpy(&descriptor[wTotalLength],
                    &g_UsbStorageInterfaceDescriptor,
                    sizeof(g_UsbStorageInterfaceDescriptor));
             wTotalLength += sizeof(g_UsbStorageInterfaceDescriptor);
-            g_mscDiskInterfaces[0].interfaceNumber = interfaceNum;
-            g_UsbStorageInterfaceDescriptor.iface.bInterfaceNumber = interfaceNum++;
         }
 
         if (g_UsbState.isAudioInEnabled)
         {
             if (g_UsbState.isAudioOutEnabled)
             {
-                memcpy(&descriptor[wTotalLength],
-                       &g_UsbAudioInterfaceDescriptor,
-                       sizeof(g_UsbAudioInterfaceDescriptor));
-                wTotalLength += sizeof(g_UsbAudioInterfaceDescriptor);
                 g_UsbDeviceAudioRecorderInterfaces[0].interfaceNumber = interfaceNum;
                 g_UsbDeviceAudioPlayerInterfaces[0].interfaceNumber = interfaceNum;
                 g_UsbAudioInterfaceDescriptor.iad.bFirstInterface = interfaceNum;
@@ -1814,46 +1812,50 @@ usb_status_t USB_DeviceGetConfigurationDescriptor(
                 g_UsbDeviceAudioPlayerInterfaces[1].interfaceNumber = interfaceNum;
                 g_UsbAudioInterfaceDescriptor.as_iface1_0.bInterfaceNumber = interfaceNum;
                 g_UsbAudioInterfaceDescriptor.as_iface1_1.bInterfaceNumber = interfaceNum++;
+                memcpy(&descriptor[wTotalLength],
+                       &g_UsbAudioInterfaceDescriptor,
+                       sizeof(g_UsbAudioInterfaceDescriptor));
+                wTotalLength += sizeof(g_UsbAudioInterfaceDescriptor);
             }
             else
             {
-                memcpy(&descriptor[wTotalLength],
-                       (uint8_t*)&g_UsbAudioInInterfaceDescriptor,
-                       sizeof(g_UsbAudioInInterfaceDescriptor));
-                wTotalLength += sizeof(g_UsbAudioInInterfaceDescriptor);
                 g_UsbDeviceAudioRecorderInterfaces[0].interfaceNumber = interfaceNum;
                 g_UsbAudioInInterfaceDescriptor.iad.bFirstInterface = interfaceNum;
                 g_UsbAudioInInterfaceDescriptor.ac_iface.bInterfaceNumber = interfaceNum++;
                 g_UsbDeviceAudioRecorderInterfaces[1].interfaceNumber = interfaceNum;
                 g_UsbAudioInInterfaceDescriptor.as_iface_0.bInterfaceNumber = interfaceNum;
                 g_UsbAudioInInterfaceDescriptor.as_iface_1.bInterfaceNumber = interfaceNum++;
+                memcpy(&descriptor[wTotalLength],
+                       (uint8_t*)&g_UsbAudioInInterfaceDescriptor,
+                       sizeof(g_UsbAudioInInterfaceDescriptor));
+                wTotalLength += sizeof(g_UsbAudioInInterfaceDescriptor);
             }
         }
         else
         {
             if (g_UsbState.isAudioOutEnabled)
             {
-                memcpy(&descriptor[wTotalLength],
-                       &g_UsbAudioOutInterfaceDescriptor,
-                       sizeof(g_UsbAudioOutInterfaceDescriptor));
-                wTotalLength += sizeof(g_UsbAudioOutInterfaceDescriptor);
                 g_UsbDeviceAudioPlayerInterfaces[0].interfaceNumber = interfaceNum;
                 g_UsbAudioOutInterfaceDescriptor.iad.bFirstInterface = interfaceNum;
                 g_UsbAudioOutInterfaceDescriptor.ac_iface.bInterfaceNumber = interfaceNum++;
                 g_UsbDeviceAudioPlayerInterfaces[1].interfaceNumber = interfaceNum;
                 g_UsbAudioOutInterfaceDescriptor.as_iface_0.bInterfaceNumber = interfaceNum;
                 g_UsbAudioOutInterfaceDescriptor.as_iface_1.bInterfaceNumber = interfaceNum++;
+                memcpy(&descriptor[wTotalLength],
+                       &g_UsbAudioOutInterfaceDescriptor,
+                       sizeof(g_UsbAudioOutInterfaceDescriptor));
+                wTotalLength += sizeof(g_UsbAudioOutInterfaceDescriptor);
             }
         }
 
         if (g_UsbState.isMidiEnabled)
         {
+            g_MidiInterfaces[0].interfaceNumber = interfaceNum;
+            g_UsbMidiInterfaceDescriptor.iface.bInterfaceNumber = interfaceNum++;
             memcpy(&descriptor[wTotalLength],
                    &g_UsbMidiInterfaceDescriptor,
                    sizeof(g_UsbMidiInterfaceDescriptor));
             wTotalLength += sizeof(g_UsbMidiInterfaceDescriptor);
-            g_MidiInterfaces[0].interfaceNumber = interfaceNum;
-            g_UsbMidiInterfaceDescriptor.iface.bInterfaceNumber = interfaceNum++;
         }
 
         g_UsbDeviceConfigurationDescriptor.bNumInterfaces = interfaceNum;
@@ -2094,6 +2096,19 @@ usb_status_t USB_DeviceSetSpeed(usb_device_handle handle, uint8_t speed)
                                            g_UsbMidiInterfaceDescriptor.ep0.ep.wMaxPacketSize);
         USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(HS_MIDI_BULK_IN_PACKET_SIZE,
                                            g_UsbMidiInterfaceDescriptor.ep1.ep.wMaxPacketSize);
+
+        g_UsbSerialInterfaceDescriptor.ep0.bInterval = HS_CDC_VCOM_INTERRUPT_IN_INTERVAL;
+        USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(HS_CDC_VCOM_INTERRUPT_IN_PACKET_SIZE,
+                                           g_UsbSerialInterfaceDescriptor.ep0.wMaxPacketSize);
+        USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(HS_CDC_VCOM_BULK_IN_PACKET_SIZE,
+                                           g_UsbSerialInterfaceDescriptor.ep1_0.wMaxPacketSize);
+        USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(HS_CDC_VCOM_BULK_OUT_PACKET_SIZE,
+                                           g_UsbSerialInterfaceDescriptor.ep1_1.wMaxPacketSize);
+
+        USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(HS_MSC_DISK_BULK_IN_PACKET_SIZE,
+                                           g_UsbStorageInterfaceDescriptor.ep0.wMaxPacketSize);
+        USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(HS_MSC_DISK_BULK_OUT_PACKET_SIZE,
+                                           g_UsbStorageInterfaceDescriptor.ep1.wMaxPacketSize);
     }
     else
     {
@@ -2101,6 +2116,19 @@ usb_status_t USB_DeviceSetSpeed(usb_device_handle handle, uint8_t speed)
                                            g_UsbMidiInterfaceDescriptor.ep0.ep.wMaxPacketSize);
         USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(FS_MIDI_BULK_IN_PACKET_SIZE,
                                            g_UsbMidiInterfaceDescriptor.ep1.ep.wMaxPacketSize);
+
+        g_UsbSerialInterfaceDescriptor.ep0.bInterval = FS_CDC_VCOM_INTERRUPT_IN_INTERVAL;
+        USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(FS_CDC_VCOM_INTERRUPT_IN_PACKET_SIZE,
+                                           g_UsbSerialInterfaceDescriptor.ep0.wMaxPacketSize);
+        USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(FS_CDC_VCOM_BULK_IN_PACKET_SIZE,
+                                           g_UsbSerialInterfaceDescriptor.ep1_0.wMaxPacketSize);
+        USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(FS_CDC_VCOM_BULK_OUT_PACKET_SIZE,
+                                           g_UsbSerialInterfaceDescriptor.ep1_1.wMaxPacketSize);
+
+        USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(FS_MSC_DISK_BULK_IN_PACKET_SIZE,
+                                           g_UsbStorageInterfaceDescriptor.ep0.wMaxPacketSize);
+        USB_SHORT_TO_LITTLE_ENDIAN_ADDRESS(FS_MSC_DISK_BULK_OUT_PACKET_SIZE,
+                                           g_UsbStorageInterfaceDescriptor.ep1.wMaxPacketSize);
     }
 
     for (int i = 0; i < USB_MIDI_ENDPOINT_COUNT; i++)

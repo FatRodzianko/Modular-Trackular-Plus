@@ -235,9 +235,9 @@ const char* const slaveClockComp[kExternalClockCompMaxVal + 1] = {
 
 const char* const kUsbAudioList[4] = {
     "Off",
-    "Input",
-    "Output",
-    "Input + Output",
+    "Input (2 in)",
+    "Output (28 out)",
+    "In/Out (2 in, 28 out)",
 };
 //############################################################################################
 //						OPISY PARAMETROW MENU CONFIG

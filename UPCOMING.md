@@ -1,0 +1,68 @@
+# Upcoming Changes (Beta / Unreleased)
+
+> **ℹ️ Note:** The features and fixes listed below have been merged since the **[v1.0.0](CHANGELOG.md)** stable release. They are **not yet in the stable release download**, but you can try them today via the **[Latest Beta Builds](README.md#latest-beta-builds)**.
+>
+> Looking for what is included in the current stable release? See **[`CHANGELOG.md`](CHANGELOG.md)**.
+
+---
+
+### Added
+
+1. **Per-Sample SD Streaming Controls & RAM Default in Sample Loader (All 3 Devices)**
+	* **RAM by Default**: Newly imported samples now default to loading fully into **RAM** (`Mem: RAM`) rather than streaming automatically, giving you full control over when SD streaming is used.
+	* **Import Memory Mode Selector**: Added a memory mode button on the Sample Loader screen (`Mem: RAM` / `Mem: Auto` / `Mem: [S]`) to choose whether newly loaded samples go to RAM, auto-stream when `256 KB` or larger, or always stream when eligible.
+	* **Per-Instrument RAM / Stream Toggle**: Highlighting an existing instrument in the right-hand slot list changes the button to **`Mode: RAM`** or **`Mode: [S]`**, allowing you to switch individual instruments between RAM and SD streaming on the fly.
+	* **Crop & Stream**: Added an **`Import Stream`** option in the partial sample crop/import screen alongside `Import` and `Import Low quality`.
+
+2. **"Add to Empty Slot" in Sample Loader (All 3 Devices)**
+	* Holding **`[Shift]`** while browsing files in the Sample Loader changes the `Add` action to **`Add to Empty Slot`** (or `Next Slot`), automatically selecting the first available empty instrument slot and importing the sample there.
+
+3. **38 New Chord Inversions in the `Chord` (`f`) Step FX (All 3 Devices)**
+	* Expanded the **`Chord` (`f`)** effect from 30 to **68 chord voicings** by adding 38 inversions across major, minor, seventh, diminished, suspended, and `m7b5` chords.
+
+4. **New Sample Editor `.ptfx` Plugins & Mono-to-Stereo Support**
+	* **`Transient Shaper` (`transient_shaper.ptfx`) (All 3 Devices)**: New modular Sample Editor effect with bipolar `Attack` (`-100%` to `+100%`) and `Sustain` (`-100%` to `+100%`) controls for sculpting drum hits and loops.
+	* **`Haas Effect` (`haas.ptfx`) (Tracker+ & Tracker Mini)**: New psychoacoustic stereo widener plugin that delays the Left or Right channel (`1–100 ms`) with an appended tail fade-out.
+	* **Mono-to-Stereo `.ptfx` Support (Tracker+ & Tracker Mini)**: Applying a stereo `.ptfx` plugin (such as `Haas Effect` or `Stereo Delay`) to a mono sample now automatically promotes the instrument to stereo when the processed left and right channels differ.
+
+5. **Clearer `[m | V]` vs `[Fx1 | Fx2]` Pattern Editor View (All 3 Devices)**
+	* Empty step slots in the **`[m | V]`** pattern view now render dimmed **`m--`** and **`V--`** indicators instead of `---`, making it immediately clear at a glance whether you are viewing `[m | V]` or `[Fx1 | Fx2]`.
+
+6. **USB Serial Development Console & Release Logging (Tracker+ & Tracker Mini)**
+	* Added an opt-in USB CDC-ACM serial console (`ENABLE_DEV_CONSOLE` when a `/.develop` file is present on the SD card) with commands for automated host testing (`ping`, `storage on|off`, `flash <name>`, `reboot`, `help`) and a ring-buffered `ENABLE_LOG` build flag that preserves release optimization levels.
+	* See [`docs/developer_guide.md`](docs/developer_guide.md) for usage details.
+
+### Changed & Fixed
+
+* **`CHIP` Synth Engine Performance Overhaul (Tracker+ & Tracker Mini)**:
+	* Replaced heavy per-sample standard math calls (`std::pow`, `std::sin`, `std::fmod`, `std::exp`) in the audio interrupt with fast, high-precision approximations and hoisted block-level calculations. This eliminates audio interrupt overruns and freezes when playing 8-voice `CHIP` chords.
+
+* **UI/UX, Sequencer & Filesystem Optimizations (All 3 Devices)**:
+	* Optimized display SPI bus transfers and pattern editor rendering for snappier UI responsiveness.
+	* Moved `Sequencer::play_microStep` into fast `AUDIO_CORE_RAM`, skipped redundant `endFx` resets in the audio sequencer, and removed redundant filesystem checks and full-buffer zeroing during file loads.
+
+* **USB Mass Storage Mode Safety & SD Remounting (Tracker+ & Tracker Mini)**:
+	* Entering USB Storage mode now stops active playback, armed recordings, held notes, and background SD sample streaming, and flushes pending workspace/config saves so the device and host computer never access the SD card simultaneously.
+	* Leaving USB Storage mode now remounts the SD card volume and rebuilds cluster maps for streamed samples so changes made from a computer are safely recognized.
+
+* **USB Audio & MIDI Class Compliance Fixes (Tracker+ & Tracker Mini)**:
+	* **Fixed Inverted `Input` / `Output` USB Audio Modes & Clarified Labels**: Fixed swapped USB Audio direction mapping where selecting `Input` enabled the 28-channel output stream and `Output` enabled the 2-channel input stream. Updated the Config menu options to **`Off`**, **`Input (2 in)`**, **`Output (28 out)`**, and **`In/Out (2 in, 28 out)`** so the direction and channel count are explicit from the Tracker's perspective.
+	* **Fixed Single-Direction USB Audio & MIDI Enumeration**: Fixed composite USB configuration descriptor generation where `bInterfaceNumber` fields were updated after copying descriptors into the configuration buffer, and prevented disabled USB class drivers (`0xFF` interface numbers) from initializing endpoints or intercepting `SetInterface` requests.
+	* **Improved Portable USB Host Compatibility**: Reduced advertised USB `bMaxPower` from `500 mA` to `100 mA` for self-powered operation so battery-powered USB hosts (such as the Teenage Engineering OP-1 Field) do not reject enumeration due to bus power limits.
+
+* **Audio Engine & Playback Fixes**:
+	* **Fixed Delay/Reverb Send Leak on First Note After Stop (Tracker+ & Tracker Mini)**: Cleared both left and right send channels on note start so an instrument with no send no longer echoes briefly in the right channel on the first note after stopping playback.
+	* **Fixed Playhead Escaping Very Short Loops & Grains (All 3 Devices)**: Prevented backward loops, ping-pong loops, and granular playheads from running out of bounds into memory (causing noise bursts) when the pitch step exceeds a very short loop or grain length.
+	* **Fixed Sequencer Tune Modulation Bug (All 3 Devices)**: Fixed an issue where sequencer modulation on `Tune` checked the `wavetablePosition` flag instead of `tune`.
+
+* **Sequencer, MIDI & Pattern Editor Fixes (All 3 Devices)**:
+	* **Fixed Freeze After Leaving Performance Mode (Tracker+ & Tracker Mini)**: Moved the pending pattern reload on sequencer stop out of the audio interrupt callback and into the main loop, fixing a freeze when previewing steps or receiving MIDI Stop after exiting Performance Mode.
+	* **Fixed Synth FX MIDI CC Control in Performance Mode**: Restored MIDI CC control over synth effect parameters in Performance Mode.
+	* **Fixed Song Mode Block Copy/Paste**: Fixed copying and pasting song arrangement blocks smaller than 32 steps.
+	* **Fixed Beat-Slice Pad Guide Lights in Live Recording Mode (Tracker & Tracker+)**: Enabled beat-slice pad guide lights in the Pattern Editor when Live Recording (`Rec + Play`) is active, matching step-record mode and the Instrument Parameters screen.
+
+* **Hardened File Validation, WAV Parsing, SD I/O & Sample Recorder Stop**:
+	* Fixed Sample Recorder stop deadlocks on stereo buffer imbalance and full sample memory.
+	* Hardened WAV header parsing and dynamic `data` chunk offset detection for custom wavetable envelopes.
+	* Added header bounds validation for `.pti` instruments, `.mtp` patterns, and projects, and preserved signed SD I/O error codes across `FileSystem`.
+	* Fixed pattern rename not marking pattern metadata as dirty for project saving.

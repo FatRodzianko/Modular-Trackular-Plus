@@ -295,6 +295,9 @@ usb_status_t USB_DeviceAudioStreamEndpointsInit(usb_device_audio_struct_t* audio
     uint8_t count;
     uint8_t index;
 
+    audioHandle->streamInterfaceNumber = 0xFFU;
+    audioHandle->streamInterfaceHandle = NULL;
+
     /* Check the configuration is valid or not. */
     if (0U == audioHandle->configuration)
     {
@@ -319,6 +322,10 @@ usb_status_t USB_DeviceAudioStreamEndpointsInit(usb_device_audio_struct_t* audio
     /* Find stream interface by using the alternate setting of the interface. */
     for (count = 0U; count < interfaceList->count; count++)
     {
+        if (0xFFU == interfaceList->interfaces[count].interfaceNumber)
+        {
+            continue;
+        }
         if ((USB_DEVICE_CONFIG_AUDIO_CLASS_CODE == interfaceList->interfaces[count].classCode) &&
             (USB_DEVICE_AUDIO_STREAM_SUBCLASS == interfaceList->interfaces[count].subclassCode))
         {
@@ -454,6 +461,9 @@ usb_status_t USB_DeviceAudioControlEndpointsInit(usb_device_audio_struct_t* audi
     uint8_t count;
     uint8_t index;
 
+    audioHandle->controlInterfaceNumber = 0xFFU;
+    audioHandle->controlInterfaceHandle = NULL;
+
     /* Check the configuration is valid or not. */
     if (0U == audioHandle->configuration)
     {
@@ -478,6 +488,10 @@ usb_status_t USB_DeviceAudioControlEndpointsInit(usb_device_audio_struct_t* audi
     /* Find control interface by using the alternate setting of the interface. */
     for (count = 0U; count < interfaceList->count; count++)
     {
+        if (0xFFU == interfaceList->interfaces[count].interfaceNumber)
+        {
+            continue;
+        }
         if ((USB_DEVICE_CONFIG_AUDIO_CLASS_CODE == interfaceList->interfaces[count].classCode) &&
             (USB_DEVICE_AUDIO_CONTROL_SUBCLASS == interfaceList->interfaces[count].subclassCode))
         {
@@ -1662,6 +1676,11 @@ usb_status_t USB_DeviceAudioSetRequestInterface(usb_device_audio_struct_t* audio
     usb_status_t status = kStatus_USB_Error;
     uint8_t entityId = (uint8_t)(controlRequest->setup->wIndex >> 0x08);
 
+    if ((NULL == audioHandle->controlInterfaceHandle) ||
+        (NULL == audioHandle->controlInterfaceHandle->classSpecific))
+    {
+        return kStatus_USB_InvalidRequest;
+    }
     entity_list =
       (usb_device_audio_entities_struct_t*)audioHandle->controlInterfaceHandle->classSpecific;
     for (i = 0; i < entity_list->count; i++)
@@ -1722,6 +1741,11 @@ usb_status_t USB_DeviceAudioGetRequestInterface(usb_device_audio_struct_t* audio
     usb_status_t status = kStatus_USB_Error;
     uint8_t entityId = (uint8_t)(controlRequest->setup->wIndex >> 0x08);
 
+    if ((NULL == audioHandle->controlInterfaceHandle) ||
+        (NULL == audioHandle->controlInterfaceHandle->classSpecific))
+    {
+        return kStatus_USB_InvalidRequest;
+    }
     entity_list =
       (usb_device_audio_entities_struct_t*)audioHandle->controlInterfaceHandle->classSpecific;
     for (i = 0; i < entity_list->count; i++)
@@ -1799,6 +1823,10 @@ usb_status_t USB_DeviceAudioEvent(void* handle, uint32_t event, void* param)
         case kUSB_DeviceClassEventDeviceReset:
             /* Bus reset, clear the configuration. */
             audioHandle->configuration = 0U;
+            audioHandle->controlInterfaceNumber = 0xFFU;
+            audioHandle->streamInterfaceNumber = 0xFFU;
+            audioHandle->controlInterfaceHandle = NULL;
+            audioHandle->streamInterfaceHandle = NULL;
             audioHandle->streamOutPipeBusy = 0U;
             audioHandle->streamInPipeBusy = 0U;
             error = kStatus_USB_Success;
@@ -2085,6 +2113,10 @@ usb_status_t USB_DeviceAudioInit(uint8_t controllerId,
     audioHandle->configuration = 0U;
     audioHandle->streamAlternate = 0xffU;
     audioHandle->controlAlternate = 0xffU;
+    audioHandle->controlInterfaceNumber = 0xFFU;
+    audioHandle->streamInterfaceNumber = 0xFFU;
+    audioHandle->controlInterfaceHandle = NULL;
+    audioHandle->streamInterfaceHandle = NULL;
 
     *handle = (class_handle_t)audioHandle;
     return error;

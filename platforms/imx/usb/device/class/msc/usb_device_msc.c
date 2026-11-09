@@ -832,6 +832,9 @@ usb_status_t USB_DeviceMscEndpointsInit(usb_device_msc_struct_t* mscHandle)
     uint32_t count;
     uint32_t index;
 
+    mscHandle->interfaceNumber = 0xFFU;
+    mscHandle->interfaceHandle = NULL;
+
     /* Check the configuration is valid or not. */
     if ((0U == mscHandle->configuration) ||
         (mscHandle->configuration >
@@ -852,6 +855,10 @@ usb_status_t USB_DeviceMscEndpointsInit(usb_device_msc_struct_t* mscHandle)
     /* Find interface by using the alternate setting of the interface. */
     for (count = 0; count < interfaceList->count; count++)
     {
+        if (0xFFU == interfaceList->interfaces[count].interfaceNumber)
+        {
+            continue;
+        }
         if (USB_DEVICE_CONFIG_MSC_CLASS_CODE == interfaceList->interfaces[count].classCode)
         {
             for (index = 0; index < interfaceList->interfaces[count].count; index++)
@@ -1018,6 +1025,8 @@ usb_status_t USB_DeviceMscInit(uint8_t controllerId,
     /* Clear the configuration value. */
     mscHandle->configuration = 0U;
     mscHandle->alternate = 0xffU;
+    mscHandle->interfaceNumber = 0xFFU;
+    mscHandle->interfaceHandle = NULL;
 
     ufi = &mscHandle->mscUfi;
 
@@ -1107,6 +1116,20 @@ usb_status_t USB_DeviceMscEvent(void* handle, uint32_t event, void* param)
         case kUSB_DeviceClassEventDeviceReset:
             /* Bus reset, clear the configuration. */
             mscHandle->configuration = 0U;
+            mscHandle->interfaceNumber = 0xFFU;
+            mscHandle->interfaceHandle = NULL;
+            mscHandle->cbwPrimeFlag = 0U;
+            mscHandle->cswPrimeFlag = 0U;
+            if ((NULL != mscHandle->configurationStruct) &&
+                (NULL != mscHandle->configurationStruct->classInfomation) &&
+                (NULL != mscHandle->configurationStruct->classInfomation->interfaceList) &&
+                (0xFFU == mscHandle->configurationStruct->classInfomation->interfaceList[0]
+                            .interfaces[0]
+                            .interfaceNumber))
+            {
+                error = kStatus_USB_Success;
+                break;
+            }
             /* Get device information. classCallback is initialized in classInit of
             s_UsbDeviceClassInterfaceMap, it is from the second parameter of classInit */
             error =

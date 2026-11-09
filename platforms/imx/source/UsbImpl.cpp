@@ -38,10 +38,12 @@ void UsbImpl::setClassState(Usb::ClassType type, bool enable)
             g_UsbState.isMidiEnabled = enable;
             break;
         case Usb::ClassType::kAudioIn:
-            g_UsbState.isAudioInEnabled = enable;
+            // Tracker audio input = USB OUT endpoint (Host -> Device, 2ch)
+            g_UsbState.isAudioOutEnabled = enable;
             break;
         case Usb::ClassType::kAudioOut:
-            g_UsbState.isAudioOutEnabled = enable;
+            // Tracker audio output = USB IN endpoint (Device -> Host, 28ch)
+            g_UsbState.isAudioInEnabled = enable;
             break;
         case Usb::ClassType::kStorage:
             g_UsbState.isStorageEnabled = enable;
@@ -62,10 +64,10 @@ bool UsbImpl::getClassState(Usb::ClassType type)
             ret = g_UsbState.isMidiEnabled;
             break;
         case Usb::ClassType::kAudioIn:
-            ret = g_UsbState.isAudioInEnabled;
+            ret = g_UsbState.isAudioOutEnabled;
             break;
         case Usb::ClassType::kAudioOut:
-            ret = g_UsbState.isAudioOutEnabled;
+            ret = g_UsbState.isAudioInEnabled;
             break;
         case Usb::ClassType::kStorage:
             ret = g_UsbState.isStorageEnabled;

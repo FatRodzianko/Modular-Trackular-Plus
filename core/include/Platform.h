@@ -426,8 +426,8 @@ class Usb
     enum class ClassType
     {
         kMidi,
-        kAudioIn,
-        kAudioOut,
+        kAudioIn,  // Audio input into Tracker (USB OUT: Host -> Device, 2ch)
+        kAudioOut, // Audio output from Tracker (USB IN: Device -> Host, 28ch)
         kStorage,
         kSerial
     };
