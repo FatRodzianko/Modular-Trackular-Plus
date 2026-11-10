@@ -145,10 +145,10 @@ constexpr std::array<ModDescriptor, kBuiltModCount> kMods{ {
     .record = synthfx::kRecord,
     .recordVersion = synthfx::kRecordVersion,
     .init = nullptr,
-    .load = nullptr,
+    .load = synthfx::load,
     .apply = nullptr,
     .reset = nullptr,
-    .storeIfEdited = nullptr,
+    .storeIfEdited = synthfx::storeIfEdited,
     .stored = nullptr,
   },
 #endif

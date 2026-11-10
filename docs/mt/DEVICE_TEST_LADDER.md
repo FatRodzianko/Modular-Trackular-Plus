@@ -114,6 +114,25 @@ is set by hand on `S5`: on each of the three parts, Wave 1 and Wave 2 on Super S
 Distortion with Placement Pre, Effect on Phaser. Instructions per block for that, from
 [CE_PORT_PLAN.md](CE_PORT_PLAN.md) 3.15: about 719,000, against 528,000 for 8 voices of VAP.
 
+## The Synth FX set: the insert on CE's engines
+
+`python tools/emu/make_masterfx_test_project.py "<project>" build/device/synthfx --synthfx` writes them:
+all three parts on one engine with its Init patch, and a `mods.bin` with Synth FX and Master FX On and
+each part's effect settings in record 16 (the rest of the source's `mods.bin` kept). A mod build with
+Synth FX. Lightest first; stop at the first problem. "Worst FX" is Distortion at full Gain into the
+Phaser, Mix 100 %, Feedback +90 %, on every part.
+
+| Project | Voices | Engine | Synth FX | Reverb + delay | What it isolates |
+|---|---|---|---|---|---|
+| `F1 1 voice ACD Overdrive` | 1 | ACD | Overdrive | Stock + Stock | The insert at its lightest |
+| `F2 1 voice PERC worst FX` | 1 | PERC | Worst FX | Stock + Stock | A stereo part |
+| `F3 4 voices ACD worst FX` | 4 | ACD | Worst FX | Stock + Stock | Mono parts sent as stereo |
+| `F4 8 voices PERC worst FX` | 8 | PERC | Worst FX | Stock + Stock | The insert at the limit |
+| `F5 8 PERC worst Shimmer BBD` | 8 | PERC | Worst FX | Shimmer + BBD | Master FX on top |
+
+On each, the patch editor's button 3 reads "Synth FX" and shows the part's rows, so the settings can
+be checked and changed by hand there.
+
 ## What a firmware comes with
 
 Each one handed over says what ran, what didn't, and the risk to the unit.

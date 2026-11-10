@@ -29,6 +29,8 @@ STACK_SIZE = 20480
 class BootRig(SoundRig):
     rng = random.Random(1)
     masked = 0
+    in_interrupt = False
+    interrupt_allocs = 0
 
     def _fake_timer(self):
         """Timer's real slots: millis, micros, delay, clockCycles, clockCyclesPerUs, then the MIDI clock."""
@@ -215,8 +217,12 @@ class BootRig(SoundRig):
         self.m.call(self.m.addr("_Z15onButtonReleaseh"), button, max_insns=300_000_000)
 
     def interrupt(self, stack=None):
-        self.m.call(self.m.addr("_ZN11TrackerImpl18updateAudioBuffersEPvS0_i"), self.tracker, self.left, self.right,
-                    BLOCK, max_insns=100_000_000, stack=stack)
+        self.in_interrupt = True
+        try:
+            self.m.call(self.m.addr("_ZN11TrackerImpl18updateAudioBuffersEPvS0_i"), self.tracker, self.left,
+                        self.right, BLOCK, max_insns=100_000_000, stack=stack)
+        finally:
+            self.in_interrupt = False
         self.now += BLOCK_MS
         return (struct.unpack(f"<{BLOCK}h", self.m.read(self.left, 2 * BLOCK)),
                 struct.unpack(f"<{BLOCK}h", self.m.read(self.right, 2 * BLOCK)))
@@ -266,6 +272,8 @@ def main():
     ap.add_argument("--preempt-play", default="", help="the same, once Play is pressed; a main loop is short then")
     ap.add_argument("--expect-tracklen", action="store_true",
                     help="fail unless the project's lengths are what the audio interrupt played")
+    ap.add_argument("--expect-synthfx", action="store_true",
+                    help="fail unless the project's Synth FX settings loaded and the insert ran on every block")
     args = ap.parse_args()
     r = BootRig(args.axf)
     m = r.m
@@ -320,6 +328,16 @@ def main():
     r.watch(m.addr("_ZN14cPatternEditor6updateEv"), bump(pattern_updates))
     r.watch(m.addr("_ZN9Sequencer11playPatternEv"), bump(played))
     r.watch(m.addr("_ZN9Sequencer10sendNoteOnEhPNS_9strPlayer14strPlayerTrack11strSendStepE"), bump(notes))
+    fx_runs = [0]
+    if args.expect_synthfx:
+        r.watch(m.addr("_ZN4mods7synthfx3runERKNS0_6InsertEiPfS4_b"), bump(fx_runs))
+
+    def on_alloc(mm):
+        if r.in_interrupt:
+            r.interrupt_allocs += 1
+    for name in ("malloc", "_malloc_r", "calloc", "_calloc_r", "realloc", "_realloc_r"):
+        if name in r.syms and r.syms[name].addr:
+            r.watch(r.syms[name].addr, on_alloc)
     active = lambda: None
     if "_ZN4mods8masterfx12activeReverbE" in r.syms:
         active = lambda: (m.r8(m.addr("_ZN4mods8masterfx12activeReverbE")),
@@ -371,12 +389,22 @@ def main():
         print("STOPPED", e, "failures", r.failures)
         where()
         return 1
-    print("sd unexpected", sorted(set(r.sd.unexpected))[:12])
+    print("sd unexpected", sorted(set(r.sd.unexpected))[:12], "allocations in the interrupt", r.interrupt_allocs)
     if args.expect_tracklen:
         lengths = bytes(m.read(m.addr("_ZN4mods8tracklen13activeLengthsE"), 16))
         print("track lengths in the interrupt's copy:", list(lengths), "notes", notes[0], flush=True)
         if not any(lengths) or notes[0] == 0:
             print("FAILED: the lengths aren't in play")
+            return 1
+    if args.expect_synthfx:
+        # Effect Phaser and Distortion on every part, as make_masterfx_test_project.SYNTHFX_WORST;
+        # each block runs the insert on every part sounding, so at least one run a block
+        fx = struct.unpack("<30f", m.read(m.addr("_ZN4mods7synthfx8settingsE"), 120))
+        kinds = [(fx[10 * p], fx[10 * p + 5]) for p in range(3)]
+        print("Synth FX (effect, distortion) per part:", kinds, "insert runs", fx_runs[0],
+              "allocations in the interrupt", r.interrupt_allocs, flush=True)
+        if kinds != [(3.0, 2.0)] * 3 or fx_runs[0] < args.blocks or r.interrupt_allocs:
+            print("FAILED: Synth FX isn't in play")
             return 1
     return 0
 

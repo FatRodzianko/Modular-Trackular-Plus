@@ -1,7 +1,8 @@
 // Modular-Trackular mods. SPDX-License-Identifier: MIT
 //
-// Synth FX's insert (synthfxMod.h). Everything here runs in the audio interrupt: no heap, no
-// SD, single precision. In flash: it runs once per part.
+// Synth FX's insert (synthfxMod.h). Everything here but pageShown runs in the audio interrupt:
+// no heap, no SD, single precision. In flash: it runs once per part. The settings are in
+// synthfxSettings.cpp.
 
 #include "modsBuild.h"
 
@@ -24,14 +25,7 @@ namespace synthfx
 
 using namespace mtfx;
 
-static_assert(kSettings == FXP_COUNT, "synthFx.h's settings");
 static_assert(polysynth::kAudioBufferSize == FX_BLOCK, "the effects run on CE's synth block");
-
-// Effect None and Distortion Off; Rate, Depth, Mix, Feedback, Gain and Tone at half, Placement
-// Post (the insert is always Post), Level 0 dB: WAVE's and PHASE's Init.
-#define SYNTHFX_INIT { 0.0f, 0.5f, 0.5f, 0.5f, 0.5f, 0.0f, 0.5f, 0.5f, 1.0f, 0.0f }
-float settings[kParts][kSettings] = { SYNTHFX_INIT, SYNTHFX_INIT, SYNTHFX_INIT };
-#undef SYNTHFX_INIT
 
 // Whether each part holds an effect state. Each one's address is also its owner id for
 // fx_claim, which can't be any voice's.
@@ -51,6 +45,11 @@ static inline bool hasOwnEffects(const polysynth::Patch* patch)
     (void)patch;
     return false;
 #endif
+}
+
+bool pageShown(const polysynth::Patch& patch)
+{
+    return mods::on(Mod::synthfx) && !hasOwnEffects(&patch);
 }
 
 static void drop(int part)

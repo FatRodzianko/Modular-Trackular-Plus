@@ -1053,8 +1053,8 @@ for every synth engine, CE's closed ones included.
   - Memory: SDRAM 504 B (995,492 B free); DTCM the settings' 120 B, 56 B less free (14,504 B
     free); ITCM 88 B (the hook grew `PolySynth::update`, which CE keeps in ITCM; 5,008 B free);
     flash about 4 KB.
-  - Not done: `boot_rig.py` (test 5) waits for phase 3, when a project can carry the settings;
-    there is no way to choose an effect on the unit until the page exists, so no device test.
+  - Not done then: `boot_rig.py` (test 5) waited for phase 3, when a project can carry the
+    settings, and the device test for the page. Test 5 is done in phase 3.
 - **Phase 3: settings and page.**
   - Settings follow the part, as its volume and sends do: loading another patch keeps them,
     since a closed engine's patch can't hold them (decision 15). In RAM: 3 × 10 floats, 120 B
@@ -1065,6 +1065,45 @@ for every synth engine, CE's closed ones included.
     (decision 16). The section, parameter and value functions in `SynthPatchEditor.cpp` read
     the patch's metadata, so each needs a branch for it. The display list's bytes are counted
     when it is built (8,172 B a frame).
+  - Changed 2026-11-10, chosen by the user: **button 3, not a section.** VAP and WTFM already
+    fill all 16 tiles of the section grid (7 of them macros), so an FX tile would push a macro
+    off. Button 3, blank on the patch editor, reads "Synth FX" on CE's seven engines with the
+    mod On; pressing it puts the nine rows in the parameter list, and pressing it again, or
+    picking any section or macro, puts the section's rows back. Every tile and macro stays.
+    WAVE and PHASE don't get it: their own FX section has the effects.
+  - Changed from "0-127": **the record holds each setting's step,** so every value round-trips
+    exactly and Feedback's 191 steps fit. Effect and Distortion: the list item (0-3). Rate,
+    Depth, Mix, Gain and Tone: 0-100, 1 % a step. Feedback: 0-190, -95 % to +95 %. Level: 0-72,
+    -30 dB to +6 dB in 0.5 dB. Placement: always 1 (Post). A missing record, another version
+    or another length opens with every effect Off; a byte out of its range is that value's
+    Init alone. Settings all at Init in a project without the record write nothing.
+  - Done 2026-11-10. `synthfxSettings.cpp`: the settings, their steps, `load` and
+    `storeIfEdited` (registry events, so Save, Save As, Open and New Project go through
+    `mods.bin` as the other mods' records do) and the rows. `synthfxPage.cpp`: the rows' names
+    and texts as WAVE's FX section shows them (Gain and Tone become Bits and Rate for the Bit
+    Crusher). `SynthPatchEditor.cpp`, all behind `MT_HAS_SYNTHFX`: button 3, and the section,
+    parameter, value, default and macro functions redirected while the rows show. The rows'
+    texts and lists are in SDRAM (`__NOINIT(EXTERNAL_RAM)`), filled before each use.
+  - Results: host test `test_synthfx` 47 checks and 0 failures (steps, the record, damaged
+    records, garbage values, rows); `tools/emu/test_synthfx_page.py` 56 checks and 0 failures
+    (mod Off: the same display calls and bytes as the reference build on all 7 engines; the
+    rows, edits, Delete, lists, leaving the rows; Save, Save As, Open, New Project);
+    `test_synthfx.py` 100 checks and 0 failures; planted faults 18 of 18 caught (11 new: the
+    button's rules, the edit's save mark, Delete, leaving the rows, Feedback's zero, the record
+    read and written, and three on the host test); host tests pass (registry 196 checks, 9 mods
+    built); the release tier 0 failed of 36 run; `MT_NO_MODS` identical.
+  - Test 5 done: `make_masterfx_test_project.make_synthfx` writes the worst case (the worst
+    pattern at 800 BPM on PERC's 8 voices, Distortion at full Gain into the Phaser on every
+    part, Shimmer and BBD), and the release tier boots it with and without `--preempt`
+    (`boot_rig.py --expect-synthfx`: the settings loaded from the record, the insert run every
+    block, no allocation inside the audio interrupt). 53,136 B heap free, pool peak 64 of 80,
+    stack 7,064 B: the same heap and pool as that project with every effect Off, so PERC's,
+    not the insert's (the plain worst project on its own engines: 80,004 B and 55).
+  - Display list, worst of each engine's patch editor, of 8,172 B: 6,548 B on opening (WTFM;
+    CE's 6,452 plus button 3's label), 5,616 B with the rows (VAP and WTFM).
+  - Memory: SDRAM 616 B (the rows' texts and lists; 994,876 B free); DTCM and ITCM as phase 2
+    (14,504 B and 5,008 B free); no heap.
+  - Not done: the device test, the Synth FX set in `DEVICE_TEST_LADDER.md`.
 - **Phase 4, later and only if wanted:** tracker FX commands that move the settings per step.
 - **Cost, our code only (emulator instructions per block; about 1,710,000 is a whole block
   before stalls, from the Synths figures):** Chorus 8,700, Flanger 10,000, Phaser 12,900,
@@ -1152,4 +1191,5 @@ candidate.
 15. **Synth FX settings follow the part or the patch.** A closed engine's patch can't hold
     them, so chosen 2026-11-09: the part, like its volume and sends.
 16. **Synth FX page:** a section at the end of the patch editor, or a popup from the part
-    screen. Chosen 2026-11-09: the section.
+    screen. Chosen 2026-11-09: the section. Changed 2026-11-10 by the user to button 3 on the
+    patch editor, since VAP and WTFM have no free tile (3.16 Phase 3).

@@ -109,6 +109,7 @@ def jobs_for(args, projects):
         Job("sound rig", e / "test_sound_rig.py", mods, ref, inputs=both),
         Job("synths", e / "test_synths.py", mods, inputs=[mods]),
         Job("synthfx", e / "test_synthfx.py", mods, ref, inputs=both),
+        Job("synthfx page", e / "test_synthfx_page.py", mods, ref, inputs=both),
         Job("masterfx objects", e / "test_masterfx.py", mods, ref, *([args.rig] if args.rig else []),
             inputs=both + ((args.rig,) if args.rig else ())),
     ]
@@ -137,7 +138,7 @@ def jobs_for(args, projects):
                             inputs=[args.diag, projects["worst"]]))
     if projects:
         for label, folder in projects.items():
-            if label == "tracklen":
+            if label in ("tracklen", "synthfx"):
                 continue
             for firmware, axf in (("mods", mods), ("reference", ref)):
                 jobs.append(Job(f"boot {label} {firmware}", boot, axf, folder, "--blocks", 300, inputs=[axf, folder]))
@@ -151,12 +152,18 @@ def jobs_for(args, projects):
         jobs.append(Job("preempt tracklen", boot, mods, short, "--blocks", worst_loops["worst"], "--expect-tracklen",
                         "--preempt", "3000,120000", "--preempt-play", play_gaps, inputs=[mods, short]))
         jobs.append(Job("cost tracklen", e / "test_bundle_cost.py", mods, ref, short, inputs=[mods, ref, short]))
+        # Synth FX at its heaviest on PERC's 8 voices, under the worst pattern: mods only (CE has no insert)
+        fx = projects["synthfx"]
+        jobs.append(Job("boot synthfx", boot, mods, fx, "--blocks", 300, "--expect-synthfx", inputs=[mods, fx]))
+        jobs.append(Job("preempt synthfx", boot, mods, fx, "--blocks", worst_loops["worst"], "--expect-synthfx",
+                        "--preempt", "3000,120000", "--preempt-play", play_gaps, inputs=[mods, fx]))
     return jobs
 
 
 def make_projects(source, parent):
     """The test projects, in a temporary folder: 8 voices held, and the worst case. Both with their effects.
-    The third is the worst case with a track length on every track of every pattern, from a 1.2.0 tracklen.bin."""
+    The third is the worst case with a track length on every track of every pattern, from a 1.2.0 tracklen.bin.
+    The fourth is the worst case on PERC with Synth FX at its heaviest on every part."""
     import make_masterfx_test_project as maker
     from test_tracklen import side_file
     short = maker.make(source, parent, "tracklen", keep_masterfx=True, worst=True)
@@ -164,7 +171,8 @@ def make_projects(source, parent):
     (short / "tracklen.bin").write_bytes(side_file([(p, {t: t % 7 + 1 for t in range(16)}) for p in range(1, 256)]))
     return {"held": maker.make(source, parent, "held", keep_masterfx=True),
             "worst": maker.make(source, parent, "worst", keep_masterfx=True, worst=True),
-            "tracklen": short}
+            "tracklen": short,
+            "synthfx": maker.make_synthfx(source, parent)}
 
 
 def main():

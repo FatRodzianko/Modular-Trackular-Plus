@@ -7,6 +7,7 @@
     python tools/emu/make_masterfx_test_project.py "<project>" "<out folder>" --engines
     python tools/emu/make_masterfx_test_project.py "<project>" "<out folder>" --synths
     python tools/emu/make_masterfx_test_project.py "<project>" "<out folder>" --sound
+    python tools/emu/make_masterfx_test_project.py "<project>" "<out folder>" --synthfx
 
 The project given is only read. In the copy:
 - project.mt: the new name, the voices given on the three synth parts, both sends at 60.
@@ -24,6 +25,9 @@ on the source project's sound. The engine comes from project.mt's synthType, not
 --synths writes the Synths mod's set the same way, on WAVE and PHASE (a mod build only: plain CE
 resets a part whose synthType it doesn't know).
 
+--synthfx writes the Synth FX set (SYNTHFX_LADDER), lightest first: mods.bin has Synth FX and Master FX
+On and record 16 holds each part's effect settings, the rest of the source's mods.bin kept.
+
 --sound writes that file's last set. `A1 Master FX sound` is one voice of ACD Init with a short note every 16
 steps, so the gaps let the reverb and delay be heard, with no masterfx.bin. `R2 Real project sends` is the source
 with its patterns and masterfx.bin kept, and every instrument and synth part sending to both effects: hellish
@@ -39,6 +43,7 @@ import argparse
 import shutil
 import struct
 import sys
+import zlib
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -199,6 +204,83 @@ LADDER = (
 )
 
 
+# Synth FX (core/mods/synthfx): mods.bin's set is record 0, a byte per mod id; Synth FX's settings
+# are record 16, each part's ten steps in synthFx.h's order (synthfxSettings.cpp):
+# Effect, Rate, Depth, Mix, Feedback, Distortion, Gain, Tone, Placement, Level.
+MODS_MAGIC = b"MTP1"
+MOD_MASTERFX = 3
+MOD_SYNTHFX = 15
+MASTERFX_RECORD = MOD_MASTERFX + 1      # reverb, delay (masterfx.cpp)
+SYNTHFX_RECORD = MOD_SYNTHFX + 1
+SYNTHFX_OFF = (0, 50, 50, 50, 145, 0, 50, 50, 1, 60)
+# The heaviest: Distortion at full Gain into the Phaser, all of it wet, Feedback +90 %.
+SYNTHFX_WORST = (3, 100, 100, 100, 185, 2, 100, 50, 1, 60)
+SYNTHFX_DRIVE = (0, 50, 50, 50, 145, 1, 60, 50, 1, 60)      # Overdrive only
+
+# The Synth FX set: name, voices, (reverb, delay), engine, each part's settings; lightest first.
+SYNTHFX_LADDER = (
+    ("F1 1 voice ACD Overdrive", (1, 0, 0), None, "ACD", (SYNTHFX_DRIVE,) * 3),
+    ("F2 1 voice PERC worst FX", (1, 0, 0), None, "PERC", (SYNTHFX_WORST,) * 3),
+    ("F3 4 voices ACD worst FX", (4, 0, 0), None, "ACD", (SYNTHFX_WORST,) * 3),
+    ("F4 8 voices PERC worst FX", (4, 2, 2), None, "PERC", (SYNTHFX_WORST,) * 3),
+    ("F5 8 PERC worst Shimmer BBD", (4, 2, 2), (4, 2), "PERC", (SYNTHFX_WORST,) * 3),
+)
+
+
+def store_records(data: bytes) -> list:
+    """A mods.bin's records as (id, version, bytes); none if it isn't one."""
+    if len(data) < 12 or data[:4] != MODS_MAGIC:
+        return []
+    _, length, crc = struct.unpack_from("<HHI", data, 4)
+    payload = data[12:12 + length]
+    if len(payload) != length or zlib.crc32(payload) != crc:
+        return []
+    records, at = [], 0
+    while at + 4 <= len(payload):
+        record, version, size = struct.unpack_from("<BBH", payload, at)
+        records.append((record, version, payload[at + 4:at + 4 + size]))
+        at += 4 + size
+    return records
+
+
+def synthfx_mods_file(source: bytes, parts, effects=None) -> bytes:
+    """The source's mods.bin (or none) with Synth FX and Master FX On and record 16 holding parts.
+    effects: (reverb, delay) for Master FX's record, or the source's kept."""
+    dropped = (0, SYNTHFX_RECORD) + ((MASTERFX_RECORD,) if effects else ())
+    records = [r for r in store_records(source) if r[0] not in dropped]
+    switches = bytearray(MOD_SYNTHFX + 1)
+    old = [r for r in store_records(source) if r[0] == 0]
+    if old:
+        switches[:len(old[0][2])] = old[0][2][:len(switches)]
+    switches[MOD_MASTERFX] = switches[MOD_SYNTHFX] = 1
+    settings = b"".join(bytes(p) for p in parts)
+    assert len(settings) == 30
+    records = [(0, 1, bytes(switches))] + records + [(SYNTHFX_RECORD, 1, settings)]
+    if effects:
+        records.append((MASTERFX_RECORD, 1, bytes(effects)))
+    payload = b"".join(struct.pack("<BBH", i, v, len(d)) + d for i, v, d in records)
+    return MODS_MAGIC + struct.pack("<HHI", 1, len(payload), zlib.crc32(payload)) + payload
+
+
+def make_synthfx(source: Path, parent: Path, name: str = "synthfx", voices=VOICES, worst: bool = True,
+                 engine: str = "PERC", parts=(SYNTHFX_WORST,) * 3, effects=(4, 2)) -> Path:
+    """By default the release tier's worst case: the worst pattern on PERC, the heaviest insert on
+    every part, and Shimmer and BBD, the heaviest Master FX."""
+    folder = make(source, parent, name, voices, worst=worst, engine=engine)
+    old = folder / "mods.bin"
+    (folder / "mods.bin").write_bytes(synthfx_mods_file(old.read_bytes() if old.exists() else b"", parts,
+                                                        effects or (0, 0)))
+    return folder
+
+
+def make_synthfx_ladder(source: Path, parent: Path) -> list:
+    out = []
+    for name, voices, effects, engine, parts in SYNTHFX_LADDER:
+        out.append(make_synthfx(source, parent, name, voices, worst=False, engine=engine, parts=parts,
+                                effects=effects))
+    return out
+
+
 def make_ladder(source: Path, parent: Path) -> list:
     out = []
     for name, voices, effects in LADDER:
@@ -279,10 +361,12 @@ def main() -> int:
     parser.add_argument("--engines", action="store_true")
     parser.add_argument("--synths", action="store_true")
     parser.add_argument("--sound", action="store_true")
+    parser.add_argument("--synthfx", action="store_true")
     args = parser.parse_args()
     try:
-        if args.ladder or args.engines or args.sound or args.synths:
+        if args.ladder or args.engines or args.sound or args.synths or args.synthfx:
             maker = (make_ladder if args.ladder else make_engines if args.engines else make_sound if args.sound
+                     else make_synthfx_ladder if args.synthfx
                      else lambda source, parent: make_engines(source, parent, SYNTHS_LADDER))
             for folder in maker(args.project, args.out):
                 print(f"Copy written: {folder}")
