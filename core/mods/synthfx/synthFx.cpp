@@ -4,7 +4,7 @@
 
 #include "modsBuild.h"
 
-#if MT_HAS_SYNTHS
+#if MT_HAS_SYNTHS || MT_HAS_SYNTHFX
 
 #include "synthFx.h"
 
@@ -434,20 +434,14 @@ static inline float ap_coef(float fc)
     return (t - 1.0f) / (t + 1.0f);
 }
 
-/* In flash, not ITCM: it runs once per instrument (at most three), dist_block once per voice
- * with Placement Pre, and ITCM is short (CLAUDE.md). */
-void fx_block(struct mt_fx *s, const float *fx, float *L, float *R, int distWanted)
+/* The modulation effect running (s->active; type: the one chosen) over a block. Mono: L in,
+ * L and R out. Stereo: L and R in and out, the effect fed (L + R) / 2. The mono form is
+ * fx_block's arithmetic as it was; compiled with the stereo one beside it, the last bit of
+ * some samples differs while an effect switch fades the Mix (2.4e-7 at most, 2026-11-09). */
+template <bool Stereo>
+static inline __attribute__((always_inline)) void fx_mod(struct mt_fx *s, const float *fx, uint32_t type,
+                                                         float *L, float *R)
 {
-    dist_block(&s->dist, L, fx, distWanted);
-
-    uint32_t type = list_pick(fx[FXP_EFFECT], FX_TYPES);
-    if (!s->running && type == FX_NONE) {
-        for (uint32_t n = 0; n < FX_BLOCK; n++)
-            R[n] = L[n];
-        return;
-    }
-    if (!s->running)
-        fx_start(s, fx, type);
     float want = type == s->active ? clampf(fx[FXP_MIX], 0.0f, 1.0f) : 0.0f;
     float m0 = s->mix, m1 = step_to(m0, want);
     float d0 = s->depth, d1 = step_to(d0, clampf(fx[FXP_DEPTH], 0.0f, 1.0f));
@@ -464,8 +458,8 @@ void fx_block(struct mt_fx *s, const float *fx, float *L, float *R, int distWant
         float swing = d0 * CHORUS_SWING;
         float lpl = s->lp[0], lpr = s->lp[1];
         for (uint32_t n = 0; n < FX_BLOCK; n++) {
-            float x = L[n];
-            s->buf[pos] = x;
+            float x = L[n], xr = Stereo ? R[n] : x;
+            s->buf[pos] = Stereo ? 0.5f * (x + xr) : x;
             float tri = ph < 0.5f ? 4.0f * ph - 1.0f : 3.0f - 4.0f * ph;
             ph += inc;
             if (ph >= 1.0f)
@@ -474,7 +468,7 @@ void fx_block(struct mt_fx *s, const float *fx, float *L, float *R, int distWant
             lpl += CHORUS_LP * (tap(s->buf, pos, CHORUS_CENTRE + d) - lpl);
             lpr += CHORUS_LP * (tap(s->buf, pos, CHORUS_CENTRE - d) - lpr);
             L[n] = gd * x + gw * lpl;
-            R[n] = gd * x + gw * lpr;
+            R[n] = gd * xr + gw * lpr;
             pos = (pos + 1u) & (FX_LEN - 1u);
             gd += dg;
             gw += dw;
@@ -486,17 +480,17 @@ void fx_block(struct mt_fx *s, const float *fx, float *L, float *R, int distWant
         float dd = (d1 - d0) * (0.5f * FLANGE_SPAN / FX_BLOCK);
         float half = d0 * 0.5f * FLANGE_SPAN;
         for (uint32_t n = 0; n < FX_BLOCK; n++) {
-            float x = L[n];
+            float x = L[n], xr = Stereo ? R[n] : x, in = Stereo ? 0.5f * (x + xr) : x;
             float tri = ph < 0.5f ? 4.0f * ph - 1.0f : 3.0f - 4.0f * ph;
             ph += inc;
             if (ph >= 1.0f)
                 ph -= 1.0f;
             float tl = tap(s->buf, pos, FLANGE_MIN + half * (1.0f + tri));
             float tr = tap(s->buf2, pos, FLANGE_MIN + half * (1.0f - tri));
-            s->buf[pos] = limit(x + fb * tl);
-            s->buf2[pos] = limit(x + fb * tr);
+            s->buf[pos] = limit(in + fb * tl);
+            s->buf2[pos] = limit(in + fb * tr);
             L[n] = gd * x + gw * tl;
-            R[n] = gd * x + gw * tr;
+            R[n] = gd * xr + gw * tr;
             pos = (pos + 1u) & (FX_LEN - 1u);
             gd += dg;
             gw += dw;
@@ -519,8 +513,8 @@ void fx_block(struct mt_fx *s, const float *fx, float *L, float *R, int distWant
             float er = ap_coef(PHASER_LO * exp2f_fast(oct * 0.5f * (1.0f - te)));
             float sl = (el - cl) * (1.0f / PHASER_CHUNK), sr = (er - cr) * (1.0f / PHASER_CHUNK);
             for (uint32_t n = c; n < c + PHASER_CHUNK; n++) {
-                float x = L[n];
-                float ul = limit(x + fb * yl), ur = limit(x + fb * yr);
+                float x = L[n], xr = Stereo ? R[n] : x, in = Stereo ? 0.5f * (x + xr) : x;
+                float ul = limit(in + fb * yl), ur = limit(in + fb * yr);
                 for (uint32_t k = 0; k < PHASER_STAGES; k++) {
                     float a = cl * ul + ql[k];
                     ql[k] = ul - cl * a;
@@ -532,7 +526,7 @@ void fx_block(struct mt_fx *s, const float *fx, float *L, float *R, int distWant
                 yl = ul;
                 yr = ur;
                 L[n] = gd * x + gw * yl;
-                R[n] = gd * x + gw * yr;
+                R[n] = gd * xr + gw * yr;
                 gd += dg;
                 gw += dw;
                 cl += sl;
@@ -553,13 +547,43 @@ void fx_block(struct mt_fx *s, const float *fx, float *L, float *R, int distWant
         s->running = 0;
 }
 
+/* In flash, not ITCM: it runs once per instrument or part (at most three), dist_block once
+ * per voice with Placement Pre, and ITCM is short (CLAUDE.md). */
+void fx_block(struct mt_fx *s, const float *fx, float *L, float *R, int distWanted)
+{
+    dist_block(&s->dist, L, fx, distWanted);
+
+    uint32_t type = list_pick(fx[FXP_EFFECT], FX_TYPES);
+    if (!s->running && type == FX_NONE) {
+        for (uint32_t n = 0; n < FX_BLOCK; n++)
+            R[n] = L[n];
+        return;
+    }
+    if (!s->running)
+        fx_start(s, fx, type);
+    fx_mod<false>(s, fx, type, L, R);
+}
+
+void fx_block_stereo(struct mt_fx *s, const float *fx, float *L, float *R, int distWanted)
+{
+    dist_block(&s->dist, L, fx, distWanted);
+    dist_block(&s->dist2, R, fx, distWanted);
+
+    uint32_t type = list_pick(fx[FXP_EFFECT], FX_TYPES);
+    if (!s->running && type == FX_NONE)
+        return;
+    if (!s->running)
+        fx_start(s, fx, type);
+    fx_mod<true>(s, fx, type, L, R);
+}
+
 /* ---- the instruments' states ------------------------------------------------------------ */
 
 /* Up to three synth parts play at once, so three states. Who owns each (WAVE and PHASE: an
- * instrument's first voice) is in DTCM (zeroed at start-up); the states themselves, delay
- * lines included, are in SDRAM, which start-up doesn't clear: a new owner clears what it
- * uses. A state whose owner hasn't run for a while (the instrument's first voice changed, or
- * it went away) can be taken over. */
+ * instrument's first voice; Synth FX: a part) is in DTCM (zeroed at start-up); the states
+ * themselves, delay lines included, are in SDRAM, which start-up doesn't clear: a new owner
+ * clears what it uses. A state whose owner hasn't run for a while (the instrument's first
+ * voice changed, or it went away) can be taken over. */
 static constexpr uint32_t kStates = 3;
 static constexpr uint32_t kStale = 4 * kStates; /* calls by anyone since the owner's last */
 
@@ -604,4 +628,4 @@ void fx_release(const void *owner)
 
 } // namespace mtfx
 
-#endif // MT_HAS_SYNTHS
+#endif // MT_HAS_SYNTHS || MT_HAS_SYNTHFX

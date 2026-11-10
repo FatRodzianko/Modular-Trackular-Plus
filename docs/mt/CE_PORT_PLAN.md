@@ -1028,6 +1028,33 @@ for every synth engine, CE's closed ones included.
     each, 504 B more in SDRAM.
   - With the mod Off, or every effect None and Off, the insert is one test per part and the
     audio is untouched.
+  - Done 2026-11-09. `core/mods/synthfx/synthfxMod.h` and `.cpp` (`mods::synthfx`): the switch
+    (mod id 15, `MT_HAS_SYNTHFX`, record 16 kept for phase 3), the settings (3 × 10 floats in
+    DTCM, every effect Off, the rest at WAVE's Init), and `begin` and `run`, which
+    `PolySynth::update` calls for each part before its blocks are taken and right after
+    `renderAudioBuffer`. `synthFx.h` gains `dist2` (a stereo part's right side) and
+    `fx_block_stereo`: the Distortion on each side, the modulation effect fed (L + R) / 2 with
+    the dry signal kept stereo, so PERC's image survives Mix fading in (a change from "L+R in"
+    above). A part lets its state go once nothing is chosen and everything has faded out.
+  - WAVE and PHASE: the modulation code is now one template for mono and stereo. Its arithmetic is
+    unchanged, but the compiler rounds the mono form differently in places: 27 of 36 effect cases
+    are bit for bit against phase 1, the other 9 differ in the last bit of some samples (2.4e-7 at
+    most) in the blocks where an effect switch fades the Mix. A copy of the old function did the
+    same (GCC folded the two start functions into one), so the shared template stayed. The 50
+    Distortion cases are bit for bit.
+  - Results: `tools/emu/test_synthfx.py` 100 checks and 0 failures; planted faults
+    (`tools/emu/plant_synthfx.py`, full builds) 7 of 7 caught; Level A 57 checks and 0 failures;
+    Level B (`test_synths.py`) 70 checks and 0 failures; host tests pass (registry 196 checks, 9
+    mods built); the release tier 0 failed of 29 run (4 more from cache); `MT_NO_MODS` identical.
+  - Cost on the emulator, open code only: the insert adds 194,493 instructions a block on 3 ACD
+    parts with Distortion and Phaser (11.4 % of a block) and 279,111 on 3 PERC parts (16.4 %).
+    Block pool peak 74 on the 3 ACD parts with the effects (65 without), against 76 for 3 PERC
+    parts with none: a mono part sent as stereo takes about 3 more blocks, as a stereo part does.
+  - Memory: SDRAM 504 B (995,492 B free); DTCM the settings' 120 B, 56 B less free (14,504 B
+    free); ITCM 88 B (the hook grew `PolySynth::update`, which CE keeps in ITCM; 5,008 B free);
+    flash about 4 KB.
+  - Not done: `boot_rig.py` (test 5) waits for phase 3, when a project can carry the settings;
+    there is no way to choose an effect on the unit until the page exists, so no device test.
 - **Phase 3: settings and page.**
   - Settings follow the part, as its volume and sends do: loading another patch keeps them,
     since a closed engine's patch can't hold them (decision 15). In RAM: 3 × 10 floats, 120 B

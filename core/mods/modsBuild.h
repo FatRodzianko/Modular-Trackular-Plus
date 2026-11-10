@@ -66,6 +66,13 @@
 #define MT_HAS_SYNTHS 0
 #endif
 
+#ifndef MT_HAS_SYNTHFX
+#define MT_HAS_SYNTHFX MT_MODS
+#elif !MT_MODS
+#undef MT_HAS_SYNTHFX
+#define MT_HAS_SYNTHFX 0
+#endif
+
 #ifndef MT_HAS_SWING
 #define MT_HAS_SWING MT_MODS
 #elif !MT_MODS

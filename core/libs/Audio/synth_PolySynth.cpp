@@ -8,6 +8,10 @@
 #include "Synth.h"
 #include "config.h"
 #include <span>
+#include "modsBuild.h" // MT:
+#if MT_HAS_SYNTHFX
+#include "synthfx/synthfxMod.h" // MT: Synth FX
+#endif
 //#include "Audio.h"
 //#include "dspinst.h'
 //#include "util_math.h"
@@ -60,6 +64,13 @@ AUDIO_CORE_RAM void PolySynth::update(void)
 
         bool hasSends = part.patch != nullptr && part.patch->getMetadata().rendersAuxSends;
 
+#if MT_HAS_SYNTHFX // MT: Synth FX: a mono part goes out as stereo while a modulation effect plays
+        static_assert(mods::synthfx::kParts == kSynthParts);
+        const bool mtEngineStereo = isStereo;
+        const mods::synthfx::Insert mtFx = mods::synthfx::begin(partIdx, part.patch.get(), isStereo);
+        isStereo = mtFx.stereo;
+#endif
+
         audio_block_t* blockPostFaderLeft = allocate();
         audio_block_t* blockPostFaderRight = isStereo ? allocate() : NULL;
         audio_block_t* blockSendsCommonOrSend1 = allocate();
@@ -99,6 +110,11 @@ AUDIO_CORE_RAM void PolySynth::update(void)
           std::span<polysynth::AudioBufferRef>(tempSendsBufArray),
           partIdx);
 
+#if MT_HAS_SYNTHFX // MT: Synth FX, before the sends and the fader, so both get it
+        mods::synthfx::run(
+          mtFx, partIdx, tempBufSendsCommonLeft.data(), tempBufSendsCommonRight.data(), mtEngineStereo);
+#endif
+
         const bool reuseUnmodifiedMono = (!hasSends && !isStereo && gainDB[partIdx] == 0.0f);
         if (!reuseUnmodifiedMono)
         {
@@ -111,10 +127,14 @@ AUDIO_CORE_RAM void PolySynth::update(void)
 
         polysynth::AudioBufferRef tempBufRef = tempBufSendsCommonLeft;
 
+#if MT_HAS_SYNTHFX // MT: Synth FX may send a mono part as stereo; this checks the engine's own
+        assert(hasSends == mtEngineStereo);
+#else
         assert(hasSends ==
                isStereo); // Assumption to simplify handling. The only one stereo and with internal
                           // synths is PERC, the other are mono and without sends. Refactor the
                           // handling if needed for new synth.
+#endif
 
         if (hasSends)
         {

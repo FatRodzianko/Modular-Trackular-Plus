@@ -16,6 +16,7 @@
 #include "modsProject.h"
 #include "songloop.h"
 #include "swing.h"
+#include "synthfx/synthfxMod.h"
 #include "synths/synthsMod.h"
 #include "tracklen.h"
 
@@ -129,6 +130,20 @@ constexpr std::array<ModDescriptor, kBuiltModCount> kMods{ {
     .name = "Synths",            // WAVE and PHASE: the switch only shows them in the picker
     .record = synths::kRecord,
     .recordVersion = synths::kRecordVersion,
+    .init = nullptr,
+    .load = nullptr,
+    .apply = nullptr,
+    .reset = nullptr,
+    .storeIfEdited = nullptr,
+    .stored = nullptr,
+  },
+#endif
+#if MT_HAS_SYNTHFX
+  {
+    .id = Mod::synthfx,
+    .name = "Synth FX",          // the audio interrupt reads the switch: Off bypasses the insert
+    .record = synthfx::kRecord,
+    .recordVersion = synthfx::kRecordVersion,
     .init = nullptr,
     .load = nullptr,
     .apply = nullptr,

@@ -38,6 +38,7 @@ enum class Mod : uint8_t
     tracklen = 12,
     songloop = 13,
     chords = 14, // retired: CE has these chords; the id stays unused
+    synthfx = 15,
     kCount
 };
 
@@ -67,6 +68,9 @@ constexpr size_t kBuiltModCount = 0
                                   + 1
 #endif
 #if MT_HAS_SYNTHS
+                                  + 1
+#endif
+#if MT_HAS_SYNTHFX
                                   + 1
 #endif
   ;

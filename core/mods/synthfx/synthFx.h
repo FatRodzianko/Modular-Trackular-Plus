@@ -1,9 +1,9 @@
 // Modular-Trackular mods. SPDX-License-Identifier: MIT
 //
 // The synth effects: a Distortion, then one modulation effect (Chorus, Flanger or Phaser),
-// on a synth's output, for any synth engine whose code is open. WAVE and PHASE use them
-// (core/mods/synths): after their voices, and WAVE's Distortion also in each voice before
-// its filter (Placement Pre). The Chorus is sy9's (Modular-Trackular's patch/synths/wt_fx.h),
+// on a synth's output. WAVE and PHASE use them (core/mods/synths): after their voices, and
+// WAVE's Distortion also in each voice before its filter (Placement Pre). Synth FX
+// (synthfxMod.h) runs them on a synth part's output, whatever its engine. The Chorus is sy9's (Modular-Trackular's patch/synths/wt_fx.h),
 // unchanged, so with the Distortion Off it plays as sy9 did.
 //
 // The settings: ten floats in this order, passed as a pointer to the first, so they can sit
@@ -65,7 +65,7 @@ struct mt_hb
     float y1[N];
 };
 
-/* One Distortion's running state: a voice's (Pre) or an instrument's (Post) */
+/* One Distortion's running state: a voice's (Pre), or an instrument's or a part's (Post) */
 struct mt_dist
 {
     float x1;                               /* the input one sample back (Overdrive, Distortion: at 2x) */
@@ -90,7 +90,7 @@ void dist_block(struct mt_dist *d, float *buf, const float *fx, int want);
  * a voice whose note starts from idle, so a Pre Distortion is there from the first sample. */
 void dist_reset(struct mt_dist *d, const float *fx, int on);
 
-/* One synth's effects: a WAVE or PHASE instrument's */
+/* One synth's effects: a WAVE or PHASE instrument's, or a synth part's (Synth FX) */
 struct mt_fx
 {
     uint32_t running;                       /* the modulation effect is in use */
@@ -101,7 +101,8 @@ struct mt_fx
     float mix, depth;                       /* where the last block ended */
     float ap[2][4];                         /* the Phaser's all-passes, each side */
     float fb[2];                            /* the Phaser's last outputs (its feedback) */
-    struct mt_dist dist;                    /* the Distortion, Post */
+    struct mt_dist dist;                    /* the Distortion, Post (a stereo part: its left side) */
+    struct mt_dist dist2;                   /* a stereo part's right side (Synth FX) */
     /* the delay lines last: a new owner clears everything before them */
     float buf[FX_LEN];                      /* Chorus, Flanger L */
     float buf2[FX_LEN];                     /* Flanger R */
@@ -110,6 +111,17 @@ struct mt_fx
 /* One block of a synth's effects: L in (mono), L and R out. fx: the ten settings.
  * distWanted: the Post Distortion is on (WAVE: Placement Post; PHASE: whenever it is on). */
 void fx_block(struct mt_fx *s, const float *fx, float *L, float *R, int distWanted);
+
+/* The same for a stereo synth (Synth FX on PERC): L and R in and out. The Distortion runs on
+ * each side; the modulation effect takes (L + R) / 2 in, and the dry signal stays stereo.
+ * With no modulation effect running, R is the Distortion's alone. */
+void fx_block_stereo(struct mt_fx *s, const float *fx, float *L, float *R, int distWanted);
+
+/* Nothing running or fading out: the state can be let go without a click */
+static inline int fx_idle(const struct mt_fx *s)
+{
+    return !s->running && s->dist.amount <= 0.0f && s->dist2.amount <= 0.0f;
+}
 
 /* The effect state that `owner` uses (WAVE and PHASE: the instrument's first voice); nullptr
  * if every state is taken (the output is then left dry, R a copy of L). Audio interrupt

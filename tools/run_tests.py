@@ -108,6 +108,7 @@ def jobs_for(args, projects):
         Job("songloop", e / "test_songloop.py", mods, ref, inputs=both),
         Job("sound rig", e / "test_sound_rig.py", mods, ref, inputs=both),
         Job("synths", e / "test_synths.py", mods, inputs=[mods]),
+        Job("synthfx", e / "test_synthfx.py", mods, ref, inputs=both),
         Job("masterfx objects", e / "test_masterfx.py", mods, ref, *([args.rig] if args.rig else []),
             inputs=both + ((args.rig,) if args.rig else ())),
     ]

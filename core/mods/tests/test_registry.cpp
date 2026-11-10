@@ -15,6 +15,7 @@
 #include "modsStore.h"
 #include "songloop.h"
 #include "swing.h"
+#include "synthfx/synthfxMod.h"
 #include "synths/synthsMod.h"
 #include "tracklen.h"
 
@@ -127,6 +128,10 @@ const std::vector<Expected> kExpected = {
     { Mod::synths, synths::kRecord, synths::kRecordVersion, nullptr, nullptr, nullptr, nullptr, nullptr,
       nullptr },
 #endif
+#if MT_HAS_SYNTHFX
+    { Mod::synthfx, synthfx::kRecord, synthfx::kRecordVersion, nullptr, nullptr, nullptr, nullptr, nullptr,
+      nullptr },
+#endif
 };
 
 bool built(Mod id)
@@ -141,6 +146,7 @@ bool built(Mod id)
     case Mod::tracklen: return MT_HAS_TRACKLEN != 0;
     case Mod::songloop: return MT_HAS_SONGLOOP != 0;
     case Mod::synths: return MT_HAS_SYNTHS != 0;
+    case Mod::synthfx: return MT_HAS_SYNTHFX != 0;
     default: return false; // not ported, or retired
     }
 }

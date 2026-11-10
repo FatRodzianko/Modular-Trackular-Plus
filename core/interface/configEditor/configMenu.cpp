@@ -150,6 +150,15 @@ const strItemTypeListTextWithAction projectSongloopSetup{
 cMenuItem melProjectSongloop(menuProjectMods, "Song Loop", projectSongloopDesc, menuTypeItemListTextWithAction, &projectSongloopSetup);
 #endif
 
+#if MT_HAS_SYNTHFX
+const char projectSynthfxDesc[] = { "Synth FX for this project: the Synths effects, a Distortion then "
+                                    "Chorus, Flanger or Phaser, on each synth part's output. Off "
+                                    "bypasses them and keeps the settings. " };
+const strItemTypeListTextWithAction projectSynthfxSetup{
+    &mods::switches[static_cast<size_t>(mods::Mod::synthfx)], 2, onOffStateTexts, mods::projectSwitchChanged };
+cMenuItem melProjectSynthfx(menuProjectMods, "Synth FX", projectSynthfxDesc, menuTypeItemListTextWithAction, &projectSynthfxSetup);
+#endif
+
 #if MT_HAS_SYNTHS
 const char projectSynthsDesc[] = { "Synths for this project: WAVE (wavetable) and PHASE (phase distortion) "
                                    "in the synth model picker. Off hides them; a part already playing one "
@@ -474,6 +483,14 @@ const char modsSongloopDesc[] = { "Whether new projects start with Song Loop on.
 const strItemTypeListTextWithAction modsSongloopSetup{
     &mods::defaults[static_cast<size_t>(mods::Mod::songloop)], 2, onOffStateTexts, mods::defaultsChanged };
 cMenuItem melModsSongloop(menuMods, "Song Loop", modsSongloopDesc, menuTypeItemListTextWithAction, &modsSongloopSetup);
+#endif
+
+#if MT_HAS_SYNTHFX
+const char modsSynthfxDesc[] = { "Whether new projects start with Synth FX on. Each project has its own "
+                                 "switch in Project Settings > Mods. " };
+const strItemTypeListTextWithAction modsSynthfxSetup{
+    &mods::defaults[static_cast<size_t>(mods::Mod::synthfx)], 2, onOffStateTexts, mods::defaultsChanged };
+cMenuItem melModsSynthfx(menuMods, "Synth FX", modsSynthfxDesc, menuTypeItemListTextWithAction, &modsSynthfxSetup);
 #endif
 
 #if MT_HAS_SYNTHS
