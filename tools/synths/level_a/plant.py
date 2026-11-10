@@ -1,7 +1,8 @@
 # Modular-Trackular mods. SPDX-License-Identifier: MIT
 """Planted faults for the Synths mod's level A (tools/emu/test_synths_dsp.py): each copies
-core/mods/synths, makes one mistake in the copy, builds the level-A ELF from it and runs the
-test, which has to fail, on the check named. A fault the test misses is a gap in the test.
+core/mods/synths and core/mods/synthfx (the effects) beside it, makes one mistake in the copy,
+builds the level-A ELF from it and runs the test, which has to fail, on the check named. A fault
+the test misses is a gap in the test.
 
     python tools/synths/level_a/plant.py <sy9's patch/synths folder> [--toolchain PREFIX] [--only NAME]
 
@@ -18,6 +19,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 SRC = ROOT / "core" / "mods" / "synths"
+FX = ROOT / "core" / "mods" / "synthfx"
 OUT = ROOT / "build" / "emu" / "plant"
 TEST = ROOT / "tools" / "emu" / "test_synths_dsp.py"
 
@@ -26,24 +28,24 @@ FAULTS = [
     ("WAVE: oscillator seed", "wtEngine.h", "0x12345678u ^", "0x12345679u ^", "WAVE as sy9"),
     ("PHASE: one shape short", "phEngine.h", "#define PH_SHAPES           8u", "#define PH_SHAPES           7u",
      "PHASE as sy9"),
-    ("Chorus: tap low-pass", "synthsFx.cpp", "#define CHORUS_LP           0.7226f", "#define CHORUS_LP           0.7f",
+    ("Chorus: tap low-pass", "../synthfx/synthFx.cpp", "#define CHORUS_LP           0.7226f", "#define CHORUS_LP           0.7f",
      "Chorus as sy9"),
-    ("WAVE: Post Distortion run in the voice", "wtEngine.h", "dist_block(&e->pre, out, p, dist_pre(p));",
-     "dist_block(&e->pre, out, p, dist_on(p));", "Placement Post: the voice itself is untouched"),
-    ("dist_reset: Pre starts faded out", "synthsFx.cpp", "d->amount = (on && type != DIST_OFF) ? 1.0f : 0.0f;",
+    ("WAVE: Post Distortion run in the voice", "wtEngine.h", "dist_block(&e->pre, out, p + P_EFFECT, dist_pre(p + P_EFFECT));",
+     "dist_block(&e->pre, out, p + P_EFFECT, dist_on(p + P_EFFECT));", "Placement Post: the voice itself is untouched"),
+    ("dist_reset: Pre starts faded out", "../synthfx/synthFx.cpp", "d->amount = (on && type != DIST_OFF) ? 1.0f : 0.0f;",
      "d->amount = 0.0f;", "dist_reset"),
-    ("Overdrive: no trim", "synthsFx.cpp", "#define OD_TRIM             0.28510f", "#define OD_TRIM             1.0f",
+    ("Overdrive: no trim", "../synthfx/synthFx.cpp", "#define OD_TRIM             0.28510f", "#define OD_TRIM             1.0f",
      "Level default"),
-    ("Bit Crusher: Rate range", "synthsFx.cpp", "#define CRUSH_HZ_OCT        5.4627571f",
+    ("Bit Crusher: Rate range", "../synthfx/synthFx.cpp", "#define CRUSH_HZ_OCT        5.4627571f",
      "#define CRUSH_HZ_OCT        4.4627571f", "Bits"),
-    ("Bit Crusher: Bits from 1", "synthsFx.cpp", "#define CRUSH_BITS_MIN      4.0f", "#define CRUSH_BITS_MIN      1.0f",
+    ("Bit Crusher: Bits from 1", "../synthfx/synthFx.cpp", "#define CRUSH_BITS_MIN      4.0f", "#define CRUSH_BITS_MIN      1.0f",
      "sounds at Gain 0"),
-    ("Distortion: linear region of the anti-aliased clip", "synthsFx.cpp", "        return 0.5f * s;\n",
+    ("Distortion: linear region of the anti-aliased clip", "../synthfx/synthFx.cpp", "        return 0.5f * s;\n",
      "        return s;\n", "Distortion"),
-    ("half-band: one coefficient off", "synthsFx.cpp", "0.6095243149f", "0.6395243149f", "aliases"),
-    ("Flanger: second delay line left dirty", "synthsFx.cpp", "        s->buf2[n] = 0.0f;\n", "",
+    ("half-band: one coefficient off", "../synthfx/synthFx.cpp", "0.6095243149f", "0.6395243149f", "aliases"),
+    ("Flanger: second delay line left dirty", "../synthfx/synthFx.cpp", "        s->buf2[n] = 0.0f;\n", "",
      "garbage left in a state"),
-    ("Phaser: feedback over 1", "synthsFx.cpp", "#define FEEDBACK_MAX        0.95f",
+    ("Phaser: feedback over 1", "../synthfx/synthFx.cpp", "#define FEEDBACK_MAX        0.95f",
      "#define FEEDBACK_MAX        1.30f", "Feedback"),
 ]
 
@@ -75,10 +77,11 @@ def main() -> int:
         if a.only and a.only not in name:
             continue
         tag = "".join(c if c.isalnum() else "_" for c in name)
-        copy = OUT / tag / "synths"
-        if copy.exists():
-            shutil.rmtree(copy)
+        copy = OUT / tag / "mods" / "synths"
+        if copy.parent.exists():
+            shutil.rmtree(copy.parent)
         shutil.copytree(SRC, copy)
+        shutil.copytree(FX, copy.parent / "synthfx")
         f = copy / file
         text = f.read_bytes().decode("utf-8")
         old_n = old.replace("\n", "\r\n") if "\r\n" in text and "\n" in old else old

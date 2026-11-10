@@ -131,7 +131,7 @@ class WaveSynthVoice : public MtSynthVoice<WaveSynthVoice, WaveParamId>
     }
 
     /* the Post Distortion runs after the voices; the Pre one in each */
-    int postDistortion() const { return dist_on(p) && !dist_pre(p); }
+    int postDistortion() const { return dist_on(p + P_EFFECT) && !dist_pre(p + P_EFFECT); }
 
     static void createMetadata(Patch& patch, Patch::Metadata& metadata)
     {

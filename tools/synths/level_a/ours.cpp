@@ -64,16 +64,16 @@ void a_phase_render(struct ph_voice* v, const float* p, float* out, const float*
 void a_fx_run(struct mt_fx* s, const float* p, float* L, float* R, uint32_t distWanted, uint32_t blocks)
 {
     for (uint32_t b = 0; b < blocks; b++)
-        fx_block(s, p, L + b * WT_BLOCK, R + b * WT_BLOCK, (int)distWanted);
+        fx_block(s, p + P_EFFECT, L + b * WT_BLOCK, R + b * WT_BLOCK, (int)distWanted);
 }
 
 void a_dist_run(struct mt_dist* d, float* buf, const float* p, uint32_t want, uint32_t blocks)
 {
     for (uint32_t b = 0; b < blocks; b++)
-        dist_block(d, buf + b * WT_BLOCK, p, (int)want);
+        dist_block(d, buf + b * WT_BLOCK, p + P_EFFECT, (int)want);
 }
 
-void a_dist_reset(struct mt_dist* d, const float* p, uint32_t on) { dist_reset(d, p, (int)on); }
+void a_dist_reset(struct mt_dist* d, const float* p, uint32_t on) { dist_reset(d, p + P_EFFECT, (int)on); }
 
 struct mt_fx* a_fx_claim(const void* voice) { return fx_claim(voice); }
 

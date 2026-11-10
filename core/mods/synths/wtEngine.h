@@ -204,7 +204,7 @@ static void wt_note_on(struct wt_voice *e, const float *p, uint32_t note)
     }
     if (e->aenv.stage == ENV_IDLE) {
         e->fresh = 1;
-        dist_reset(&e->pre, p, dist_pre(p));
+        dist_reset(&e->pre, p + P_EFFECT, dist_pre(p + P_EFFECT));
     }
     if (!legato) {                          /* attack again from where the envelopes are */
         e->aenv.stage = ENV_ATTACK;
@@ -618,7 +618,7 @@ static void wt_voice_render(struct wt_voice *e, const float *p, float *out, floa
         }
         e->noise = nz;
     }
-    dist_block(&e->pre, out, p, dist_pre(p));   /* the Distortion, Pre (MT+) */
+    dist_block(&e->pre, out, p + P_EFFECT, dist_pre(p + P_EFFECT));   /* the Distortion, Pre (MT+) */
     float drive = clampf(p[WP_DRIVE], 0.0f, 1.0f);
     if (drive > 0.0f) {                     /* Drive: the filter's input through the soft clip */
         float dg = exp2f_fast(drive * DRIVE_OCTAVES);

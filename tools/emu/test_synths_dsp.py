@@ -668,7 +668,7 @@ def costs(r: Rig) -> None:
 # ---- 6. the Level default -----------------------------------------------------------------------
 def level_default(r: Rig) -> None:
     """Level 0 dB (its default) and the default Gain: a held Init note, note 60, as loud as with
-    the Distortion Off within 1 dB, on WAVE and PHASE (the plan's rule; synthsFx.cpp's trims).
+    the Distortion Off within 1 dB, on WAVE and PHASE (the plan's rule; synthfx/synthFx.cpp's trims).
     Other notes and Gains are printed: Overdrive's 720 Hz high-pass leaves low notes cleaner."""
     tail = slice(20 * BLOCK, None)
     names = {DIST_OVERDRIVE: "Overdrive", DIST_DISTORTION: "Distortion", DIST_CRUSHER: "Bit Crusher"}

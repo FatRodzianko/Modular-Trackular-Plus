@@ -136,7 +136,7 @@ class MtSynthVoice : public polysynth::sdk::CustomSynthVoice<Derived, ParamEnum>
                 R[n] = L[n];
             return;
         }
-        fx_block(s, p, L, R, static_cast<Derived*>(this)->postDistortion());
+        fx_block(s, p + P_EFFECT, L, R, static_cast<Derived*>(this)->postDistortion());
     }
 
   protected:

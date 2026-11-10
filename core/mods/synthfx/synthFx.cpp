@@ -1,19 +1,19 @@
 // Modular-Trackular mods. SPDX-License-Identifier: MIT
 //
-// WAVE's and PHASE's effects (synthsFx.h). The Chorus is sy9's, sample for sample.
+// The synth effects (synthFx.h). The Chorus is sy9's, sample for sample.
 
 #include "modsBuild.h"
 
 #if MT_HAS_SYNTHS
 
-#include "synthsFx.h"
+#include "synthFx.h"
 
 #include "config.h"
 #include <cr_section_macros.h>
 #include <cstddef>
 #include <cstring>
 
-namespace mtsynth
+namespace mtfx
 {
 
 /* ---- the Distortion ------------------------------------------------------------------- */
@@ -57,7 +57,7 @@ namespace mtsynth
 #define CRUSH_BITS_SPAN     12.0f           /* Gain 1: 16 bits */
 #define CRUSH_HZ_MIN        1000.0f
 #define CRUSH_HZ_OCT        5.4627571f      /* log2(44100 / 1000): Tone 1, 44.1 kHz */
-#define CRUSH_IN            2.0f            /* the input's clamp: WT_OUT_LIMIT */
+#define CRUSH_IN            2.0f            /* the input's clamp: FX_OUT_LIMIT */
 /* The Distortion runs a chunk of the block at a time, one stage after another (up, up, clip,
  * down, down), so one filter's states are live in a loop instead of all four. The arithmetic,
  * and its order for each value, is the same: the output is the same bit for bit. It saved 9 %
@@ -204,10 +204,10 @@ static inline float round_near(float x)
 }
 
 /* Level, with the type's trim */
-static float dist_level(uint32_t type, const float *p)
+static float dist_level(uint32_t type, const float *fx)
 {
     float trim = type == DIST_OVERDRIVE ? OD_TRIM : type == DIST_DISTORTION ? DS_TRIM : 1.0f;
-    return trim * exp2f_fast(clampf(p[P_LEVEL], -30.0f, 6.0f) * DB_TO_OCT);
+    return trim * exp2f_fast(clampf(fx[FXP_LEVEL], -30.0f, 6.0f) * DB_TO_OCT);
 }
 
 static float dist_gain(uint32_t type, float g)
@@ -219,21 +219,21 @@ static float dist_gain(uint32_t type, float g)
                                   : DS_GAIN_MIN * exp2f_fast(g * DS_GAIN_OCT);
 }
 
-void dist_reset(struct mt_dist *d, const float *p, int on)
+void dist_reset(struct mt_dist *d, const float *fx, int on)
 {
-    uint32_t type = list_pick(p[P_DIST], DIST_TYPES);
+    uint32_t type = list_pick(fx[FXP_DIST], DIST_TYPES);
     dist_clear(d);
     if (type == DIST_CRUSHER)
         d->hp = 1.0f;
     d->type = type;
-    d->gain = dist_gain(type, p[P_GAIN]);
-    d->level = dist_level(type, p);
+    d->gain = dist_gain(type, fx[FXP_GAIN]);
+    d->level = dist_level(type, fx);
     d->amount = (on && type != DIST_OFF) ? 1.0f : 0.0f;
 }
 
-AUDIO_CORE_RAM void dist_block(struct mt_dist *d, float *buf, const float *p, int want)
+AUDIO_CORE_RAM void dist_block(struct mt_dist *d, float *buf, const float *fx, int want)
 {
-    uint32_t type = list_pick(p[P_DIST], DIST_TYPES);
+    uint32_t type = list_pick(fx[FXP_DIST], DIST_TYPES);
     if (type == DIST_OFF)
         want = 0;
     if (d->amount <= 0.0f) {
@@ -243,26 +243,26 @@ AUDIO_CORE_RAM void dist_block(struct mt_dist *d, float *buf, const float *p, in
         if (type == DIST_CRUSHER)
             d->hp = 1.0f;                   /* take the first sample at once */
         d->type = type;
-        d->gain = dist_gain(type, p[P_GAIN]);
-        d->level = dist_level(type, p);
+        d->gain = dist_gain(type, fx[FXP_GAIN]);
+        d->level = dist_level(type, fx);
     }
     if (type != d->type)                    /* another type: out first, then in */
         want = 0;
     float a0 = d->amount;
     float a1 = want ? (a0 + FX_STEP > 1.0f ? 1.0f : a0 + FX_STEP) : (a0 - FX_STEP < 0.0f ? 0.0f : a0 - FX_STEP);
-    float g0 = d->gain, g1 = dist_gain(d->type, p[P_GAIN]);
-    float l0 = d->level, l1 = dist_level(d->type, p);
-    const float inv = 1.0f / WT_BLOCK;
+    float g0 = d->gain, g1 = dist_gain(d->type, fx[FXP_GAIN]);
+    float l0 = d->level, l1 = dist_level(d->type, fx);
+    const float inv = 1.0f / FX_BLOCK;
     float da = (a1 - a0) * inv, dg = (g1 - g0) * inv, dl = (l1 - l0) * inv;
     float am = a0, g = g0, lv = l0;
-    float tone = clampf(p[P_TONE], 0.0f, 1.0f);
+    float tone = clampf(fx[FXP_TONE], 0.0f, 1.0f);
     float x1 = d->x1, hp = d->hp, u1 = d->u1, lp = d->lp, hp2 = d->hp2, v1 = d->v1;
     if (d->type == DIST_OVERDRIVE) {
         /* the treble cut: a one-pole low-pass, 700 Hz to 6 kHz */
         float fc = OD_TONE_LO * exp2f_fast(tone * OD_TONE_OCT);
-        float c = 1.0f - exp2f_fast(-6.2831853f * fc / WT_RATE * 1.4426950f);
+        float c = 1.0f - exp2f_fast(-6.2831853f * fc / FX_RATE * 1.4426950f);
         mt_hb<HB_COEFS> up = d->up, down = d->down;     /* held in registers for the block */
-        for (uint32_t n = 0; n < WT_BLOCK; n++) {
+        for (uint32_t n = 0; n < FX_BLOCK; n++) {
             float x = clampf(buf[n], -4.0f, 4.0f);
             float s[2], ys[2];
             hb_up(&up, hb_c, x, &s[0], &s[1]);
@@ -284,8 +284,8 @@ AUDIO_CORE_RAM void dist_block(struct mt_dist *d, float *buf, const float *p, in
         d->down = down;
     } else if (d->type == DIST_CRUSHER) {
         float q = g1, iq = 1.0f / g1;                  /* the step, set per block */
-        float r = crush_hz(tone) * (1.0f / WT_RATE);    /* the hold's phase per sample, up to 1 */
-        for (uint32_t n = 0; n < WT_BLOCK; n++) {
+        float r = crush_hz(tone) * (1.0f / FX_RATE);    /* the hold's phase per sample, up to 1 */
+        for (uint32_t n = 0; n < FX_BLOCK; n++) {
             float x = clampf(buf[n], -CRUSH_IN, CRUSH_IN);
             hp += r;
             if (hp >= 1.0f) {                           /* a new sample */
@@ -300,7 +300,7 @@ AUDIO_CORE_RAM void dist_block(struct mt_dist *d, float *buf, const float *p, in
     } else {
         mt_hb<HB_COEFS> up = d->up, down = d->down;
         mt_hb<HB2_COEFS> up2 = d->up2, down2 = d->down2;
-        for (uint32_t c0 = 0; c0 < WT_BLOCK; c0 += DIST_CHUNK) {
+        for (uint32_t c0 = 0; c0 < FX_BLOCK; c0 += DIST_CHUNK) {
             float* in = buf + c0;
             float s2[2u * DIST_CHUNK], s4[4u * DIST_CHUNK];
             for (uint32_t n = 0; n < DIST_CHUNK; n++)       /* up to 2x */
@@ -365,13 +365,13 @@ AUDIO_CORE_RAM void dist_block(struct mt_dist *d, float *buf, const float *p, in
  *
  * Mix and Depth move at most FX_STEP per block; switching the effect fades the old one
  * out and the new one in. */
-#define CHORUS_CENTRE       (3.5e-3f * WT_RATE)
-#define CHORUS_SWING        (1.85e-3f * WT_RATE)    /* at Depth 100 % */
+#define CHORUS_CENTRE       (3.5e-3f * FX_RATE)
+#define CHORUS_SWING        (1.85e-3f * FX_RATE)    /* at Depth 100 % */
 #define CHORUS_LP           0.7226f         /* 1 - exp(-2 pi 9 kHz / 44.1 kHz) */
 #define RATE_MIN            0.05f           /* Rate 0: 0.05 Hz; 1: 5 Hz (x 100) */
 #define RATE_OCTAVES        6.6438562f      /* log2(100) */
-#define FLANGE_MIN          (0.25e-3f * WT_RATE)    /* 11 samples */
-#define FLANGE_SPAN         (6.0e-3f * WT_RATE)     /* at Depth 100 % */
+#define FLANGE_MIN          (0.25e-3f * FX_RATE)    /* 11 samples */
+#define FLANGE_SPAN         (6.0e-3f * FX_RATE)     /* at Depth 100 % */
 #define PHASER_LO           200.0f
 #define PHASER_OCT          4.0f
 #define PHASER_STAGES       4u
@@ -396,7 +396,7 @@ float rate_hz(float v)
     return RATE_MIN * exp2f_fast(clampf(v, 0.0f, 1.0f) * RATE_OCTAVES);
 }
 
-static void fx_start(struct mt_fx *s, const float *p, uint32_t type)
+static void fx_start(struct mt_fx *s, const float *fx, uint32_t type)
 {
     for (uint32_t n = 0; n < FX_LEN; n++) {
         s->buf[n] = 0.0f;
@@ -408,7 +408,7 @@ static void fx_start(struct mt_fx *s, const float *p, uint32_t type)
         s->ap[0][k] = s->ap[1][k] = 0.0f;
     s->fb[0] = s->fb[1] = 0.0f;
     s->mix = 0.0f;
-    s->depth = clampf(p[P_DEPTH], 0.0f, 1.0f);
+    s->depth = clampf(fx[FXP_DEPTH], 0.0f, 1.0f);
     s->active = type;
     s->running = 1;
 }
@@ -430,40 +430,40 @@ static inline float tap(const float *buf, uint32_t pos, float d)
 /* An all-pass's coefficient for a corner of fc Hz */
 static inline float ap_coef(float fc)
 {
-    float t = tan_pade(3.14159265f * fc / WT_RATE);
+    float t = tan_pade(3.14159265f * fc / FX_RATE);
     return (t - 1.0f) / (t + 1.0f);
 }
 
 /* In flash, not ITCM: it runs once per instrument (at most three), dist_block once per voice
  * with Placement Pre, and ITCM is short (CLAUDE.md). */
-void fx_block(struct mt_fx *s, const float *p, float *L, float *R, int distWanted)
+void fx_block(struct mt_fx *s, const float *fx, float *L, float *R, int distWanted)
 {
-    dist_block(&s->dist, L, p, distWanted);
+    dist_block(&s->dist, L, fx, distWanted);
 
-    uint32_t type = list_pick(p[P_EFFECT], FX_TYPES);
+    uint32_t type = list_pick(fx[FXP_EFFECT], FX_TYPES);
     if (!s->running && type == FX_NONE) {
-        for (uint32_t n = 0; n < WT_BLOCK; n++)
+        for (uint32_t n = 0; n < FX_BLOCK; n++)
             R[n] = L[n];
         return;
     }
     if (!s->running)
-        fx_start(s, p, type);
-    float want = type == s->active ? clampf(p[P_MIX], 0.0f, 1.0f) : 0.0f;
+        fx_start(s, fx, type);
+    float want = type == s->active ? clampf(fx[FXP_MIX], 0.0f, 1.0f) : 0.0f;
     float m0 = s->mix, m1 = step_to(m0, want);
-    float d0 = s->depth, d1 = step_to(d0, clampf(p[P_DEPTH], 0.0f, 1.0f));
+    float d0 = s->depth, d1 = step_to(d0, clampf(fx[FXP_DEPTH], 0.0f, 1.0f));
     float g0, w0, g1, w1;
     fx_gains(m0, &g0, &w0);
     fx_gains(m1, &g1, &w1);
-    float dg = (g1 - g0) * (1.0f / WT_BLOCK), dw = (w1 - w0) * (1.0f / WT_BLOCK);
+    float dg = (g1 - g0) * (1.0f / FX_BLOCK), dw = (w1 - w0) * (1.0f / FX_BLOCK);
     float gd = g0, gw = w0;
-    float inc = rate_hz(p[P_RATE]) * (1.0f / WT_RATE), ph = s->phase;
+    float inc = rate_hz(fx[FXP_RATE]) * (1.0f / FX_RATE), ph = s->phase;
     uint32_t pos = s->pos;
-    float fb = clampf(p[P_FEEDBACK], -FEEDBACK_MAX, FEEDBACK_MAX);
+    float fb = clampf(fx[FXP_FEEDBACK], -FEEDBACK_MAX, FEEDBACK_MAX);
     if (s->active == FX_CHORUS) {
-        float dd = (d1 - d0) * (CHORUS_SWING / WT_BLOCK);
+        float dd = (d1 - d0) * (CHORUS_SWING / FX_BLOCK);
         float swing = d0 * CHORUS_SWING;
         float lpl = s->lp[0], lpr = s->lp[1];
-        for (uint32_t n = 0; n < WT_BLOCK; n++) {
+        for (uint32_t n = 0; n < FX_BLOCK; n++) {
             float x = L[n];
             s->buf[pos] = x;
             float tri = ph < 0.5f ? 4.0f * ph - 1.0f : 3.0f - 4.0f * ph;
@@ -483,9 +483,9 @@ void fx_block(struct mt_fx *s, const float *p, float *L, float *R, int distWante
         s->lp[0] = lpl;
         s->lp[1] = lpr;
     } else if (s->active == FX_FLANGER) {
-        float dd = (d1 - d0) * (0.5f * FLANGE_SPAN / WT_BLOCK);
+        float dd = (d1 - d0) * (0.5f * FLANGE_SPAN / FX_BLOCK);
         float half = d0 * 0.5f * FLANGE_SPAN;
-        for (uint32_t n = 0; n < WT_BLOCK; n++) {
+        for (uint32_t n = 0; n < FX_BLOCK; n++) {
             float x = L[n];
             float tri = ph < 0.5f ? 4.0f * ph - 1.0f : 3.0f - 4.0f * ph;
             ph += inc;
@@ -503,13 +503,13 @@ void fx_block(struct mt_fx *s, const float *p, float *L, float *R, int distWante
             half += dd;
         }
     } else {                                /* the Phaser */
-        float oct0 = d0 * PHASER_OCT, doct = (d1 - d0) * (PHASER_OCT / WT_BLOCK);
+        float oct0 = d0 * PHASER_OCT, doct = (d1 - d0) * (PHASER_OCT / FX_BLOCK);
         float *ql = s->ap[0], *qr = s->ap[1];
         float yl = s->fb[0], yr = s->fb[1];
         float tri = ph < 0.5f ? 4.0f * ph - 1.0f : 3.0f - 4.0f * ph;
         float cl = ap_coef(PHASER_LO * exp2f_fast(oct0 * 0.5f * (1.0f + tri)));
         float cr = ap_coef(PHASER_LO * exp2f_fast(oct0 * 0.5f * (1.0f - tri)));
-        for (uint32_t c = 0; c < WT_BLOCK; c += PHASER_CHUNK) {
+        for (uint32_t c = 0; c < FX_BLOCK; c += PHASER_CHUNK) {
             float phe = ph + inc * (float)PHASER_CHUNK;
             if (phe >= 1.0f)
                 phe -= 1.0f;
@@ -555,53 +555,53 @@ void fx_block(struct mt_fx *s, const float *p, float *L, float *R, int distWante
 
 /* ---- the instruments' states ------------------------------------------------------------ */
 
-/* Up to three synth parts play WAVE or PHASE at once, so three states. Which voice owns
- * each is in DTCM (zeroed at start-up); the states themselves, delay lines included, are in
- * SDRAM, which start-up doesn't clear: a new owner clears what it uses. A state whose owner
- * hasn't run for a while (the instrument's first voice changed, or it went away) can be
- * taken over. */
+/* Up to three synth parts play at once, so three states. Who owns each (WAVE and PHASE: an
+ * instrument's first voice) is in DTCM (zeroed at start-up); the states themselves, delay
+ * lines included, are in SDRAM, which start-up doesn't clear: a new owner clears what it
+ * uses. A state whose owner hasn't run for a while (the instrument's first voice changed, or
+ * it went away) can be taken over. */
 static constexpr uint32_t kStates = 3;
 static constexpr uint32_t kStale = 4 * kStates; /* calls by anyone since the owner's last */
 
 struct Owner
 {
-    const void *voice;
+    const void *who;
     uint32_t last;
 };
 static Owner owners[kStates];
 static uint32_t calls;
 __NOINIT(EXTERNAL_RAM) static struct mt_fx states[kStates];
 
-struct mt_fx *fx_claim(const void *voice)
+struct mt_fx *fx_claim(const void *owner)
 {
     calls++;
     for (uint32_t i = 0; i < kStates; i++)
-        if (owners[i].voice == voice) {
+        if (owners[i].who == owner) {
             owners[i].last = calls;
             return &states[i];
         }
     uint32_t pick = kStates;
     for (uint32_t i = 0; i < kStates && pick == kStates; i++)
-        if (owners[i].voice == nullptr)
+        if (owners[i].who == nullptr)
             pick = i;
     for (uint32_t i = 0; i < kStates && pick == kStates; i++)
         if (calls - owners[i].last > kStale)
             pick = i;
     if (pick == kStates)
         return nullptr;
-    owners[pick].voice = voice;
+    owners[pick].who = owner;
     owners[pick].last = calls;
     memset(&states[pick], 0, offsetof(struct mt_fx, buf));
     return &states[pick];
 }
 
-void fx_release(const void *voice)
+void fx_release(const void *owner)
 {
     for (uint32_t i = 0; i < kStates; i++)
-        if (owners[i].voice == voice)
-            owners[i].voice = nullptr;
+        if (owners[i].who == owner)
+            owners[i].who = nullptr;
 }
 
-} // namespace mtsynth
+} // namespace mtfx
 
 #endif // MT_HAS_SYNTHS

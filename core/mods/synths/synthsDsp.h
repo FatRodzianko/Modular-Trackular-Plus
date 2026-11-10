@@ -1,20 +1,25 @@
 // Modular-Trackular mods. SPDX-License-Identifier: MIT
 //
-// What WAVE's and PHASE's engines and the effects share: maths, envelopes, the LFOs'
-// tables, the output limit. Ported from Modular-Trackular's patch/synths (sy9) with the
+// What WAVE's and PHASE's engines share: maths, envelopes, the LFOs' tables. The maths the
+// effects need too (clampf, exp2f_fast, list_pick, tan_pade, limit, fsqrt) is in
+// synthfx/fxDsp.h. Ported from Modular-Trackular's patch/synths (sy9) with the
 // arithmetic unchanged, so a render matches sy9's sample for sample. Runs in the audio
 // interrupt: single-precision only, no library calls.
 
 #ifndef MODS_SYNTHS_SYNTHSDSP_H_
 #define MODS_SYNTHS_SYNTHSDSP_H_
 
+#include "synthfx/fxDsp.h"
+
 #include <cstdint>
 
 namespace mtsynth
 {
 
-#define WT_BLOCK            128u
-#define WT_RATE             44100.0f
+using namespace mtfx;
+
+#define WT_BLOCK            FX_BLOCK
+#define WT_RATE             FX_RATE
 #define WT_MAX_HZ           20000.0f        /* the highest harmonic a level may reach */
 
 #define ENV_IDLE            0u
@@ -23,27 +28,6 @@ namespace mtsynth
 #define ENV_SUSTAIN         3u
 #define ENV_RELEASE         4u
 struct wt_env { uint32_t stage; float level; };
-
-/* x clamped to lo..hi; NaN gives lo */
-static inline float clampf(float x, float lo, float hi)
-{
-    if (!(x >= lo))
-        return lo;
-    return x > hi ? hi : x;
-}
-
-/* 2^x for x in -100..100 (relative error under 2e-6) */
-static inline float exp2f_fast(float x)
-{
-    x = clampf(x, -100.0f, 100.0f);
-    int i = (int)(x + 128.0f) - 128;
-    float f = x - (float)i;
-    float p = 1.0f + f * (0.69314718f + f * (0.24022651f + f * (0.05550411f + f * (0.00961813f
-              + f * (0.00133336f + f * 0.00015404f)))));
-    union { float f; int32_t i; } u = { p };
-    u.i += i << 23;
-    return u.f;
-}
 
 static inline float note_hz(float note)
 {
@@ -56,11 +40,6 @@ static inline float note_hz(float note)
 #define LFO_ONE_SHOT        1u              /* ... once, then hold */
 #define LFO_FREE            2u              /* ... never restarted */
 #define LFO_SH              5u              /* Waveform: Random S&H */
-
-static inline uint32_t list_pick(float v, uint32_t count)  /* a stepped parameter's item; NaN gives 0 */
-{
-    return (uint32_t)(clampf(v, 0.0f, (float)(count - 1u)) + 0.5f);
-}
 
 /* the length of each Sync division, in beats (1, 1/2 D, 1/2, 1/4 D, 1 T, 1/4, 1/8 D, 1/2 T,
  * 1/8, 1/16 D, 1/4 T, 1/16, 1/8 T, 1/32, 1/16 T, 1/32 T) */
@@ -137,41 +116,6 @@ static inline float sat(float x)
     x = x > 3.0f ? 3.0f : (x < -3.0f ? -3.0f : x);
     float x2 = x * x;
     return x * (27.0f + x2) / (27.0f + 9.0f * x2);
-}
-
-/* tan(x) for 0 <= x <= 1.3 (cutoff up to 18.2 kHz), a Pade approximation (error under 0.3 %) */
-static inline float tan_pade(float x)
-{
-    float x2 = x * x;
-    return x * (15.0f - x2) / (15.0f - 6.0f * x2);
-}
-
-#define WT_OUT_LIMIT        2.0f
-
-/* x limited to +-WT_OUT_LIMIT; a NaN becomes the limit */
-static inline float limit(float x)
-{
-#if defined(__ARM_ARCH)
-    float lo = -WT_OUT_LIMIT, hi = WT_OUT_LIMIT;
-    __asm("vmaxnm.f32 %0, %0, %1" : "+t"(x) : "t"(lo));
-    __asm("vminnm.f32 %0, %0, %1" : "+t"(x) : "t"(hi));
-    return x;
-#else
-    if (!(x >= -WT_OUT_LIMIT))              /* NaN too, as vmaxnm then vminnm give */
-        return -WT_OUT_LIMIT;
-    return x > WT_OUT_LIMIT ? WT_OUT_LIMIT : x;
-#endif
-}
-
-static inline float fsqrt(float x)
-{
-#if defined(__ARM_ARCH)
-    float r;
-    __asm__("vsqrt.f32 %0, %1" : "=t"(r) : "t"(x));
-    return r;
-#else
-    return __builtin_sqrtf(x);
-#endif
 }
 
 /* The Mod Matrix's common sizes */

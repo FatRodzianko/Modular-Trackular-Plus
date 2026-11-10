@@ -127,7 +127,7 @@ class PhaseSynthVoice : public MtSynthVoice<PhaseSynthVoice, PhaseParamId>
     }
 
     /* no filter: the Distortion always runs after the voices */
-    int postDistortion() const { return dist_on(p); }
+    int postDistortion() const { return dist_on(p + P_EFFECT); }
 
     static void createMetadata(Patch& patch, Patch::Metadata& metadata)
     {

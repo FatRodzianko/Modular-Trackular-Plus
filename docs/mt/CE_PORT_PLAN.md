@@ -989,8 +989,8 @@ for every synth engine, CE's closed ones included.
   loop, not a function, and does what our Bit Crusher does, so there is nothing to reuse.
   DIRT's shapers and PERC's drives are inside `libPolySynth.a`: its headers expose only
   `createShapingSynth()` and `createDrumSynth()`, so they can't be reused or studied. Our
-  effects are already functions on a buffer, a state and ten settings (`synthsFx.h`), with
-  nothing tied to WAVE or PHASE except where the settings sit (ids 62-71 in the engine's
+  effects were already functions on a buffer, a state and ten settings (`synthsFx.h`), with
+  nothing tied to WAVE or PHASE except where the settings sat (ids 62-71 in the engine's
   parameter array).
 - **Where every part's audio passes through open code.** `PolySynth::update`
   (`core/libs/Audio/synth_PolySynth.cpp`, in the audio interrupt) gets each part's block from
@@ -1003,6 +1003,15 @@ for every synth engine, CE's closed ones included.
   to the ten (`p + 62` for WAVE and PHASE), so any open engine can use them, Pre included, and
   their macros still reach them. Proof: WAVE and PHASE render bit for bit as before (the 50
   cases of the staging check), Level A, the planted faults and `MT_NO_MODS` identical.
+  - Done 2026-11-09. `core/mods/synthfx/`: `synthFx.h` and `synthFx.cpp` (namespace `mtfx`,
+    the settings 0-9 as `FXP_*`) and `fxDsp.h` (`clampf`, `exp2f_fast`, `list_pick`,
+    `tan_pade`, `limit`, `fsqrt`). `synths/synthsFx.h` keeps only the ids 62-71, and each call
+    passes `p + P_EFFECT`. `fx_claim` takes any owner pointer. Still built with
+    `MT_HAS_SYNTHS`; phase 2 adds `MT_HAS_SYNTHFX`. Results: 50 of 50 cases bit for bit
+    against the committed Level A build, Level A 57 checks and 0 failures, 12 of 12 planted
+    faults caught, Level B 70 checks and 0 failures, the release tier 0 failed of 28 run (4
+    more from cache), `MT_NO_MODS` identical, memory as before (`dist_block` 5,372 B in
+    ITCM, 5,096 B free; the states 13,008 B in SDRAM).
 - **Phase 2: the per-part insert.** In `PolySynth::update`, behind `MT_HAS_SYNTHFX`, right after
   `renderAudioBuffer`: the part's Distortion, then its modulation effect, on
   `tempBufSendsCommonLeft/Right`, so the sends and the fader both get the result.
