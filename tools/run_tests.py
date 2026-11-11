@@ -38,6 +38,11 @@ EMU = ROOT / "tools" / "emu"
 sys.path.insert(0, str(EMU))
 import cpu_limit  # noqa: E402
 CACHE = ROOT / "build" / "test_cache.json"
+# Built in WSL, not by this runner: the Synth FX plugins' rig (tools/synthfx/rig/build.sh), the pack
+# (tools/synthfx/build_pack.py) and the synths' Level A (tools/synths/level_a/build.sh)
+SYNTHFX_RIG = ROOT / "build" / "emu" / "synthfx_rig.axf"
+SYNTHFX_PACK = ROOT / "build" / "synthfx" / "pack"
+LEVEL_A = ROOT / "build" / "emu" / "synths_level_a.axf"
 OUT = ROOT / "build" / "test_out"
 
 
@@ -110,6 +115,10 @@ def jobs_for(args, projects):
         Job("synths", e / "test_synths.py", mods, inputs=[mods]),
         Job("synthfx", e / "test_synthfx.py", mods, ref, inputs=both),
         Job("synthfx page", e / "test_synthfx_page.py", mods, ref, inputs=both),
+        Job("synthfx plugins", ROOT / "tools" / "synthfx" / "test_runtime.py", SYNTHFX_RIG,
+            inputs=[SYNTHFX_RIG, SYNTHFX_PACK, ROOT / "build" / "synthfx" / "rig"]),
+        Job("synthfx pack", ROOT / "tools" / "synthfx" / "test_pack.py", LEVEL_A, SYNTHFX_PACK,
+            inputs=[LEVEL_A, SYNTHFX_PACK]),
         Job("masterfx objects", e / "test_masterfx.py", mods, ref, *([args.rig] if args.rig else []),
             inputs=both + ((args.rig,) if args.rig else ())),
     ]
@@ -191,14 +200,15 @@ def main():
     cpu_limit.apply()
     args.jobs = min(args.jobs, cpu_limit.allowed())
 
-    missing = []
+    missing = [f"{p.relative_to(ROOT)}: build it (see SYNTHFX_RIG in tools/run_tests.py)"
+               for p in (SYNTHFX_RIG, SYNTHFX_PACK, LEVEL_A) if not p.exists()]
     if args.tier != "quick":
         if not args.diag:
             missing.append("--diag: the lockup recorder wouldn't be tested")
         if not args.project:
             missing.append("--project: the real Play path wouldn't be tested")
     if missing:
-        print("The release and deep tiers need:\n  " + "\n  ".join(missing))
+        print("The tests need:\n  " + "\n  ".join(missing))
         return 2
 
     cache = json.loads(CACHE.read_text()) if CACHE.exists() else {}

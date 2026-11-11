@@ -19,6 +19,7 @@
 #include "modsSwitches.h"
 #include "songloop.h"
 #include "swing.h"
+#include "synthfx/synthfxPlugins.h"
 #include "tracklen.h"
 
 #include "Platform.h"
@@ -29,6 +30,8 @@
 #include <algorithm>
 #include <cr_section_macros.h>
 #include <cstdio>
+#include <cstring>
+#include <strings.h>
 
 namespace mods
 {
@@ -96,7 +99,50 @@ class CeFileIo : public FileIo
             fileSystem->mkdir(0, path);
         }
     }
+
+    bool exists(const char* path) override
+    {
+        return fileSystem != nullptr && fileSystem->exists(path);
+    }
+
+    size_t list(const char* dir, const char* suffix, char* names, size_t count, size_t nameSize) override
+    {
+        if (fileSystem == nullptr || count == 0 || nameSize < 2 || !fileSystem->exists(dir))
+        {
+            return 0;
+        }
+        int found = static_cast<int>(std::min(count, kListMax));
+        fileSystem->listDirContents(
+          dir,
+          FileSystem::DirContentType::kFiles,
+          [suffix](const char* name) {
+              const size_t length = strlen(name);
+              const size_t suffixLength = strlen(suffix);
+              return length > suffixLength && strcasecmp(name + length - suffixLength, suffix) == 0;
+          },
+          listNames,
+          static_cast<int>(sizeof(listNames)),
+          static_cast<int>(std::min(nameSize - 1, kListNameMax)),
+          found,
+          listEntries);
+        const size_t n = found > 0 ? static_cast<size_t>(found) : 0;
+        for (size_t i = 0; i < n; i++)
+        {
+            snprintf(names + i * nameSize, nameSize, "%s", listEntries[i]);
+        }
+        return n;
+    }
+
+    // listDirContents' working space (main loop): names packed one after another, and where
+    // each starts
+    static constexpr size_t kListMax = 64;
+    static constexpr size_t kListNameMax = 63;
+    static char listNames[kListMax * (kListNameMax + 1)];
+    static char* listEntries[kListMax];
 };
+
+__NOINIT(EXTERNAL_RAM) char CeFileIo::listNames[CeFileIo::kListMax * (CeFileIo::kListNameMax + 1)];
+__NOINIT(EXTERNAL_RAM) char* CeFileIo::listEntries[CeFileIo::kListMax];
 
 constexpr size_t kConfigBufferSize = 512;
 // Color Song's record is the largest, up to 5,124, then Variable Track Length's, up to 4,335.
@@ -144,6 +190,29 @@ void init(FileSystem* fileSystem)
     registry::init();
     project::setChangedCallback(markProjectChanged);
     config::load(fileIo, configStore, defaults.data(), kModCount);
+#if MT_HAS_SYNTHFX
+    if (defaults[static_cast<size_t>(Mod::synthfx)] != 0)
+    {
+        synthfx::startPlugins(fileIo); // the pack onto the card, the list
+    }
+#endif
+}
+
+void update()
+{
+#if MT_HAS_SYNTHFX
+    if (!synthfx::plugins::started())
+    {
+        if (on(Mod::synthfx)) // turned on since boot, or a project that has it
+        {
+            synthfx::startPlugins(fileIo);
+        }
+    }
+    else
+    {
+        synthfx::plugins::update();
+    }
+#endif
 }
 
 void defaultsChanged()

@@ -28,6 +28,7 @@ TEST = ROOT / "tools" / "emu" / "test_synthfx.py"
 PAGE_TEST = ROOT / "tools" / "emu" / "test_synthfx_page.py"
 MOD = "core/mods/synthfx/synthfxMod.cpp"
 FX = "core/mods/synthfx/synthFx.cpp"
+DSP = "core/mods/synthfx/synthFxDsp.h"   # the effects' arithmetic
 SETTINGS = "core/mods/synthfx/synthfxSettings.cpp"
 EDITOR = "core/interface/instrumentEditor/SynthPatchEditor.cpp"   # CRLF: a fault's \n matches its \r\n
 
@@ -44,10 +45,10 @@ FAULTS = [
      "    if (engineStereo && part < 0)\n    {\n        fx_block_stereo", "each_effect", "6", "PERC, Overdrive"),
     ("WAVE not skipped", MOD, "return synths::ownsLayout(patch->getMetadata().instrumentTypeId);",
      "return patch == nullptr;", "skipped_and_shared", "", "WAVE: skipped"),
-    ("stereo dry right from the left", FX, "float x = L[n], xr = Stereo ? R[n] : x;\n            s->buf[pos]",
+    ("stereo dry right from the left", DSP, "float x = L[n], xr = Stereo ? R[n] : x;\n            s->buf[pos]",
      "float x = L[n], xr = x;\n            s->buf[pos]", "mix_zero", "6", "PERC, Chorus at Mix 0"),
     # Mix unclamped alone heals (step_to gives its target for a NaN), so eased as well: a NaN then stays
-    ("Mix unclamped and eased (a NaN stays)", FX,
+    ("Mix unclamped and eased (a NaN stays)", DSP,
      "float want = type == s->active ? clampf(fx[FXP_MIX], 0.0f, 1.0f) : 0.0f;\n    float m0 = s->mix, m1 = step_to(m0, want);",
      "float want = type == s->active ? fx[FXP_MIX] : 0.0f;\n    float m0 = s->mix, m1 = m0 + 0.5f * (want - m0);",
      "garbage", "", "garbage settings"),

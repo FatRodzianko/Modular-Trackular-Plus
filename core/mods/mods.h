@@ -111,6 +111,9 @@ constexpr CountText kModCountText = makeCountText(kBuiltModCount);
 // Boot, after the file manager: loads the defaults from mods.cfg.
 void init(FileSystem* fileSystem);
 
+// Main loop, every pass (TrackerImpl::update).
+void update();
+
 // Config -> Mods action for every item: saves mods.cfg.
 void defaultsChanged();
 
