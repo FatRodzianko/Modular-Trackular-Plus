@@ -16,6 +16,8 @@
 #include "modsProject.h"
 #include "songloop.h"
 #include "swing.h"
+#include "synthfx/synthfxMod.h"
+#include "synths/synthsMod.h"
 #include "tracklen.h"
 
 namespace mods
@@ -119,6 +121,34 @@ constexpr std::array<ModDescriptor, kBuiltModCount> kMods{ {
     .apply = songloop::apply,    // the status bar's glyphs on, or back to CE's
     .reset = songloop::reset,    // a selection or loop from the last project
     .storeIfEdited = nullptr,
+    .stored = nullptr,
+  },
+#endif
+#if MT_HAS_SYNTHS
+  {
+    .id = Mod::synths,
+    .name = "Synths",            // WAVE and PHASE: the switch only shows them in the picker
+    .record = synths::kRecord,
+    .recordVersion = synths::kRecordVersion,
+    .init = nullptr,
+    .load = nullptr,
+    .apply = nullptr,
+    .reset = nullptr,
+    .storeIfEdited = nullptr,
+    .stored = nullptr,
+  },
+#endif
+#if MT_HAS_SYNTHFX
+  {
+    .id = Mod::synthfx,
+    .name = "Synth FX",          // the audio interrupt reads the switch: Off bypasses the insert
+    .record = synthfx::kRecord,
+    .recordVersion = synthfx::kRecordVersion,
+    .init = nullptr,
+    .load = synthfx::load,
+    .apply = nullptr,
+    .reset = nullptr,
+    .storeIfEdited = synthfx::storeIfEdited,
     .stored = nullptr,
   },
 #endif

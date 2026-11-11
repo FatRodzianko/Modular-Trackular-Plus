@@ -467,7 +467,7 @@ of that reading.
 | `N3` FAT | 8 | 54-56 % | 73 % | 15 ms | 80,468 B |
 | `N4` VAP | 8 | 58 % | 75 % | 17 ms | 63,716 B |
 | `N5` WTFM | 8 | 48-51 % | 67 % | 16 ms | 62,740 B |
-| `N6` PERC | 8 | 18-19 % | 49 % | 9 ms | 51,980 B |
+| `N6` PERC | 3 (8 stored, clamped by CE: PERC allows 1 a part) | 18-19 % | 49 % | 9 ms | 51,980 B |
 | `N7` DIRT | 8 | 63-66 % | 83 % | 20 ms | 78,292 B |
 | `N8` ACD, Shimmer + BBD | 8 | 57-60 % | 75 % | 17 ms | 80,428 B |
 

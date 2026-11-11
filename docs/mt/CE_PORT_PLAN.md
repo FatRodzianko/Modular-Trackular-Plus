@@ -794,6 +794,391 @@ free heap 76,120, max stack 7,849.
   on hardware).
 - **Effort:** L.
 
+#### Build plan (2026-11-09, branch `mod/synths`)
+
+Your choices, 2026-11-09: D1 old projects not supported; D2/D3 the effects and chain below,
+with a Level knob in place of automatic level make-up; D4 an FX tile with the two LFOs on
+one; D5 ids 64 and 65.
+
+**What moves.** The `sy9` DSP from Modular-Trackular's `patch/synths/` (`wt_engine.h`,
+`ph_engine.h`, `wt_fx.h`, the two table generators), unchanged where it can be, so a render
+can be compared with `sy9`'s sample for sample. None of the 1.2.0 hooks, the model swap,
+`synths.bin` or VAP's layout code moves. Each engine is a `CustomSynthVoice` in
+`core/synth/engines/` whose voice keeps its own copy of the parameters (filled by
+`onParamChange`, per voice, so velocity macros stay per voice) and calls the ported engine.
+
+**Identity.** Own `InstrumentTypeId`, name (`WAVE`, `PHASE`), parameter list, value
+displays, Init patch, Macros (as `sy9`'s a to f) and Edit Patch tiles. No VAP names,
+ranges or cells: on 1.2.0 many of WAVE's ranges came from VAP's builder, so every range
+here is set by us. Mini and medium badges for the model list and Edit Patch, drawn by our
+own script.
+
+**Ids (D5).** `InstrumentTypeId` values are stored in patch files. CE's next engine would take
+9, so ours sit at **64 (WAVE) and 65 (PHASE)**, clear of upstream; the emulator checks the
+library creates, saves, lists and loads patches at those ids, and if it doesn't they fall
+back to 9 and 10. The project stores the model as an index into `Synth::kSynthTypes`, so WAVE
+is index 7 and PHASE 8. Plain CE opening such a project resets that synth part to its
+defaults (`validateSynthPartSettings`); nothing else breaks. If upstream ever appends an
+engine at index 7, the merge remaps ours.
+
+**Parameters.** `sy9`'s 66 keep their numbers (0 to 65), so the engines read them as
+before; the new effect controls are 66 to 71. `enum_util` scans to 127, so 72 fits.
+
+**Effects (D2, D3).** Two blocks after the voices, per instrument except Pre:
+
+```
+WAVE:  osc -> [Distortion, Pre: per voice] -> Drive -> filter -> amp env -> sum of voices
+       -> [Distortion, Post] -> [Chorus | Flanger | Phaser] -> out (stereo)
+PHASE: DCOs -> DCA -> sum of voices -> [Distortion] -> [Chorus | Flanger | Phaser] -> out
+```
+
+Distortion before the modulation effect, as on a pedalboard. Post runs once on the summed
+output (`renderPostProcessAudio`), so a chord intermodulates as through a real pedal; Pre
+runs in each WAVE voice before Drive and the filter. On PHASE the Distortion always runs in
+the Post place, so Pre and Post sound the same (a test checks they match sample for sample).
+
+| Control | Range, default | Notes |
+|---|---|---|
+| Effect | None, Chorus, Flanger, Phaser; None | `sy9`'s list, extended; Chorus keeps value 1 |
+| Rate | 0.05 to 5 Hz; 0.5 Hz | `sy9`'s, shared |
+| Depth | 0 to 100 %; 50 % | Chorus as `sy9`. Flanger: the delay sweeps 0.25 ms to 0.25 + 6 ms × Depth. Phaser: the notches sweep up from 200 Hz by 4 octaves × Depth |
+| Mix | 0 to 100 %; 50 % | `sy9`'s, loudness kept. At 50 % Flanger and Phaser have their deepest notches |
+| Feedback (new) | -95 to +95 %; 50 % | Flanger and Phaser; Chorus ignores it |
+| Distortion (new) | Off, Overdrive, Distortion, Bit Crusher; Off | Op-amp clipping. Overdrive after the Tube Screamer: soft clip in the op-amp's feedback, a 720 Hz high-pass into the clipper (the mid hump; bass stays clean), the clean signal kept under the clipped one. Distortion after the DS-1: op-amp gain into a hard diode clip to ground, full bass, scooped tone. Bit Crusher (added 2026-11-09 at the user's request): sample-and-hold to a lower rate and rounding to fewer bits, no anti-aliasing (the aliasing is the sound) |
+| Gain / Bits (new) | 0 to 100 %; 50 % | The clipper's gain: Overdrive +6 to +41 dB, Distortion +10 to +50 dB. Bit Crusher: Bits, 16 down to 4, continuous (fewer rounded a normal note to silence) (2^bits levels, so a macro sweeps it smoothly) |
+| Tone (new) | 0 to 100 %; 50 % | Overdrive: treble cut, about 700 Hz to 6 kHz. Distortion: the DS-1's low-pass/high-pass blend, dark to bright, with its mid scoop near the middle. Bit Crusher: Rate, 44.1 kHz down to 1 kHz, exponential |
+| Placement (new) | Pre, Post; Post | Before or after WAVE's filter. On PHASE it does nothing, and the docs say so |
+| Level (new) | -30 to +6 dB; 0 dB | The Distortion's output, as a pedal's Level knob. Each type has a fixed trim under it (Overdrive -10.9 dB, Distortion -8.5 dB, Bit Crusher none), measured so that at 0 dB a held Init note at the default Gain is as loud as with Distortion Off, within 1 dB |
+
+The two knobs are named for the type chosen: Gain and Tone, or Bits and Rate. The
+Distortion control has `invalidatesOtherMetadata`, so the library rebuilds the metadata,
+and one `// MT:` line in `changeSynthPatchParamValue` rebuilds the patch editor's list
+when a control with that flag changes (CE copies the names only on entering a section).
+The emulator checks when the library calls our `createMetadata` and that it never does
+so in the audio interrupt (it allocates). If either fails: fixed names, Gain and Tone,
+with the values showing the type's units ("8 bit", "11.0 kHz").
+
+There is no automatic level make-up: as on the pedals, more Gain gets louder until the clip
+holds it, and Level sets the output. The clippers use first-order antiderivative anti-aliasing
+(closed forms, no division) and oversampling: Overdrive at 2×, Distortion at 4×, through
+polyphase IIR half-band filters (8 coefficients for the outer 2× stage, 4 for Distortion's
+inner one). Antiderivatives alone left 1-7 kHz notes aliasing at full Gain; with the
+oversampling the test bounds it below -55 dB at 1 kHz and -44 dB at the worst note. The Bit
+Crusher is not oversampled: its aliasing is the sound. Flanger and Phaser are stereo the way the Chorus
+is: the right side's sweep runs in opposite phase. The Phaser has 4 stages (a Phase 90's
+count). Switching any effect on or off fades, as the Chorus does.
+
+**Edit Patch tiles (D4).** CE's grid holds 16 tiles and the 7 Macros take 7, so an engine gets
+9. `sy9`'s WAVE used all 9 (Osc, Filter, Amp Env, Env 1, Env 2, LFO 1, LFO 2, Mod, Voice),
+so one has to give way for an FX tile:
+
+- WAVE: Osc, Filter, Amp Env, Flt Env, Mod Env, LFO (both LFOs), Matrix, Voice, FX.
+- PHASE: DCO, DCW, DCA, DCW Env, DCO Env, LFO, Matrix, Voice, FX.
+
+CE labels tiles from keywords in the section names ("Oscillator" gives Osc) and has no DCO,
+DCW or DCA. One `// MT:` hook in `SynthPatchEditor.cpp` gives our two engines their
+sections' short names as labels, with the keyword's icon; other engines are untouched.
+
+**Off and builds.** `MT_HAS_SYNTHS` (new, on in mod builds) wraps every hook: the enum values,
+the registry lines, `kSynthTypes` and the editors' name and badge tables. `MT_NO_MODS` then
+builds plain CE byte for byte. With the mod Off in a project, the model picker in
+`SynthEditor.cpp` lists CE's 7 models, plus ours only where that part already uses one, which
+keeps playing (`hidesOnly`).
+
+**Old projects (D1, decision 6).** Chosen: not supported. A 1.2.0 project opens its WAVE
+or PHASE parts as the replaced stock model with its Init patch, as CE already does. Converting
+would mean either reading 1.2.0's patch files, whose format is the closed library's, or
+loading them through the library at 1.2.0's ids, and PHASE's (7) is CE's DIRT.
+
+**Memory and CPU.** Measured 2026-11-09. Instructions per 128-sample block, counted in the
+emulator over our code only (`tools/emu/test_synths_dsp.py`, which has a ceiling for each);
+a block is about 1,700,000 cycles at 600 MHz. The unit is stall-bound, so device time is
+the Profiler's, with all 8 voices sounding.
+
+| | Runs | Instructions per block | Memory |
+|---|---|---|---|
+| WAVE voice | per voice | 15,700 (Init); 48,100 with both oscillators on the super saw; 460 idle | 384 B of state in the voice, which CE allocates on engine select as for every engine |
+| PHASE voice | per voice | 13,700 (Init) | 88 B of state in the voice |
+| Chorus / Flanger / Phaser | per instrument | 8,700 / 10,000 / 9,400 (12,900 before 2026-11-11) | one state per synth part, 4,488 B each with the Distortions' (Synth FX added a second for a stereo part's right side): 3 × in SDRAM (`__NOINIT(EXTERNAL_RAM)`, cleared by us), 13,464 B of the mod builds' 1 MiB |
+| Overdrive (2×) | per instrument (Post) or per voice (Pre, WAVE) | 20,500 (22,900 before 2026-11-11) | in that state, or in the voice for Pre |
+| Distortion (4×) | the same | 33,200 (40,200 before 2026-11-11; 44,200 before it ran in stages) | the same |
+| Bit Crusher | the same | 3,300 | the same |
+| Code and tables | | | flash: 569 KB more than `modular` (about 470 KB of wavetables, 4 KB of cosine table); DTCM 680 B |
+| Hot loop | | | ITCM: the Distortion block only (`dist_block`, 7,580 B since 2026-11-11, 5,372 B before; 2,800 B of ITCM stay free with Synth FX's hook). The voices and the effect block run from flash, as CE's own engines do |
+
+For 8 voices: WAVE Init about 125,000; PHASE Init about 110,000; the heaviest case, WAVE
+with both oscillators on the super saw, Pre Distortion and the Phaser, about 719,000 (8 ×
+48,100 + 8 × 40,200 + 12,900), about 42 % of a block in instructions before stalls. Stock
+VAP is 66,000 per voice, 528,000 for 8. That heaviest case is what the Profiler checks
+first on the unit.
+
+Cutting the Distortion's cost (2026-11-09): it ran sample by sample with all four half-band
+filters live, and its compiled loop had about 640 loads, stores and register moves to 220
+arithmetic instructions. Run in stages over 32 samples it gives the same output bit for bit
+(50 cases against the old build) and saves 9 %; unrolling the stages saved nothing more, and
+staging the Overdrive cost 8 % more, so it stays as it was. What's left is the moves the
+all-passes' shared states need and the coefficients' reloads. Anything bigger changes the
+sound: 2x for the Distortion about halves it, but it failed the aliasing bound, which is why
+it is 4x; a shorter outer half-band saves about 10 % and softens the top above about 19 kHz.
+Second-order antiderivatives (ADAA2) at 2x, tried in a float64 model of the chain with the
+test's measure (2026-11-09): at full Gain about the same as 4x (worst -47.8 dB against -47.1)
+but 1 kHz at -54.8 (the bound is -55); at half Gain 12 to 16 dB worse at 3 and 4 kHz (-54 and
+-50 against -70 and -62); and the top darker, -3.5 dB at 20 kHz against 1 kHz where 4x is
++3.3. Not a match, so it stays 4x. CE's own drives (master Saturation, the filter's Overdrive)
+are piecewise polynomials at 1x with no anti-aliasing: cheaper, but they alias. Post costs
+one Distortion per part, Pre one per voice.
+
+Cutting it again (2026-11-11), after the Synth FX device test put 8 DIRT voices with the
+worst insert at 98 %. Copies between registers were 28 % of the Distortion's instructions:
+each all-pass's state moved along the chain every sample. The half-band filters now run two
+samples a pass, their states in registers and swapping roles between the two, and the
+Phaser holds its all-passes in locals for the block instead of reading and writing them in
+SDRAM every sample (through `s->ap`, every output store could alias them). Same output bit
+for bit: 288 cases against the old build (every Distortion type with Gain, Tone and Level
+ramps, fades and type switches; every modulation effect, mono and stereo, with and without
+the Distortion). About one copy per all-pass is left: the fused multiply-add overwrites its
+addend, and a form without it rounds differently. Then the inner half-band (88.2 to 176.4
+kHz) went from 4 coefficients to 3: it only has to remove what folds onto 0-24 kHz at 88.2
+kHz, from 64.4 kHz up, since the outer one removes 24-44 kHz after it, and 3 with a 0.2
+transition do that at 76.6 dB against 76.1 (`tools/synths/halfband.py`). Against the 4: every
+harmonic to 20 kHz within 0.001 dB, every alias within 0.1 dB; the samples differ in phase at
+the top only. Distortion 40,251 to 33,209 (-17.5 %), Overdrive 22,923 to 20,548 (-10 %),
+Phaser 13,010 to 9,429 (-28 %). `dist_block` grew 2,208 B in ITCM (7,580 B; 2,800 B free).
+The 1-7 kHz alias test didn't see an inner coefficient 0.03 off (rejection 30.8 dB), so a
+check on 11 and 13 kHz at Gain 0 was added (-68 and -69 dB; the planted fault -59 and -58).
+
+No `double`, heap or SD in the audio paths: the tests count `malloc` and
+`createMetadata` calls during every block and fail on any.
+
+**Tests**, in order:
+1. **Engine level, our code only** (no host compiler here, so in the emulator: our voice
+   classes called directly from the `.axf`, no closed code). `sy9`'s engine C built for Arm as
+   the reference: WAVE and PHASE renders equal sample for sample over a set of patches, with
+   the Chorus. Then `test_synths.py`'s and `test_phase.py`'s engine checks, ported.
+2. **The new effects:** Flanger delay and feedback from clicks; Phaser notch positions against
+   Depth and Rate; each clipper's curve, Gain and Tone responses, level make-up, the aliasing
+   bound; Pre and Post differ on WAVE and match on PHASE; NaN and garbage values bounded;
+   fades with no step.
+3. **Through CE's host** (sound rig levels B and C, `boot_rig.py`): engine select, 8 voices,
+   voices freed when the amp envelope ends, patch save and load through `FakeSd`, Macros, the
+   block pool, heap after 50 engine switches, stress with random notes and parameters.
+4. **Off:** Off = CE against the reference build; with the mod Off the picker hides the
+   engines and a part that uses one keeps playing.
+5. **The tests catch mistakes:** a scratch build with planted faults (a wrong filter type, a
+   detune off by a cent, Feedback ignored, Pre and Post swapped) must fail them.
+6. `tools/run_tests.py --tier release`, then the ladder in
+   [DEVICE_TEST_LADDER.md](DEVICE_TEST_LADDER.md) with WAVE and PHASE projects.
+
+What runs them: level A is `tools/emu/test_synths_dsp.py` on an ELF that
+`tools/synths/level_a/build.sh` builds from our sources and `sy9`'s (it needs `sy9`'s
+folder, so it isn't in `run_tests.py`); `tools/synths/level_a/plant.py` plants 12 faults
+and checks level A fails each. Level B is `tools/emu/test_synths.py` on the full build, a
+`run_tests.py` job. CE's synth has 8 voices in all, shared by its 3 parts
+(`kSynthMaxVoices`), so the 8-voice checks are one part with all 8 and three parts with
+3 + 3 + 2.
+
+Found by level B and fixed (2026-11-09): WAVE's Cutoff had `MacroOperation::kMult`, as the
+SDK guide suggests for a cutoff. But WAVE's Cutoff macro is bipolar, and CE starts a bipolar
+macro at its centre, which under `kMult` left every WAVE voice at 20 Hz: a 26 dB quieter,
+muffled Init note on the unit, while level A, which has no host macros, sounded right. Cutoff
+is now `kAdd` (additive in the exponential curve's normalized space, so the centre changes
+nothing). Level B now reads what each voice renders with, against `sy9`'s Init, with the
+macros set as the model picker sets them, and checks the two engines' loudness against level
+A's; both checks failed on the old build.
+
+The device projects (`make_masterfx_test_project.py --synths`, DEVICE_TEST_LADDER.md's Synths
+set) were booted through CE's own start-up, project load and Play in `boot_rig.py`, 2026-11-09:
+S1 (WAVE), S2 (PHASE) and S5 (8 WAVE voices) open with their parts on WAVE or PHASE, sound, and
+keep the heap steady (67,960 B free with 8 WAVE voices; PERC's 3, its most, leave 53,508 B).
+
+**Hardware checklist** (for you, after the tests): chords on 8 voices on each engine (the
+1.2.0 screech came only on the unit); the heaviest patch (both oscillators on the super saw,
+Pre Distortion, Phaser) at 8 voices, with the Profiler's CPU; each effect by ear; the
+Distortion's knob names changing with its type; the picker with the mod On and Off; a
+project and a patch saved and reopened. Break FX, performance mode, Export and per-mod
+saving stay in the emulator.
+
+### 3.16 synthfx (Synth FX: the Synths effects on every synth part)
+
+Planned 2026-11-09, from the source, with decisions 9-16 chosen the same day; nothing built
+yet. Goal: the Synths effects (Chorus, Flanger, Phaser; Overdrive, Distortion, Bit Crusher)
+for every synth engine, CE's closed ones included.
+
+- **What can be shared, and what can't.** CHIP's Bitcrush is five lines inside its voice
+  loop, not a function, and does what our Bit Crusher does, so there is nothing to reuse.
+  DIRT's shapers and PERC's drives are inside `libPolySynth.a`: its headers expose only
+  `createShapingSynth()` and `createDrumSynth()`, so they can't be reused or studied. Our
+  effects were already functions on a buffer, a state and ten settings (`synthsFx.h`), with
+  nothing tied to WAVE or PHASE except where the settings sat (ids 62-71 in the engine's
+  parameter array).
+- **Where every part's audio passes through open code.** `PolySynth::update`
+  (`core/libs/Audio/synth_PolySynth.cpp`, in the audio interrupt) gets each part's block from
+  `renderAudioBuffer(..., partIdx)` as floats, before the sends split and the fader. An insert
+  there processes the closed engines' output in our code, which the licence allows: nothing
+  inside the library is touched or measured. Only Post is possible there; Pre needs the
+  engine's own voice.
+- **Phase 1: a shared effects library, no change in sound.** `synthsFx.*` and the helpers it
+  needs from `synthsDsp.h` move to `core/mods/synthfx/`. The settings are read from a pointer
+  to the ten (`p + 62` for WAVE and PHASE), so any open engine can use them, Pre included, and
+  their macros still reach them. Proof: WAVE and PHASE render bit for bit as before (the 50
+  cases of the staging check), Level A, the planted faults and `MT_NO_MODS` identical.
+  - Done 2026-11-09. `core/mods/synthfx/`: `synthFx.h` and `synthFx.cpp` (namespace `mtfx`,
+    the settings 0-9 as `FXP_*`) and `fxDsp.h` (`clampf`, `exp2f_fast`, `list_pick`,
+    `tan_pade`, `limit`, `fsqrt`). `synths/synthsFx.h` keeps only the ids 62-71, and each call
+    passes `p + P_EFFECT`. `fx_claim` takes any owner pointer. Still built with
+    `MT_HAS_SYNTHS`; phase 2 adds `MT_HAS_SYNTHFX`. Results: 50 of 50 cases bit for bit
+    against the committed Level A build, Level A 57 checks and 0 failures, 12 of 12 planted
+    faults caught, Level B 70 checks and 0 failures, the release tier 0 failed of 28 run (4
+    more from cache), `MT_NO_MODS` identical, memory as before (`dist_block` 5,372 B in
+    ITCM, 5,096 B free; the states 13,008 B in SDRAM).
+- **Phase 2: the per-part insert.** In `PolySynth::update`, behind `MT_HAS_SYNTHFX`, right after
+  `renderAudioBuffer`: the part's Distortion, then its modulation effect, on
+  `tempBufSendsCommonLeft/Right`, so the sends and the fader both get the result.
+  - Parts on WAVE or PHASE are skipped: they have the same effects inside, with Pre and macros
+    (decision 13).
+  - Mono parts (every CE engine but PERC) stay mono until a modulation effect is on; then the
+    part is sent as stereo, one more pool block while it plays. Stereo parts (PERC): the
+    Distortion runs on each side, the modulation effects take L+R in and give L and R out.
+  - PERC renders its sends itself (`rendersAuxSends`), so the insert reaches its main output
+    only; its sends stay dry (decision 14).
+  - The states: the three `mt_fx` states WAVE and PHASE already claim (SDRAM, 4,336 B each),
+    claimed by part instead of by voice. A part is on one engine at a time, so three still
+    cover every case; a second `mt_dist` per state for a stereo part's right side is 168 B
+    each, 504 B more in SDRAM.
+  - With the mod Off, or every effect None and Off, the insert is one test per part and the
+    audio is untouched.
+  - Done 2026-11-09. `core/mods/synthfx/synthfxMod.h` and `.cpp` (`mods::synthfx`): the switch
+    (mod id 15, `MT_HAS_SYNTHFX`, record 16 kept for phase 3), the settings (3 × 10 floats in
+    DTCM, every effect Off, the rest at WAVE's Init), and `begin` and `run`, which
+    `PolySynth::update` calls for each part before its blocks are taken and right after
+    `renderAudioBuffer`. `synthFx.h` gains `dist2` (a stereo part's right side) and
+    `fx_block_stereo`: the Distortion on each side, the modulation effect fed (L + R) / 2 with
+    the dry signal kept stereo, so PERC's image survives Mix fading in (a change from "L+R in"
+    above). A part lets its state go once nothing is chosen and everything has faded out.
+  - WAVE and PHASE: the modulation code is now one template for mono and stereo. Its arithmetic is
+    unchanged, but the compiler rounds the mono form differently in places: 27 of 36 effect cases
+    are bit for bit against phase 1, the other 9 differ in the last bit of some samples (2.4e-7 at
+    most) in the blocks where an effect switch fades the Mix. A copy of the old function did the
+    same (GCC folded the two start functions into one), so the shared template stayed. The 50
+    Distortion cases are bit for bit.
+  - Results: `tools/emu/test_synthfx.py` 100 checks and 0 failures; planted faults
+    (`tools/emu/plant_synthfx.py`, full builds) 7 of 7 caught; Level A 57 checks and 0 failures;
+    Level B (`test_synths.py`) 70 checks and 0 failures; host tests pass (registry 196 checks, 9
+    mods built); the release tier 0 failed of 29 run (4 more from cache); `MT_NO_MODS` identical.
+  - Cost on the emulator, open code only: the insert adds 194,493 instructions a block on 3 ACD
+    parts with Distortion and Phaser (11.4 % of a block) and 279,111 on 3 PERC parts (16.4 %).
+    Block pool peak 74 on the 3 ACD parts with the effects (65 without), against 76 for 3 PERC
+    parts with none: a mono part sent as stereo takes about 3 more blocks, as a stereo part does.
+  - Memory: SDRAM 504 B (995,492 B free); DTCM the settings' 120 B, 56 B less free (14,504 B
+    free); ITCM 88 B (the hook grew `PolySynth::update`, which CE keeps in ITCM; 5,008 B free);
+    flash about 4 KB.
+  - Not done then: `boot_rig.py` (test 5) waited for phase 3, when a project can carry the
+    settings, and the device test for the page. Test 5 is done in phase 3.
+- **Phase 3: settings and page.**
+  - Settings follow the part, as its volume and sends do: loading another patch keeps them,
+    since a closed engine's patch can't hold them (decision 15). In RAM: 3 × 10 floats, 120 B
+    of DTCM, read by the interrupt, written by the main loop (single 32-bit stores). On card:
+    one `mods.bin` record (id 16, version 1, 3 × 10 bytes as 0-127), well inside its 10,496 B.
+    A project without the record opens with every effect Off.
+  - The page: an "FX" section after the engine's own in the patch editor, drawn by our code
+    (decision 16). The section, parameter and value functions in `SynthPatchEditor.cpp` read
+    the patch's metadata, so each needs a branch for it. The display list's bytes are counted
+    when it is built (8,172 B a frame).
+  - Changed 2026-11-10, chosen by the user: **button 3, not a section.** VAP and WTFM already
+    fill all 16 tiles of the section grid (7 of them macros), so an FX tile would push a macro
+    off. Button 3, blank on the patch editor, reads "Synth FX" on CE's seven engines with the
+    mod On; pressing it puts the nine rows in the parameter list, and pressing it again, or
+    picking any section or macro, puts the section's rows back. Every tile and macro stays.
+    WAVE and PHASE don't get it: their own FX section has the effects.
+  - Changed from "0-127": **the record holds each setting's step,** so every value round-trips
+    exactly and Feedback's 191 steps fit. Effect and Distortion: the list item (0-3). Rate,
+    Depth, Mix, Gain and Tone: 0-100, 1 % a step. Feedback: 0-190, -95 % to +95 %. Level: 0-72,
+    -30 dB to +6 dB in 0.5 dB. Placement: always 1 (Post). A missing record, another version
+    or another length opens with every effect Off; a byte out of its range is that value's
+    Init alone. Settings all at Init in a project without the record write nothing.
+  - Done 2026-11-10. `synthfxSettings.cpp`: the settings, their steps, `load` and
+    `storeIfEdited` (registry events, so Save, Save As, Open and New Project go through
+    `mods.bin` as the other mods' records do) and the rows. `synthfxPage.cpp`: the rows' names
+    and texts as WAVE's FX section shows them (Gain and Tone become Bits and Rate for the Bit
+    Crusher). `SynthPatchEditor.cpp`, all behind `MT_HAS_SYNTHFX`: button 3, and the section,
+    parameter, value, default and macro functions redirected while the rows show. The rows'
+    texts and lists are in SDRAM (`__NOINIT(EXTERNAL_RAM)`), filled before each use.
+  - Results: host test `test_synthfx` 47 checks and 0 failures (steps, the record, damaged
+    records, garbage values, rows); `tools/emu/test_synthfx_page.py` 56 checks and 0 failures
+    (mod Off: the same display calls and bytes as the reference build on all 7 engines; the
+    rows, edits, Delete, lists, leaving the rows; Save, Save As, Open, New Project);
+    `test_synthfx.py` 100 checks and 0 failures; planted faults 18 of 18 caught (11 new: the
+    button's rules, the edit's save mark, Delete, leaving the rows, Feedback's zero, the record
+    read and written, and three on the host test); host tests pass (registry 196 checks, 9 mods
+    built); the release tier 0 failed of 36 run; `MT_NO_MODS` identical.
+  - Test 5 done: `make_masterfx_test_project.make_synthfx` writes the worst case (the worst
+    pattern at 800 BPM on three PERC parts (stored as 4, 2, 2 then, which CE clamped to 1
+    each, PERC's limit; 1, 1, 1 since), Distortion at full Gain into the Phaser on every
+    part, Shimmer and BBD), and the release tier boots it with and without `--preempt`
+    (`boot_rig.py --expect-synthfx`: the settings loaded from the record, the insert run every
+    block, no allocation inside the audio interrupt). 53,136 B heap free, pool peak 64 of 80,
+    stack 7,064 B: the same heap and pool as that project with every effect Off, so PERC's,
+    not the insert's (the plain worst project on its own engines: 80,004 B and 55).
+  - Display list, worst of each engine's patch editor, of 8,172 B: 6,548 B on opening (WTFM;
+    CE's 6,452 plus button 3's label), 5,616 B with the rows (VAP and WTFM).
+  - Memory: SDRAM 616 B (the rows' texts and lists; 994,876 B free); DTCM and ITCM as phase 2
+    (14,504 B and 5,008 B free); no heap.
+  - Device test 2026-11-10, the Synth FX set on `TrackerPlus_MT_synthfx_diag.ptf`: all five ran,
+    no lockup or fault in `mfx_log.txt`, 0 blocks over time on any. Profiler slowest: F1 about
+    33 % (no change with Overdrive at full or the Phaser), F2 37 %, F3 53 %, F4 69 %, F5 78 %
+    (Master FX's own `L8` was 78 to 82 %). Button 3, its rows, an edit heard, and Save then reopen
+    all worked. Pool peak 48 of 80 at most. Free heap: F4 51,692 B, but F5 21,072 to 21,348 B.
+    F4 and F5 were out of spec: PERC allows 1 voice a part and the generator stored 4, 2 and 2,
+    which CE clamps on open only when the engine changes. So F4 (after ACD's F3) ran 3 PERC
+    voices, as `N6` had, and F5 (after PERC's F2) ran 8, a state the UI can't reach; its 78 %
+    and 21 KB overstate the real worst case. See `CE_FIRMWARE_MAP.md`, 2026-11-10. The generator
+    now refuses a count over the engine's limit; F4 and F5 store 1, 1, 1 and read about 53 KB in
+    any order on the rig, and F6 (8 DIRT voices, the heaviest engine on the unit, with the worst
+    insert) is added: 79,688 B. On the unit, same firmware, F2 then F5 then F6: F2 39 % slowest,
+    63,808 B; F5 (after F2) average 45 %, slowest 63 %, 51,928 B; F6 average 81 %, slowest 98 %,
+    0 of 6,260 blocks over time, main loop gap 34 ms, 78,408 B. So 8 DIRT voices with the worst
+    insert on every part, on Init patches, sit at the limit: the insert adds about 15 points to
+    `N7`'s 83 %, and Shimmer and BBD on top, or a heavier patch, would go over. The recorder's voices
+    figure is the limit, not the count, so it reads 1 on PERC parts; the log lines were matched
+    to the projects by their CPU figures.
+  - Device test 2026-11-11, the cost cuts (below) on `TrackerPlus_MT_synthfx_diag.ptf`: F4, F5
+    and F6, 0 blocks over time on any. F4 (1 PERC voice a part, first time on the unit in spec)
+    average 41 %, slowest 56 to 60 %, 51,936 B. F5 average 43 to 48 %, slowest 58 to 61 % (was
+    63 %), 51,620 to 51,876 B. F6 average 79 to 81 % (was 81 %), slowest 94 to 96 % (was 98 %),
+    0 of 6,677 blocks over time, 78,256 to 78,512 B. F6 with Shimmer and BBD as well: average 82
+    to 84 %, slowest 90 to 95 %, 0 of 8,886 blocks over time, main loop gap 37 ms, 78,264 B; it
+    holds, where before the cuts it was expected to go over. Max stack 7,825 B throughout.
+- **Phase 4, later and only if wanted:** tracker FX commands that move the settings per step.
+- **Cost, our code only (emulator instructions per block; about 1,710,000 is a whole block
+  before stalls, from the Synths figures):** Chorus 8,700, Flanger 10,000, Phaser 12,900,
+  Overdrive 22,900, Distortion 40,300 (80,500 on a stereo part), Bit Crusher 3,300; since
+  2026-11-11 Phaser 9,400, Overdrive 20,500, Distortion 33,200 (see the Synths cost note), and
+  the worst insert through the host 162,606 on 3 ACD parts (9.6 %, was 194,493) and 227,069 on 3
+  PERC parts (13.4 %, was 279,111); release tier 0 failed of 32 run, all 14 Level A plants
+  caught, `MT_NO_MODS` identical; on the unit F6 dropped from 98 % to 94-96 % slowest (the
+  device test 2026-11-11 above). The worst
+  insert: 3 parts with Distortion and Phaser, about 160,000 (9 %) on mono parts and 280,000
+  (16 %) on three PERC parts. The engines themselves can't be counted (closed), and CHIP's 8
+  voices have locked a unit up before (Master FX on Stock too), so the device test starts at the lightest
+  load and reads the Profiler. Memory: 504 B SDRAM, 120 B DTCM, no new ITCM (`dist_block` is
+  there already), flash a few KB for the insert and page.
+- **Tests,** after `PAST_FAILURES.md`:
+  1. Phase 1: bit for bit on WAVE and PHASE; Level A; planted faults.
+  2. Each CE engine (ACD, FAT, VAP, WTFM, PERC, DIRT, CHIP) on a part through the real host:
+     the insert changes the part's output, each effect type sounds, the output stays bounded.
+     Ours with and without the insert is compared, never the engine's internals.
+  3. Off: every part's output byte-identical to the reference build's; `MT_NO_MODS`
+     identical.
+  4. Garbage settings (NaN, out of range): bounded, and a clear makes it sound again (the stock
+     reverb's NaN failure).
+  5. `boot_rig.py` with three PERC parts (1 voice each, PERC's limit) and the worst insert on all three parts, `--preempt`:
+     heap, pool peak (the extra stereo block), no `malloc` in the interrupt.
+  6. `mods.bin`: the record round-trips through Save, Save As, Open, New Project; a project
+     without it opens Off.
+  7. Display bytes on the FX section under the limit, on every engine's patch editor.
+  8. Device: the ladder, one part first, then three, with the Profiler.
+- **Effort:** M for phases 1 and 2, M for phase 3.
+
 ## 4. Order and why
 
 | # | Mod | Proves | Effort |
@@ -832,8 +1217,28 @@ candidate.
    1 MiB less room.
 4. **Edition name** for `version.mk` and the `.ptf` name. Suggested: `MT`.
 5. **tracklen lengths:** pattern field or `mods.bin` record. Chosen 2026-11-06: `mods.bin`.
-6. **Old WAVE/PHASE instruments:** convert to the new engines, or not supported.
+6. **Old WAVE/PHASE instruments:** convert to the new engines, or not supported. Chosen
+   2026-11-09: not supported (section 3.15).
 7. **Pull requests to Polyend:** they'd get relicensing rights over the change.
    Recommended: not for mods; maybe for plain bug fixes.
 8. **Tag names:** `v*` tags auto-publish a GitHub Release in CE's workflow. Suggested
    `v1.0.0-mt1` style, published only when you say so.
+9. **Synth FX: its own mod or part of Synths.** Chosen 2026-11-09: its own (id 15), so CE's
+   engines get the effects without WAVE and PHASE in the picker; the effects code is shared.
+10. **Synth FX Off:** the insert bypassed and its page hidden, the settings kept. Chosen
+    2026-11-09.
+11. **Synth FX on CHIP:** through the insert (no change to CE's file) or inside CHIP (Pre and
+    macros, but CHIP's patches then hold settings stock CE doesn't know). Chosen 2026-11-09:
+    the insert. CHIP's own Bitcrush stays either way.
+12. **Synth FX on stereo parts (PERC):** the Distortion on each side (twice the cost), or on
+    L+R (half, but the part goes mono). Chosen 2026-11-09: each side.
+13. **Synth FX on WAVE and PHASE parts:** skipped, since they have the effects inside, or
+    stacked on top. Chosen 2026-11-09: skipped.
+14. **Synth FX and PERC's sends:** the insert reaches PERC's main output only and its sends
+    stay dry; or the insert is off for PERC. Chosen 2026-11-09: allowed, with the page saying
+    so.
+15. **Synth FX settings follow the part or the patch.** A closed engine's patch can't hold
+    them, so chosen 2026-11-09: the part, like its volume and sends.
+16. **Synth FX page:** a section at the end of the patch editor, or a popup from the part
+    screen. Chosen 2026-11-09: the section. Changed 2026-11-10 by the user to button 3 on the
+    patch editor, since VAP and WTFM have no free tile (3.16 Phase 3).

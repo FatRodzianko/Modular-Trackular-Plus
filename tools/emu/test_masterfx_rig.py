@@ -64,10 +64,14 @@ def settings(r):
 
 
 class MasterPage:
-    """cMasterParams on the rig. Buttons press what the page itself registered."""
+    """cMasterParams on the rig. Buttons press what the page itself registered. Another page
+    (test_synthfx_page.py) changes PAGE, INIT and RIG."""
+    PAGE = "masterParams"
+    INIT = "_ZN13cMasterParams19initDisplayControlsEv"
+    RIG = SoundRig
 
     def __init__(self, axf):
-        self.r = r = SoundRig(axf)
+        self.r = r = self.RIG(axf)
         self.m = m = r.m
         self.log = []
         self.buttons = {}
@@ -91,8 +95,8 @@ class MasterPage:
         m.call(m.addr("_ZN8cDisplay8setThemeEh"), self.display, 0)
         self._watch_inputs()
         m.call(m.addr("_ZN8TitleBar12initControlsEv"), m.addr("titleBar"), max_insns=5_000_000)
-        self.page = m.addr("masterParams")
-        m.call(m.addr("_ZN13cMasterParams19initDisplayControlsEv"), self.page, max_insns=20_000_000)
+        self.page = m.addr(self.PAGE)
+        m.call(m.addr(self.INIT), self.page, max_insns=20_000_000)
         self._watch_display_calls()
         self._find_controls()
 

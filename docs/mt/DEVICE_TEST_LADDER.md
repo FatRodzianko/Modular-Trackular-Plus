@@ -69,7 +69,7 @@ on one engine says nothing about the next, so this set doesn't stop at the first
 | `N3 8 voices FAT` | 8 | FAT | Stock + Stock | |
 | `N4 8 voices VAP` | 8 | VAP | Stock + Stock | |
 | `N5 8 voices WTFM` | 8 | WTFM | Stock + Stock | |
-| `N6 8 voices PERC` | 8 | PERC | Stock + Stock | The most memory: 53,508 B of heap free on the rig, against about 80,000 B |
+| `N6 3 voices PERC` | 3 | PERC | Stock + Stock | The most memory: 53,508 B of heap free on the rig, against about 80,000 B. PERC allows 1 voice a part |
 | `N7 8 voices DIRT` | 8 | DIRT | Stock + Stock | |
 | `N8 8 ACD Shimmer BBD` | 8 | ACD | Shimmer + BBD | Master FX at 8 voices, if `N2` runs |
 
@@ -92,6 +92,51 @@ optimisations.
 
 The first run, 2026-11-05: all three worked, `L8` at about 80 % and `R2` at about 60 %.
 [MASTERFX_PORT_PLAN.md](MASTERFX_PORT_PLAN.md) section 8 has the readings.
+
+## The Synths set: WAVE and PHASE
+
+`python tools/emu/make_masterfx_test_project.py "<project>" build/device/synths --synths` writes them,
+the same way as the second set: all three parts on one engine with its Init patch. The firmware is a
+mod build (plain CE resets a part on an engine it doesn't know). Lightest first; stop at the first
+problem.
+
+| Project | Voices | Engine | Reverb + delay | What it isolates |
+|---|---|---|---|---|
+| `S1 1 voice WAVE Init` | 1 | WAVE | Stock + Stock | The engine itself |
+| `S2 1 voice PHASE Init` | 1 | PHASE | Stock + Stock | |
+| `S3 4 voices WAVE Init` | 4 | WAVE | Stock + Stock | |
+| `S4 8 voices PHASE Init` | 8 | PHASE | Stock + Stock | The lighter engine at the limit |
+| `S5 8 voices WAVE Init` | 8 | WAVE | Stock + Stock | |
+| `S6 8 WAVE Shimmer BBD` | 8 | WAVE | Shimmer + BBD | Master FX on top |
+
+The heaviest case can't be written into a project (patches are the closed library's format), so it
+is set by hand on `S5`: on each of the three parts, Wave 1 and Wave 2 on Super Saw, Distortion on
+Distortion with Placement Pre, Effect on Phaser. Instructions per block for that, from
+[CE_PORT_PLAN.md](CE_PORT_PLAN.md) 3.15: about 719,000, against 528,000 for 8 voices of VAP.
+
+## The Synth FX set: the insert on CE's engines
+
+`python tools/emu/make_masterfx_test_project.py "<project>" build/device/synthfx --synthfx` writes them:
+all three parts on one engine with its Init patch, and a `mods.bin` with Synth FX and Master FX On and
+each part's effect settings in record 16 (the rest of the source's `mods.bin` kept). A mod build with
+Synth FX. Lightest first; stop at the first problem. "Worst FX" is Distortion at full Gain into the
+Phaser, Mix 100 %, Feedback +90 %, on every part.
+
+| Project | Voices | Engine | Synth FX | Reverb + delay | What it isolates |
+|---|---|---|---|---|---|
+| `F1 1 voice ACD Overdrive` | 1 | ACD | Overdrive | Stock + Stock | The insert at its lightest |
+| `F2 1 voice PERC worst FX` | 1 | PERC | Worst FX | Stock + Stock | A stereo part |
+| `F3 4 voices ACD worst FX` | 4 | ACD | Worst FX | Stock + Stock | Mono parts sent as stereo |
+| `F4 3 voices PERC worst FX` | 3 | PERC | Worst FX | Stock + Stock | Three stereo parts, PERC's most |
+| `F5 3 PERC worst Shimmer BBD` | 3 | PERC | Worst FX | Shimmer + BBD | Master FX on top |
+| `F6 8 voices DIRT worst FX` | 8 | DIRT | Worst FX | Stock + Stock | The heaviest engine on the unit (`N7`, 83 %) with the insert |
+
+Before 2026-11-10, `N6`, `F4` and `F5` stored 4, 2 and 2 PERC voices, which the UI can't save. CE clamped
+them to 1 a part only when the project before had another engine, so a run's figures depended on the order.
+`make_masterfx_test_project.py` now refuses a count over the engine's limit.
+
+On each, the patch editor's button 3 reads "Synth FX" and shows the part's rows, so the settings can
+be checked and changed by hand there.
 
 ## What a firmware comes with
 

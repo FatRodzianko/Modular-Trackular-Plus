@@ -302,6 +302,21 @@ and On. 5 plays, 57,901 blocks, none over time, no stall and no lockup record. A
 to 38 %, slowest 50 %. Longest main loop gap 105 ms (likely the font loads), lowest free heap 76,120, max
 stack 7,849.
 
+**Device reading, 2026-11-10, Synth FX (on `1f510b7`),** recorder build, the Synth FX set: lowest free heap
+21,072, on `F5` opened after `F2`. That project was out of spec, not a leak. PERC's patch allows 1 voice a
+part (`Synth::getMaxVoiceCount`; every other engine allows 8), and `make_masterfx_test_project.py` wrote
+4, 2 and 2 into `project.mt`, which the UI can't save. On open, `Synth::updateToSettings` sets the stored
+count, then `setInstrumentType`, which clamps to the engine's limit only when the engine changes. Opened
+after an ACD project, the parts were clamped to 1 each: 53,964 B free on the `MT_NO_MODS` build (53,132 B
+with the mods). Opened after a PERC project, nothing clamped and 8 PERC voices ran: 23,636 B (22,804 B).
+With a valid project (1, 1, 1), every order gives about 53 KB. So the real PERC case is 3 voices, about
+52 KB free, as `N6` and `F4` read on the unit, and the corrected `F5` opened after `F2` read 51,928 B
+on the same firmware. Neither Synth FX nor Master FX allocates.
+
+A fix for CE, checked on a scratch `MT_NO_MODS` build only: in `updateToSettings`, after
+`setInstrumentType`, clamp the part to `getMaxVoiceCount` whatever the engine was before. With it, the
+out-of-spec `F5` opened after `F2` leaves 53,952 B. Only a hand-made `project.mt` reaches this.
+
 **Heap:** 138,752 fixed. A failed malloc hangs the unit, so this is the one with a hard edge.
 About 58 KB is in use with a project open, and 1.2.0 measured at least 42 KB free. In the
 emulator the break pointer reached 23,968 after the static constructors and 67,112 by the time

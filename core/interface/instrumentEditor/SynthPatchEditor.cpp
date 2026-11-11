@@ -12,6 +12,13 @@
 #include "util_string.h"
 
 #include "mtAudioEngine.h"
+#if MT_HAS_SYNTHS // MT: WAVE's and PHASE's tiles and controls
+#include "synths/synthsMod.h"
+#endif
+#if MT_HAS_SYNTHFX // MT: Synth FX's rows
+#include "synthfx/synthfxMod.h"
+#include <cr_section_macros.h>
+#endif
 
 #include <cmath>
 
@@ -19,6 +26,9 @@ const char* const OffOnNames[] = { "Off", "On" };
 static const int synthModelListImages[Synth::kSynthTypes.size()] = {
     enDisplayBitmaps::kBitmapACD,  enDisplayBitmaps::kBitmapFAT,  enDisplayBitmaps::kBitmapVAP,
     enDisplayBitmaps::kBitmapWTFM, enDisplayBitmaps::kBitmapPERC, enDisplayBitmaps::kBitmapDIRT, enDisplayBitmaps::kBitmapCHIP
+#if MT_HAS_SYNTHS // MT: WAVE and PHASE
+    , enDisplayBitmaps::kBitmapWAVE, enDisplayBitmaps::kBitmapPHASE
+#endif
 };
 
 static cInstrumentEditor* IE = &instrumentEditor;
@@ -49,6 +59,163 @@ static void functSynthBack();
 static void functSynthInit();
 static void functSynthInitConfirm();
 static void functSynthInitCancel();
+
+#if MT_HAS_SYNTHFX // MT: Synth FX's rows in the parameter list, on button 3, for CE's engines (synthfxMod.h)
+static void functSynthFx();
+
+static bool mtFxView = false; // the parameter list shows Synth FX's rows
+
+static constexpr int kMtFxItems = 4; // the longest of the two lists: Effect and Distortion
+
+namespace
+{
+// The rows' texts and the value list, in SDRAM (main loop only; CE's own lists are on the heap)
+__NOINIT(EXTERNAL_RAM) char mtFxText[mods::synthfx::kRows * 2][cInstrumentEditor::kMaxSynthListStringLen];
+__NOINIT(EXTERNAL_RAM) char* mtFxNames[mods::synthfx::kRows];
+__NOINIT(EXTERNAL_RAM) char* mtFxValues[mods::synthfx::kRows];
+__NOINIT(EXTERNAL_RAM) char mtFxItemText[kMtFxItems][cInstrumentEditor::kMaxSynthListStringLen];
+__NOINIT(EXTERNAL_RAM) char* mtFxItems[kMtFxItems];
+} // namespace
+
+static int mtFxPart()
+{
+    return mtProject.values.lastUsedInstrument - SYNTH_INSTRUMENTS_START_IDX;
+}
+
+static bool mtFxAvailable()
+{
+    const int part = mtFxPart();
+    return part >= 0 && part < kSynthInstrumentsCount &&
+           mods::synthfx::pageShown(IE->getSynth()->getPatch(part));
+}
+
+static int mtFxRow()
+{
+    return clamp(IE->paramListPos, 0, mods::synthfx::kRows - 1);
+}
+
+static void mtFxShowList(bool refreshList)
+{
+    namespace sfx = mods::synthfx;
+    const int part = mtFxPart();
+    if (refreshList)
+    {
+        for (int row = 0; row < sfx::kRows; row++)
+        {
+            mtFxNames[row] = mtFxText[2 * row];
+            mtFxValues[row] = mtFxText[2 * row + 1];
+            polystrncpy(mtFxNames[row], sfx::rowName(part, row), cInstrumentEditor::kMaxSynthListStringLen);
+            sfx::rowText(part, row, sfx::rowStep(part, row), mtFxValues[row], cInstrumentEditor::kMaxSynthListStringLen);
+        }
+        IE->paramListPos = mtFxRow();
+        IE->paramsListData.start = IE->paramListPos;
+        IE->paramsListData.length = sfx::kRows;
+        IE->paramsListData.linesCount = sfx::kRows;
+        IE->paramsListData.params = mtFxNames;
+        IE->paramsListData.values = mtFxValues;
+        display.setControlData(IE->paramsListControl, &IE->paramsListData);
+    }
+
+    display.setControlValue(IE->paramsListControl, IE->paramListPos);
+    display.refreshControl(IE->paramsListControl);
+
+    display.setControlText(IE->label[5], "Synth FX");
+    display.refreshControl(IE->label[5]);
+}
+
+static void mtFxShowValue(bool refreshList)
+{
+    namespace sfx = mods::synthfx;
+    const int part = mtFxPart();
+    const int row = mtFxRow();
+    const int step = sfx::rowStep(part, row);
+    const int count = sfx::stepCount(sfx::rowSetting(row));
+
+    if (refreshList)
+    {
+        if (sfx::rowIsList(row))
+        {
+            const int length = std::min(count, kMtFxItems);
+            for (int i = 0; i < length; i++)
+            {
+                mtFxItems[i] = mtFxItemText[i];
+                sfx::rowText(part, row, i, mtFxItems[i], cInstrumentEditor::kMaxSynthListStringLen);
+            }
+            IE->modelListData.rowHeight = 0;
+            IE->modelListData.scrollText = true;
+            IE->modelListData.start = step;
+            IE->modelListData.length = length;
+            IE->modelListData.linesCount = length;
+            IE->modelListData.params = mtFxItems;
+            IE->modelListData.imageIds = nullptr;
+            display.setControlData(IE->modelListControl, &IE->modelListData);
+            IE->paramValueMode = cInstrumentEditor::kList;
+        }
+        else
+        {
+            IE->paramValueMode = cInstrumentEditor::kValue;
+        }
+    }
+
+    if (IE->paramValueMode == cInstrumentEditor::kList)
+    {
+        IE->paramValueListPos = step;
+        display.setControlHide(IE->barControl[7]);
+        display.setControlShow(IE->modelListControl);
+        display.setControlValue(IE->modelListControl, step);
+        display.refreshControl(IE->modelListControl);
+    }
+    else
+    {
+        int barValue = 0;
+        if (sfx::rowBipolar(row))
+        {
+            const int middle = (count - 1) / 2;
+            barValue = (step - middle) * 100 / middle;
+            display.setAddControlStyle(IE->barControl[7], controlStyleValueLeftRight_100_100);
+            display.setRemoveControlStyle(IE->barControl[7], controlStyleValue_0_100);
+        }
+        else
+        {
+            barValue = step * 100 / (count - 1);
+            display.setAddControlStyle(IE->barControl[7], controlStyleValue_0_100);
+            display.setRemoveControlStyle(IE->barControl[7], controlStyleValueLeftRight_100_100);
+        }
+        display.setControlValue(IE->barControl[7], barValue);
+        display.setControlShow(IE->barControl[7]);
+        display.refreshControl(IE->barControl[7]);
+        display.setControlHide(IE->modelListControl);
+    }
+    display.synchronizeRefresh();
+
+    sfx::rowText(part, row, step, mtFxText[2 * row + 1], cInstrumentEditor::kMaxSynthListStringLen);
+}
+
+// An edit: into the settings the audio reads, then the project's record
+static void mtFxSet(int step)
+{
+    namespace sfx = mods::synthfx;
+    const int row = mtFxRow();
+    sfx::setRowStep(mtFxPart(), row, step);
+    if (IE->paramValueMode == cInstrumentEditor::kList)
+    {
+        IE->paramValueListPos = sfx::rowStep(mtFxPart(), row);
+    }
+    mods::projectSettingEdited();
+    mtFxShowList(sfx::rowRenames(row));
+    mtFxShowValue(false);
+}
+
+static void mtFxChange(int16_t value)
+{
+    mtFxSet(mods::synthfx::rowStep(mtFxPart(), mtFxRow()) + value);
+}
+
+static void mtFxDefault()
+{
+    mtFxSet(mods::synthfx::initStep(mods::synthfx::rowSetting(mtFxRow())));
+}
+#endif
 
 void cInstrumentEditor::cleanPatchEditorResources()
 {
@@ -126,6 +293,12 @@ void cInstrumentEditor::setSynthPatchEditorScreenFunct()
     ip->setButtonObj(interfaceButton0, buttonPress, functSynthSave);
     ip->setButtonObj(interfaceButton1, buttonPress, functSynthSaveAs);
     ip->setButtonObj(interfaceButton2, buttonPress, functSynthInit);
+#if MT_HAS_SYNTHFX // MT: Synth FX's rows
+    if (mtFxAvailable())
+    {
+        ip->setButtonObj(interfaceButton3, buttonPress, functSynthFx);
+    }
+#endif
     ip->setButtonObj(interfaceButton7, buttonPress, functSynthBack);
 
     ip->setPotObj(interfacePot0, functSynthPatchEditEncoder);
@@ -504,6 +677,31 @@ static void functSynthInitCancel()
     IE->setSynthPatchEditorScreenFunct();
 }
 
+#if MT_HAS_SYNTHFX // MT: button 3 shows Synth FX's rows in the parameter list, or the section's again
+static void functSynthFx()
+{
+    if (IE->mode != mtInstEditModeSynthPatchEdit || IE->keyboardManager.getState())
+    {
+        return;
+    }
+    if (!mtFxView && !mtFxAvailable())
+    {
+        return;
+    }
+    mtFxView = !mtFxView;
+    IE->paramListPos = 0;
+    IE->selectedPlace[mtInstEditModeSynthPatchEdit] = 1;
+    IE->imgGridData.showSelection = false;
+    display.refreshControl(IE->imgGridControl);
+    IE->activateLabelsBorder();
+    IE->showSynthPatchSectionParam(true);
+    IE->showSynthPatchSectionParamValue(true);
+    IE->showSynthPatchMacroParam(true);
+    IE->showSynthPatchMacroParamValue(true);
+    display.synchronizeRefresh();
+}
+#endif
+
 static void functSynthBack()
 {
     sequencer.stopManualNotes();
@@ -556,6 +754,9 @@ void cInstrumentEditor::changeSynthPatchSection(int16_t value)
 
     if (previousValue != sectionListPos)
     {
+#if MT_HAS_SYNTHFX // MT: another section leaves Synth FX's rows
+        mtFxView = false;
+#endif
         showSynthPatchSection();
         showSynthPatchSectionParam(true);
         showSynthPatchSectionParamValue(true);
@@ -582,6 +783,13 @@ void cInstrumentEditor::changeSynthPatchParam(int16_t value)
 
 void cInstrumentEditor::setSynthPatchParamDefault()
 {
+#if MT_HAS_SYNTHFX // MT: Synth FX's rows
+    if (mtFxView)
+    {
+        mtFxDefault();
+        return;
+    }
+#endif
     int syntPartIdx = mtProject.values.lastUsedInstrument - SYNTH_INSTRUMENTS_START_IDX;
 
     auto& patch = getSynth()->getPatch(syntPartIdx);
@@ -688,6 +896,13 @@ void cInstrumentEditor::setSynthPatchParamDefault()
 
 void cInstrumentEditor::changeSynthPatchParamValue(int16_t value)
 {
+#if MT_HAS_SYNTHFX // MT: Synth FX's rows
+    if (mtFxView)
+    {
+        mtFxChange(value);
+        return;
+    }
+#endif
     bool refreshParamList = false;
     int syntPartIdx = mtProject.values.lastUsedInstrument - SYNTH_INSTRUMENTS_START_IDX;
 
@@ -825,7 +1040,20 @@ void cInstrumentEditor::changeSynthPatchParamValue(int16_t value)
 
     getSynth()->setPatchDirty(syntPartIdx);
 
+#if MT_HAS_SYNTHS // MT: WAVE's and PHASE's Distortion and LFO Sync rename or redisplay other controls: the list again
+    bool mtRebuild = false;
+    if (!isMacroSelected())
+    {
+        const auto& mtMetadata = patch.getMetadata();
+        const int mtParam = sectionParamsIds[paramListPos];
+        mtRebuild = mods::synths::ownsLayout(mtMetadata.instrumentTypeId) && mtParam >= 0 &&
+                    mtParam < std::ssize(mtMetadata.params) &&
+                    mtMetadata.params[mtParam].invalidatesOtherMetadata;
+    }
+    showSynthPatchSectionParam(mtRebuild);
+#else
     showSynthPatchSectionParam();
+#endif
     showSynthPatchSectionParamValue();
     showSynthPatchMacroParam(refreshParamList);
     showSynthPatchMacroParamValue();
@@ -917,7 +1145,13 @@ void cInstrumentEditor::setSection(int sectionIdx)
     sectionListPos = sectionIdx;
     sectionListPos = clamp<int8_t>(sectionListPos, 0, sectionListLen ? sectionListLen - 1 : 0);
 
+#if MT_HAS_SYNTHFX // MT: picking a section, even the same one, leaves Synth FX's rows
+    const bool mtFxLeft = mtFxView;
+    mtFxView = false;
+    if (previousValue != sectionListPos || mtFxLeft)
+#else
     if (previousValue != sectionListPos)
+#endif
     {
         showSynthPatchSection();
         showSynthPatchSectionParam(true);
@@ -943,6 +1177,10 @@ void cInstrumentEditor::setSection(int sectionIdx)
 void cInstrumentEditor::showSynthPatchEditorScreen()
 {
     assert(mtProject.values.lastUsedInstrument >= SYNTH_INSTRUMENTS_START_IDX);
+
+#if MT_HAS_SYNTHFX // MT: the screen opens on the section, not Synth FX's rows
+    mtFxView = false;
+#endif
 
     showTitleBar();
 
@@ -988,7 +1226,11 @@ void cInstrumentEditor::showSynthPatchEditorScreen()
     display.setControlText(label[0], "Save");
     display.setControlText(label[1], "Save As");
     display.setControlText(label[2], "Init");
+#if MT_HAS_SYNTHFX // MT: button 3 opens Synth FX's rows
+    display.setControlText(label[3], mtFxAvailable() ? "Synth FX" : "");
+#else
     display.setControlText(label[3], "");
+#endif
     display.setControlText(label[4], "");
     display.setControlText(label[5], "Parameter");
     display.setControlText(label[6], "");
@@ -1286,6 +1528,14 @@ void cInstrumentEditor::showSynthPatchSection(bool refreshList)
                     sectionImgList[idx] = -1;
                 }
 
+#if MT_HAS_SYNTHS // MT: WAVE's and PHASE's tiles show their sections' short names
+                if (mods::synths::ownsLayout(metadata.instrumentTypeId) && !section.shortName.empty())
+                {
+                    shortName = section.shortName.c_str();
+                    number = 0;
+                }
+#endif
+
                 sectionNamesList[idx] = &sectionNamesGridBuff[kMaxSynthGridStringLen * idx];
 
                 if (number > 0)
@@ -1351,6 +1601,13 @@ void cInstrumentEditor::showSynthPatchSection(bool refreshList)
 
 void cInstrumentEditor::showSynthPatchSectionParam(bool refreshList)
 {
+#if MT_HAS_SYNTHFX // MT: Synth FX's rows
+    if (mtFxView)
+    {
+        mtFxShowList(refreshList);
+        return;
+    }
+#endif
     if (isMacroSelected())
     {
         return;
@@ -1448,6 +1705,12 @@ void cInstrumentEditor::showSynthPatchSectionParam(bool refreshList)
 
 void cInstrumentEditor::showSynthPatchMacroParam(bool refreshList)
 {
+#if MT_HAS_SYNTHFX // MT: Synth FX's rows
+    if (mtFxView)
+    {
+        return;
+    }
+#endif
     if (!isMacroSelected())
     {
         return;
@@ -1566,6 +1829,13 @@ void cInstrumentEditor::showSynthPatchMacroParam(bool refreshList)
 
 void cInstrumentEditor::showSynthPatchSectionParamValue(bool refreshList)
 {
+#if MT_HAS_SYNTHFX // MT: Synth FX's rows
+    if (mtFxView)
+    {
+        mtFxShowValue(refreshList);
+        return;
+    }
+#endif
     if (isMacroSelected())
     {
         return;
@@ -1707,6 +1977,12 @@ void cInstrumentEditor::showSynthPatchSectionParamValue(bool refreshList)
 
 void cInstrumentEditor::showSynthPatchMacroParamValue(bool refreshList)
 {
+#if MT_HAS_SYNTHFX // MT: Synth FX's rows
+    if (mtFxView)
+    {
+        return;
+    }
+#endif
     if (!isMacroSelected())
     {
         return;

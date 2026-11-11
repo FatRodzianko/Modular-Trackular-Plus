@@ -76,6 +76,12 @@
 #include "images/synth_shaper_18x18_L4.h"
 #include "images/chip_med_108x40_L2.h"
 #include "images/chip_mini_nomark_80x28_L2.h"
+#if MT_HAS_SYNTHS // MT: WAVE's and PHASE's model badges (tools/synths/gen_badges.py)
+#include "synths/images/wave_mini_80x28_L2.h"
+#include "synths/images/wave_med_108x40_L2.h"
+#include "synths/images/phase_mini_80x28_L2.h"
+#include "synths/images/phase_med_108x40_L2.h"
+#endif
 
 #endif
 
@@ -210,6 +216,12 @@ const strBitmap bitmaps[displayBitmapsCount] = {
     { synth_shaper_18x18_L4, 126900, 162, 18, 18, L4, 9 },
     { chip_mini_nomark_80x28_L2, 127100, 560, 80, 28, L2, 20 },
     { chip_med_108x40_L2, 127700, 1080, 108, 40, L2, 27 },
+#if MT_HAS_SYNTHS // MT: WAVE's and PHASE's badges, in the RAM_G past CHIP's (the controls start at 150000)
+    { wave_mini_80x28_L2, 128800, 560, 80, 28, L2, 20 },
+    { wave_med_108x40_L2, 129400, 1080, 108, 40, L2, 27 },
+    { phase_mini_80x28_L2, 130500, 560, 80, 28, L2, 20 },
+    { phase_med_108x40_L2, 131600, 1080, 108, 40, L2, 27 },
+#endif
 
 #endif
 };
