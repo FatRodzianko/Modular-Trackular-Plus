@@ -65,16 +65,14 @@ static void functSynthFx();
 
 static bool mtFxView = false; // the parameter list shows Synth FX's rows
 
-static constexpr int kMtFxItems = 4; // the longest of the two lists: Effect and Distortion
-
 namespace
 {
 // The rows' texts and the value list, in SDRAM (main loop only; CE's own lists are on the heap)
-__NOINIT(EXTERNAL_RAM) char mtFxText[mods::synthfx::kRows * 2][cInstrumentEditor::kMaxSynthListStringLen];
-__NOINIT(EXTERNAL_RAM) char* mtFxNames[mods::synthfx::kRows];
-__NOINIT(EXTERNAL_RAM) char* mtFxValues[mods::synthfx::kRows];
-__NOINIT(EXTERNAL_RAM) char mtFxItemText[kMtFxItems][cInstrumentEditor::kMaxSynthListStringLen];
-__NOINIT(EXTERNAL_RAM) char* mtFxItems[kMtFxItems];
+__NOINIT(EXTERNAL_RAM) char mtFxText[mods::synthfx::kMaxRows * 2][cInstrumentEditor::kMaxSynthListStringLen];
+__NOINIT(EXTERNAL_RAM) char* mtFxNames[mods::synthfx::kMaxRows];
+__NOINIT(EXTERNAL_RAM) char* mtFxValues[mods::synthfx::kMaxRows];
+__NOINIT(EXTERNAL_RAM) char mtFxItemText[mods::synthfx::kMaxChoices][cInstrumentEditor::kMaxSynthListStringLen];
+__NOINIT(EXTERNAL_RAM) char* mtFxItems[mods::synthfx::kMaxChoices];
 } // namespace
 
 static int mtFxPart()
@@ -91,7 +89,8 @@ static bool mtFxAvailable()
 
 static int mtFxRow()
 {
-    return clamp(IE->paramListPos, 0, mods::synthfx::kRows - 1);
+    const int rows = mods::synthfx::rowCount(mtFxPart());
+    return clamp(IE->paramListPos, 0, rows > 0 ? rows - 1 : 0);
 }
 
 static void mtFxShowList(bool refreshList)
@@ -100,17 +99,18 @@ static void mtFxShowList(bool refreshList)
     const int part = mtFxPart();
     if (refreshList)
     {
-        for (int row = 0; row < sfx::kRows; row++)
+        const int rows = sfx::rowCount(part);
+        for (int row = 0; row < rows; row++)
         {
             mtFxNames[row] = mtFxText[2 * row];
             mtFxValues[row] = mtFxText[2 * row + 1];
-            polystrncpy(mtFxNames[row], sfx::rowName(part, row), cInstrumentEditor::kMaxSynthListStringLen);
-            sfx::rowText(part, row, sfx::rowStep(part, row), mtFxValues[row], cInstrumentEditor::kMaxSynthListStringLen);
+            sfx::rowName(part, row, mtFxNames[row], cInstrumentEditor::kMaxSynthListStringLen);
+            sfx::rowText(part, row, mtFxValues[row], cInstrumentEditor::kMaxSynthListStringLen);
         }
         IE->paramListPos = mtFxRow();
         IE->paramsListData.start = IE->paramListPos;
-        IE->paramsListData.length = sfx::kRows;
-        IE->paramsListData.linesCount = sfx::kRows;
+        IE->paramsListData.length = rows;
+        IE->paramsListData.linesCount = std::min(rows, 14); // as CE's sections
         IE->paramsListData.params = mtFxNames;
         IE->paramsListData.values = mtFxValues;
         display.setControlData(IE->paramsListControl, &IE->paramsListData);
@@ -129,23 +129,23 @@ static void mtFxShowValue(bool refreshList)
     const int part = mtFxPart();
     const int row = mtFxRow();
     const int step = sfx::rowStep(part, row);
-    const int count = sfx::stepCount(sfx::rowSetting(row));
+    const int count = sfx::rowSteps(part, row);
 
     if (refreshList)
     {
-        if (sfx::rowIsList(row))
+        if (sfx::rowIsList(part, row))
         {
-            const int length = std::min(count, kMtFxItems);
+            const int length = std::min(count, sfx::kMaxChoices);
             for (int i = 0; i < length; i++)
             {
                 mtFxItems[i] = mtFxItemText[i];
-                sfx::rowText(part, row, i, mtFxItems[i], cInstrumentEditor::kMaxSynthListStringLen);
+                sfx::rowItemText(part, row, i, mtFxItems[i], cInstrumentEditor::kMaxSynthListStringLen);
             }
             IE->modelListData.rowHeight = 0;
             IE->modelListData.scrollText = true;
             IE->modelListData.start = step;
             IE->modelListData.length = length;
-            IE->modelListData.linesCount = length;
+            IE->modelListData.linesCount = std::min(length, 14); // as CE's lists
             IE->modelListData.params = mtFxItems;
             IE->modelListData.imageIds = nullptr;
             display.setControlData(IE->modelListControl, &IE->modelListData);
@@ -168,16 +168,16 @@ static void mtFxShowValue(bool refreshList)
     else
     {
         int barValue = 0;
-        if (sfx::rowBipolar(row))
+        if (sfx::rowBipolar(part, row))
         {
             const int middle = (count - 1) / 2;
-            barValue = (step - middle) * 100 / middle;
+            barValue = middle > 0 ? (step - middle) * 100 / middle : 0;
             display.setAddControlStyle(IE->barControl[7], controlStyleValueLeftRight_100_100);
             display.setRemoveControlStyle(IE->barControl[7], controlStyleValue_0_100);
         }
         else
         {
-            barValue = step * 100 / (count - 1);
+            barValue = count > 1 ? static_cast<int>(static_cast<int64_t>(step) * 100 / (count - 1)) : 0;
             display.setAddControlStyle(IE->barControl[7], controlStyleValue_0_100);
             display.setRemoveControlStyle(IE->barControl[7], controlStyleValueLeftRight_100_100);
         }
@@ -188,32 +188,43 @@ static void mtFxShowValue(bool refreshList)
     }
     display.synchronizeRefresh();
 
-    sfx::rowText(part, row, step, mtFxText[2 * row + 1], cInstrumentEditor::kMaxSynthListStringLen);
+    if (row < sfx::rowCount(part))
+    {
+        sfx::rowText(part, row, mtFxText[2 * row + 1], cInstrumentEditor::kMaxSynthListStringLen);
+    }
 }
 
-// An edit: into the settings the audio reads, then the project's record
-static void mtFxSet(int step)
+// After an edit: the project's record, then the rows (the value list too if a slot's plugin
+// changed, and with it the knob rows)
+static void mtFxEdited(bool rowsChanged)
 {
-    namespace sfx = mods::synthfx;
-    const int row = mtFxRow();
-    sfx::setRowStep(mtFxPart(), row, step);
-    if (IE->paramValueMode == cInstrumentEditor::kList)
-    {
-        IE->paramValueListPos = sfx::rowStep(mtFxPart(), row);
-    }
     mods::projectSettingEdited();
-    mtFxShowList(sfx::rowRenames(row));
-    mtFxShowValue(false);
+    mtFxShowList(true);
+    mtFxShowValue(rowsChanged);
 }
 
 static void mtFxChange(int16_t value)
 {
-    mtFxSet(mods::synthfx::rowStep(mtFxPart(), mtFxRow()) + value);
+    namespace sfx = mods::synthfx;
+    const int part = mtFxPart();
+    const int row = mtFxRow();
+    mtFxEdited(sfx::setRowStep(part, row, sfx::rowStep(part, row) + sfx::rowEncoderSteps(part, row, value)));
 }
 
 static void mtFxDefault()
 {
-    mtFxSet(mods::synthfx::initStep(mods::synthfx::rowSetting(mtFxRow())));
+    mtFxEdited(mods::synthfx::defaultRow(mtFxPart(), mtFxRow()));
+}
+
+// Main loop (cInstrumentEditor::update): a slot's plugin made, let go or stopped since: redraw
+void mtSynthFxPoll()
+{
+    if (mods::synthfx::takeSlotsChanged() && mtFxView && IE->mode == mtInstEditModeSynthPatchEdit &&
+        !IE->keyboardManager.getState())
+    {
+        mtFxShowList(true);
+        mtFxShowValue(true);
+    }
 }
 #endif
 
@@ -689,6 +700,10 @@ static void functSynthFx()
         return;
     }
     mtFxView = !mtFxView;
+    if (mtFxView)
+    {
+        mods::synthfx::pageOpened();
+    }
     IE->paramListPos = 0;
     IE->selectedPlace[mtInstEditModeSynthPatchEdit] = 1;
     IE->imgGridData.showSelection = false;

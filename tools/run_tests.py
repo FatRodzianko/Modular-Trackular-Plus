@@ -43,6 +43,9 @@ CACHE = ROOT / "build" / "test_cache.json"
 SYNTHFX_RIG = ROOT / "build" / "emu" / "synthfx_rig.axf"
 SYNTHFX_PACK = ROOT / "build" / "synthfx" / "pack"
 LEVEL_A = ROOT / "build" / "emu" / "synths_level_a.axf"
+# Synth FX phase 1's firmware (commit 42a415e, built with `make plus EDITION_NAME=MT`): the built-in
+# effects a version 1 project played, which test_synthfx.py's as_before compares the plugins with
+SYNTHFX_BEFORE = ROOT / "build" / "emu" / "TrackerPlus_MT_p1.axf"
 OUT = ROOT / "build" / "test_out"
 
 
@@ -113,7 +116,7 @@ def jobs_for(args, projects):
         Job("songloop", e / "test_songloop.py", mods, ref, inputs=both),
         Job("sound rig", e / "test_sound_rig.py", mods, ref, inputs=both),
         Job("synths", e / "test_synths.py", mods, inputs=[mods]),
-        Job("synthfx", e / "test_synthfx.py", mods, ref, inputs=both),
+        Job("synthfx", e / "test_synthfx.py", mods, ref, "--before", SYNTHFX_BEFORE, inputs=both + (SYNTHFX_BEFORE,)),
         Job("synthfx page", e / "test_synthfx_page.py", mods, ref, inputs=both),
         Job("synthfx plugins", ROOT / "tools" / "synthfx" / "test_runtime.py", SYNTHFX_RIG,
             inputs=[SYNTHFX_RIG, SYNTHFX_PACK, ROOT / "build" / "synthfx" / "rig"]),

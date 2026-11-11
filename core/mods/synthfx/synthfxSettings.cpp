@@ -1,8 +1,8 @@
 // Modular-Trackular mods. SPDX-License-Identifier: MIT
 //
-// Synth FX's settings (synthfxMod.h): the values the insert reads, their steps, the project
-// record and the patch editor's rows. Main loop only, except that the audio interrupt reads
-// settings. No heap; host tests build this file (core/mods/tests/test_synthfx.cpp).
+// Synth FX's slot settings (synthfxMod.h): the file and knobs of each part's two slots, and the
+// project record, with version 1 (the built-in effects' ten settings) converted. Main loop only.
+// No heap; host tests build this file (core/mods/tests/test_synthfx.cpp).
 
 #include "modsBuild.h"
 
@@ -10,209 +10,303 @@
 
 #include "synthfxMod.h"
 
-#include "synthFx.h"
-
 #include <cstring>
+
+#if defined(MT_HOST_TEST)
+#define MT_SLOTS_SDRAM
+#else
+#include "config.h"
+#include <cr_section_macros.h>
+#define MT_SLOTS_SDRAM __NOINIT(EXTERNAL_RAM) // main loop only; init() clears the slots
+#endif
 
 namespace mods
 {
 namespace synthfx
 {
 
-using namespace mtfx;
-
-static_assert(kSettings == FXP_COUNT, "synthFx.h's settings");
-
-// Effect None and Distortion Off; Rate, Depth, Mix, Feedback, Gain and Tone at half, Placement
-// Post (the insert is always Post), Level 0 dB: WAVE's and PHASE's Init. Each is on its
-// setting's steps (initStep; the host test checks).
-#define SYNTHFX_INIT { 0.0f, 0.5f, 0.5f, 0.5f, 0.5f, 0.0f, 0.5f, 0.5f, 1.0f, 0.0f }
-float settings[kParts][kSettings] = { SYNTHFX_INIT, SYNTHFX_INIT, SYNTHFX_INIT };
-#undef SYNTHFX_INIT
+MT_SLOTS_SDRAM Slot slots[kParts][kSlots];
 
 namespace
 {
 
-// A setting's steps: count of them, the step that is 0, and steps per unit. Its value is
-// (step - zero) / perUnit, so Init's values are exact.
-struct Steps
-{
-    uint8_t count;
-    uint8_t zero;
-    uint8_t perUnit;
-    uint8_t init;
-};
-
-constexpr Steps kSteps[kSettings] = {
-    { FX_TYPES, 0, 1, FX_NONE },         // Effect: None, Chorus, Flanger, Phaser
-    { 101, 0, 100, 50 },                 // Rate, 0-100 %
-    { 101, 0, 100, 50 },                 // Depth
-    { 101, 0, 100, 50 },                 // Mix
-    { 191, 95, 100, 145 },               // Feedback, -95 % to +95 %
-    { DIST_TYPES, 0, 1, DIST_OFF },      // Distortion: Off, Overdrive, Distortion, Bit Crusher
-    { 101, 0, 100, 50 },                 // Gain
-    { 101, 0, 100, 50 },                 // Tone
-    { 2, 0, 1, PLACE_POST },             // Placement: always Post
-    { 73, 60, 2, 60 },                   // Level, -30 dB to +6 dB in 0.5 dB
-};
-
-static_assert(FXP_EFFECT == 0 && FXP_FEEDBACK == 4 && FXP_DIST == 5 && FXP_PLACEMENT == 8 && FXP_LEVEL == 9,
-              "kSteps is in synthFx.h's order");
-
-constexpr int kRowSettings[kRows] = {
-    FXP_DIST, FXP_GAIN, FXP_TONE, FXP_LEVEL, FXP_EFFECT, FXP_RATE, FXP_DEPTH, FXP_FEEDBACK, FXP_MIX,
-};
-
-bool validSetting(int setting)
-{
-    return setting >= 0 && setting < static_cast<int>(kSettings);
-}
+bool loadedSince = false;
 
 bool validPart(int part)
 {
     return part >= 0 && part < kParts;
 }
 
-// The record's bytes, or every one at Init if the project has none or a damaged one. A byte
-// out of its setting's range is Init on its own; Placement is always Post.
-void stored(const Store& store, uint8_t* bytes)
+bool validSlot(int part, int slot)
+{
+    return validPart(part) && slot >= 0 && slot < kSlots;
+}
+
+float noKnob()
+{
+    uint32_t bits = 0x7FC00000u; // the one NaN a knob ever holds, so records compare by bytes
+    float f;
+    memcpy(&f, &bits, sizeof f);
+    return f;
+}
+
+bool finite(float f)
+{
+    uint32_t bits;
+    memcpy(&bits, &f, sizeof bits);
+    return (bits & 0x7F800000u) != 0x7F800000u;
+}
+
+char lower(char c)
+{
+    return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c;
+}
+
+bool sameFile(const char* a, const char* b)
+{
+    for (; *a != 0 && lower(*a) == lower(*b); a++, b++)
+    {
+    }
+    return lower(*a) == lower(*b);
+}
+
+// A name in /SynthFX/: printable, no path, ending in .ptsfx, with room for its 0
+bool goodFile(const char* file, size_t size)
+{
+    const void* end = memchr(file, 0, size);
+    if (end == nullptr)
+    {
+        return false;
+    }
+    const size_t length = static_cast<size_t>(static_cast<const char*>(end) - file);
+    static const char kSuffix[] = ".ptsfx";
+    const size_t suffix = sizeof(kSuffix) - 1;
+    if (length <= suffix || !sameFile(file + length - suffix, kSuffix))
+    {
+        return false;
+    }
+    for (size_t i = 0; i < length; i++)
+    {
+        const unsigned char c = static_cast<unsigned char>(file[i]);
+        if (c < 0x20 || c > 0x7E || c == '/' || c == '\\' || c == ':')
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+void empty(Slot& s)
+{
+    memset(s.file, 0, sizeof s.file);
+    for (float& k : s.knobs)
+    {
+        k = noKnob();
+    }
+}
+
+void setFile(Slot& s, const char* file)
+{
+    empty(s);
+    const size_t length = strnlen(file, kFileSize - 1);
+    memcpy(s.file, file, length);
+}
+
+// ---- version 1: the ten settings' steps, part by part ---------------------------------------
+
+enum V1
+{
+    V1_EFFECT, V1_RATE, V1_DEPTH, V1_MIX, V1_FEEDBACK, V1_DIST, V1_GAIN, V1_TONE, V1_PLACEMENT, V1_LEVEL, V1_COUNT
+};
+constexpr uint8_t kV1Count[V1_COUNT] = { 4, 101, 101, 101, 191, 4, 101, 101, 2, 73 };
+constexpr uint8_t kV1Init[V1_COUNT] = { 0, 50, 50, 50, 145, 0, 50, 50, 1, 60 };
+
+// The default pack's knobs take the old steps' values exactly (synthfx-sdk/pack/pack.h): a
+// percent knob is its step, Feedback its step - 95, Level its step - 60 in 0.5 dB.
+void fromV1(const uint8_t* data, Slot (&out)[kParts][kSlots])
 {
     for (int part = 0; part < kParts; part++)
     {
-        for (size_t k = 0; k < kSettings; k++)
+        uint8_t v[V1_COUNT];
+        for (int k = 0; k < V1_COUNT; k++)
         {
-            bytes[part * kSettings + k] = kSteps[k].init;
+            const uint8_t b = data[part * V1_COUNT + k];
+            v[k] = b < kV1Count[k] ? b : kV1Init[k];
+        }
+        Slot& fx1 = out[part][0];
+        Slot& fx2 = out[part][1];
+        empty(fx1);
+        empty(fx2);
+        static const char* const kDists[] = { nullptr, kOverdrive, kDistortion, kBitCrusher };
+        if (kDists[v[V1_DIST]] != nullptr)
+        {
+            setFile(fx1, kDists[v[V1_DIST]]);
+            fx1.knobs[0] = static_cast<float>(v[V1_GAIN]);
+            fx1.knobs[1] = static_cast<float>(v[V1_TONE]);
+            fx1.knobs[2] = static_cast<float>(v[V1_LEVEL] - 60) / 2.0f;
+        }
+        if (v[V1_EFFECT] == 1)
+        {
+            setFile(fx2, kChorus);
+            fx2.knobs[0] = static_cast<float>(v[V1_RATE]);
+            fx2.knobs[1] = static_cast<float>(v[V1_DEPTH]);
+            fx2.knobs[2] = static_cast<float>(v[V1_MIX]);
+        }
+        else if (v[V1_EFFECT] == 2 || v[V1_EFFECT] == 3)
+        {
+            setFile(fx2, v[V1_EFFECT] == 2 ? kFlanger : kPhaser);
+            fx2.knobs[0] = static_cast<float>(v[V1_RATE]);
+            fx2.knobs[1] = static_cast<float>(v[V1_DEPTH]);
+            fx2.knobs[2] = static_cast<float>(static_cast<int>(v[V1_FEEDBACK]) - 95);
+            fx2.knobs[3] = static_cast<float>(v[V1_MIX]);
+        }
+    }
+}
+
+void fromV2(const uint8_t* data, Slot (&out)[kParts][kSlots])
+{
+    for (int part = 0; part < kParts; part++)
+    {
+        for (int slot = 0; slot < kSlots; slot++)
+        {
+            const uint8_t* p = data + (part * kSlots + slot) * kSlotBytes;
+            Slot& s = out[part][slot];
+            empty(s);
+            const char* file = reinterpret_cast<const char*>(p);
+            if (!goodFile(file, kFileSize) || (slot == 1 && sameFile(file, out[part][0].file)))
+            {
+                continue; // a bad name, or the plugin FX1 has: an empty slot
+            }
+            setFile(s, file);
+            for (size_t k = 0; k < kKnobs; k++)
+            {
+                float f;
+                memcpy(&f, p + kFileSize + 4 * k, sizeof f);
+                s.knobs[k] = finite(f) ? f : noKnob();
+            }
+        }
+    }
+}
+
+// The record as slots: empty if the project has none or a damaged one
+void stored(const Store& store, Slot (&out)[kParts][kSlots])
+{
+    for (auto& part : out)
+    {
+        for (Slot& s : part)
+        {
+            empty(s);
         }
     }
     uint8_t version = 0;
     uint16_t length = 0;
     const uint8_t* data = store.find(kRecord, &version, &length);
-    if (data == nullptr || version != kRecordVersion || length != kRecordSize)
+    if (data == nullptr)
     {
         return;
     }
-    for (size_t i = 0; i < kRecordSize; i++)
+    if (version == kRecordVersion && length == kRecordSize)
     {
-        const size_t k = i % kSettings;
-        if (k != FXP_PLACEMENT && data[i] < kSteps[k].count)
+        fromV2(data, out);
+    }
+    else if (version == kRecordVersionV1 && length == kRecordSizeV1)
+    {
+        fromV1(data, out);
+    }
+}
+
+void toBytes(const Slot (&in)[kParts][kSlots], uint8_t* bytes)
+{
+    for (int part = 0; part < kParts; part++)
+    {
+        for (int slot = 0; slot < kSlots; slot++)
         {
-            bytes[i] = data[i];
+            uint8_t* p = bytes + (part * kSlots + slot) * kSlotBytes;
+            const Slot& s = in[part][slot];
+            memset(p, 0, kFileSize);
+            memcpy(p, s.file, strnlen(s.file, kFileSize - 1));
+            for (size_t k = 0; k < kKnobs; k++)
+            {
+                const float f = finite(s.knobs[k]) ? s.knobs[k] : noKnob();
+                memcpy(p + kFileSize + 4 * k, &f, sizeof f);
+            }
         }
     }
 }
 
+// Working space (main loop): two sets of slots and two records' bytes, not on the stack
+MT_SLOTS_SDRAM Slot scratch[kParts][kSlots];
+MT_SLOTS_SDRAM uint8_t nowBytes[kRecordSize];
+MT_SLOTS_SDRAM uint8_t beforeBytes[kRecordSize];
+
 } // namespace
 
-int stepCount(int setting)
+void init()
 {
-    return validSetting(setting) ? kSteps[setting].count : 1;
-}
-
-int initStep(int setting)
-{
-    return validSetting(setting) ? kSteps[setting].init : 0;
-}
-
-int stepOf(int setting, float value)
-{
-    if (!validSetting(setting))
+    for (auto& part : slots)
     {
-        return 0;
+        for (Slot& s : part)
+        {
+            empty(s);
+        }
     }
-    const Steps& s = kSteps[setting];
-    if (!(value == value)) // NaN
-    {
-        return s.init;
-    }
-    float x = value * static_cast<float>(s.perUnit) + static_cast<float>(s.zero);
-    const float top = static_cast<float>(s.count - 1);
-    x = x < 0.0f ? 0.0f : (x > top ? top : x);
-    return static_cast<int>(x + 0.5f);
-}
-
-float valueOf(int setting, int step)
-{
-    if (!validSetting(setting))
-    {
-        return 0.0f;
-    }
-    const Steps& s = kSteps[setting];
-    step = step < 0 ? 0 : (step >= s.count ? s.count - 1 : step);
-    return static_cast<float>(step - s.zero) / static_cast<float>(s.perUnit);
+    loadedSince = false;
 }
 
 void load(const Store& store)
 {
-    uint8_t bytes[kRecordSize];
-    stored(store, bytes);
-    for (int part = 0; part < kParts; part++)
-    {
-        for (size_t k = 0; k < kSettings; k++)
-        {
-            settings[part][k] = valueOf(static_cast<int>(k), bytes[part * kSettings + k]);
-        }
-    }
+    stored(store, slots);
+    loadedSince = true;
 }
 
 bool storeIfEdited(Store& store)
 {
-    uint8_t now[kRecordSize];
-    for (int part = 0; part < kParts; part++)
-    {
-        for (size_t k = 0; k < kSettings; k++)
-        {
-            now[part * kSettings + k] = static_cast<uint8_t>(
-              k == FXP_PLACEMENT ? static_cast<int>(PLACE_POST) : stepOf(static_cast<int>(k), settings[part][k]));
-        }
-    }
-    uint8_t before[kRecordSize];
-    stored(store, before);
-    if (memcmp(now, before, kRecordSize) == 0)
+    toBytes(slots, nowBytes);
+    stored(store, scratch);
+    toBytes(scratch, beforeBytes);
+    if (memcmp(nowBytes, beforeBytes, kRecordSize) == 0)
     {
         return false;
     }
-    return store.put(kRecord, kRecordVersion, now, kRecordSize);
+    return store.put(kRecord, kRecordVersion, nowBytes, kRecordSize);
 }
 
-int rowSetting(int row)
+bool takeLoaded()
 {
-    return row >= 0 && row < kRows ? kRowSettings[row] : static_cast<int>(FXP_EFFECT);
+    const bool was = loadedSince;
+    loadedSince = false;
+    return was;
 }
 
-bool rowIsList(int row)
+void clearSlot(int part, int slot)
 {
-    const int s = rowSetting(row);
-    return s == FXP_EFFECT || s == FXP_DIST;
-}
-
-bool rowBipolar(int row)
-{
-    return rowSetting(row) == FXP_FEEDBACK;
-}
-
-bool rowRenames(int row)
-{
-    return rowSetting(row) == FXP_DIST;
-}
-
-int rowStep(int part, int row)
-{
-    if (!validPart(part))
+    if (validSlot(part, slot))
     {
-        return 0;
+        empty(slots[part][slot]);
     }
-    const int s = rowSetting(row);
-    return stepOf(s, settings[part][s]);
 }
 
-void setRowStep(int part, int row, int step)
+void setSlotFile(int part, int slot, const char* file)
 {
-    if (!validPart(part))
+    if (!validSlot(part, slot))
     {
         return;
     }
-    const int s = rowSetting(row);
-    settings[part][s] = valueOf(s, step);
+    if (file == nullptr || !goodFile(file, strnlen(file, kFileSize - 1) + 1))
+    {
+        empty(slots[part][slot]);
+        return;
+    }
+    setFile(slots[part][slot], file);
+}
+
+bool usedByOtherSlot(int part, int slot, const char* file)
+{
+    if (!validSlot(part, slot) || file == nullptr || file[0] == 0)
+    {
+        return false;
+    }
+    return sameFile(slots[part][1 - slot].file, file);
 }
 
 } // namespace synthfx

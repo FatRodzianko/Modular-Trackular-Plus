@@ -1,11 +1,13 @@
 # Modular-Trackular mods. SPDX-License-Identifier: MIT
 """Planted faults for Synth FX: each makes one mistake, builds the full firmware with it and runs the
 test section that has to fail, on the check named. A fault the test misses is a gap in the test.
-The insert's and the effects' faults go to tools/emu/test_synthfx.py; the patch editor's and the
-project record's (phase 3) to test_synthfx_page.py ("page:<section>"); the settings' steps to the host
-test, core/mods/tests/test_synthfx.cpp ("host", built in the tree with its g++).
+The slots' faults go to tools/emu/test_synthfx.py (as_before with --before, the phase 1 build); the
+patch editor's and the project's to test_synthfx_page.py ("page:<section>"); the record's rules to the
+host test, core/mods/tests/test_synthfx.cpp ("host", built in the tree with its g++). The plugins'
+own arithmetic has its faults in tools/synthfx/rig/plant.py.
 
-    python tools/emu/plant_synthfx.py <reference.axf> [--tree WSL_DIR] [--toolchain PREFIX] [--jobs N] [--only NAME] [--keep]
+    python tools/emu/plant_synthfx.py <reference.axf> --before <phase 1 axf> [--tree WSL_DIR]
+        [--toolchain PREFIX] [--jobs N] [--only NAME] [--keep]
 
 The builds run in WSL in a copy of this checkout (--tree, default ~/mtplant_synthfx), synced from it
 first, so each fault rebuilds only its own file; one fault at a time with --jobs compilers (default
@@ -26,54 +28,70 @@ ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "build" / "emu" / "plant_synthfx"
 TEST = ROOT / "tools" / "emu" / "test_synthfx.py"
 PAGE_TEST = ROOT / "tools" / "emu" / "test_synthfx_page.py"
-MOD = "core/mods/synthfx/synthfxMod.cpp"
-FX = "core/mods/synthfx/synthFx.cpp"
-DSP = "core/mods/synthfx/synthFxDsp.h"   # the effects' arithmetic
+MOD = "core/mods/synthfx/synthfxMod.cpp"         # the slots in the audio interrupt
+SLOTS = "core/mods/synthfx/synthfxSlots.cpp"     # the slots' plugins made and let go
+PAGE = "core/mods/synthfx/synthfxPage.cpp"       # the rows
 SETTINGS = "core/mods/synthfx/synthfxSettings.cpp"
 EDITOR = "core/interface/instrumentEditor/SynthPatchEditor.cpp"   # CRLF: a fault's \n matches its \r\n
+INSTR = "core/interface/instrumentEditor/fIinstrEdit.cpp"         # CRLF
 
 # (name, file, text, replacement, test section, engines, a check the test must fail: a substring of its line)
 FAULTS = [
-    ("Off doesn't bypass", MOD, "const bool on = mods::on(Mod::synthfx);", "const bool on = true;",
-     "off_is_ce", "1", "Synth FX Off with Phaser"),
-    ("a mono part never goes stereo", MOD,
-     "return { s, engineStereo || s->running || list_pick(fx[FXP_EFFECT], FX_TYPES) != FX_NONE };",
-     "return { s, engineStereo };", "each_effect", "1", "ACD, Chorus"),
-    ("the state is never let go", MOD, "if (!wanted(fx) && fx_idle(s))", "if (!wanted(fx) && fx_idle(s) && part < 0)",
-     "release", "", "ACD: cleared"),
-    ("PERC through the mono effects", MOD, "    if (engineStereo)\n    {\n        fx_block_stereo",
-     "    if (engineStereo && part < 0)\n    {\n        fx_block_stereo", "each_effect", "6", "PERC, Overdrive"),
-    ("WAVE not skipped", MOD, "return synths::ownsLayout(patch->getMetadata().instrumentTypeId);",
-     "return patch == nullptr;", "skipped_and_shared", "", "WAVE: skipped"),
-    ("stereo dry right from the left", DSP, "float x = L[n], xr = Stereo ? R[n] : x;\n            s->buf[pos]",
-     "float x = L[n], xr = x;\n            s->buf[pos]", "mix_zero", "6", "PERC, Chorus at Mix 0"),
-    # Mix unclamped alone heals (step_to gives its target for a NaN), so eased as well: a NaN then stays
-    ("Mix unclamped and eased (a NaN stays)", DSP,
-     "float want = type == s->active ? clampf(fx[FXP_MIX], 0.0f, 1.0f) : 0.0f;\n    float m0 = s->mix, m1 = step_to(m0, want);",
-     "float want = type == s->active ? fx[FXP_MIX] : 0.0f;\n    float m0 = s->mix, m1 = m0 + 0.5f * (want - m0);",
-     "garbage", "", "garbage settings"),
-
-    # phase 3: the patch editor's rows and the project's record
+    # the slots in the audio interrupt
+    ("Off doesn't bypass", MOD, "if (!mods::on(Mod::synthfx) || patch == nullptr || hasOwnEffects(patch))",
+     "if (patch == nullptr || hasOwnEffects(patch))", "off_is_ce", "1", "Synth FX Off with Distortion"),
+    ("a mono part never goes stereo", MOD, "return { true, engineStereo || widens };", "return { true, engineStereo };",
+     "each_effect", "1", "ACD, Chorus in FX1"),
+    ("WAVE not skipped", MOD, "return synths::ownsLayout(patch->getMetadata().instrumentTypeId);", "return false;",
+     "skipped_and_shared", "", "WAVE: skipped"),
+    ("no fade in", MOD, "r.phase = id >= 0 ? kFadeIn : kGone;", "r.phase = id >= 0 ? kOn : kGone;",
+     "each_effect", "1", "ACD, Overdrive in FX1"),
+    ("no fade out", MOD, "runs[part][slot].phase = kLeaving;", "runs[part][slot].phase = kGone;",
+     "release", "", "ACD: cleared, the slots fade out"),
+    ("FX2 before FX1", MOD, "    for (int slot = 0; slot < kSlots; slot++)\n    {\n        Run& r = runs[part][slot];",
+     "    for (int s = 0; s < kSlots; s++)\n    {\n        const int slot = kSlots - 1 - s;\n        Run& r = runs[part][slot];",
+     "order_and_swap", "", "ACD: FX1 runs before FX2"),
+    # the slots' plugins in the main loop
+    ("the old plugin never freed", SLOTS, "        plugins::destroy(l.old);\n", "",
+     "release", "", "ACD: cleared, the plugins fade out"),
+    ("freed before it faded", SLOTS, "if (!retired(part, slot) && plugins::now() - l.oldSince < kRetireMs)", "if (false)",
+     "order_and_swap", "", "ACD: Overdrive swapped"),
+    ("a project's knobs not set", SLOTS, "if (isFinite(want.knobs[k]))", "if (false)",
+     "as_before", "1", "ACD, Overdrive"),
+    ("knobs not snapped", SLOTS, "        want.knobs[k] = plugins::knob(id, k); // on the plugin's steps, as it will be saved\n",
+     "", "garbage", "", "ACD: garbage knobs"),
+    ("an opened project's slots never made", SLOTS, "if (takeLoaded())", "if (false && takeLoaded())",
+     "page:projects", "", "Open: each slot's plugin made"),
+    # the record
+    ("the record never written", SETTINGS, "return store.put(kRecord, kRecordVersion, nowBytes, kRecordSize);",
+     "return false;", "page:projects", "", "Save: reopened with its slots"),
+    ("load ignores the record", SETTINGS, "const uint8_t* data = store.find(kRecord, &version, &length);",
+     "const uint8_t* data = nullptr;", "page:projects", "", "Save: reopened with its slots"),
+    ("version 1's Feedback a step off", SETTINGS, "static_cast<int>(v[V1_FEEDBACK]) - 95", "static_cast<int>(v[V1_FEEDBACK]) - 96",
+     "host", "", "Phaser: Rate, Depth, Feedback"),
+    ("FX2 may repeat FX1", SETTINGS, " || (slot == 1 && sameFile(file, out[part][0].file))", "",
+     "host", "", "the plugin FX1 has, in FX2 as well"),
+    ("a path taken for a name", SETTINGS, r" || c == '/' || c == '\\' || c == ':'", "", "host", "", "a path"),
+    ("a short version 2 record read", SETTINGS, "if (version == kRecordVersion && length == kRecordSize)",
+     "if (version == kRecordVersion)", "host", "", "another length"),
+    ("infinite knobs kept", SETTINGS, "s.knobs[k] = finite(f) ? f : noKnob();", "s.knobs[k] = f;",
+     "host", "", "infinities and NaNs are the default"),
+    # the page
     ("button 3 with the mod Off", MOD, "return mods::on(Mod::synthfx) && !hasOwnEffects(&patch);",
      "return !hasOwnEffects(&patch);", "page:off", "", "mod Off"),
     ("button 3 on WAVE", MOD, "return mods::on(Mod::synthfx) && !hasOwnEffects(&patch);",
      "return mods::on(Mod::synthfx);", "page:off", "", "WAVE, mod On: no button 3"),
-    ("an edit not marked for saving", EDITOR, "    mods::projectSettingEdited();\n    mtFxShowList",
-     "    mtFxShowList", "page:page", "", "the edit lands in the project's record 16"),
+    ("an edit not marked for saving", EDITOR, "    mods::projectSettingEdited();\n    mtFxShowList(true);",
+     "    mtFxShowList(true);", "page:page", "", "the pick lands in the project's record 16"),
     ("the same section keeps the rows", EDITOR, "if (previousValue != sectionListPos || mtFxLeft)",
      "if (previousValue != sectionListPos)", "page:page", "", "a section, even the same one"),
-    ("Delete by row, not setting", EDITOR, "initStep(mods::synthfx::rowSetting(mtFxRow()))",
-     "initStep(mtFxRow())", "page:page", "", "Delete: Feedback"),
-    ("Feedback's zero a step off", SETTINGS, "{ 191, 95, 100, 145 }", "{ 191, 96, 100, 145 }",
-     "page:page", "", "Feedback"),
-    ("load ignores the record", SETTINGS, "if (data == nullptr || version", "if (true || version",
-     "page:projects", "", "Save: reopened with its settings"),
-    ("the record never written", SETTINGS, "return store.put(kRecord, kRecordVersion, now, kRecordSize);",
-     "return false;", "page:projects", "", "Save: reopened with its settings"),
-    ("Placement read from the record", SETTINGS, "if (k != FXP_PLACEMENT && data[i]", "if (data[i]",
-     "host", "", "Placement is always Post"),
-    ("a short record read", SETTINGS, " || length != kRecordSize)", ")", "host", "", "another length"),
-    ("NaN not Init", SETTINGS, "if (!(value == value)) // NaN", "if (false)", "host", "", "NaN is Init"),
+    ("no redraw when a plugin is made", INSTR, "    mtSynthFxPoll();\n", "", "page:page", "", "then its knobs"),
+    ("the other slot's plugin offered", PAGE, "e->status != plugins::Status::ok || usedByOtherSlot(part, slot, e->file)",
+     "e->status != plugins::Status::ok", "page:page", "", "FX2's list"),
+    ("Delete leaves a knob", PAGE, "        plugins::setKnob(id, static_cast<uint32_t>(knob), p->default_val);\n", "",
+     "page:page", "", "Delete: Gain back"),
+    ("knobs two steps a tick", PAGE, "return ticks * (per > 1 ? per : 1);", "return ticks * 2;",
+     "page:page", "", "Gain: 1 % a step"),
 ]
 
 
@@ -90,6 +108,7 @@ def wsl(script: str) -> subprocess.CompletedProcess:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("ref")
+    ap.add_argument("--before", required=True, help="the phase 1 build, for test_synthfx.py's as_before")
     ap.add_argument("--tree", default="~/mtplant_synthfx")
     ap.add_argument("--toolchain", default="arm-none-eabi-")
     ap.add_argument("--jobs", type=int, default=3)
@@ -141,7 +160,7 @@ def main() -> int:
             cmd = [sys.executable, str(PAGE_TEST), str(axf), a.ref, "--only", section[5:]]
             t = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT)
         else:
-            cmd = [sys.executable, str(TEST), str(axf), a.ref, "--only", section] + (["--engines", engines] if engines else [])
+            cmd = [sys.executable, str(TEST), str(axf), a.ref, "--before", a.before, "--only", section] +                 (["--engines", engines] if engines else [])
             t = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT)
         fails = [ln for ln in t.stdout.splitlines() if ln.startswith("FAIL")]
         caught = t.returncode != 0 and any(expect in ln for ln in fails)

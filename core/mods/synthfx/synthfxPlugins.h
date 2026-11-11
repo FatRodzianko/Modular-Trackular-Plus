@@ -130,9 +130,18 @@ void setKnob(int id, uint32_t knob, float value);
 float knob(int id, uint32_t knob);
 // A knob moved by whole steps.
 void stepKnob(int id, uint32_t knob, int steps);
+// Its steps: how many (0 for no such knob), which one it is on, and set by step (held at the
+// last).
+uint32_t knobSteps(int id, uint32_t knob);
+uint32_t knobStep(int id, uint32_t knob);
+void setKnobStep(int id, uint32_t knob, uint32_t step);
 // Its text for the screen: the plugin's format() if it has one and fills it in, else the
-// value (one decimal for 'f') and the unit.
+// value (one decimal for 'f') and the unit. At: the text for one of its steps.
 void knobText(int id, uint32_t knob, char* out, uint32_t size);
+void knobTextAt(int id, uint32_t knob, uint32_t step, char* out, uint32_t size);
+
+// The platform's time in ms (Env::millis), for the main loop's waits.
+uint32_t now();
 
 // Asks for a reset before the instance's next block (a new note on a Pre slot, a part
 // starting again).

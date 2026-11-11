@@ -1,8 +1,9 @@
 // Modular-Trackular mods. SPDX-License-Identifier: MIT
 //
-// Synth FX's insert (synthfxMod.h). Everything here but pageShown runs in the audio interrupt:
-// no heap, no SD, single precision. In flash: it runs once per part. The settings are in
-// synthfxSettings.cpp.
+// Synth FX's slots in the audio interrupt (synthfxMod.h): begin and run, and the per-slot state
+// the main loop publishes to them. Everything here but pageShown and the main loop's four
+// (publish, retire, retired, published) runs in the audio interrupt: no heap, no SD, single
+// precision. In flash: it runs once per part; the plugins' own process is in ITCM.
 
 #include "modsBuild.h"
 
@@ -10,7 +11,7 @@
 
 #include "synthfxMod.h"
 
-#include "synthFx.h"
+#include "synthfxPlugins.h"
 
 #include "PolySynth/Patch.h"
 #include "PolySynth/config.h"
@@ -18,26 +19,51 @@
 #include "synths/synthsMod.h"
 #endif
 
+#include <cr_section_macros.h>
+
 namespace mods
 {
 namespace synthfx
 {
 
-using namespace mtfx;
+static_assert(polysynth::kAudioBufferSize == PTSFX_BLOCK, "the plugins run on CE's synth block");
 
-static_assert(polysynth::kAudioBufferSize == FX_BLOCK, "the effects run on CE's synth block");
-
-// Whether each part holds an effect state. Each one's address is also its owner id for
-// fx_claim, which can't be any voice's.
-static uint8_t held[kParts];
-
-static inline bool wanted(const float* fx)
+namespace
 {
-    return list_pick(fx[FXP_EFFECT], FX_TYPES) != FX_NONE || dist_on(fx);
+
+// A slot as the interrupt runs it. The main loop writes id and widens before phase; the
+// interrupt moves phase on (fadeIn -> on, leaving -> gone). Single core: the main loop never
+// runs while the interrupt does, and each field is one byte.
+enum Phase : uint8_t
+{
+    kGone,      // nothing runs (the id may still be the last one, for the main loop to free)
+    kFadeIn,    // runs, from dry to its output over this block
+    kOn,
+    kLeaving,   // runs, from its output to dry over this block, then gone
+};
+
+struct Run
+{
+    volatile int8_t id;
+    volatile uint8_t phase;
+    volatile uint8_t widens;
+};
+
+Run runs[kParts][kSlots] = { { { -1, kGone, 0 }, { -1, kGone, 0 } },
+                             { { -1, kGone, 0 }, { -1, kGone, 0 } },
+                             { { -1, kGone, 0 }, { -1, kGone, 0 } } };
+
+// The dry signal kept over a fading block (the interrupt only)
+__NOINIT(EXTERNAL_RAM) float dryL[PTSFX_BLOCK];
+__NOINIT(EXTERNAL_RAM) float dryR[PTSFX_BLOCK];
+
+bool validSlot(int part, int slot)
+{
+    return part >= 0 && part < kParts && slot >= 0 && slot < kSlots;
 }
 
-// WAVE and PHASE have these effects inside
-static inline bool hasOwnEffects(const polysynth::Patch* patch)
+// WAVE and PHASE have their effects inside
+inline bool hasOwnEffects(const polysynth::Patch* patch)
 {
 #if MT_HAS_SYNTHS
     return synths::ownsLayout(patch->getMetadata().instrumentTypeId);
@@ -47,71 +73,149 @@ static inline bool hasOwnEffects(const polysynth::Patch* patch)
 #endif
 }
 
+inline bool running(const Run& r)
+{
+    return r.phase != kGone;
+}
+
+void copy(float* to, const float* from)
+{
+    for (uint32_t n = 0; n < PTSFX_BLOCK; n++)
+    {
+        to[n] = from[n];
+    }
+}
+
+// x from the plugin's output towards dry (out true) or from dry towards the output, over the block
+void fade(float* x, const float* dry, bool out)
+{
+    const float step = 1.0f / static_cast<float>(PTSFX_BLOCK);
+    for (uint32_t n = 0; n < PTSFX_BLOCK; n++)
+    {
+        const float t = static_cast<float>(n + 1u) * step; // the last sample is all the new side
+        const float wet = out ? 1.0f - t : t;
+        x[n] = dry[n] + wet * (x[n] - dry[n]);
+    }
+}
+
+} // namespace
+
 bool pageShown(const polysynth::Patch& patch)
 {
     return mods::on(Mod::synthfx) && !hasOwnEffects(&patch);
 }
 
-static void drop(int part)
+// ---- the main loop's side -------------------------------------------------------------------
+
+void publish(int part, int slot, int id, bool widens)
 {
-    if (held[part])
+    if (!validSlot(part, slot))
     {
-        fx_release(&held[part]);
-        held[part] = 0;
+        return;
+    }
+    Run& r = runs[part][slot];
+    r.phase = kGone; // first, so the interrupt never sees the new id with the old phase
+    r.id = static_cast<int8_t>(id);
+    r.widens = widens ? 1 : 0;
+    r.phase = id >= 0 ? kFadeIn : kGone;
+}
+
+void retire(int part, int slot)
+{
+    if (validSlot(part, slot) && running(runs[part][slot]))
+    {
+        runs[part][slot].phase = kLeaving;
     }
 }
 
+bool retired(int part, int slot)
+{
+    return !validSlot(part, slot) || !running(runs[part][slot]);
+}
+
+int published(int part, int slot)
+{
+    return validSlot(part, slot) ? runs[part][slot].id : -1;
+}
+
+// ---- the audio interrupt --------------------------------------------------------------------
+
 Insert begin(int part, const polysynth::Patch* patch, bool engineStereo)
 {
-    const Insert dry = { nullptr, engineStereo };
+    const Insert dry = { false, engineStereo };
     if (part < 0 || part >= kParts)
     {
         return dry;
     }
-    const float* fx = settings[part];
-    const bool on = mods::on(Mod::synthfx);
-    if (!held[part] && !(on && wanted(fx)))
+    const Run* r = runs[part];
+    if (!running(r[0]) && !running(r[1]))
     {
         return dry;
     }
-    if (!on || patch == nullptr || hasOwnEffects(patch))
+    if (!mods::on(Mod::synthfx) || patch == nullptr || hasOwnEffects(patch))
     {
-        drop(part);
+        for (int slot = 0; slot < kSlots; slot++) // not run: one letting go is gone now
+        {
+            if (runs[part][slot].phase == kLeaving)
+            {
+                runs[part][slot].phase = kGone;
+            }
+        }
         return dry;
     }
-    mt_fx* s = fx_claim(&held[part]);
-    if (s == nullptr) // every state taken (three parts with effects already): dry
-    {
-        held[part] = 0;
-        return dry;
-    }
-    held[part] = 1;
-    // A mono part goes out as stereo while a modulation effect runs, from the block it starts
-    // in (fx_block starts it whenever one is chosen) until it has faded out.
-    return { s, engineStereo || s->running || list_pick(fx[FXP_EFFECT], FX_TYPES) != FX_NONE };
+    // A mono part goes out as stereo while a widening plugin runs in a slot, fading out too
+    const bool widens = (running(r[0]) && r[0].widens) || (running(r[1]) && r[1].widens);
+    return { true, engineStereo || widens };
 }
 
 void run(const Insert& insert, int part, float* left, float* right, bool engineStereo)
 {
-    mt_fx* s = insert.state;
-    if (s == nullptr)
+    if (!insert.on)
     {
         return;
     }
-    const float* fx = settings[part];
-    const int dist = dist_on(fx);
-    if (engineStereo)
+    bool stereoNow = engineStereo; // whether right holds the part's right side yet
+    for (int slot = 0; slot < kSlots; slot++)
     {
-        fx_block_stereo(s, fx, left, right, dist);
+        Run& r = runs[part][slot];
+        const uint8_t phase = r.phase;
+        if (phase == kGone)
+        {
+            continue;
+        }
+        const bool widens = r.widens != 0;
+        float* R = (stereoNow || widens) ? right : nullptr;
+        const bool fading = phase == kFadeIn || phase == kLeaving;
+        if (fading)
+        {
+            copy(dryL, left);
+            if (R != nullptr)
+            {
+                copy(dryR, stereoNow ? right : left);
+            }
+        }
+        const bool ran = plugins::process(r.id, left, R, stereoNow ? 2u : 1u);
+        if (R != nullptr && !stereoNow)
+        {
+            if (!ran) // bypassed or gone: the right side is still to be made
+            {
+                copy(right, left);
+            }
+            stereoNow = true;
+        }
+        if (fading)
+        {
+            fade(left, dryL, phase == kLeaving);
+            if (R != nullptr)
+            {
+                fade(right, dryR, phase == kLeaving);
+            }
+            r.phase = phase == kLeaving ? kGone : kOn;
+        }
     }
-    else
+    if (insert.stereo && !stereoNow) // declared stereo, nothing widened this block
     {
-        s->dist2.amount = 0.0f; // a mono part has no right side: off, so fx_idle can be true
-        fx_block(s, fx, left, right, dist);
-    }
-    if (!wanted(fx) && fx_idle(s)) // everything faded out: the state goes back
-    {
-        drop(part);
+        copy(right, left);
     }
 }
 

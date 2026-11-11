@@ -748,7 +748,35 @@ void stepKnob(int id, uint32_t knob, int steps)
     setKnob(id, knob, valueAt(*p, static_cast<uint32_t>(to)));
 }
 
+uint32_t knobSteps(int id, uint32_t knob)
+{
+    const PtsfxParam* p = paramOf(id, knob);
+    return p != nullptr ? lastStep(*p) + 1u : 0u;
+}
+
+uint32_t knobStep(int id, uint32_t knob)
+{
+    const PtsfxParam* p = paramOf(id, knob);
+    return p != nullptr ? stepNearest(*p, instanceTable[id].value[knob]) : 0u;
+}
+
+void setKnobStep(int id, uint32_t knob, uint32_t step)
+{
+    const PtsfxParam* p = paramOf(id, knob);
+    if (p != nullptr)
+    {
+        const uint32_t last = lastStep(*p);
+        setKnob(id, knob, valueAt(*p, step > last ? last : step));
+    }
+}
+
 void knobText(int id, uint32_t knob, char* out, uint32_t size)
+{
+    const PtsfxParam* p = paramOf(id, knob);
+    knobTextAt(id, knob, p != nullptr ? stepNearest(*p, instanceTable[id].value[knob]) : 0u, out, size);
+}
+
+void knobTextAt(int id, uint32_t knob, uint32_t step, char* out, uint32_t size)
 {
     if (size == 0)
     {
@@ -761,7 +789,8 @@ void knobText(int id, uint32_t knob, char* out, uint32_t size)
         return;
     }
     const Plugin& plugin = plugins[instanceTable[id].plugin];
-    const float v = instanceTable[id].value[knob];
+    const uint32_t last = lastStep(*p);
+    const float v = valueAt(*p, step > last ? last : step);
     if (plugin.format != nullptr)
     {
         plugin.format(env.host, knob, v, out, size);
@@ -782,6 +811,11 @@ void knobText(int id, uint32_t knob, char* out, uint32_t size)
         appendText(out, size, " ");
         appendText(out, size, p->unit);
     }
+}
+
+uint32_t now()
+{
+    return env.millis != nullptr ? env.millis() : 0u;
 }
 
 void resetSoon(int id)

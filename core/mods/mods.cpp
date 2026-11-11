@@ -19,6 +19,7 @@
 #include "modsSwitches.h"
 #include "songloop.h"
 #include "swing.h"
+#include "synthfx/synthfxMod.h"
 #include "synthfx/synthfxPlugins.h"
 #include "tracklen.h"
 
@@ -211,6 +212,7 @@ void update()
     else
     {
         synthfx::plugins::update();
+        synthfx::updateSlots(); // a project's slots made, old plugins let go
     }
 #endif
 }

@@ -1,23 +1,29 @@
 # Modular-Trackular mods. SPDX-License-Identifier: MIT
-"""Synth FX phase 3 on full Tracker+ builds, with the synth libraries in: the patch editor's
-Synth FX rows (button 3) and the project record. The second build is plain CE (MT_NO_MODS).
+"""Synth FX's rows and the project record on full Tracker+ builds, with the synth libraries in: the
+patch editor's two plugin slots (button 3) and record 16. The second build is plain CE (MT_NO_MODS).
 
 CE's real cInstrumentEditor runs on the sound rig with its display calls caught, as
 test_masterfx_rig.py's ui section does for the Master page; buttons and the encoder call what
-the page itself registered. The engines' parameters come through Patch's public metadata, as
-the editor reads them.
+the page itself registered. The mods start as at boot (mods::init on the fake card, then a
+main-loop pass with the mod On writes the default pack to /SynthFX/); a slot's plugin is made
+from the card when it is picked.
 
 1. off: with the mod Off, every CE engine's patch editor makes the same display calls, and
    draws the same bytes, as the reference build, through a walk over rows, values, defaults
    and sections. On WAVE (mod On) there is no button 3 either.
-2. page: mod On. Button 3 reads "Synth FX" and shows the nine rows with WAVE's names and
-   texts; the encoder and Delete set the part's settings and the project's record; the
-   Distortion renames Gain and Tone; the lists and bars; button 3 again, or a section, goes
-   back; the grid keeps every tile (VAP and WTFM fill all 16); toggling leaks no heap.
-3. bytes: the display list with the rows shown, on every engine, under the limit.
+2. page: mod On. Button 3 reads "Synth FX" and shows FX1 and FX2 at None; a slot's list has
+   None and the pack, without the other slot's plugin; a pick makes the plugin, its knobs
+   become rows with its names and texts, and the pick lands in the record; the encoder moves
+   a knob a step a tick, Delete puts it back and empties a slot; a swap shows Loading until
+   the main loop has made the new plugin, then the page redraws itself; button 3 again, or a
+   section, goes back; the grid keeps every tile (VAP and WTFM fill all 16); toggling and
+   picking leak no heap.
+3. bytes: the display list with the most rows (Phaser and Flanger), on a slot's list and on a
+   knob, on every engine, under the limit.
 4. projects: the record through CE's project hooks on a fake SD card (as test_swing.py): Open
-   without it is all Off; Save, Save As, New Project, Save As over another project; an
-   unsaved edit doesn't stick; the switch Off keeps the settings.
+   without it is every slot empty; a version 1 project opens with its effects in the slots,
+   and the main loop makes their plugins; Save, Save As, New Project, Save As over another
+   project; an unsaved edit doesn't stick; the switch Off keeps the slots.
 
 The record's rules are in the host tests (core/mods/tests/test_synthfx.cpp).
 
@@ -26,6 +32,7 @@ Usage: python tools/emu/test_synthfx_page.py <mods.axf> <reference.axf> [--only 
 from __future__ import annotations
 
 import argparse
+import math
 import struct
 import sys
 from pathlib import Path
@@ -33,31 +40,29 @@ from pathlib import Path
 from unicorn import UC_HOOK_MEM_READ
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from machine import Machine  # noqa: E402
 from sound_rig import SoundRig  # noqa: E402
 from test_masterfx_rig import LIMIT, MasterPage  # noqa: E402
 from test_step0 import store_image  # noqa: E402
 from test_swing import Projects  # noqa: E402
 from test_synths import WAVE  # noqa: E402
-from test_synthfx import INIT, NAMES, PERC, SYNTHFX_MOD  # noqa: E402
+from test_synthfx import FILE_SIZE, KNOBS, NAMES, PERC, SLOT_BYTES, SYNTHFX_MOD  # noqa: E402
 
 SYNTH0 = 64                 # SYNTH_INSTRUMENTS_START_IDX
 RECORD = SYNTHFX_MOD + 1
-SETTINGS = "_ZN4mods7synthfx8settingsE"
+SLOTS = "_ZN4mods7synthfx5slotsE"
 SWITCHES = "_ZN4mods8switchesE"
 STORE = "_ZN4mods12_GLOBAL__N_112projectStoreE"
 FX_BUTTON = 3
-# the rows, as WAVE's FX section has them without Placement, and their settings' index
-ROWS = (("Distortion", 5), ("Gain", 6), ("Tone", 7), ("Level", 9), ("Effect", 0), ("Rate", 1), ("Depth", 2),
-        ("Feedback", 4), ("FX Mix", 3))
-INIT_TEXTS = ("Off", "50 %", "50 %", "+0.0 dB", "None", None, "50 %", "+50 %", "50 %")
+RECORD_SIZE = 3 * 2 * SLOT_BYTES
+# the pack as the lists show it (each plugin's own name)
+PACK = ("Bit Crusher", "Chorus", "Distortion", "Flanger", "Overdrive", "Phaser")
+NAN = float("nan")
+NAME = {f"{n.replace(' ', '')}.ptsfx": n for n in PACK}
+KNOB_ROWS = {"BitCrusher.ptsfx": ("Bits", "Rate", "Level"), "Chorus.ptsfx": ("Rate", "Depth", "Mix"),
+             "Distortion.ptsfx": ("Gain", "Tone", "Level"), "Flanger.ptsfx": ("Rate", "Depth", "Feedback", "Mix"),
+             "Overdrive.ptsfx": ("Gain", "Tone", "Level"), "Phaser.ptsfx": ("Rate", "Depth", "Feedback", "Mix")}
 
 failures = 0
-
-
-def f32s(values):
-    """As the firmware holds them: single precision."""
-    return struct.unpack(f"<{len(values)}f", struct.pack(f"<{len(values)}f", *values))
 
 
 def check(ok: bool, what: str) -> None:
@@ -65,6 +70,28 @@ def check(ok: bool, what: str) -> None:
     print(("ok   " if ok else "FAIL ") + what)
     if not ok:
         failures += 1
+
+
+def start_mods(r, on):
+    """As at boot: mods::init on the rig's card, a main-loop pass with the mod On (the default pack
+    onto the card, its list read), then the switch as wanted."""
+    m = r.m
+    m.call(m.addr("_ZN4mods4initEP10FileSystem"), r.sd.obj, max_insns=50_000_000)
+    m.write(m.addr(SWITCHES) + SYNTHFX_MOD, b"\1")
+    m.call(m.addr("_ZN4mods6updateEv"), max_insns=200_000_000)
+    m.write(m.addr(SWITCHES) + SYNTHFX_MOD, bytes([1 if on else 0]))
+    m.uc.ctl_flush_tb()
+
+
+def slot_bytes(m, base):
+    return bytes(m.read(base, RECORD_SIZE))
+
+
+def slot_of(raw, part, slot):
+    """(file, knobs) of one slot in the slots' or the record's bytes (both the same layout)"""
+    at = (part * 2 + slot) * SLOT_BYTES
+    file = raw[at:at + FILE_SIZE].split(b"\0")[0].decode()
+    return file, struct.unpack("<12f", raw[at + FILE_SIZE:at + SLOT_BYTES])
 
 
 class EditorPage(MasterPage):
@@ -77,11 +104,12 @@ class EditorPage(MasterPage):
         super().__init__(axf)
         r, m = self.r, self.m
         r.stub(m.addr("_ZN8TitleBar33showCurrentInstrumentOnRightLabelEv"), lambda mm: 0)  # its own synth pointer
-        self.mods = SETTINGS in r.syms
+        self.mods = SLOTS in r.syms
         if self.mods:
             m.call(m.addr("_GLOBAL__sub_I__ZN4mods4initEP10FileSystem"))  # the project store
             r.stub(m.addr("_ZN12cFileManager23setProjectStructChangedEv"), lambda mm: 0)
-            m.write(m.addr(SWITCHES) + SYNTHFX_MOD, bytes([1 if on else 0]))
+            start_mods(r, on)
+            self.slots = m.addr(SLOTS)
         r.set_instrument(0, engine)
         settings = m.alloc(512, 4)
         r.call("_ZN5Synth21initSynthPartSettingsEiR17SynthPartSettings", r.synth, 0, settings)
@@ -115,13 +143,32 @@ class EditorPage(MasterPage):
     def press_id(self, button):
         mode, fn = self.buttons[button]
         self.m.call(fn, button, max_insns=100_000_000) if mode in (2, 4) else self.m.call(fn, max_insns=100_000_000)
+        self.m.uc.ctl_flush_tb()
+
+    def turn(self, value):
+        self.encoder(value)
+        self.m.uc.ctl_flush_tb()            # a pick may load a plugin's code
 
     def section(self, index):
         """A pad or the grid's middle button: setSection."""
         self.m.call(self.m.addr("_ZN17cInstrumentEditor10setSectionEi"), self.page, index, max_insns=300_000_000)
 
-    def settings(self, part=0):
-        return struct.unpack("<10f", self.m.read(self.m.addr(SETTINGS) + 40 * part, 40))
+    def main_loop(self, ms=100):
+        """Time passes (a swapped plugin is let go after 50 ms when no audio runs), then a main-loop
+        pass: the mods' update (the slots' plugins made and freed) and the editor's own update,
+        which redraws the rows when a slot changed."""
+        m = self.m
+        self.r.now += ms
+        m.call(m.addr("_ZN4mods6updateEv"), max_insns=200_000_000)
+        m.uc.ctl_flush_tb()
+        m.call(m.addr("_ZN17cInstrumentEditor6updateEv"), self.page, max_insns=200_000_000)
+
+    def slot(self, part=0, slot=0):
+        return slot_of(slot_bytes(self.m, self.slots), part, slot)
+
+    def instance(self, part=0, slot=0):
+        v = self.m.call(self.m.addr("_ZN4mods7synthfx12slotInstanceEii"), part, slot)
+        return v - (1 << 32) if v & 0x80000000 else v
 
     def record(self):
         """Record 16's version and bytes in the project's store, or None."""
@@ -140,6 +187,22 @@ class EditorPage(MasterPage):
 
     def texts_of(self, kind):
         return [e[2] for e in self.log if e[0] == kind]
+
+    def pick(self, file, slot=0, part=0, most=10):
+        """The encoder on a slot's row until the slot has file (the row must be selected), then a
+        main-loop pass: a pick over a made plugin is Loading until the main loop has let it go"""
+        for _ in range(most):
+            if self.slot(part, slot)[0] == file:
+                break
+            self.turn(1)
+        self.main_loop()
+        return self.slot(part, slot)[0] == file and self.instance(part, slot) >= 0
+
+
+def after(texts, name):
+    """The text drawn after a row's name: its value"""
+    i = texts.index(name) if name in texts else -1
+    return texts[i + 1] if 0 <= i < len(texts) - 1 else None
 
 
 def walk(p):
@@ -193,81 +256,93 @@ def test_page(mods):
     p.take_log()
     p.press_id(FX_BUTTON)
     texts, _ = p.drawn()
-    names_ok = all(n in texts for n, _ in ROWS)
-    values = []
-    for (n, _), want in zip(ROWS, INIT_TEXTS):
-        i = texts.index(n) if n in texts else -1
-        values.append(texts[i + 1] if 0 <= i < len(texts) - 1 else None)
-    texts_ok = all(w is None or v == w for v, w in zip(values, INIT_TEXTS)) and values[5].endswith("Hz")
-    check(names_ok and texts_ok and "Synth FX" in p.texts_of("text"),
-          f"button 3: the nine rows with WAVE's names and Init texts, the list titled Synth FX ({values})")
-    check(p.record() is None, "nothing edited: no record in the project")
+    check(after(texts, "FX1") == "None" and after(texts, "FX2") == "None" and "Synth FX" in p.texts_of("text"),
+          f"button 3: FX1 and FX2 at None, the list titled Synth FX ({texts[:8]})")
+    check(all(n in texts for n in PACK), f"FX1's list: None and the pack ({[n for n in PACK if n not in texts]} missing)")
+    check(p.record() is None, "nothing picked: no record in the project")
 
-    # the Distortion's list: the encoder moves it, Delete puts it back
-    p.encoder(1)
-    s = p.settings()
+    # FX1: the Overdrive, made from the card; its knobs become rows
+    picked = p.pick("Overdrive.ptsfx")
     texts, _ = p.drawn()
-    check(s[5] == 1.0 and "Overdrive" in texts and any(t.startswith("+") and t.endswith("dB") and t != "+0.0 dB"
-                                                         for t in texts),
-          f"encoder on Distortion: Overdrive, and Gain shows its dB ({s[5]})")
+    gain, tone, level = after(texts, "Gain"), after(texts, "Tone"), after(texts, "Level")
+    check(picked and p.instance() >= 0 and after(texts, "FX1") == "Overdrive" and
+          (gain or "").endswith("dB") and tone == "50 %" and level == "+0.0 dB",
+          f"FX1 picks the Overdrive: made ({p.instance()}), its Gain, Tone and Level as rows ({gain}, {tone}, {level})")
     rec = p.record()
-    check(rec is not None and rec[0] == 1 and len(rec[1]) == 30 and rec[1][5] == 1,
-          f"the edit lands in the project's record 16 ({rec})")
-    p.encoder(2)
-    texts, _ = p.drawn()
-    check(p.settings()[5] == 3.0 and "Bits" in texts and "Rate" in texts and "Gain" not in texts
-          and any(t.endswith("bit") for t in texts), "Bit Crusher: Gain and Tone become Bits and Rate")
-    p.encoder(5)
-    check(p.settings()[5] == 3.0, "the list stops at its end")
-    p.press("delete")
-    texts, _ = p.drawn()
-    check(p.settings()[5] == 0.0 and "Gain" in texts, "Delete: Distortion back to Off, Gain again")
+    want = slot_of(rec[1], 0, 0) if rec and len(rec[1]) == RECORD_SIZE else None
+    check(rec is not None and rec[0] == 2 and want is not None and want[0] == "Overdrive.ptsfx" and
+          want[1][:3] == (50.0, 50.0, 0.0) and all(math.isnan(k) for k in want[1][3:]),
+          f"the pick lands in the project's record 16, version 2, its knobs on the plugin's steps "
+          f"({rec[0] if rec else None}, {want})")
 
-    # values: down to Gain, Level, Feedback
+    # the knobs: a step a tick, Delete, the ends
     p.press("down")
-    p.encoder(7)
-    check(abs(p.settings()[6] - 0.57) < 1e-6, f"Gain: 1 % a step ({p.settings()[6]})")
+    p.turn(7)
+    check(p.slot()[1][0] == 57.0, f"Gain: 1 % a step ({p.slot()[1][0]})")
+    p.press("delete")
+    check(p.slot()[1][0] == 50.0, f"Delete: Gain back to 50 % ({p.slot()[1][0]})")
     p.press("down")
     p.press("down")
-    p.encoder(100)
+    p.turn(100)
     texts, _ = p.drawn()
-    check(p.settings()[9] == 6.0 and "+6.0 dB" in texts, f"Level: up to +6 dB ({p.settings()[9]})")
-    p.encoder(-1)
-    check(p.settings()[9] == 5.5, "in 0.5 dB")
+    check(p.slot()[1][2] == 6.0 and "+6.0 dB" in texts, f"Level: up to +6 dB ({p.slot()[1][2]})")
+    p.turn(-1)
+    check(p.slot()[1][2] == 5.5, "in 0.5 dB")
+
+    # FX2: every plugin but FX1's; the Chorus
+    p.press("down")
+    texts, _ = p.drawn()
+    shown = [n for n in PACK if n in texts]
+    check(texts.count("Overdrive") == 1 and len(shown) == len(PACK) and after(texts, "FX2") == "None",
+          f"FX2's list: None and every plugin but FX1's (the Overdrive only as FX1's, {texts.count('Overdrive')})")
+    picked = p.pick("Chorus.ptsfx", slot=1)
+    texts, _ = p.drawn()
+    knobs = [after(texts, k) for k in ("Rate", "Depth", "Mix")]
+    check(picked and p.instance(0, 1) >= 0 and all(knobs) and knobs[1:] == ["50 %", "50 %"],
+          f"FX2 picks the Chorus: made, Rate, Depth and Mix as rows ({knobs})")
+
+    # a swap: FX1 to the next plugin, Loading until the main loop has let the Overdrive go and made it
     for _ in range(4):
-        p.press("down")
-    p.encoder(-300)
+        p.press("up")
+    p.turn(1)
+    file = p.slot()[0]
     texts, _ = p.drawn()
-    check(abs(p.settings()[4] + 0.95) < 1e-6 and "-95 %" in texts, f"Feedback: down to -95 % ({p.settings()[4]})")
+    loading = after(texts, "FX1")
+    check(file not in ("", "Overdrive.ptsfx", "Chorus.ptsfx") and loading == "Loading" and "Gain" not in texts and
+          p.instance() == -1, f"a swap: FX1 to {file}, the row Loading ({loading}) and the old knobs gone")
+    p.main_loop()
+    made = p.instance()
+    count = sum(p.instance(0, s) >= 0 for s in range(2))
+    texts, _ = p.drawn()
+    now = after(texts, "FX1")
+    check(made >= 0 and count == 2, f"then the main loop lets the Overdrive go and makes it ({made}, {count} made)")
+    rows = KNOB_ROWS.get(file, ("?",))
+    check(now == NAME.get(file) and all(after(texts, k) for k in rows),
+          f"the page redraws itself once the plugin is made: FX1 {now}, then its knobs {rows}")
+
+    # Delete on FX1: None, the knobs' rows gone
     p.press("delete")
-    check(p.settings()[4] == 0.5, "Delete: Feedback back to +50 %")
-    p.press("up")
-    p.press("up")
-    p.press("up")
-    p.encoder(1)
+    p.main_loop()
     texts, _ = p.drawn()
-    check(p.settings()[0] == 1.0 and "Chorus" in texts, "Effect: Chorus")
-    rec = p.record()
-    want = [round(INIT[k] * 100) if k in (1, 2, 3, 6, 7) else 0 for k in range(10)]
-    want[0], want[4], want[6], want[8], want[9] = 1, 145, 57, 1, 71
-    check(rec is not None and list(rec[1][:10]) == want and list(rec[1][10:]) == [0, 50, 50, 50, 145, 0, 50, 50, 1, 60] * 2,
-          f"the record holds part 1's steps, the others at Init ({list(rec[1][:10]) if rec else None})")
-    others = p.settings(1), p.settings(2)
-    check(others == (INIT, INIT), "the other parts' settings untouched")
+    check(p.slot()[0] == "" and after(texts, "FX1") == "None" and after(texts, "FX2") == "Chorus" and p.instance() == -1,
+          f"Delete on FX1: None, its plugin let go, FX2 kept ({after(texts, 'FX1')}, {after(texts, 'FX2')})")
+    others = slot_bytes(p.m, p.slots)[2 * SLOT_BYTES:]
+    check(all(slot_of(others, part, s)[0] == "" for part in range(2) for s in range(2)),
+          "the other parts' slots untouched")
 
     # back: button 3 again, or a section
     p.press_id(FX_BUTTON)
     texts, _ = p.drawn()
-    check("Distortion" not in texts and texts == grid_on and p.texts_of("text")[-1] != "Synth FX",
+    check("FX1" not in texts and texts == grid_on and p.texts_of("text")[-1] != "Synth FX",
           "button 3 again: the section's rows back, as before")
     p.press_id(FX_BUTTON)
     p.section(0)
     texts, _ = p.drawn()
-    check("Distortion" not in texts and "Saw Mix" in texts, "a section, even the same one, leaves the rows")
+    check("FX1" not in texts and "Saw Mix" in texts, "a section, even the same one, leaves the rows")
     p.press_id(FX_BUTTON)
     p.section(9)
     texts, _ = p.drawn()
-    check("Distortion" not in texts and "Macro name" in texts, "and a macro's tile")
+    check("FX1" not in texts and "Macro name" in texts, "and a macro's tile")
 
     # VAP and WTFM fill all 16 tiles: On or Off, the same grid
     for e in (4, 5, PERC):
@@ -286,11 +361,13 @@ def test_page(mods):
     heap0 = p.r.heap_brk
     for i in range(40):
         p.press_id(FX_BUTTON)
-        p.encoder(1 if i % 2 else -1)
-        p.press("down")
+        p.turn(1 if i % 3 else -1)
+        p.press("down" if i % 4 else "up")
         if i % 5 == 0:
             p.section(i % 4)
-    check(p.r.heap_brk == heap0 and not p.r.failures, f"40 toggles and edits: heap held, no asserts {p.r.failures[:1]}")
+        if i % 3 == 0:
+            p.main_loop()
+    check(p.r.heap_brk == heap0 and not p.r.failures, f"40 toggles, picks and edits: heap held, no asserts {p.r.failures[:1]}")
 
 
 def test_bytes(mods, ref):
@@ -302,89 +379,134 @@ def test_bytes(mods, ref):
         ce = b.drawn()[1]
         _, closed = a.drawn()
         a.press_id(FX_BUTTON)
-        _, rows = a.drawn()
-        a.press("down")
-        a.press("down")
+        _, empty = a.drawn()
+        a.pick("Phaser.ptsfx")
+        for _ in range(5):
+            a.press("down")
+        a.pick("Flanger.ptsfx", slot=1)
+        _, lists = a.drawn()
         a.press("down")
         _, bar = a.drawn()
-        worst = max(closed, rows, bar)
-        check(worst < LIMIT, f"{name}: {closed} bytes on opening, {rows} with the rows, {bar} on a bar "
-                             f"(CE {ce}; limit {LIMIT})")
+        rows = a.m.call(a.m.addr("_ZN4mods7synthfx8rowCountEi"), 0)
+        worst = max(closed, empty, lists, bar)
+        check(worst < LIMIT and rows == 10, f"{name}: {closed} bytes on opening, {empty} with the slots empty, "
+                                            f"{lists} with {rows} rows on a slot's list, {bar} on a knob "
+                                            f"(CE {ce}; limit {LIMIT})")
+
+
+SLOTS_A = ((("Phaser.ptsfx", (10, 20, -30, 40)), ("Overdrive.ptsfx", (70, 30, -6))),)
+SLOTS_B = ((("Chorus.ptsfx", (1, 2, 3)), (None, ())),)
+
+
+def slot_image(part_slots):
+    """One part's two slots as the firmware holds them"""
+    out = b""
+    for file, knobs in part_slots:
+        name = (file or "").encode().ljust(FILE_SIZE, b"\0")
+        vals = list(knobs) + [NAN] * (KNOBS - len(knobs))
+        out += name + struct.pack("<12f", *vals)
+    return out
+
+
+EMPTY = slot_image(((None, ()), (None, ())))
+A = slot_image(SLOTS_A[0])
+B = slot_image(SLOTS_B[0])
 
 
 class FxProjects(Projects):
-    def __init__(self, axf):
-        class R:
-            pass
-        r = R()
-        r.m = Machine(axf)
-        super().__init__(r)
-        self.fx = self.m.addr(SETTINGS)
+    """CE's project hooks on the sound rig (its platform: the plugins' clock)"""
 
-    def edit(self, part, values, on=True):
+    def __init__(self, axf):
+        r = SoundRig(axf)
+        r.stub(r.m.addr("_ZN11TrackerImpl11getPlatformEv"), lambda mm: r.platform)
+        super().__init__(r)
+        self.slots = self.m.addr(SLOTS)
+
+    def edit(self, part, image, on=True):
         self.m.write(self.switches + SYNTHFX_MOD, bytes([1 if on else 0]))
         self.m.call(self.m.addr("_ZN4mods20projectSwitchChangedEv"))
-        self.m.write(self.fx + 40 * part, struct.pack("<10f", *values))
+        self.m.write(self.slots + part * 2 * SLOT_BYTES, image)
         self.m.call(self.m.addr("_ZN4mods20projectSettingEditedEv"))
 
+    def parts(self):
+        raw = slot_bytes(self.m, self.slots)
+        return tuple(raw[p * 2 * SLOT_BYTES:(p + 1) * 2 * SLOT_BYTES] for p in range(3))
+
     def state(self):
-        return (self.m.r8(self.switches + SYNTHFX_MOD),
-                tuple(struct.unpack("<10f", self.m.read(self.fx + 40 * p, 40)) for p in range(3)))
+        return self.m.r8(self.switches + SYNTHFX_MOD), self.parts()
 
 
 def test_projects(mods):
     print("-- projects --")
     p = FxProjects(mods)
     sd = p.sd
-    a = f32s((3.0, 0.25, 0.75, 0.4, -0.5, 2.0, 0.8, 0.3, 1.0, -6.0))   # each on its setting's steps
-    b = f32s((1.0, 0.5, 0.5, 0.9, 0.5, 3.0, 0.1, 0.9, 1.0, 2.5))
-    init3 = (INIT, INIT, INIT)
+    empty3 = (EMPTY, EMPTY, EMPTY)
 
     older = bytearray(SYNTHFX_MOD)
     sd.files["Projects/Old/mods.bin"] = store_image(b"MTP1", [(0, 1, bytes(older))])
-    p.edit(1, a)
+    p.edit(1, A)
     p.open("Projects", "Old")
-    check(p.state()[1] == init3, "a project from a build without Synth FX: every effect Off")
+    check(p.parts() == empty3, "a project from a build without Synth FX: every slot empty")
 
-    p.edit(1, a)
-    p.edit(2, b)
-    p.save()
+    # version 1: the Distortion and the Phaser on every part, Feedback 90 %
+    v1 = bytes([3, 50, 50, 50, 185, 2, 100, 50, 1, 60] * 3)
+    switches = bytearray(SYNTHFX_MOD + 1)
+    switches[SYNTHFX_MOD] = 1
+    sd.files["Projects/V1/mods.bin"] = store_image(b"MTP1", [(0, 1, bytes(switches)), (RECORD, 1, v1)])
+    p.open("Projects", "V1")
+    fx = [slot_of(p.parts()[part], 0, s) for part in range(3) for s in range(2)]
+    check([f for f, _ in fx] == ["Distortion.ptsfx", "Phaser.ptsfx"] * 3 and fx[0][1][:3] == (100.0, 50.0, 0.0) and
+          fx[1][1][:4] == (50.0, 50.0, 90.0, 50.0),
+          f"a version 1 project: its effects in the slots, the Distortion in FX1 and the Phaser in FX2 ({fx[:2]})")
+    passes = 0
+    made = [False] * 6
+    while not all(made) and passes < 4:     # the first pass starts the plugins, the next makes the slots'
+        p.m.call(p.m.addr("_ZN4mods6updateEv"), max_insns=400_000_000)
+        p.m.uc.ctl_flush_tb()
+        passes += 1
+        made = [p.m.call(p.m.addr("_ZN4mods7synthfx12slotInstanceEii"), i // 2, i % 2) < 0x80000000 for i in range(6)]
+    check(all(made), f"Open: each slot's plugin made by the main loop ({made}, after {passes} passes)")
+
     p.new_project()
-    check(p.state()[1] == init3, "New Project: every effect Off")
+    p.edit(1, A)
+    p.edit(2, B)
+    p.save("Projects", "Old")
+    p.new_project()
+    check(p.parts() == empty3, "New Project: every slot empty")
     p.open("Projects", "Old")
-    check(p.state()[1] == (INIT, a, b), "Save: reopened with its settings")
+    check(p.parts() == (EMPTY, A, B), "Save: reopened with its slots")
 
-    p.edit(0, b)
+    p.edit(0, B)
     p.save("Projects", "Copy")
     check("Projects/Copy/mods.bin" in sd.files, "Save As: mods.bin in the new folder")
     p.open("Projects", "Old")
-    check(p.state()[1] == (INIT, a, b), "Save As leaves the first project as it was")
+    check(p.parts() == (EMPTY, A, B), "Save As leaves the first project as it was")
     p.open("Projects", "Copy")
-    check(p.state()[1] == (b, a, b), "Save As: the new project has the settings")
+    check(p.parts() == (B, A, B), "Save As: the new project has the slots")
 
     p.new_project()
     p.save("Projects", "Fresh")
     p.open("Projects", "Copy")
     p.open("Projects", "Fresh")
-    check(p.state()[1] == init3, "New Project then Save As: every effect Off")
+    check(p.parts() == empty3, "New Project then Save As: every slot empty")
 
     p.open("Projects", "Copy")
-    p.edit(2, a)
+    p.edit(2, A)
     p.save("Projects", "Fresh")
     p.open("Projects", "Old")
     p.open("Projects", "Fresh")
-    check(p.state()[1] == (b, a, a), "Save As over another project: replaces its settings")
+    check(p.parts() == (B, A, A), "Save As over another project: replaces its slots")
 
-    p.edit(0, a)
+    p.edit(0, A)
     p.open("Projects", "Old")
     p.open("Projects", "Fresh")
-    check(p.state()[1] == (b, a, a), "an unsaved edit doesn't stick")
+    check(p.parts() == (B, A, A), "an unsaved edit doesn't stick")
 
-    p.edit(0, b, on=False)
+    p.edit(0, B, on=False)
     p.save()
     p.open("Projects", "Old")
     p.open("Projects", "Fresh")
-    check(p.state() == (0, (b, a, a)), "Off: the switch saved Off, the settings kept")
+    check(p.state() == (0, (B, A, A)), "Off: the switch saved Off, the slots kept")
     check(not sd.unexpected and not sd.handles, f"only expected file calls, every file closed {sd.unexpected}")
 
 

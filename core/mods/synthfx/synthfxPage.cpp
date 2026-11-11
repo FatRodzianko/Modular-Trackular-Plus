@@ -1,7 +1,8 @@
 // Modular-Trackular mods. SPDX-License-Identifier: MIT
 //
-// Synth FX's rows on the patch editor (synthfxMod.h): their names and value texts, as WAVE's
-// and PHASE's FX section shows them (synths/synthsSdk.cpp). Main loop only.
+// Synth FX's rows on the patch editor (synthfxMod.h): FX1, its plugin's knobs, FX2, its plugin's
+// knobs. A slot's row picks its plugin from the catalog (not the one in the part's other slot);
+// a knob's row has the plugin's name, steps and texts. Main loop only.
 
 #include "modsBuild.h"
 
@@ -9,101 +10,401 @@
 
 #include "synthfxMod.h"
 
-#include "synthFx.h"
+#include "synthfxPlugins.h"
 
+#include "config.h"
+#include <cr_section_macros.h>
 #include <cstdio>
+#include <cstring>
 
 namespace mods
 {
 namespace synthfx
 {
 
-using namespace mtfx;
-
 namespace
 {
 
-const char* const kEffects[FX_TYPES] = { "None", "Chorus", "Flanger", "Phaser" };
-const char* const kDistortions[DIST_TYPES] = { "Off", "Overdrive", "Distortion", "Bit Crusher" };
+constexpr int kNone = -1;      // a choice: no plugin
+constexpr int kOwnFile = -2;   // a choice: the slot's file, not listed now (missing, damaged)
 
-bool crusher(int part)
+// a slot's choices, from the last choices() (main loop; written before it is read)
+__NOINIT(EXTERNAL_RAM) int choiceList[kMaxChoices];
+
+bool validPart(int part)
 {
-    return part >= 0 && part < kParts && list_pick(settings[part][FXP_DIST], DIST_TYPES) == DIST_CRUSHER;
+    return part >= 0 && part < kParts;
 }
 
-uint32_t distType(int part)
+int knobsOf(int part, int slot)
 {
-    return part >= 0 && part < kParts ? list_pick(settings[part][FXP_DIST], DIST_TYPES) : DIST_OFF;
+    const PtsfxHeader* h = plugins::header(slotInstance(part, slot));
+    if (h == nullptr)
+    {
+        return 0;
+    }
+    return h->num_params < kKnobs ? h->num_params : static_cast<int>(kKnobs);
 }
 
-void hzText(float hz, char* out, size_t size)
+// row -> slot and knob (-1: the slot's own row); false if there is no such row
+bool locate(int part, int row, int* slot, int* knob)
 {
-    if (hz < 10.0f)
-        snprintf(out, size, "%.2f Hz", hz);
-    else if (hz < 100.0f)
-        snprintf(out, size, "%.1f Hz", hz);
-    else if (hz < 1000.0f)
-        snprintf(out, size, "%.0f Hz", hz);
+    if (!validPart(part) || row < 0)
+    {
+        return false;
+    }
+    for (int s = 0; s < kSlots; s++)
+    {
+        const int rows = 1 + knobsOf(part, s);
+        if (row < rows)
+        {
+            *slot = s;
+            *knob = row - 1;
+            return true;
+        }
+        row -= rows;
+    }
+    return false;
+}
+
+// The slot's choices into choiceList: None, every usable plugin but the other slot's, and the
+// slot's own file if it isn't one of those. Returns how many.
+int choices(int part, int slot)
+{
+    int n = 0;
+    choiceList[n++] = kNone;
+    const char* own = slots[part][slot].file;
+    bool ownListed = own[0] == 0;
+    for (size_t i = 0; i < plugins::catalogCount() && n < kMaxChoices - 1; i++)
+    {
+        const plugins::CatalogEntry* e = plugins::catalogAt(i);
+        if (e == nullptr || e->status != plugins::Status::ok || usedByOtherSlot(part, slot, e->file))
+        {
+            continue;
+        }
+        if (!ownListed && plugins::catalogFind(own) == static_cast<int>(i))
+        {
+            ownListed = true;
+        }
+        choiceList[n++] = static_cast<int>(i);
+    }
+    if (!ownListed)
+    {
+        choiceList[n++] = kOwnFile;
+    }
+    return n;
+}
+
+int currentChoice(int part, int slot, int count)
+{
+    const char* own = slots[part][slot].file;
+    if (own[0] == 0)
+    {
+        return 0;
+    }
+    const int listed = plugins::catalogFind(own);
+    for (int i = 1; i < count; i++)
+    {
+        if (choiceList[i] == kOwnFile || (listed >= 0 && choiceList[i] == listed))
+        {
+            return i;
+        }
+    }
+    return 0;
+}
+
+// The file name without .ptsfx
+void stem(const char* file, char* out, size_t size)
+{
+    snprintf(out, size, "%s", file);
+    char* dot = strrchr(out, '.');
+    if (dot != nullptr && dot != out)
+    {
+        *dot = 0;
+    }
+}
+
+void pluginName(const char* file, char* out, size_t size)
+{
+    const int listed = plugins::catalogFind(file);
+    const plugins::CatalogEntry* e = listed >= 0 ? plugins::catalogAt(static_cast<size_t>(listed)) : nullptr;
+    if (e != nullptr && e->status == plugins::Status::ok && e->name[0] != 0)
+    {
+        snprintf(out, size, "%s", e->name);
+    }
     else
-        snprintf(out, size, "%.1f kHz", hz * 0.001f);
+    {
+        stem(file, out, size);
+    }
 }
 
-void percentText(float v, bool signedRange, char* out, size_t size)
+const char* whyText(uint8_t status)
 {
-    const int pc = static_cast<int>(v * 100.0f + (v < 0.0f ? -0.5f : 0.5f));
-    snprintf(out, size, signedRange && pc > 0 ? "+%d %%" : "%d %%", pc);
+    switch (static_cast<plugins::Status>(status))
+    {
+    case plugins::Status::missing: return "Missing";
+    case plugins::Status::badFile: return "Bad file";
+    case plugins::Status::tooBig: return "Too big";
+    case plugins::Status::noCodeRoom:
+    case plugins::Status::noStateRoom:
+    case plugins::Status::tooMany: return "No room";
+    case plugins::Status::skipped: return "Safe mode";
+    case plugins::Status::readFailed: return "Read error";
+    default: return "Not loaded";
+    }
+}
+
+void slotText(int part, int slot, char* out, size_t size)
+{
+    char name[kFileSize];
+    pluginName(slots[part][slot].file, name, sizeof name);
+    switch (slotState(part, slot))
+    {
+    case SlotState::empty: snprintf(out, size, "None"); break;
+    case SlotState::loading: snprintf(out, size, "Loading"); break;
+    case SlotState::running: snprintf(out, size, "%s", name); break;
+    case SlotState::bypassed: snprintf(out, size, "Slow: %s", name); break;
+    case SlotState::failed: snprintf(out, size, "%s: %s", whyText(slotStatus(part, slot)), name); break;
+    }
+}
+
+const PtsfxParam* paramOf(int part, int slot, int knob)
+{
+    const PtsfxHeader* h = plugins::header(slotInstance(part, slot));
+    return h != nullptr && knob >= 0 && knob < knobsOf(part, slot) ? &h->params[knob] : nullptr;
 }
 
 } // namespace
 
-const char* rowName(int part, int row)
+int rowCount(int part)
 {
-    switch (rowSetting(row))
-    {
-    case FXP_DIST: return "Distortion";
-    case FXP_GAIN: return crusher(part) ? "Bits" : "Gain";
-    case FXP_TONE: return crusher(part) ? "Rate" : "Tone";
-    case FXP_LEVEL: return "Level";
-    case FXP_EFFECT: return "Effect";
-    case FXP_RATE: return "Rate";
-    case FXP_DEPTH: return "Depth";
-    case FXP_FEEDBACK: return "Feedback";
-    case FXP_MIX: return "FX Mix";
-    default: return "";
-    }
+    return validPart(part) ? kSlots + knobsOf(part, 0) + knobsOf(part, 1) : 0;
 }
 
-void rowText(int part, int row, int step, char* out, size_t size)
+void rowName(int part, int row, char* out, size_t size)
 {
+    int slot = 0;
+    int knob = 0;
     if (out == nullptr || size == 0)
     {
         return;
     }
-    const int s = rowSetting(row);
-    const float v = valueOf(s, step);
-    switch (s)
+    out[0] = 0;
+    if (!locate(part, row, &slot, &knob))
     {
-    case FXP_EFFECT: snprintf(out, size, "%s", kEffects[list_pick(v, FX_TYPES)]); break;
-    case FXP_DIST: snprintf(out, size, "%s", kDistortions[list_pick(v, DIST_TYPES)]); break;
-    case FXP_RATE: hzText(rate_hz(v), out, size); break;
-    case FXP_LEVEL: snprintf(out, size, "%+.1f dB", v); break;
-    case FXP_FEEDBACK: percentText(v, true, out, size); break;
-    case FXP_GAIN:
-        switch (distType(part))
+        return;
+    }
+    if (knob < 0)
+    {
+        snprintf(out, size, "FX%d", slot + 1);
+        return;
+    }
+    const PtsfxParam* p = paramOf(part, slot, knob);
+    snprintf(out, size, "%s", p != nullptr ? p->label : "");
+}
+
+bool rowIsList(int part, int row)
+{
+    int slot = 0;
+    int knob = 0;
+    if (!locate(part, row, &slot, &knob))
+    {
+        return false;
+    }
+    if (knob < 0)
+    {
+        return true;
+    }
+    const PtsfxParam* p = paramOf(part, slot, knob);
+    return p != nullptr && p->display_type == PTSFX_PARAM_LIST &&
+           plugins::knobSteps(slotInstance(part, slot), static_cast<uint32_t>(knob)) <= kListKnobSteps;
+}
+
+bool rowBipolar(int part, int row)
+{
+    int slot = 0;
+    int knob = 0;
+    if (!locate(part, row, &slot, &knob) || knob < 0)
+    {
+        return false;
+    }
+    const PtsfxParam* p = paramOf(part, slot, knob);
+    return p != nullptr && p->min_val < 0.0f && p->max_val == -p->min_val;
+}
+
+int rowSteps(int part, int row)
+{
+    int slot = 0;
+    int knob = 0;
+    if (!locate(part, row, &slot, &knob))
+    {
+        return 1;
+    }
+    if (knob < 0)
+    {
+        return choices(part, slot);
+    }
+    const uint32_t n = plugins::knobSteps(slotInstance(part, slot), static_cast<uint32_t>(knob));
+    return n > 0 ? static_cast<int>(n) : 1;
+}
+
+int rowStep(int part, int row)
+{
+    int slot = 0;
+    int knob = 0;
+    if (!locate(part, row, &slot, &knob))
+    {
+        return 0;
+    }
+    if (knob < 0)
+    {
+        return currentChoice(part, slot, choices(part, slot));
+    }
+    return static_cast<int>(plugins::knobStep(slotInstance(part, slot), static_cast<uint32_t>(knob)));
+}
+
+void rowText(int part, int row, char* out, size_t size)
+{
+    int slot = 0;
+    int knob = 0;
+    if (out == nullptr || size == 0)
+    {
+        return;
+    }
+    out[0] = 0;
+    if (!locate(part, row, &slot, &knob))
+    {
+        return;
+    }
+    if (knob < 0)
+    {
+        slotText(part, slot, out, size);
+        return;
+    }
+    plugins::knobText(slotInstance(part, slot), static_cast<uint32_t>(knob), out, static_cast<uint32_t>(size));
+}
+
+void rowItemText(int part, int row, int step, char* out, size_t size)
+{
+    int slot = 0;
+    int knob = 0;
+    if (out == nullptr || size == 0)
+    {
+        return;
+    }
+    out[0] = 0;
+    if (!locate(part, row, &slot, &knob) || step < 0)
+    {
+        return;
+    }
+    if (knob >= 0)
+    {
+        plugins::knobTextAt(slotInstance(part, slot), static_cast<uint32_t>(knob), static_cast<uint32_t>(step), out,
+                            static_cast<uint32_t>(size));
+        return;
+    }
+    const int count = choices(part, slot);
+    if (step >= count)
+    {
+        return;
+    }
+    const int c = choiceList[step];
+    if (c == kNone)
+    {
+        snprintf(out, size, "None");
+    }
+    else if (c == kOwnFile)
+    {
+        slotText(part, slot, out, size);
+    }
+    else
+    {
+        const plugins::CatalogEntry* e = plugins::catalogAt(static_cast<size_t>(c));
+        pluginName(e != nullptr ? e->file : "", out, size);
+    }
+}
+
+int rowEncoderSteps(int part, int row, int ticks)
+{
+    int slot = 0;
+    int knob = 0;
+    if (!locate(part, row, &slot, &knob) || knob < 0)
+    {
+        return ticks;
+    }
+    const int per = (rowSteps(part, row) - 1) / kStepsPerTurn;
+    return ticks * (per > 1 ? per : 1);
+}
+
+bool setRowStep(int part, int row, int step)
+{
+    int slot = 0;
+    int knob = 0;
+    if (!locate(part, row, &slot, &knob))
+    {
+        return false;
+    }
+    if (knob >= 0)
+    {
+        const int id = slotInstance(part, slot);
+        const int last = rowSteps(part, row) - 1;
+        step = step < 0 ? 0 : (step > last ? last : step);
+        plugins::setKnobStep(id, static_cast<uint32_t>(knob), static_cast<uint32_t>(step));
+        slots[part][slot].knobs[knob] = plugins::knob(id, static_cast<uint32_t>(knob));
+        return false;
+    }
+    const int count = choices(part, slot);
+    step = step < 0 ? 0 : (step >= count ? count - 1 : step);
+    const int c = choiceList[step];
+    if (step == currentChoice(part, slot, count) || c == kOwnFile)
+    {
+        return false;
+    }
+    if (c == kNone)
+    {
+        clearSlot(part, slot);
+    }
+    else
+    {
+        const plugins::CatalogEntry* e = plugins::catalogAt(static_cast<size_t>(c));
+        if (e == nullptr)
         {
-        case DIST_CRUSHER: snprintf(out, size, "%.1f bit", crush_bits(v)); break;
-        case DIST_OVERDRIVE: snprintf(out, size, "+%.0f dB", 6.0206f * (1.0f + v * 5.8826430f)); break;
-        case DIST_DISTORTION: snprintf(out, size, "+%.0f dB", 10.0f + v * 40.0f); break;
-        default: percentText(v, false, out, size); break;
+            return false;
         }
-        break;
-    case FXP_TONE:
-        if (crusher(part))
-            hzText(crush_hz(v), out, size);
-        else
-            percentText(v, false, out, size);
-        break;
-    default: percentText(v, false, out, size); break;
+        setSlotFile(part, slot, e->file);
+    }
+    remake(part, slot, false);
+    return true;
+}
+
+bool defaultRow(int part, int row)
+{
+    int slot = 0;
+    int knob = 0;
+    if (!locate(part, row, &slot, &knob))
+    {
+        return false;
+    }
+    if (knob < 0)
+    {
+        return setRowStep(part, row, 0); // None
+    }
+    const PtsfxParam* p = paramOf(part, slot, knob);
+    if (p != nullptr)
+    {
+        const int id = slotInstance(part, slot);
+        plugins::setKnob(id, static_cast<uint32_t>(knob), p->default_val);
+        slots[part][slot].knobs[knob] = plugins::knob(id, static_cast<uint32_t>(knob));
+    }
+    return false;
+}
+
+void pageOpened()
+{
+    if (plugins::started())
+    {
+        plugins::scan(); // the card may have new files
+        retryFailed();
     }
 }
 

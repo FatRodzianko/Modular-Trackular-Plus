@@ -103,7 +103,6 @@ class BootRig(SoundRig):
             "enableFastSeek": lambda mm: 0,
             "createFilesList": lambda mm: 0,
             "createInstrumentsList": lambda mm: 0,
-            "listDirContents": lambda mm: 0,
             # a card answers 0 for a file that isn't there
             "getFileSizeEPKc": lambda mm: len(sd.files.get(mm.cstr(mm.arg(1)), b"")),
             "writeFile": self._write,
@@ -273,7 +272,8 @@ def main():
     ap.add_argument("--expect-tracklen", action="store_true",
                     help="fail unless the project's lengths are what the audio interrupt played")
     ap.add_argument("--expect-synthfx", action="store_true",
-                    help="fail unless the project's Synth FX settings loaded and the insert ran on every block")
+                    help="fail unless the project's Synth FX slots loaded, their plugins were made and the "
+                         "insert ran on every block")
     args = ap.parse_args()
     r = BootRig(args.axf)
     m = r.m
@@ -397,13 +397,17 @@ def main():
             print("FAILED: the lengths aren't in play")
             return 1
     if args.expect_synthfx:
-        # Effect Phaser and Distortion on every part, as make_masterfx_test_project.SYNTHFX_WORST;
-        # each block runs the insert on every part sounding, so at least one run a block
-        fx = struct.unpack("<30f", m.read(m.addr("_ZN4mods7synthfx8settingsE"), 120))
-        kinds = [(fx[10 * p], fx[10 * p + 5]) for p in range(3)]
-        print("Synth FX (effect, distortion) per part:", kinds, "insert runs", fx_runs[0],
+        # Effect Phaser and Distortion on every part, as make_masterfx_test_project.SYNTHFX_WORST (a
+        # version 1 record): converted on load to the Distortion in FX1 and the Phaser in FX2, each
+        # made as a plugin from the card; each block runs the insert on every part sounding, so at
+        # least one run a block
+        slots = m.addr("_ZN4mods7synthfx5slotsE")
+        files = [m.read(slots + 96 * i, 48).split(b"\0")[0].decode() for i in range(6)]
+        made = [m.call(m.addr("_ZN4mods7synthfx12slotInstanceEii"), i // 2, i % 2) < 0x80000000 for i in range(6)]
+        print("Synth FX slots:", files, "made", made, "insert runs", fx_runs[0],
               "allocations in the interrupt", r.interrupt_allocs, flush=True)
-        if kinds != [(3.0, 2.0)] * 3 or fx_runs[0] < args.blocks or r.interrupt_allocs:
+        if files != ["Distortion.ptsfx", "Phaser.ptsfx"] * 3 or not all(made) or fx_runs[0] < args.blocks or \
+                r.interrupt_allocs:
             print("FAILED: Synth FX isn't in play")
             return 1
     return 0

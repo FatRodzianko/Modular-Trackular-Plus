@@ -9,8 +9,29 @@ The six effects that used to be built in (Overdrive, Distortion, Bit Crusher, Ch
 Phaser) are plugins too: the default pack. The firmware writes each pack file to `/SynthFX/`
 when it is missing there, so delete one to get the firmware's copy back.
 
-Status: the runtime (loading, the pools, the guards, the pack) is in the firmware. The two slots
-on the synth page arrive with the next phase (`docs/mt/CE_PORT_PLAN.md` §3.17).
+Status: the runtime (loading, the pools, the guards, the pack) and the two slots on CE's synth
+engines (ACD to CHIP) are in the firmware. WAVE and PHASE keep their own FX section until the
+next phase (`docs/mt/CE_PORT_PLAN.md` §3.17).
+
+## On the synth page
+
+With the Synth FX mod on, button 3 on a synth part's Edit Patch screen shows the Synth FX
+rows: FX1, its plugin's knobs, FX2, its plugin's knobs.
+
+- **A slot's row** picks the plugin: None, then every plugin in `/SynthFX/` that loaded
+  cleanly, by its header's name, without the one in the part's other slot.
+- **While a plugin loads,** the row reads Loading. The page redraws when the plugin is
+  ready.
+- **A knob's row** shows its label and its text. A `PTSFX_PARAM_LIST` knob with up to 16
+  steps is a list; any other knob is a bar, centred when its range is symmetric (min = -max).
+- **The encoder** moves a knob one step a tick. A knob with more than 200 steps moves more
+  per tick, so a turn still crosses its range. Delete puts a knob back to its default, or
+  empties a slot.
+- **A project stores** each slot's file name and its knobs' values, for each part. A slot
+  whose file is missing or refused keeps its name and says why, such as `Missing: Delay`.
+  It loads again when the page next opens, once the file is back.
+- **A swap** fades the old plugin out over one block and the new one in over its first
+  block, so a slot can change while the part plays.
 
 ## What you need
 
