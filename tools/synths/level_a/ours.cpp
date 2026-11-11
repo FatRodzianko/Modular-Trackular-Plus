@@ -67,6 +67,13 @@ void a_fx_run(struct mt_fx* s, const float* p, float* L, float* R, uint32_t dist
         fx_block(s, p + P_EFFECT, L + b * WT_BLOCK, R + b * WT_BLOCK, (int)distWanted);
 }
 
+/* the same for a stereo part (Synth FX on PERC): L and R in and out */
+void a_fx_run_stereo(struct mt_fx* s, const float* p, float* L, float* R, uint32_t distWanted, uint32_t blocks)
+{
+    for (uint32_t b = 0; b < blocks; b++)
+        fx_block_stereo(s, p + P_EFFECT, L + b * WT_BLOCK, R + b * WT_BLOCK, (int)distWanted);
+}
+
 void a_dist_run(struct mt_dist* d, float* buf, const float* p, uint32_t want, uint32_t blocks)
 {
     for (uint32_t b = 0; b < blocks; b++)

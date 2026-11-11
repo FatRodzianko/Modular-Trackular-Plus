@@ -899,12 +899,12 @@ the Profiler's, with all 8 voices sounding.
 |---|---|---|---|
 | WAVE voice | per voice | 15,700 (Init); 48,100 with both oscillators on the super saw; 460 idle | 384 B of state in the voice, which CE allocates on engine select as for every engine |
 | PHASE voice | per voice | 13,700 (Init) | 88 B of state in the voice |
-| Chorus / Flanger / Phaser | per instrument | 8,700 / 10,000 / 12,900 | one state per synth part, 4,336 B each with the Distortion's: 3 × in SDRAM (`__NOINIT(EXTERNAL_RAM)`, cleared by us), 13,008 B of the mod builds' 1 MiB |
-| Overdrive (2×) | per instrument (Post) or per voice (Pre, WAVE) | 22,900 | in that state, or in the voice for Pre |
-| Distortion (4×) | the same | 40,200 (44,200 before it ran in stages) | the same |
+| Chorus / Flanger / Phaser | per instrument | 8,700 / 10,000 / 9,400 (12,900 before 2026-11-11) | one state per synth part, 4,488 B each with the Distortions' (Synth FX added a second for a stereo part's right side): 3 × in SDRAM (`__NOINIT(EXTERNAL_RAM)`, cleared by us), 13,464 B of the mod builds' 1 MiB |
+| Overdrive (2×) | per instrument (Post) or per voice (Pre, WAVE) | 20,500 (22,900 before 2026-11-11) | in that state, or in the voice for Pre |
+| Distortion (4×) | the same | 33,200 (40,200 before 2026-11-11; 44,200 before it ran in stages) | the same |
 | Bit Crusher | the same | 3,300 | the same |
 | Code and tables | | | flash: 569 KB more than `modular` (about 470 KB of wavetables, 4 KB of cosine table); DTCM 680 B |
-| Hot loop | | | ITCM: the Distortion block only (`dist_block`, 5,372 B; 5,096 B of ITCM stay free). The voices and the effect block run from flash, as CE's own engines do |
+| Hot loop | | | ITCM: the Distortion block only (`dist_block`, 7,580 B since 2026-11-11, 5,372 B before; 2,800 B of ITCM stay free with Synth FX's hook). The voices and the effect block run from flash, as CE's own engines do |
 
 For 8 voices: WAVE Init about 125,000; PHASE Init about 110,000; the heaviest case, WAVE
 with both oscillators on the super saw, Pre Distortion and the Phaser, about 719,000 (8 ×
@@ -927,6 +927,25 @@ but 1 kHz at -54.8 (the bound is -55); at half Gain 12 to 16 dB worse at 3 and 4
 +3.3. Not a match, so it stays 4x. CE's own drives (master Saturation, the filter's Overdrive)
 are piecewise polynomials at 1x with no anti-aliasing: cheaper, but they alias. Post costs
 one Distortion per part, Pre one per voice.
+
+Cutting it again (2026-11-11), after the Synth FX device test put 8 DIRT voices with the
+worst insert at 98 %. Copies between registers were 28 % of the Distortion's instructions:
+each all-pass's state moved along the chain every sample. The half-band filters now run two
+samples a pass, their states in registers and swapping roles between the two, and the
+Phaser holds its all-passes in locals for the block instead of reading and writing them in
+SDRAM every sample (through `s->ap`, every output store could alias them). Same output bit
+for bit: 288 cases against the old build (every Distortion type with Gain, Tone and Level
+ramps, fades and type switches; every modulation effect, mono and stereo, with and without
+the Distortion). About one copy per all-pass is left: the fused multiply-add overwrites its
+addend, and a form without it rounds differently. Then the inner half-band (88.2 to 176.4
+kHz) went from 4 coefficients to 3: it only has to remove what folds onto 0-24 kHz at 88.2
+kHz, from 64.4 kHz up, since the outer one removes 24-44 kHz after it, and 3 with a 0.2
+transition do that at 76.6 dB against 76.1 (`tools/synths/halfband.py`). Against the 4: every
+harmonic to 20 kHz within 0.001 dB, every alias within 0.1 dB; the samples differ in phase at
+the top only. Distortion 40,251 to 33,209 (-17.5 %), Overdrive 22,923 to 20,548 (-10 %),
+Phaser 13,010 to 9,429 (-28 %). `dist_block` grew 2,208 B in ITCM (7,580 B; 2,800 B free).
+The 1-7 kHz alias test didn't see an inner coefficient 0.03 off (rejection 30.8 dB), so a
+check on 11 and 13 kHz at Gain 0 was added (-68 and -69 dB; the planted fault -59 and -58).
 
 No `double`, heap or SD in the audio paths: the tests count `malloc` and
 `createMetadata` calls during every block and fail on any.
@@ -1122,10 +1141,22 @@ for every synth engine, CE's closed ones included.
     `N7`'s 83 %, and Shimmer and BBD on top, or a heavier patch, would go over. The recorder's voices
     figure is the limit, not the count, so it reads 1 on PERC parts; the log lines were matched
     to the projects by their CPU figures.
+  - Device test 2026-11-11, the cost cuts (below) on `TrackerPlus_MT_synthfx_diag.ptf`: F4, F5
+    and F6, 0 blocks over time on any. F4 (1 PERC voice a part, first time on the unit in spec)
+    average 41 %, slowest 56 to 60 %, 51,936 B. F5 average 43 to 48 %, slowest 58 to 61 % (was
+    63 %), 51,620 to 51,876 B. F6 average 79 to 81 % (was 81 %), slowest 94 to 96 % (was 98 %),
+    0 of 6,677 blocks over time, 78,256 to 78,512 B. F6 with Shimmer and BBD as well: average 82
+    to 84 %, slowest 90 to 95 %, 0 of 8,886 blocks over time, main loop gap 37 ms, 78,264 B; it
+    holds, where before the cuts it was expected to go over. Max stack 7,825 B throughout.
 - **Phase 4, later and only if wanted:** tracker FX commands that move the settings per step.
 - **Cost, our code only (emulator instructions per block; about 1,710,000 is a whole block
   before stalls, from the Synths figures):** Chorus 8,700, Flanger 10,000, Phaser 12,900,
-  Overdrive 22,900, Distortion 40,300 (80,500 on a stereo part), Bit Crusher 3,300. The worst
+  Overdrive 22,900, Distortion 40,300 (80,500 on a stereo part), Bit Crusher 3,300; since
+  2026-11-11 Phaser 9,400, Overdrive 20,500, Distortion 33,200 (see the Synths cost note), and
+  the worst insert through the host 162,606 on 3 ACD parts (9.6 %, was 194,493) and 227,069 on 3
+  PERC parts (13.4 %, was 279,111); release tier 0 failed of 32 run, all 14 Level A plants
+  caught, `MT_NO_MODS` identical; on the unit F6 dropped from 98 % to 94-96 % slowest (the
+  device test 2026-11-11 above). The worst
   insert: 3 parts with Distortion and Phaser, about 160,000 (9 %) on mono parts and 280,000
   (16 %) on three PERC parts. The engines themselves can't be counted (closed), and CHIP's 8
   voices have locked a unit up before (Master FX on Stock too), so the device test starts at the lightest

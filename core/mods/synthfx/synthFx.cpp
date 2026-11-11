@@ -27,7 +27,8 @@ namespace mtfx
  * oversampled with polyphase IIR half-band filters: Overdrive at 2x (88.2 kHz), through one
  * of 8 all-passes, its images and aliases over 100 dB down and flat to about 20 kHz;
  * Distortion, whose hard clip at up to +50 dB makes far more harmonics, at 4x (176.4 kHz),
- * through that one and then one of 4 all-passes (76 dB or more).
+ * through that one and then one of 3 all-passes (76 dB or more on what would fold onto
+ * 0-24 kHz; the outer one takes the rest; 4 until 2026-11-11, the same rejection).
  *
  * Bit Crusher: a sample-and-hold at Rate, each held sample rounded to Bits (2^(Bits - 1)
  * steps from 0 to 1, rounded to the nearest, so silence stays silent). No anti-aliasing:
@@ -138,46 +139,103 @@ float crush_hz(float v)
 
 /* The half-band filters' all-pass coefficients (de Soras's polyphase IIR design;
  * tools/synths/halfband.py works them out and checks the responses). Even ones are the
- * first path, odd ones the second. hb_c: 8, transition 0.04; hb2_c: 4, transition 0.12. */
+ * first path, odd ones the second. hb_c: 8, transition 0.04; hb2_c: 3, transition 0.2. */
 static const float hb_c[HB_COEFS] = {
     0.0406334609f, 0.1505051290f, 0.3007570560f, 0.4607745050f,
     0.6095243149f, 0.7385038411f, 0.8492238104f, 0.9497427837f,
 };
 static const float hb2_c[HB2_COEFS] = {
-    0.0707659490f, 0.2578530785f, 0.5131675747f, 0.8173173544f,
+    0.0814300232f, 0.3156598402f, 0.7097708001f,
 };
 
-/* One path: all-passes first, first + 2, ... Each: y = c (x - y1) + x1, where x1, its input
- * one step back, is the previous all-pass's output one step back. */
-template <uint32_t N, uint32_t First>
-static inline float hb_path(mt_hb<N> *h, const float *c, float x)
+/* One path's state in registers: s[0] its input one step back, s[k] its k-th all-pass's output
+ * one step back (all-passes first, first + 2, ... of the filter). Each all-pass: y = c (x - y1)
+ * + x1, where x1, its input one step back, is the previous all-pass's output one step back.
+ * A step reads one state and writes the other, so two steps (s to t, then t to s) leave it
+ * where it was with no copies between them: the copies were 28 % of the Distortion's
+ * instructions (2026-11-11). The arithmetic and its order are as before, bit for bit. */
+template <uint32_t M>                       /* M: the all-passes on the path */
+struct hb_path_regs
 {
-    float x1 = h->in1[First];
-    h->in1[First] = x;
+    float c[M];
+    float s[M + 1u], t[M + 1u];
+};
+
+template <uint32_t M>
+static inline __attribute__((always_inline)) float hb_step(const float *c, const float *s, float *t, float x)
+{
+    t[0] = x;
 #pragma GCC unroll 8
-    for (uint32_t i = First; i < N; i += 2u) {
-        float y1 = h->y1[i];
-        float y = c[i] * (x - y1) + x1;
-        h->y1[i] = y;
-        x1 = y1;
-        x = y;
+    for (uint32_t k = 1; k <= M; k++)
+        t[k] = c[k - 1u] * (t[k - 1u] - s[k]) + s[k - 1u];
+    return t[M];
+}
+
+/* A filter's two paths, loaded from and stored back to its state. With N odd the first path
+ * has one all-pass more. */
+template <uint32_t N>
+struct hb_regs
+{
+    static constexpr uint32_t M0 = (N + 1u) / 2u, M1 = N / 2u;
+    hb_path_regs<M0> p0;
+    hb_path_regs<M1> p1;
+};
+
+template <uint32_t M>
+static inline __attribute__((always_inline)) void hb_path_load(hb_path_regs<M> *p, float in1, const float *y1,
+                                                               const float *c)
+{
+    p->s[0] = in1;
+#pragma GCC unroll 8
+    for (uint32_t k = 0; k < M; k++) {
+        p->c[k] = c[2u * k];
+        p->s[k + 1u] = y1[2u * k];
     }
-    return x;
 }
 
-/* 2x up: one sample in, two out (a first) */
-template <uint32_t N>
-static inline void hb_up(mt_hb<N> *h, const float *c, float x, float *a, float *b)
+template <uint32_t M>
+static inline __attribute__((always_inline)) void hb_path_store(const hb_path_regs<M> *p, float *in1, float *y1)
 {
-    *a = hb_path<N, 0u>(h, c, x);
-    *b = hb_path<N, 1u>(h, c, x);
+    *in1 = p->s[0];
+#pragma GCC unroll 8
+    for (uint32_t k = 0; k < M; k++)
+        y1[2u * k] = p->s[k + 1u];
 }
 
-/* 2x down: two samples in (a first), one out */
 template <uint32_t N>
-static inline float hb_down(mt_hb<N> *h, const float *c, float a, float b)
+static inline __attribute__((always_inline)) void hb_load(hb_regs<N> *r, const mt_hb<N> *h, const float *c)
 {
-    return 0.5f * (hb_path<N, 0u>(h, c, b) + hb_path<N, 1u>(h, c, a));
+    hb_path_load(&r->p0, h->in1[0], &h->y1[0], &c[0]);
+    hb_path_load(&r->p1, h->in1[1], &h->y1[1], &c[1]);
+}
+
+template <uint32_t N>
+static inline __attribute__((always_inline)) void hb_store(const hb_regs<N> *r, mt_hb<N> *h)
+{
+    hb_path_store(&r->p0, &h->in1[0], &h->y1[0]);
+    hb_path_store(&r->p1, &h->in1[1], &h->y1[1]);
+}
+
+/* 2x up over two samples in: four out (each sample's first path first). The state ends in s. */
+template <uint32_t N>
+static inline __attribute__((always_inline)) void hb_up2(hb_regs<N> *r, float x0, float x1, float *out)
+{
+    constexpr uint32_t M0 = hb_regs<N>::M0, M1 = hb_regs<N>::M1;
+    out[0] = hb_step<M0>(r->p0.c, r->p0.s, r->p0.t, x0);
+    out[1] = hb_step<M1>(r->p1.c, r->p1.s, r->p1.t, x0);
+    out[2] = hb_step<M0>(r->p0.c, r->p0.t, r->p0.s, x1);
+    out[3] = hb_step<M1>(r->p1.c, r->p1.t, r->p1.s, x1);
+}
+
+/* 2x down over four samples in (in order): two out. The state ends in s. */
+template <uint32_t N>
+static inline __attribute__((always_inline)) void hb_down2(hb_regs<N> *r, const float *in, float *y0, float *y1)
+{
+    constexpr uint32_t M0 = hb_regs<N>::M0, M1 = hb_regs<N>::M1;
+    float b0 = hb_step<M0>(r->p0.c, r->p0.s, r->p0.t, in[1]);
+    *y0 = 0.5f * (b0 + hb_step<M1>(r->p1.c, r->p1.s, r->p1.t, in[0]));
+    float b1 = hb_step<M0>(r->p0.c, r->p0.t, r->p0.s, in[3]);
+    *y1 = 0.5f * (b1 + hb_step<M1>(r->p1.c, r->p1.t, r->p1.s, in[2]));
 }
 
 template <uint32_t N>
@@ -261,27 +319,37 @@ AUDIO_CORE_RAM void dist_block(struct mt_dist *d, float *buf, const float *fx, i
         /* the treble cut: a one-pole low-pass, 700 Hz to 6 kHz */
         float fc = OD_TONE_LO * exp2f_fast(tone * OD_TONE_OCT);
         float c = 1.0f - exp2f_fast(-6.2831853f * fc / FX_RATE * 1.4426950f);
-        mt_hb<HB_COEFS> up = d->up, down = d->down;     /* held in registers for the block */
-        for (uint32_t n = 0; n < FX_BLOCK; n++) {
-            float x = clampf(buf[n], -4.0f, 4.0f);
-            float s[2], ys[2];
-            hb_up(&up, hb_c, x, &s[0], &s[1]);
-            for (uint32_t k = 0; k < 2u; k++) {             /* at 2x */
-                hp = OD_HP * (hp + s[k] - x1);
-                float u = g * hp;
-                ys[k] = 0.5f * (s[k] + x1) + CLIP_LEVEL * od_adaa(u, u1);  /* the clean signal, aligned with the clip's half sample */
-                x1 = s[k];
-                u1 = u;
+        hb_regs<HB_COEFS> up, down;                     /* held in registers for the block */
+        hb_load(&up, &d->up, hb_c);
+        hb_load(&down, &d->down, hb_c);
+        for (uint32_t n = 0; n < FX_BLOCK; n += 2u) {   /* two samples a pass (hb_regs) */
+            float xs[2] = { clampf(buf[n], -4.0f, 4.0f), clampf(buf[n + 1u], -4.0f, 4.0f) };
+            float s[4], ys[4];
+            hb_up2(&up, xs[0], xs[1], s);
+#pragma GCC unroll 2
+            for (uint32_t j = 0; j < 2u; j++) {
+#pragma GCC unroll 2
+                for (uint32_t k = 2u * j; k < 2u * j + 2u; k++) {     /* at 2x */
+                    hp = OD_HP * (hp + s[k] - x1);
+                    float u = g * hp;
+                    ys[k] = 0.5f * (s[k] + x1) + CLIP_LEVEL * od_adaa(u, u1);  /* the clean signal, aligned with the clip's half sample */
+                    x1 = s[k];
+                    u1 = u;
+                }
+                g += dg;
             }
-            float y = hb_down(&down, hb_c, ys[0], ys[1]);
-            lp += c * (y - lp);
-            buf[n] = limit(x + am * (lp * lv - x));
-            am += da;
-            g += dg;
-            lv += dl;
+            float y[2];
+            hb_down2(&down, ys, &y[0], &y[1]);
+#pragma GCC unroll 2
+            for (uint32_t j = 0; j < 2u; j++) {
+                lp += c * (y[j] - lp);
+                buf[n + j] = limit(xs[j] + am * (lp * lv - xs[j]));
+                am += da;
+                lv += dl;
+            }
         }
-        d->up = up;
-        d->down = down;
+        hb_store(&up, &d->up);
+        hb_store(&down, &d->down);
     } else if (d->type == DIST_CRUSHER) {
         float q = g1, iq = 1.0f / g1;                  /* the step, set per block */
         float r = crush_hz(tone) * (1.0f / FX_RATE);    /* the hold's phase per sample, up to 1 */
@@ -298,15 +366,19 @@ AUDIO_CORE_RAM void dist_block(struct mt_dist *d, float *buf, const float *fx, i
             lv += dl;
         }
     } else {
-        mt_hb<HB_COEFS> up = d->up, down = d->down;
-        mt_hb<HB2_COEFS> up2 = d->up2, down2 = d->down2;
+        hb_regs<HB_COEFS> up, down;
+        hb_regs<HB2_COEFS> up2, down2;
+        hb_load(&up, &d->up, hb_c);
+        hb_load(&down, &d->down, hb_c);
+        hb_load(&up2, &d->up2, hb2_c);
+        hb_load(&down2, &d->down2, hb2_c);
         for (uint32_t c0 = 0; c0 < FX_BLOCK; c0 += DIST_CHUNK) {
             float* in = buf + c0;
             float s2[2u * DIST_CHUNK], s4[4u * DIST_CHUNK];
-            for (uint32_t n = 0; n < DIST_CHUNK; n++)       /* up to 2x */
-                hb_up(&up, hb_c, clampf(in[n], -4.0f, 4.0f), &s2[2u * n], &s2[2u * n + 1u]);
-            for (uint32_t m = 0; m < 2u * DIST_CHUNK; m++)  /* up to 4x */
-                hb_up(&up2, hb2_c, s2[m], &s4[2u * m], &s4[2u * m + 1u]);
+            for (uint32_t n = 0; n < DIST_CHUNK; n += 2u)   /* up to 2x */
+                hb_up2(&up, clampf(in[n], -4.0f, 4.0f), clampf(in[n + 1u], -4.0f, 4.0f), &s2[2u * n]);
+            for (uint32_t m = 0; m < 2u * DIST_CHUNK; m += 2u)  /* up to 4x */
+                hb_up2(&up2, s2[m], s2[m + 1u], &s4[2u * m]);
             for (uint32_t n = 0; n < DIST_CHUNK; n++) {     /* the clip, at 4x */
                 for (uint32_t j = 0; j < 4u; j++) {
                     float q = s4[4u * n + j];
@@ -318,10 +390,13 @@ AUDIO_CORE_RAM void dist_block(struct mt_dist *d, float *buf, const float *fx, i
                 }
                 g += dg;
             }
-            for (uint32_t m = 0; m < 2u * DIST_CHUNK; m++)  /* down to 2x */
-                s2[m] = hb_down(&down2, hb2_c, s4[2u * m], s4[2u * m + 1u]);
-            for (uint32_t n = 0; n < DIST_CHUNK; n++) {     /* down, the tone stack, the mix */
-                float v = CLIP_LEVEL * hb_down(&down, hb_c, s2[2u * n], s2[2u * n + 1u]);
+            for (uint32_t m = 0; m < 2u * DIST_CHUNK; m += 2u)  /* down to 2x */
+                hb_down2(&down2, &s4[2u * m], &s2[m], &s2[m + 1u]);
+            float* w = s4;                                  /* free again: the filter's out, then the rest */
+            for (uint32_t n = 0; n < DIST_CHUNK; n += 2u)   /* down to 1x */
+                hb_down2(&down, &s2[2u * n], &w[n], &w[n + 1u]);
+            for (uint32_t n = 0; n < DIST_CHUNK; n++) {     /* the tone stack, the mix */
+                float v = CLIP_LEVEL * w[n];
                 lp += DS_TONE_LP * (v - lp);                /* the stack: low-pass ... */
                 hp2 = DS_TONE_HP * (hp2 + v - v1);          /* ... and high-pass, blended */
                 float y = lp + tone * (hp2 - lp);
@@ -332,10 +407,10 @@ AUDIO_CORE_RAM void dist_block(struct mt_dist *d, float *buf, const float *fx, i
                 lv += dl;
             }
         }
-        d->up = up;
-        d->down = down;
-        d->up2 = up2;
-        d->down2 = down2;
+        hb_store(&up, &d->up);
+        hb_store(&down, &d->down);
+        hb_store(&up2, &d->up2);
+        hb_store(&down2, &d->down2);
     }
     d->x1 = x1;
     d->hp = hp;
@@ -498,7 +573,14 @@ static inline __attribute__((always_inline)) void fx_mod(struct mt_fx *s, const 
         }
     } else {                                /* the Phaser */
         float oct0 = d0 * PHASER_OCT, doct = (d1 - d0) * (PHASER_OCT / FX_BLOCK);
-        float *ql = s->ap[0], *qr = s->ap[1];
+        /* the all-passes' states in registers for the block: through s->ap, each L[n] store
+         * could alias them, so they were loaded and stored every sample (in SDRAM) */
+        float ql[PHASER_STAGES], qr[PHASER_STAGES];
+#pragma GCC unroll 4
+        for (uint32_t k = 0; k < PHASER_STAGES; k++) {
+            ql[k] = s->ap[0][k];
+            qr[k] = s->ap[1][k];
+        }
         float yl = s->fb[0], yr = s->fb[1];
         float tri = ph < 0.5f ? 4.0f * ph - 1.0f : 3.0f - 4.0f * ph;
         float cl = ap_coef(PHASER_LO * exp2f_fast(oct0 * 0.5f * (1.0f + tri)));
@@ -515,6 +597,7 @@ static inline __attribute__((always_inline)) void fx_mod(struct mt_fx *s, const 
             for (uint32_t n = c; n < c + PHASER_CHUNK; n++) {
                 float x = L[n], xr = Stereo ? R[n] : x, in = Stereo ? 0.5f * (x + xr) : x;
                 float ul = limit(in + fb * yl), ur = limit(in + fb * yr);
+#pragma GCC unroll 4
                 for (uint32_t k = 0; k < PHASER_STAGES; k++) {
                     float a = cl * ul + ql[k];
                     ql[k] = ul - cl * a;
@@ -538,6 +621,11 @@ static inline __attribute__((always_inline)) void fx_mod(struct mt_fx *s, const 
         }
         s->fb[0] = yl;
         s->fb[1] = yr;
+#pragma GCC unroll 4
+        for (uint32_t k = 0; k < PHASER_STAGES; k++) {
+            s->ap[0][k] = ql[k];
+            s->ap[1][k] = qr[k];
+        }
     }
     s->pos = pos;
     s->phase = ph;

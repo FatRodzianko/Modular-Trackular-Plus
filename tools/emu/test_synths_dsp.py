@@ -474,6 +474,26 @@ def distortion(r: Rig) -> None:
               f"{names[kind]}: aliases at full Gain, 1-7 kHz: "
               + ", ".join(f"{f // 1000}k {v:.0f}" for f, v in got.items()) + " dB")
 
+    # high notes at Gain 0: their 5th to 7th harmonics land at 55-90 kHz, where the inner half-band
+    # (88.2 to 176.4 kHz) works, so this sees it; 1-7 kHz at full Gain don't. -68 and -69 dB on
+    # 2026-11-11 (3 coefficients and 4 alike); an inner coefficient 0.03 off gave -59 and -58.
+    got = {}
+    for f in (11000, 13000):
+        n = 4096
+        f0 = round(f * n / RATE) * RATE / n
+        r.dist_clear()
+        y = r.dist({**FX_INIT, P_DIST: DIST_DISTORTION, P_GAIN: 0.0, P_TONE: 1.0}, sine(f0, 72, 0.5))[-n:]
+        s = spectrum(y)
+        k0 = round(f0 * n / RATE)
+        mask = np.ones(len(s), bool)
+        for h in range(1, 60):
+            if h * k0 < len(s):
+                mask[max(h * k0 - 4, 0):h * k0 + 5] = False
+        mask[:4] = False
+        got[f] = db(float(np.max(s[mask])) / float(s[k0]))
+    check(max(got.values()) < -63.0, "Distortion: aliases of high notes at Gain 0 (the inner half-band): "
+          + ", ".join(f"{f // 1000}k {v:.0f}" for f, v in got.items()) + " dB")
+
     # bounded, whatever comes in
     r.dist_clear()
     y = r.dist({**FX_INIT, P_DIST: DIST_DISTORTION, P_GAIN: 1.0, P_LEVEL: 6.0}, noise(20, 9, 50.0))
@@ -593,12 +613,13 @@ def states(r: Rig) -> None:
 # ---- 7. cost --------------------------------------------------------------------------------------
 # Instructions per block on the emulated core: a regression ceiling, not the CPU load (that is
 # cycles, measured on the device with the Profiler, all 8 voices sounding). Each ceiling is
-# about 15 % over what the build measured on 2026-11-09; sy9's own were 500 idle and 16,000
-# playing for a WAVE voice.
+# about 15 % over what the build measured on 2026-11-09 (Overdrive, Distortion and Phaser:
+# 2026-11-11, after their loops kept the filters' states in registers); sy9's own were 500 idle
+# and 16,000 playing for a WAVE voice.
 COST_CEILINGS = {
     "WAVE voice, Init": 16_000, "WAVE voice, idle": 500, "WAVE voice, super saw on both": 55_000,
-    "PHASE voice, Init": 16_000, "Overdrive": 26_500, "Distortion": 46_000, "Bit Crusher": 4_000,
-    "Chorus": 10_000, "Flanger": 11_500, "Phaser": 15_000,
+    "PHASE voice, Init": 16_000, "Overdrive": 23_600, "Distortion": 38_200, "Bit Crusher": 4_000,
+    "Chorus": 10_000, "Flanger": 11_500, "Phaser": 10_800,
 }
 
 

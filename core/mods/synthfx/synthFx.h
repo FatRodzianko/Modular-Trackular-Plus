@@ -57,7 +57,7 @@ enum : uint32_t { PLACE_PRE, PLACE_POST };
  * back, and each all-pass's output one step back (which is also the next all-pass's input).
  * HB_COEFS: 44.1 to 88.2 kHz and back; HB2_COEFS: 88.2 to 176.4 kHz (Distortion only). */
 #define HB_COEFS            8u
-#define HB2_COEFS           4u
+#define HB2_COEFS           3u
 template <uint32_t N>
 struct mt_hb
 {
