@@ -25,7 +25,7 @@ Off/On switch, so there's no separate build for each mix of mods.
 | **Synths** | Two more synth models in the picker: WAVE (wavetable, two oscillators, a filter, three envelopes, two LFOs and a mod matrix) and PHASE (phase distortion, after the Casio CZ). Each has an FX page: Chorus, Flanger or Phaser, and a Distortion that is Overdrive (Tube Screamer style), Distortion (DS-1 style) or Bit Crusher, with Level. Its two knobs are named for the type: Gain and Tone, or Bits and Rate. On WAVE the Distortion can go before the filter (Pre, in each voice) or after (Post); on PHASE Pre and Post are the same. Patches save as CE's do. Off hides the models; a part already playing one keeps it. 1.2.0 projects' WAVE and PHASE parts aren't converted. | Project Settings → Synths |
 | **Synth FX** | The Synths effects on CE's own synth models (ACD, FAT, VAP, WTFM, PERC, DIRT and CHIP): a Distortion (Overdrive, Distortion or Bit Crusher), then Chorus, Flanger or Phaser, on each synth part's output. In the patch editor, button 3 shows the part's Synth FX rows. The settings belong to the part, not the patch, so loading another patch keeps them, and they are saved with the project. WAVE and PHASE use their own FX page instead. On PERC the effects reach the main output, not its sends. The Distortion and Phaser cost the most CPU: 8 DIRT voices with both on every part reach about 95 %. | Patch editor → button 3 |
 
-All but Synths are tested on hardware.
+Every mod is tested on hardware.
 
 The chord inversions and conditional trigs from the 1.2.0 mods are now part of CE itself, though CE's
 conditions differ, so a 1.2.0 project's conditional trigs read as CE's. Still to port, with no

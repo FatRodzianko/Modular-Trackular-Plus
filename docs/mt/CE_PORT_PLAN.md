@@ -991,6 +991,17 @@ set) were booted through CE's own start-up, project load and Play in `boot_rig.p
 S1 (WAVE), S2 (PHASE) and S5 (8 WAVE voices) open with their parts on WAVE or PHASE, sound, and
 keep the heap steady (67,960 B free with 8 WAVE voices; PERC's 3, its most, leave 53,508 B).
 
+Device test 2026-11-11, the Synths set on `TrackerPlus_MT_synthfx_diag.ptf` (with Synth FX's
+cost cuts): 0 blocks over time in any of the 30 runs logged. Profiler slowest: S1 about 27 %,
+S2 29 %, S3 40 %, S4 45 %, S5 50 %, S6 57 %. The heaviest case set by hand on S5 (on all three
+parts both oscillators on Super Saw, Distortion Pre, Phaser), 8-note chords: average 62 to
+65 %, slowest 75 to 82 %, 0 of 31,360 blocks over time in 91 s. Free heap 66,160 B at the least;
+pool peak 46 of 80; max stack 11,825 B (of 20,480). Each effect by ear on WAVE, the Distortion's
+knob names changing with its type (Bits and Rate on the Bit Crusher), and a project and a patch
+saved and reopened all worked. With Synths Off a part on WAVE kept playing and kept WAVE in its
+picker, PHASE was hidden, and once the part left WAVE it couldn't go back: as designed. The first
+play after opening a project reads 3 to 5 points higher than later plays.
+
 **Hardware checklist** (for you, after the tests): chords on 8 voices on each engine (the
 1.2.0 screech came only on the unit); the heaviest patch (both oscillators on the super saw,
 Pre Distortion, Phaser) at 8 voices, with the Profiler's CPU; each effect by ear; the
