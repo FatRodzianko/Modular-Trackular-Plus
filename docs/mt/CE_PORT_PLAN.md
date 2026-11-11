@@ -970,7 +970,7 @@ A's; both checks failed on the old build.
 The device projects (`make_masterfx_test_project.py --synths`, DEVICE_TEST_LADDER.md's Synths
 set) were booted through CE's own start-up, project load and Play in `boot_rig.py`, 2026-11-09:
 S1 (WAVE), S2 (PHASE) and S5 (8 WAVE voices) open with their parts on WAVE or PHASE, sound, and
-keep the heap steady (67,960 B free with 8 WAVE voices; PERC's 8 leave 53,508 B).
+keep the heap steady (67,960 B free with 8 WAVE voices; PERC's 3, its most, leave 53,508 B).
 
 **Hardware checklist** (for you, after the tests): chords on 8 voices on each engine (the
 1.2.0 screech came only on the unit); the heaviest patch (both oscillators on the super saw,
@@ -1093,7 +1093,8 @@ for every synth engine, CE's closed ones included.
     read and written, and three on the host test); host tests pass (registry 196 checks, 9 mods
     built); the release tier 0 failed of 36 run; `MT_NO_MODS` identical.
   - Test 5 done: `make_masterfx_test_project.make_synthfx` writes the worst case (the worst
-    pattern at 800 BPM on PERC's 8 voices, Distortion at full Gain into the Phaser on every
+    pattern at 800 BPM on three PERC parts (stored as 4, 2, 2 then, which CE clamped to 1
+    each, PERC's limit; 1, 1, 1 since), Distortion at full Gain into the Phaser on every
     part, Shimmer and BBD), and the release tier boots it with and without `--preempt`
     (`boot_rig.py --expect-synthfx`: the settings loaded from the record, the insert run every
     block, no allocation inside the audio interrupt). 53,136 B heap free, pool peak 64 of 80,
@@ -1103,7 +1104,24 @@ for every synth engine, CE's closed ones included.
     CE's 6,452 plus button 3's label), 5,616 B with the rows (VAP and WTFM).
   - Memory: SDRAM 616 B (the rows' texts and lists; 994,876 B free); DTCM and ITCM as phase 2
     (14,504 B and 5,008 B free); no heap.
-  - Not done: the device test, the Synth FX set in `DEVICE_TEST_LADDER.md`.
+  - Device test 2026-11-10, the Synth FX set on `TrackerPlus_MT_synthfx_diag.ptf`: all five ran,
+    no lockup or fault in `mfx_log.txt`, 0 blocks over time on any. Profiler slowest: F1 about
+    33 % (no change with Overdrive at full or the Phaser), F2 37 %, F3 53 %, F4 69 %, F5 78 %
+    (Master FX's own `L8` was 78 to 82 %). Button 3, its rows, an edit heard, and Save then reopen
+    all worked. Pool peak 48 of 80 at most. Free heap: F4 51,692 B, but F5 21,072 to 21,348 B.
+    F4 and F5 were out of spec: PERC allows 1 voice a part and the generator stored 4, 2 and 2,
+    which CE clamps on open only when the engine changes. So F4 (after ACD's F3) ran 3 PERC
+    voices, as `N6` had, and F5 (after PERC's F2) ran 8, a state the UI can't reach; its 78 %
+    and 21 KB overstate the real worst case. See `CE_FIRMWARE_MAP.md`, 2026-11-10. The generator
+    now refuses a count over the engine's limit; F4 and F5 store 1, 1, 1 and read about 53 KB in
+    any order on the rig, and F6 (8 DIRT voices, the heaviest engine on the unit, with the worst
+    insert) is added: 79,688 B. On the unit, same firmware, F2 then F5 then F6: F2 39 % slowest,
+    63,808 B; F5 (after F2) average 45 %, slowest 63 %, 51,928 B; F6 average 81 %, slowest 98 %,
+    0 of 6,260 blocks over time, main loop gap 34 ms, 78,408 B. So 8 DIRT voices with the worst
+    insert on every part, on Init patches, sit at the limit: the insert adds about 15 points to
+    `N7`'s 83 %, and Shimmer and BBD on top, or a heavier patch, would go over. The recorder's voices
+    figure is the limit, not the count, so it reads 1 on PERC parts; the log lines were matched
+    to the projects by their CPU figures.
 - **Phase 4, later and only if wanted:** tracker FX commands that move the settings per step.
 - **Cost, our code only (emulator instructions per block; about 1,710,000 is a whole block
   before stalls, from the Synths figures):** Chorus 8,700, Flanger 10,000, Phaser 12,900,
@@ -1122,7 +1140,7 @@ for every synth engine, CE's closed ones included.
      identical.
   4. Garbage settings (NaN, out of range): bounded, and a clear makes it sound again (the stock
      reverb's NaN failure).
-  5. `boot_rig.py` with 8 PERC voices and the worst insert on all three parts, `--preempt`:
+  5. `boot_rig.py` with three PERC parts (1 voice each, PERC's limit) and the worst insert on all three parts, `--preempt`:
      heap, pool peak (the extra stereo block), no `malloc` in the interrupt.
   6. `mods.bin`: the record round-trips through Save, Save As, Open, New Project; a project
      without it opens Off.

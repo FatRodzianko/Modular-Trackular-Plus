@@ -69,7 +69,7 @@ on one engine says nothing about the next, so this set doesn't stop at the first
 | `N3 8 voices FAT` | 8 | FAT | Stock + Stock | |
 | `N4 8 voices VAP` | 8 | VAP | Stock + Stock | |
 | `N5 8 voices WTFM` | 8 | WTFM | Stock + Stock | |
-| `N6 8 voices PERC` | 8 | PERC | Stock + Stock | The most memory: 53,508 B of heap free on the rig, against about 80,000 B |
+| `N6 3 voices PERC` | 3 | PERC | Stock + Stock | The most memory: 53,508 B of heap free on the rig, against about 80,000 B. PERC allows 1 voice a part |
 | `N7 8 voices DIRT` | 8 | DIRT | Stock + Stock | |
 | `N8 8 ACD Shimmer BBD` | 8 | ACD | Shimmer + BBD | Master FX at 8 voices, if `N2` runs |
 
@@ -127,8 +127,13 @@ Phaser, Mix 100 %, Feedback +90 %, on every part.
 | `F1 1 voice ACD Overdrive` | 1 | ACD | Overdrive | Stock + Stock | The insert at its lightest |
 | `F2 1 voice PERC worst FX` | 1 | PERC | Worst FX | Stock + Stock | A stereo part |
 | `F3 4 voices ACD worst FX` | 4 | ACD | Worst FX | Stock + Stock | Mono parts sent as stereo |
-| `F4 8 voices PERC worst FX` | 8 | PERC | Worst FX | Stock + Stock | The insert at the limit |
-| `F5 8 PERC worst Shimmer BBD` | 8 | PERC | Worst FX | Shimmer + BBD | Master FX on top |
+| `F4 3 voices PERC worst FX` | 3 | PERC | Worst FX | Stock + Stock | Three stereo parts, PERC's most |
+| `F5 3 PERC worst Shimmer BBD` | 3 | PERC | Worst FX | Shimmer + BBD | Master FX on top |
+| `F6 8 voices DIRT worst FX` | 8 | DIRT | Worst FX | Stock + Stock | The heaviest engine on the unit (`N7`, 83 %) with the insert |
+
+Before 2026-11-10, `N6`, `F4` and `F5` stored 4, 2 and 2 PERC voices, which the UI can't save. CE clamped
+them to 1 a part only when the project before had another engine, so a run's figures depended on the order.
+`make_masterfx_test_project.py` now refuses a count over the engine's limit.
 
 On each, the patch editor's button 3 reads "Synth FX" and shows the part's rows, so the settings can
 be checked and changed by hand there.

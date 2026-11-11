@@ -152,7 +152,8 @@ def jobs_for(args, projects):
         jobs.append(Job("preempt tracklen", boot, mods, short, "--blocks", worst_loops["worst"], "--expect-tracklen",
                         "--preempt", "3000,120000", "--preempt-play", play_gaps, inputs=[mods, short]))
         jobs.append(Job("cost tracklen", e / "test_bundle_cost.py", mods, ref, short, inputs=[mods, ref, short]))
-        # Synth FX at its heaviest on PERC's 8 voices, under the worst pattern: mods only (CE has no insert)
+        # Synth FX at its heaviest on three PERC parts (1 voice each, PERC's limit), under the worst
+        # pattern: mods only (CE has no insert)
         fx = projects["synthfx"]
         jobs.append(Job("boot synthfx", boot, mods, fx, "--blocks", 300, "--expect-synthfx", inputs=[mods, fx]))
         jobs.append(Job("preempt synthfx", boot, mods, fx, "--blocks", worst_loops["worst"], "--expect-synthfx",

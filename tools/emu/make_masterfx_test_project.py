@@ -138,6 +138,9 @@ def project_file(source: bytes, name: str, voices=VOICES, tempo=None, engine=Non
         raise ce.Refused(f"project.mt: {len(mt)} bytes. I only know version {ce.PROJECT_VERSION} "
                          f"at {ce.PROJECT_SIZE} bytes.")
     mt[ce.PROJECT_NAME:ce.PROJECT_NAME + ce.PROJECT_NAME_SIZE] = name.encode("ascii").ljust(ce.PROJECT_NAME_SIZE, b"\0")
+    limit = MAX_VOICES.get(engine, 8)
+    if any(count > limit for count in voices):
+        raise ValueError(f"{name}: {voices} voices, but {engine} allows {limit} a part")
     for slot, count in enumerate(voices):
         record = ce.SLOT_RECORDS + slot * ce.SLOT_RECORD_SIZE
         struct.pack_into("<i", mt, record + SLOT_VOICES, count)
@@ -166,6 +169,11 @@ def masterfx_file(reverb: int, delay: int) -> bytes:
 # In the order of Synth::kSynthTypes, which project.mt's synthType counts in. WAVE and PHASE are the
 # Synths mod's, after CE's seven in mod builds (core/synth/Synth.h).
 ENGINES = ("ACD", "FAT", "VAP", "WTFM", "PERC", "DIRT", "CHIP", "WAVE", "PHASE")
+# Voices a part allows where it's below 8: the patch's own limit, read on the rig through
+# Synth::getMaxVoiceCount. The UI never saves more, but project.mt is written here byte for byte, and CE
+# clamps a stored count on open only when the part's engine changes: a count above the limit runs above
+# it whenever the project open before had the same engine (CE_FIRMWARE_MAP.md, 2026-11-10).
+MAX_VOICES = {"PERC": 1}
 
 # name, voices, (reverb, delay), the parts' engine. 8 voices split as L7 and L8 do: with all 8 on one
 # part, the pattern sounded only 4 notes.
@@ -175,7 +183,7 @@ ENGINE_LADDER = (
     ("N3 8 voices FAT", (4, 2, 2), None, "FAT"),
     ("N4 8 voices VAP", (4, 2, 2), None, "VAP"),
     ("N5 8 voices WTFM", (4, 2, 2), None, "WTFM"),
-    ("N6 8 voices PERC", (4, 2, 2), None, "PERC"),
+    ("N6 3 voices PERC", (1, 1, 1), None, "PERC"),      # PERC allows 1 a part
     ("N7 8 voices DIRT", (4, 2, 2), None, "DIRT"),
     ("N8 8 ACD Shimmer BBD", (4, 2, 2), (4, 2), "ACD"),
 )
@@ -222,8 +230,10 @@ SYNTHFX_LADDER = (
     ("F1 1 voice ACD Overdrive", (1, 0, 0), None, "ACD", (SYNTHFX_DRIVE,) * 3),
     ("F2 1 voice PERC worst FX", (1, 0, 0), None, "PERC", (SYNTHFX_WORST,) * 3),
     ("F3 4 voices ACD worst FX", (4, 0, 0), None, "ACD", (SYNTHFX_WORST,) * 3),
-    ("F4 8 voices PERC worst FX", (4, 2, 2), None, "PERC", (SYNTHFX_WORST,) * 3),
-    ("F5 8 PERC worst Shimmer BBD", (4, 2, 2), (4, 2), "PERC", (SYNTHFX_WORST,) * 3),
+    ("F4 3 voices PERC worst FX", (1, 1, 1), None, "PERC", (SYNTHFX_WORST,) * 3),
+    ("F5 3 PERC worst Shimmer BBD", (1, 1, 1), (4, 2), "PERC", (SYNTHFX_WORST,) * 3),
+    # DIRT was the heaviest engine at 8 voices on the unit (MASTERFX_PORT_PLAN.md section 8)
+    ("F6 8 voices DIRT worst FX", (4, 2, 2), None, "DIRT", (SYNTHFX_WORST,) * 3),
 )
 
 
@@ -262,10 +272,10 @@ def synthfx_mods_file(source: bytes, parts, effects=None) -> bytes:
     return MODS_MAGIC + struct.pack("<HHI", 1, len(payload), zlib.crc32(payload)) + payload
 
 
-def make_synthfx(source: Path, parent: Path, name: str = "synthfx", voices=VOICES, worst: bool = True,
+def make_synthfx(source: Path, parent: Path, name: str = "synthfx", voices=(1, 1, 1), worst: bool = True,
                  engine: str = "PERC", parts=(SYNTHFX_WORST,) * 3, effects=(4, 2)) -> Path:
-    """By default the release tier's worst case: the worst pattern on PERC, the heaviest insert on
-    every part, and Shimmer and BBD, the heaviest Master FX."""
+    """By default the release tier's worst case: the worst pattern on PERC (1 voice a part, its limit),
+    the heaviest insert on every part, and Shimmer and BBD, the heaviest Master FX."""
     folder = make(source, parent, name, voices, worst=worst, engine=engine)
     old = folder / "mods.bin"
     (folder / "mods.bin").write_bytes(synthfx_mods_file(old.read_bytes() if old.exists() else b"", parts,
