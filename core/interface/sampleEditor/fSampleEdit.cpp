@@ -252,6 +252,12 @@ void cSampleEditor::start(uint32_t options)
         }
     }
 
+    if (zoom.zoomValue > 1.0f)
+    {
+        // the zoom may have been set on a sample of another length
+        GP.spectrumChangeZoom(0, editorInstrument->sample.length, &zoom);
+    }
+
     prepareDisplayDataMainScreen();
     showMainScreen();
 

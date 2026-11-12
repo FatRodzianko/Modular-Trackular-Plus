@@ -248,6 +248,14 @@ void cPerformanceMode::turnOffAtEndOfPattern()
     if (!sequencer.isPerformanceMode())
         return;
 
+    if (!sequencer.isPlay())
+    {
+        // No pattern end is coming that could do it.
+        turnOff();
+        dontClearPerformanceMode = 0;
+        return;
+    }
+
     dontClearPerformanceMode = 1;
     if (!sequencer.isSongMode())
     {
@@ -442,6 +450,7 @@ static void functLeft()
         PM->showFxNames(PM->performanceEditPlace + 1);
         PM->showPerformaceValue(PM->performanceEditPlace);
         PM->showPerformaceValue(PM->performanceEditPlace + 1);
+        PM->lightUpPadBoard();
     }
     else if (PM->performanceEditState)
     {
@@ -487,6 +496,7 @@ static void functRight()
         PM->showFxNames(PM->performanceEditPlace - 1);
         PM->showPerformaceValue(PM->performanceEditPlace);
         PM->showPerformaceValue(PM->performanceEditPlace - 1);
+        PM->lightUpPadBoard();
     }
     else if (PM->performanceEditState)
     {

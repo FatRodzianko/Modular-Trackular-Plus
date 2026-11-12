@@ -190,7 +190,9 @@ void cPatternEditor::update()
 
         uint8_t button = interfaceButtonSampleLoad;
         PTE->firstFreeInstrumentSlotFound++;
-        PTE->eventFunct(eventSwitchModule, PTE, &button, &PTE->firstFreeInstrumentSlotFound);
+        // The handler reads the options through a uint32_t pointer.
+        uint32_t slot = static_cast<uint8_t>(PTE->firstFreeInstrumentSlotFound);
+        PTE->eventFunct(eventSwitchModule, PTE, &button, &slot);
     }
     else if (managerStatus >= fmLoadEnd && managerStatus < fmError) // 	lapie cala reszte Endow
     {
@@ -982,8 +984,11 @@ void cPatternEditor::moveCursorByStep(uint8_t val)
     }
     else
     {
-        trackerPattern.actualStep = mtProject.values.patternEditStep + val -
-                                    ((patternLength + 1) - trackerPattern.actualStep);
+        // The move can be longer than the pattern, as after pasting a tall block into a
+        // short pattern, so wrapping once is not enough.
+        trackerPattern.actualStep =
+          (trackerPattern.actualStep + mtProject.values.patternEditStep + val) %
+          (patternLength + 1);
     }
 
     PTE->trackerPattern.selectState = 1;
@@ -1011,7 +1016,7 @@ void cPatternEditor::moveCursorByStepParallel()
     else
     {
         trackerPattern.actualStep =
-          mtProject.values.patternEditStep - ((patternLength + 1) - trackerPattern.actualStep);
+          (trackerPattern.actualStep + mtProject.values.patternEditStep) % (patternLength + 1);
     }
     PTE->trackerPattern.selectStartStep = trackerPattern.actualStep;
     PTE->trackerPattern.selectEndStep = trackerPattern.actualStep;
@@ -1510,6 +1515,7 @@ void cPatternEditor::changeFillData(int16_t value, bool rollListOver)
     int16_t min = 0, max;
     uint8_t fillParam = fillPlace;
     uint8_t fillIdx = getFillDataIdx();
+    uint8_t fillFx = interfaceGlobals.fxNameToId(fillData[fillIdx].param);
 
     switch (fillPlace)
     {
@@ -1546,12 +1552,12 @@ void cPatternEditor::changeFillData(int16_t value, bool rollListOver)
             {
                 min = (editParam < EditFx1
                          ? 0
-                         : sequencer.getFxMin(interfaceGlobals.fxIDs[fillData[fillIdx].param]));
+                         : sequencer.getFxMin(fillFx));
                 max = (editParam == EditNote
                          ? 127
                          : (editParam == EditInstr
                               ? kTotalInstrumentsCount - 1
-                              : sequencer.getFxMax(interfaceGlobals.fxIDs[fillData[fillIdx].param])));
+                              : sequencer.getFxMax(fillFx)));
             }
             break;
         case 3: // to
@@ -1573,12 +1579,12 @@ void cPatternEditor::changeFillData(int16_t value, bool rollListOver)
             {
                 min = (editParam < EditFx1
                          ? 0
-                         : sequencer.getFxMin(interfaceGlobals.fxIDs[fillData[fillIdx].param]));
+                         : sequencer.getFxMin(fillFx));
                 max = (editParam == EditNote
                          ? 127
                          : (editParam == EditInstr
                               ? kTotalInstrumentsCount - 1
-                              : sequencer.getFxMax(interfaceGlobals.fxIDs[fillData[fillIdx].param])));
+                              : sequencer.getFxMax(fillFx)));
             }
             break;
         case 4: // param
@@ -1652,8 +1658,9 @@ void cPatternEditor::changneFillDataByPad(uint8_t pad)
             if (editParam == EditNote)
             {
                 bool isBeatSlice =
+                  mtProject.values.lastUsedInstrument < kSampleInstrumentsCount &&
                   mtProject.instrument[mtProject.values.lastUsedInstrument].playMode ==
-                  playModeBeatSlice;
+                    playModeBeatSlice;
 
                 fillData[fillIdx].from = mtPadBoard.getNoteFromPad(pad, isBeatSlice);
             }
@@ -1664,9 +1671,9 @@ void cPatternEditor::changneFillDataByPad(uint8_t pad)
             else
             {
                 int16_t min_fx =
-                  sequencer.getFxMin(interfaceGlobals.fxIDs[fillData[fillIdx].param]);
+                  sequencer.getFxMin(interfaceGlobals.fxNameToId(fillData[fillIdx].param));
                 int16_t max_fx =
-                  sequencer.getFxMax(interfaceGlobals.fxIDs[fillData[fillIdx].param]);
+                  sequencer.getFxMax(interfaceGlobals.fxNameToId(fillData[fillIdx].param));
 
                 fillData[fillIdx].from = mapClamped<int>(pad, 0, 47, min_fx, max_fx);
 
@@ -1682,8 +1689,9 @@ void cPatternEditor::changneFillDataByPad(uint8_t pad)
             if (editParam == EditNote)
             {
                 bool isBeatSlice =
+                  mtProject.values.lastUsedInstrument < kSampleInstrumentsCount &&
                   mtProject.instrument[mtProject.values.lastUsedInstrument].playMode ==
-                  playModeBeatSlice;
+                    playModeBeatSlice;
 
                 fillData[fillIdx].to = mtPadBoard.getNoteFromPad(pad, isBeatSlice);
             }
@@ -1694,9 +1702,9 @@ void cPatternEditor::changneFillDataByPad(uint8_t pad)
             else
             {
                 int16_t min_fx =
-                  sequencer.getFxMin(interfaceGlobals.fxIDs[fillData[fillIdx].param]);
+                  sequencer.getFxMin(interfaceGlobals.fxNameToId(fillData[fillIdx].param));
                 int16_t max_fx =
-                  sequencer.getFxMax(interfaceGlobals.fxIDs[fillData[fillIdx].param]);
+                  sequencer.getFxMax(interfaceGlobals.fxNameToId(fillData[fillIdx].param));
 
                 fillData[fillIdx].to = mapClamped<int>(pad, 0, 47, min_fx, max_fx);
 
@@ -4461,8 +4469,9 @@ static void functMiniMiddle(uint8_t state)
         case cPatternEditor::EditNote: // nuta
         {
             // xxx niedorobione
-            bool isBeatSlice = mtProject.instrument[mtProject.values.lastUsedInstrument].playMode ==
-                               playModeBeatSlice;
+            bool isBeatSlice = mtProject.values.lastUsedInstrument < kSampleInstrumentsCount &&
+                               mtProject.instrument[mtProject.values.lastUsedInstrument].playMode ==
+                                 playModeBeatSlice;
             uint8_t noteFromPad = isBeatSlice
                                     ? /*padToBeatNoteConverter.getNoteFromPad(pad)*/ mtProject
                                         .values.lastUsedNote // <<<< tu moze byc zle
@@ -4569,6 +4578,17 @@ static void functMiniMiddle(uint8_t state)
     }
 }
 
+// The pad board has more pads than there are FX; the last pads select nothing.
+static void setSelectionFxTypeFromPad(uint8_t fxIndex, uint8_t pad)
+{
+    if (pad >= FX_COUNT)
+    {
+        return;
+    }
+
+    sequencer.setSelectionFxType(fxIndex, interfaceGlobals.fxIDs[pad]);
+}
+
 static void functPads(uint8_t pad, uint8_t state, int16_t velo)
 {
     (void)velo;
@@ -4626,6 +4646,7 @@ static void functPads(uint8_t pad, uint8_t state, int16_t velo)
         sendSelection();
 
         bool isBeatSlice =
+          mtProject.values.lastUsedInstrument < kSampleInstrumentsCount &&
           mtProject.instrument[mtProject.values.lastUsedInstrument].playMode == playModeBeatSlice;
 
         uint8_t noteToPlay = mtPadBoard.getNoteFromPad(pad, isBeatSlice);
@@ -4673,8 +4694,9 @@ static void functPads(uint8_t pad, uint8_t state, int16_t velo)
             case cPatternEditor::EditNote: // nuta
             {
                 bool isBeatSlice =
+                  mtProject.values.lastUsedInstrument < kSampleInstrumentsCount &&
                   mtProject.instrument[mtProject.values.lastUsedInstrument].playMode ==
-                  playModeBeatSlice;
+                    playModeBeatSlice;
                 uint8_t noteFromPad = mtPadBoard.getNoteFromPad(pad, isBeatSlice);
                 if (sequencer.isRec())
                 {
@@ -4784,7 +4806,7 @@ static void functPads(uint8_t pad, uint8_t state, int16_t velo)
                            interfaceButtonFx2))) //&& mtPopups.getStepPopupState() == stepPopupNone)
                     {
                         PTE->dontShowPopupsUntilButtonRelease = 1;
-                        sequencer.setSelectionFxType(fx_index, interfaceGlobals.fxIDs[pad]);
+                        setSelectionFxTypeFromPad(fx_index, pad);
                     }
                     else
                     {

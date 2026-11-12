@@ -380,11 +380,7 @@ void cSampleImporter::setDefaultScreenFunct()
 
 static void instrumentAdd(bool addNext)
 {
-    if (SI->explorerNames == nullptr)
-    {
-        return;
-    }
-    if (*SI->explorerNames[SI->selectedFile] == '/')
+    if (!SI->isFileRow(SI->selectedFile))
     {
         return;
     }
@@ -427,7 +423,7 @@ static void instrumentAdd(bool addNext)
     }
     else
     {
-        if (SI->explorerNames != nullptr && *SI->explorerNames[SI->selectedFile] != '/')
+        if (SI->isFileRow(SI->selectedFile))
         {
             SI->sampleType = mtSampleTypeWaveFile;
             SI->addNextFlag = addNext;
@@ -529,11 +525,7 @@ void cSampleImporter::processPoints()
 
 static void functInstrumentImport()
 {
-    if (SI->explorerNames == nullptr)
-    {
-        return;
-    }
-    if (*SI->explorerNames[SI->selectedFile] == '/')
+    if (!SI->isFileRow(SI->selectedFile))
     {
         return;
     }
@@ -544,8 +536,7 @@ static void functInstrumentImport()
 
     SI->playFromPads(INTERFACE_BUTTON_PREVIEW, buttonRelease, -1);
 
-    char* fileName = SI->explorerNames[SI->selectedFile];
-    if (hasFileExtension(fileName, "pti"))
+    if (hasFileExtension(SI->explorerRowName(SI->selectedFile), "pti"))
     {
         return;
     }
@@ -988,7 +979,7 @@ static void functConfirmRename()
             // SI->displayDelete(SI->selectedPlace);
 
             //	fileManager.setInstrumentChangeFlag(mtProject.values.lastUsedInstrument);
-            newFileManager.setInstrumentStructChanged(mtProject.values.lastUsedInstrument);
+            newFileManager.setInstrumentStructChanged(SI->selectedSlot);
 
             SI->keyboardManager.deactivateKeyboard();
         }
@@ -1307,6 +1298,12 @@ static void functSwitchModule(uint8_t button)
 
 uint8_t cSampleImporter::changeFileSelection(int16_t value)
 {
+    // An empty list has no entry to move to; the clamp below would wrap around to entry 255.
+    if (locationExplorerCount == 0)
+    {
+        return 1;
+    }
+
     value = clamp<int>(value, -5, 5);
 
     if (selectionActive[selectedPlace])
@@ -1415,10 +1412,7 @@ void cSampleImporter::refreshActionButtons()
 
 void cSampleImporter::BrowseOrAdd()
 {
-    if (SI->explorerNames == nullptr)
-        return;
-
-    if (*explorerNames[selectedFile] == '/')
+    if (isFolderRow(selectedFile))
     {
         if (selectedPlace == 0)
         {
@@ -1430,7 +1424,7 @@ void cSampleImporter::BrowseOrAdd()
             }
         }
     }
-    else
+    else if (isFileRow(selectedFile))
     {
         if (SI->buttons->isButtonPressed(interfaceButtonShift) &&
             SI->selectionLength[listFiles] == 0)
@@ -1686,6 +1680,11 @@ void cSampleImporter::playSelectedSdFile(uint16_t from, uint16_t to)
 
     stopPlayingAll();
 
+    if (explorerRowName(selectedFile) == nullptr)
+    {
+        return;
+    }
+
     if (newFileManager.previevSamplefromSD(selectedFile, from, to))
     {
         //		ip->blockAllInputsExcept(interfaceButton4);
@@ -1939,12 +1938,29 @@ int16_t cSampleImporter::getSelectionEnd(uint8_t whichSelect)
 
 bool cSampleImporter::checkIfValidSelection(uint8_t positionToCheck)
 {
-    if (explorerNames != nullptr && !(*explorerNames[positionToCheck] == '/'))
+    return isFileRow(positionToCheck);
+}
+
+const char* cSampleImporter::explorerRowName(uint16_t row) const
+{
+    if (explorerNames == nullptr || row >= locationExplorerCount)
     {
-        return true;
+        return nullptr;
     }
 
-    return false;
+    return explorerNames[row];
+}
+
+bool cSampleImporter::isFolderRow(uint16_t row) const
+{
+    const char* name = explorerRowName(row);
+    return name != nullptr && *name == '/';
+}
+
+bool cSampleImporter::isFileRow(uint16_t row) const
+{
+    const char* name = explorerRowName(row);
+    return name != nullptr && *name != '/';
 }
 
 char* cSampleImporter::parseNewName(uint8_t num)
@@ -2284,7 +2300,11 @@ void cSampleImporter::initDeleteUnusedInstruments()
 {
     memset(instrUseMap, 0, sizeof(instrUseMap));
 
-    for (int patternIdx = PATTERN_INDEX_MIN; patternIdx < PATTERN_INDEX_MAX; patternIdx++)
+    // The scan reads the pattern files, and the pattern in memory can be newer than its file
+    // until the next autosave.
+    newFileManager.saveWorkspacePatternNow(mtProject.values.actualPattern);
+
+    for (int patternIdx = PATTERN_INDEX_MIN; patternIdx <= PATTERN_INDEX_MAX; patternIdx++)
     {
         const Sequencer::strPattern* pattern =
           newFileManager.loadWorkspacePatternToTempBuffer(patternIdx);
@@ -2296,12 +2316,15 @@ void cSampleImporter::initDeleteUnusedInstruments()
 
         for (int trackIdx = 0; trackIdx < kSampleTracks; trackIdx++)
         {
-            for (int stepIdx = 0; stepIdx < pattern->track[trackIdx].length; stepIdx++)
+            // The length of a track is the index of its last step.
+            for (int stepIdx = 0; stepIdx <= pattern->track[trackIdx].length; stepIdx++)
             {
                 const struct Sequencer::strPattern::strTrack::strStep& step =
                   pattern->track[trackIdx].step[stepIdx];
 
-                if (step.note > Sequencer::STEP_NOTE_EMPTY)
+                // Sample tracks can also hold MIDI and synth instruments, which have no slot.
+                if (step.note > Sequencer::STEP_NOTE_EMPTY &&
+                    step.instrument < kSampleInstrumentsCount)
                 {
                     instrUseMap[step.instrument] = 1;
                 }
@@ -2354,7 +2377,7 @@ static void functDeleteInstrumentDeny()
 
 static void functReplaceInstrumentConfirm()
 {
-    if (SI->explorerNames != nullptr && *SI->explorerNames[SI->selectedFile] != '/')
+    if (SI->isFileRow(SI->selectedFile))
     {
         SI->sampleType = mtSampleTypeWaveFile;
         SI->addNextFlag = SI->addNextOperationWantReplaceInstrument ? 1 : 0;

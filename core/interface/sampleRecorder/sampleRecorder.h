@@ -345,7 +345,7 @@ class cSampleRecorder : public ModuleBase
     strZoomParams zoom;
     strSpectrumParams spectrumParams[SAMPLE_CHANNELS];
 
-    char zoomTextValue[6];
+    char zoomTextValue[7];
 
     static strTrackerSpectrum spectrum[SAMPLE_CHANNELS];
     strTrackerPoints points;

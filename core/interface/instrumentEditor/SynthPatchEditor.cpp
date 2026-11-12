@@ -65,6 +65,14 @@ static inline int decodeSampleSlotId(int encodedId)
 
 void cInstrumentEditor::cleanPatchEditorResources()
 {
+    // The section grid and the parameter list are only hidden when the editor is left,
+    // and a hidden control is still redrawn while it waits in the refresh queue. Both
+    // skip their texts when these pointers are null.
+    imgGridData.textList = nullptr;
+    paramsListData.params = nullptr;
+    paramsListData.values = nullptr;
+    modelListData.params = nullptr;
+
     if (sectionNamesBufor != nullptr)
     {
         delete[] sectionNamesBufor;
@@ -925,7 +933,7 @@ void cInstrumentEditor::changeSynthMacroName()
 
     int macroIdx = sectionIds[sectionListPos];
 
-    if (macroIdx < 0 && macroIdx >= std::ssize(metadata.macros))
+    if (macroIdx < 0 || macroIdx >= std::ssize(metadata.macros))
     {
         return;
     }
@@ -1240,9 +1248,10 @@ void cInstrumentEditor::showSynthPatchSection(bool refreshList)
 
         int idx = 0;
 
-        sectionNamesBufor = new char[kMaxSynthSectionStringsCount * kMaxSynthListStringLen];
+        // A section without a name leaves its entries of these two unwritten.
+        sectionNamesBufor = new char[kMaxSynthSectionStringsCount * kMaxSynthListStringLen]{};
         sectionNamesGridBuff = new char[kMaxSynthSectionStringsCount * kMaxSynthListStringLen];
-        sectionNamesList = new char*[kMaxSynthSectionStringsCount];
+        sectionNamesList = new char*[kMaxSynthSectionStringsCount]{};
         sectionIds = new int[kMaxSynthSectionStringsCount];
 
         const char* shortName = nullptr;
@@ -1466,6 +1475,8 @@ void cInstrumentEditor::showSynthPatchSectionParam(bool refreshList)
         paramListNames = new char*[kMaxSynthParamStringsCount];
         paramListValues = new char*[kMaxSynthParamStringsCount];
         sectionParamsIds = new int[kMaxSynthParamStringsCount];
+        // A section without parameters must not show or edit one.
+        std::fill_n(sectionParamsIds, kMaxSynthParamStringsCount, -1);
 
         int syntPartIdx = mtProject.values.lastUsedInstrument - SYNTH_INSTRUMENTS_START_IDX;
         auto& patch = getSynth()->getPatch(syntPartIdx);
@@ -1903,7 +1914,7 @@ void cInstrumentEditor::showSynthPatchMacroParamValue(bool refreshList)
     const auto& metadata = patch.getMetadata();
 
     int macroIdx = sectionIds[sectionListPos];
-    if (macroIdx < 0 && macroIdx >= std::ssize(metadata.macros))
+    if (macroIdx < 0 || macroIdx >= std::ssize(metadata.macros))
     {
         display.setControlHide(barControl[7]);
         display.setControlHide(modelListControl);
