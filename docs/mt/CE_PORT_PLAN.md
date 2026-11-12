@@ -1190,6 +1190,517 @@ for every synth engine, CE's closed ones included.
   8. Device: the ladder, one part first, then three, with the Profiler.
 - **Effort:** M for phases 1 and 2, M for phase 3.
 
+### 3.17 synthfx plugins (`.ptsfx`: every synth effect a file on the card)
+
+Planned 2026-11-11, from the source. Phase 1 (the runtime and the SDK) built 2026-11-11:
+"Phase 1, as built" below. Phase 2 (CE's engines on the two slots) built 2026-11-11: "Phase 2,
+as built" below. Phase 3 (WAVE and PHASE on the slots) built 2026-11-11: "Phase 3, as
+built" below. Phase 4 (the device) run 2026-11-12, then retested with the fixes: "Phase 4, prepared" below.
+**Done 2026-11-12** ("Status" at the end of phase 4). Goal, the user's choices of
+2026-11-11: each synth part has two effect slots, FX1 and FX2, that pick from one list of
+`.ptsfx` plugins in `/SynthFX/` on the card. A part can't use the same effect in both
+slots. Today's six effects (Overdrive, Distortion, Bit Crusher, Chorus, Flanger, Phaser)
+stop being built in: they ship as the default pack of plugin files. Choosing a plugin for a
+slot puts that plugin's knobs in the slot's rows. Anyone can write a new effect in C, build
+it, and copy it to the card. WAVE and PHASE use the same two slots.
+
+- **What CE's `.ptfx` does** (`core/effector/ptfx_loader.cpp`, `ptfx_manager.cpp`,
+  `editor-fx-sdk/`): a 472-byte header (name, author, up to 12 parameters of 32 bytes, code
+  and `.bss` sizes, three entry offsets), then Thumb code built `-fPIC
+  -mpic-data-is-text-relative` with a linker script at 0, so it runs wherever it is loaded.
+  The loader reads it into the shared scratch buffer (`externalRamScratchBuff`, SDRAM),
+  zeroes `.bss`, cleans the D-cache and invalidates the I-cache, and calls it through a host
+  table of math functions. SDRAM is executable (MPU region 8, XN 0), and so is ITCM. One
+  plugin at a time, run in the main loop on int16 samples, offline, at any speed.
+- **Why a synth effect can't be a `.ptfx`.** A synth effect runs in the audio interrupt,
+  every block, while the project plays, up to six at once (two on each of three parts), and
+  WAVE's Pre runs one in each voice. So:
+  - it needs memory of its own that stays loaded (the shared scratch is the SD stream's,
+    Export's and the file lists');
+  - one plugin's code must serve many instances, so its state is passed in, not kept in
+    globals (the builder refuses writable `.data` and `.bss`);
+  - it works on floats in place and must finish inside a block;
+  - a slow or crashing plugin stops the audio or hangs the unit, and CE opens the last
+    project at boot, so a bad plugin could hang it on every start.
+  CE's `.ptfx` effects are written for offline use, so they aren't run as synth effects;
+  the format is a sibling, not the same file.
+- **The format: `.ptsfx`,** magic `PTSF`, version 1, laid out as CE's header, with the same
+  32-byte parameter records, an instance size (RAM per instance) and flags (Stereo, Pre
+  allowed). Entries, each taking the instance's RAM first:
+  - `init(void* st, const SfxHost* host)`: main loop, once per instance;
+  - `set_param(void* st, uint8_t index, float value)`: in the interrupt, before a block,
+    only for values that changed;
+  - `process(void* st, float* L, float* R, uint32_t frames)`: in the interrupt, in place;
+    R is null on a mono part or in a voice;
+  - `reset(void* st)`: clears the state (a voice starts from idle, a part changes engine).
+  The host table: `sinf`, `cosf`, `tanf`, `tanhf`, `expf`, `logf`, `powf`, `sqrtf`,
+  `fabsf`, `fminf`, `fmaxf`, a fast random, `memset`, `memcpy`, the sample rate and the
+  block size. No SD, display, heap or `double`, as for our own code in the interrupt.
+- **Memory (the user chose 288 KB in all):** SDRAM, `__NOINIT(EXTERNAL_RAM)`, ours,
+  cleared by us; no heap. A code pool of 96 KB holds each plugin in use once, however many
+  slots use it. An instance pool of 192 KB gives each instance the RAM its header asks for
+  (the Distortion about 200 B, the Chorus about 4 KB, a delay up to 64 KB). Both are filled
+  in the main loop in order and packed again when a plugin is let go; a load that doesn't
+  fit is refused with a popup. Small hot plugins can go in ITCM instead: the Distortion's
+  `dist_block` (7,580 B) leaves ITCM once it is a plugin, so about 10 KB there can take the
+  heaviest default plugins' code (the Distortion's, at least), as it runs today.
+- **Loading,** all in the main loop: the slot is marked off, so the interrupt passes it dry;
+  the loader waits one block, reads the file in 256-byte pieces (as CE does), checks the
+  header (magic, version, sizes, entry offsets inside the code), syncs the caches, calls
+  `init` on each new instance, applies the parameters, and marks the slot on. The scan of
+  `/SynthFX/` runs at boot and when the rows open, never in the interrupt.
+- **The default pack:** the six effects become six plugins built from today's code
+  (`core/mods/synthfx/`), checked bit for bit against today's effects in the emulator. The
+  firmware carries them and writes any that are missing to `/SynthFX/` at boot, so a card without them still has every effect.
+- **Guards:**
+  - Time: the interrupt times each `process` call with the cycle counter (as the Profiler
+    does). Over its share of a block (proposed 25 %) in 8 blocks running, the slot is
+    bypassed and the main loop says so.
+  - Output: NaN and infinity become 0 and the output is held within ±4.
+  - Crash on start: before a plugin's `init` and first blocks the main loop writes
+    `/SynthFX/.starting` with its name and deletes it after 2 s of clean running. If the
+    file is there at boot, that plugin isn't loaded, and a popup names it. A plugin that
+    hangs later (an endless loop) still hangs the unit until it is restarted; the marker
+    covers the restart.
+- **Settings (CE's engines):** record 16 version 2: per part, each slot's plugin file name
+  (32 B, empty for none) and its knob values (12 floats); 336 B in all. A version 1 record
+  is converted: its Distortion type goes in FX1 as that plugin, its modulation effect in
+  FX2, with the same knob values. A missing file opens the slot empty, with a popup.
+- **WAVE and PHASE (chosen 2026-11-11):** their own FX section becomes the same two slots,
+  kept in the part and saved in the project as on CE's engines, not in the patch: loading a
+  patch keeps the part's effects, and macros no longer reach them. A patch saved before
+  has its ten FX values converted once, when it loads, into the part's slots (as record 16
+  version 1 is). WAVE keeps Placement Pre: on WAVE each slot has a Placement row, and Pre
+  runs one instance in each voice before the filter, as today, for plugins whose header
+  allows it.
+- **Also chosen 2026-11-11:** the firmware writes the default pack to the card when files
+  are missing; the one-use rule is per part (two parts can each use the Distortion).
+- **The page:** the Synth FX rows become FX1 (the plugin list), its knobs, FX2, its knobs.
+  The knobs' names, ranges and units come from the plugin's header, as for Gain and Tone or
+  Bits and Rate today. A plugin already in the other slot isn't offered.
+- **The SDK (`synthfx-sdk/`):** `tracker_synthfx.h`, `ptsfx_builder.py` (from CE's
+  `ptfx_builder.py`, CE's MIT licence kept), the default pack's sources as the examples
+  plus a short Delay, and a guide `docs/synthfx_plugins.md` with the rules and the cost
+  budget. `tools/synthfx/check_ptsfx.py` runs a built plugin in the emulator: header checks,
+  instructions per block against the 25 % share, output bounded, `set_param` and `reset`
+  at any time.
+- **CPU:** the same effects cost about what they do now if their code runs from ITCM;
+  from SDRAM, through the I-cache, it could be a few points more on the unit, and F6 is at
+  94-96 %. The device test reads that first (F6 with the default pack against today's
+  figures).
+- **Phases:**
+  1. The runtime: format, loader, pools, guards, the SDK and builder, the default pack as
+     plugins, bit for bit against today's effects; nothing on the page yet.
+  2. CE's engines: two slots, record 16 version 2 with the conversion, the rows from the
+     header, the one-use rule.
+  3. WAVE and PHASE on the two slots.
+  4. Device ladder: F1-F6 with the default pack against today's figures, a third-party
+     style Delay, a deliberately slow plugin to see the bypass, the start marker.
+- **Tests,** after `PAST_FAILURES.md`: the default pack bit for bit; each through the real
+  host on the full build; Off and empty slots byte-identical to the reference build,
+  `MT_NO_MODS` identical; damaged files rejected (bad magic, version, sizes, offsets outside
+  the code, truncated, writable `.data`); the pools (full, packing, a refused load); the
+  time and output guards; the start marker; the record (version 1 converted, version 2
+  round-trips through Save, Save As, Open and New Project); the one-use rule; display bytes
+  with 2 × 12 knobs; `boot_rig.py` with six instances; planted faults for each guard.
+- **Effort:** XL (each phase M to L).
+- **Phase 1, as built (2026-11-11).** Nothing on the page and nothing in the audio path yet: the
+  built-in effects still play. At start, with the mod on (in `mods.cfg` at boot, or later in a
+  project, from `mods::update()` in the main loop), the firmware makes `/SynthFX/`, writes the
+  pack files that are missing, and lists the folder.
+  - **Files:**
+    - `core/mods/synthfx/ptsfx.h`, the SDK's header (a host test checks they are the same);
+    - `synthfxPool.h` (first fit);
+    - `synthfxPlugins.h/.cpp`: the runtime, platform-free, with memory, clock, cache sync
+      and host table passed in;
+    - `synthfxPluginsCe.cpp`: the firmware's side, with CE's `PtfxLoader::syncInstructionCache`,
+      `Timer::clockCycles` and libm;
+    - `synthfxPack.cpp` with the generated `synthfxPack.inc` (`tools/synthfx/build_pack.py
+      --embed`);
+    - `FileIo` gained `exists` and `list` (on CE's `listDirContents`);
+    - `TrackerImpl::update` calls `mods::update()`.
+  - **Changed from the plan above:**
+    - **The format** is `ptsfx.h`, not `tracker_synthfx.h`. The header is 476 bytes.
+      - `set_param` takes a `uint32_t` index.
+      - `process` takes `frames` and `in_channels`.
+      - An optional `format()` gives a knob's text.
+      - The host table has `print` (for `format()`) and no `memset`/`memcpy`; the builder
+        links `ptsfx_support.c` into every plugin instead.
+      - The flags are WIDENS (mono in, stereo out) and PRE.
+    - **Knobs:** a knob's value is always `fmaf(i, step, min)` for a whole step i. The
+      default is snapped to that grid too.
+    - **The pools** are first fit, and nothing moves: the interrupt may be running a block,
+      so a freed block leaves a hole, which later fits reuse.
+    - **Loading:**
+      - The file is read whole into its code block, 4 bytes in, so the code lands 32-byte
+        aligned. Its header is checked again there, and its size against the list.
+      - An instance's `active` byte is set last and cleared first. On the single core the
+        main loop never runs while the interrupt does, so there is no block to wait for.
+    - **The start marker** holds no name, and settles after 5 s, not 2. Found at start, it
+      puts the runtime in safe mode: the plugins a project asks for aren't loaded until the
+      user picks one and it settles. That is simpler, and it covers a plugin that hangs a
+      few seconds in.
+    - **The output guard's** common case has no branch per sample: sums of `v - v`, and
+      VMAXNM of `|v|`. Only a block that needs it goes sample by sample. A NaN or infinity
+      also resets the plugin before its next block.
+    - **The default pack** shares its arithmetic with the firmware: the effects' code moved
+      into `synthFxDsp.h` (inline, in `mtfx::dsp`), and `synthFx.cpp` keeps the entry
+      points. The firmware builds the per-block helpers as plain functions (`MTFX_SETUP`),
+      as before: inlined, they grew `dist_block`'s ITCM copy by 1,450 B and pushed some
+      of the closed libraries' cymbal code out of ITCM. Now it is within 4 B of before,
+      and CE's ITCM set is unchanged.
+  - **Memory** (`tools/mem_budget.py`, full build, against `TrackerPlus_MT_diag_8b7597c`):
+    - SDRAM free 681,484 B (was 994,732): the pools' 288 KB, plus about 18 KB of tables
+      (catalog 5.6 KB, instances 4.2 KB, the list's names 7 KB);
+    - flash about 49 KB for the pack's copy;
+    - ITCM free 2,792 B (was 2,800). `process` and the guard are `AUDIO_CORE_RAM`, but
+      nothing calls them yet, so they aren't linked. Phase 2 links them (about 0.5 KB), or
+      moves them to flash if ITCM is short;
+    - DTCM: 43 B of the runtime's flags and pointers.
+  - **The SDK:**
+    - `synthfx-sdk/` holds `ptsfx.h`, `ptsfx_builder.py` (CE's licence noted),
+      `ptsfx_support.c`, `pack/` (the six) and `examples/` (Tremolo, a short Delay);
+    - `docs/synthfx_plugins.md` is the guide;
+    - `tools/synthfx/check_ptsfx.py` checks a built plugin on the emulator with the
+      firmware's runtime: the header, texts, output bounded, no stray writes, `reset` as a
+      fresh instance, and instructions per block against the quarter-block share. It found
+      a `reset` bug in the first Tremolo.
+  - **Tests (2026-11-11):**
+    - `tools/synthfx/test_pack.py`: the pack bit for bit against the built-in effects,
+      32 of 32;
+    - `tools/synthfx/test_runtime.py`: the runtime as the firmware builds it, on the
+      emulator (`tools/synthfx/rig/`, with the test plugin `probe.c`), 78 of 78. It covers:
+      - the start and the catalog;
+      - each pack plugin through the runtime as called directly;
+      - knobs: set after init, then only when they change, snapped, stepped, their texts;
+      - loading: alignment, the cache sync, state zeroed, the limits (8 plugins, 56
+        instances, the code and state pools full), holes reused;
+      - the guards, and the marker and safe mode;
+      - the cost: +1,010 instructions per block around a mono plugin, +1,816 around a
+        widening one;
+    - host test `test_synthfx_plugins`, 99 checks: the pool, `checkHeader` against 31
+      spoiled headers, the start, the catalog, the marker, the header copy;
+    - `tools/synthfx/rig/plant.py`: 20 planted faults (16 in the rig, 4 in the host test),
+      all caught;
+    - the `MT_NO_MODS` reference build is byte-identical; the full and diagnostic builds
+      are clean.
+    - `run_tests.py` runs `synthfx plugins` and `synthfx pack`.
+    - Level A's and `plant_synthfx.py`'s planted faults that named `synthFx.cpp` now name
+      `synthFxDsp.h`, where that code moved. Rerun after the move: Level A's 14 of 14
+      caught, and `plant_synthfx.py`'s two in `synthFxDsp.h` caught. Level A rebuilt after
+      the move gives the same output as the 8b7597c build, sample for sample, in all 288
+      effect cases.
+    - `run_tests.py --tier release` with the diagnostic build: 34 of 34 pass.
+    - Not run: `plant_synthfx.py`'s other faults (their files didn't change); no device
+      test (nothing a user can reach has changed but the boot's pack writing and scan).
+- **Phase 2, as built (2026-11-11).** CE's engines (ACD to CHIP) play their Synth FX through the
+  plugins in two slots per part; the built-in effects no longer run on them. WAVE and PHASE
+  still use `synthFx.cpp` in their own FX section (phase 3).
+  - **Files:**
+    - `synthfxMod.cpp`: the slots in the audio interrupt, `begin` and `run`;
+    - `synthfxSlots.cpp` (new): making each slot's plugin in the main loop and letting it go;
+    - `synthfxSettings.cpp`: the slots' settings and record 16;
+    - `synthfxPage.cpp`: the rows;
+    - `SynthPatchEditor.cpp`: the rows on button 3, now from the plugin's header;
+    - `fIinstrEdit.cpp`: `cInstrumentEditor::update` calls `mtSynthFxPoll`, which redraws the
+      rows when a slot's plugin is made, let go or bypassed;
+    - `mods::update` calls `synthfx::updateSlots` after the runtime's own update.
+  - **The slots.** Each slot holds a file name and 12 knob values; NaN means the plugin's
+    default.
+    - The settings live in SDRAM. The main loop alone reads them, and `synthfx::init` (the
+      registry's init) empties them at boot.
+    - The interrupt has its own copy per slot in DTCM: the instance, a phase, and whether
+      the plugin widens.
+    - A pick never waits on the interrupt:
+      1. the running plugin is retired, and the interrupt fades it out over its next block;
+      2. a later main-loop pass frees it once it has faded, or after 50 ms if the part isn't
+         rendering;
+      3. the new plugin is made, gets its knobs (snapped onto its steps, and written back to
+         the settings) and is published;
+      4. the interrupt fades it in over its first block.
+    - Opening a project remakes all six slots in the main loop. The page shows Loading until
+      the plugin is ready.
+    - Signal path:
+      - FX1 runs, then FX2.
+      - A mono part goes out as stereo while a widening plugin runs in either slot.
+      - A non-widening plugin on a mono part gets `R` null.
+    - With the mod Off, or on WAVE or PHASE, the interrupt passes the part dry.
+  - **Changed from the plan above:**
+    - Record 16 version 2 is 576 B: per slot, a 48-byte file name (the runtime's limit, not
+      32) and 12 little-endian floats, with NaN as 0x7FC00000. Damaged entries load as empty
+      slots, and non-finite knobs load as the default. FX2 naming FX1's file loads empty.
+      A record is rewritten only after an edit, so a damaged or version 1 record stays on
+      the card until the user changes something.
+    - A missing or refused file shows no popup. The slot keeps its name and reads, for
+      example, `Missing: Delay`; it is tried again each time the rows open. The other
+      reasons are Bad file, Too big, No room, Safe mode and Read error. A slot the time
+      guard stopped reads `Slow: <name>`.
+    - Version 1's conversion:
+      - Gain and Tone become the plugin's percent knobs and Level its dB, in 0.5 dB steps.
+      - The modulation effect's Rate, Depth and Mix carry over, and Feedback becomes
+        step - 95.
+      - Out-of-range bytes are Init, as before.
+  - **The page:**
+    - The rows are FX1, its knobs, FX2, its knobs, at most 26, with 14 lines visible.
+    - A slot's list is None plus every catalog plugin with status ok, without the other
+      slot's. The slot's own file is added if it isn't listed (missing).
+    - A `PTSFX_PARAM_LIST` knob of up to 16 steps is a list; any other knob is a bar, centred
+      when min = -max.
+    - The encoder moves a knob one step a tick, or (steps - 1) / 200 steps a tick on a long
+      range.
+    - Delete restores a knob's default, or sets a slot to None.
+    - The rows' texts and lists are in SDRAM (3,568 B).
+    - Display list: worst 6,548 B, on WTFM's patch screen as it opens (CE: 6,452 B); 5,940 B
+      with 10 rows of knobs.
+  - **Memory** (`tools/mem_budget.py`, full build, against phase 1's):
+    - ITCM free 2,264 B (was 2,792): `process` and the guard are now linked;
+    - SDRAM free 675,204 B (was 681,484): the slots' settings (576 B), the rows (3,568 B),
+      and the slots' main-loop state;
+    - DTCM: the interrupt's copy, `runs` (18 B) and `live` (72 B); the free figure reads
+      14,456 B, as before;
+    - the cost, three ACD parts with Distortion and Phaser: 171,135 instructions a block
+      (10.1 % of a block), the plugins' own included; on PERC 238,453 (14.0 %). Block pool
+      peak 74 (ACD) and 76 (PERC, the same as PERC without the slots).
+  - **Tests (2026-11-11):**
+    - `tools/emu/test_synthfx.py`, rewritten for the slots, on all seven engines:
+      - Off sounds as the reference build;
+      - each pack plugin in FX1, and Distortion into Phaser, fades in over one block,
+        measured from the first sample that changes (the output path delays the part 5
+        samples);
+      - FX1 runs before FX2, and swaps and clears fade out and let the plugin go;
+      - WAVE and PHASE are skipped;
+      - garbage knobs are snapped;
+      - no malloc in the interrupt;
+      - the cost, as above.
+    - `as_before` plays a version 1 project through the plugins against phase 1's build
+      (`--before`, `TrackerPlus_MT_p1.axf`, from 42a415e):
+      - of its 49 cases, the 42 without a Phaser at Feedback 90 % agree sample for sample by
+        block 80 after the pick;
+      - the old built-in Distortion ramped in over 8 blocks and the plugin doesn't, so they
+        differ at first (CHIP's Bit Crusher takes the longest, 72 blocks);
+      - behind the Phaser at Feedback 90 % the difference rings on: within the last bit by
+        105 to 162 blocks, with a last-bit difference while the note sounds.
+    - `tools/emu/test_synthfx_page.py`:
+      - the rows, lists, knobs, Delete, the swap, the redraw;
+      - the display bytes;
+      - projects: an old one, a version 1 one converted, Save, Save As, New, Off, every file
+        closed.
+    - `boot_rig.py --expect-synthfx`: a version 1 project's six slots made at the start.
+    - `tools/emu/plant_synthfx.py`: 26 planted faults (audio path, slots, record, host test,
+      page), all caught. The first run missed the two fade faults: the checks then looked
+      at the block's first 4 samples, which are still the dry sound before it.
+    - `run_tests.py --tier release` with the diagnostic build: 36 of 37 passed. `synthfx`
+      failed `as_before`'s limits, which were then fixed and rerun alone, section by section,
+      with every engine; the tier wasn't run again as a whole.
+    - The `MT_NO_MODS` reference build is byte-identical; the full and diagnostic builds are
+      clean.
+    - Not run: no device test (phase 4). Real time, SDRAM cache misses and the plugins' cost
+      with 8 voices sounding are device readings.
+- **Phase 3, as built (2026-11-11).** WAVE and PHASE play their effects through the same two
+  slots; their own effects (the Distortion in the voice, and `synthFx.cpp`'s block after it)
+  are gone from them. With Synth FX Off they play dry, as CE's engines do (the user's choice,
+  2026-11-11).
+  - **Files:**
+    - `wtEngine.h`: the voice's Distortion is a hook, `pre(pre_ctx, out)`, where
+      `dist_block` was: before Drive and the filter. `fresh` is still set on a note from idle.
+    - `waveSynth.cpp`: the hook calls `synthfx::runPre(voice, buf, fresh)`; the FX section
+      and its names are gone. `phaseSynth.cpp`: the same, without a hook.
+    - `synthsSdk.h`, `synthsSdk.cpp`: the post process is `toStereo` alone; `distKnobName`,
+      `kFxSection` and the Distortion's `.invalidates` are gone. Parameters 62 to 71 stay,
+      so old patches load, and do nothing; a macro aimed at one no longer changes the sound.
+    - `synthfxMod.cpp`: `begin` and `run` take WAVE and PHASE; `runPre`; `partIsWave`;
+      `convertOldPatches`. `synthfxSlots.cpp`: a Pre slot is made 8 times.
+      `synthfxSettings.cpp`: record version 3, `setSlotPre`, `fromOldPatch`.
+      `synthfxPage.cpp`: the Placement row. `mods.cpp`: `mods::update` calls
+      `convertOldPatches`.
+    - The pack: the Overdrive, Distortion and Bit Crusher have `PTSFX_FLAG_PRE`.
+  - **The audio path:**
+    - A WAVE or PHASE part goes into the slots in mono (`Insert.inStereo` false): its two
+      sides are alike, so FX1 runs on one channel, and a widening plugin makes it stereo.
+    - Placement Pre (a slot with Pre and a plugin flagged PRE) is made with 8 instances. On a
+      WAVE part each voice runs its own on its block before the filter (`runPre`), and `run`
+      skips the slot on the part, moving its fade on. On another engine the first instance
+      runs on the part, as Post.
+    - CE's library passes voice index 0 to every voice, so `runPre` gives voices seats by
+      address: a voice that rendered in the last block keeps its seat; any other takes a
+      seat nobody rendered in last block, and that seat's instances reset, as they do when
+      the voice starts a note from idle.
+  - **Old patches.** `convertOldPatches` runs in the main loop, with the mod On or Off, and
+    only while the file manager is idle (a project opening may not have its record in yet).
+    A WAVE or PHASE patch with an Effect or a Distortion has them moved into its part's
+    slots, as record version 1 is (the patch's floats × 100, Level as it is; FX1 Pre if WAVE
+    and Placement Pre). It then sets the patch's Effect to None and Distortion to Off
+    (`kPatchAssign`, with the audio interrupt off), marks the patch and the project edited,
+    and has the slots made again.
+  - **Changed from the plan above:**
+    - Record 16 version 3 is 582 B: version 2's 576, then a Placement byte per slot (1:
+      Pre; anything else, or an empty slot, is Post). Version 2 loads with every slot Post.
+    - The `Slot` is 100 B (the file at 0, the knobs at 48, Pre at 96, padded).
+    - Old patches are converted by the main loop after they load, not inside the load: one
+      check covers a patch opened, a project opened and a patch picked, and a project's
+      record is in by then.
+  - **The page.** Button 3 is on every engine when the mod is On; WAVE's and PHASE's FX tile
+    is gone (8 sections). On a WAVE part, a slot with a PRE plugin has a Placement row (Pre,
+    Post) under it; Delete sets Post. Changing it makes the slot again. A knob's edit is
+    copied to all 8 instances (`knobEdited`). Display list: WAVE's patch screen as it opens
+    is now the worst, 7,092 B (limit 8,172); PHASE 6,576 B; 5,952 B with WAVE's 10 rows.
+  - **Memory** (`tools/mem_budget.py`, full build, against phase 2's):
+    - ITCM free 9,808 B (was 2,264): `dist_block` and its copy no longer linked;
+    - SDRAM free 688,492 B (was 675,204);
+    - DTCM free 14,272 B (was 14,456): `runs` grows to 8 ids a slot (72 B), `live` to
+      168 B, and the seats (192 B);
+    - instances: 56, enough for every slot Pre on every part (48).
+    - Cost (emulator instructions, the plugins' own included): one WAVE part with all 8
+      voices, the Distortion and the Bit Crusher both Pre, 307,397 a block (18.1 %); three
+      WAVE parts 3 + 3 + 2, each the Distortion Pre and the Phaser, 307,051 (18.1 %).
+  - **Tests (2026-11-11):**
+    - `tools/run_tests.py --tier release`: 37 run, 0 failed (synthfx plugins cached);
+    - host tests (`core/mods/tests`): 65 checks, 0 failed;
+    - `test_synthfx.py`'s new sections: `wave_off_and_mono` 7/0, `old_patches` 22/0, `pre` 9/0;
+      `test_synths.py` 32/0; `test_synths_dsp.py` passes; the page test passes;
+    - planted faults: `plant_synthfx.py` 40 of 40 caught, Level A 3 of 3;
+    - the diagnostic build has only CE's own warnings; the `MT_NO_MODS` reference is
+      byte-identical.
+    - Tight: PHASE at Feedback 90 % agrees with the phase 1 build from block 166, against a
+      limit of 170.
+    - Not run: anything on the unit (phase 4, `DEVICE_TEST_LADDER.md` S5).
+- **Phase 4, prepared (2026-11-11).** No firmware change: the device test's files and the emulator
+  runs of them first. Firmware `build/TrackerPlus_MT_synthfx_plugins_diag.ptf`, the lockup recorder
+  build of 761cfc1 that the release tier ran.
+  - **Files:** `tools/synthfx/device/` (GuardSlow, GuardHang, `build.sh`, which also builds the SDK's
+    Delay and Tremolo into `build/device/synthfx_card/SynthFX`); `make_masterfx_test_project.py
+    --synthfx-plugins` (record 16 version 3: P1 the Delay, P2 8 WAVE voices with the Distortion Pre and
+    the Phaser on every part, G1 GuardSlow, G2 GuardHang); `DEVICE_TEST_LADDER.md`'s plugin set.
+  - **Emulator, before the unit:** `test_synthfx.py`'s `guards`, with a clock that counts only the
+    plugins' own instructions, as cycles: GuardSlow Light 300,020 instructions a block (6.0 a turn), kept
+    running, of the budget's 435,000; Heavy over it for exactly 8 blocks, then bypassed, the sound sample
+    for sample as without it; the Delay echoes, 22,262 instructions a block (1.3 %), under the rules;
+    with the marker on the card a project's GuardHang and Delay aren't made, a user's pick is, and safe
+    mode ends 5 s after it; the marker is on the card before GuardHang's first block. `boot_rig.py
+    --expect-hang` (release tier `boot synthfx hang`): CE's own Open of G2 hangs inside the plugin, with
+    the marker on the card, no file open and the Workspace's `mods.bin` written; a second start from that
+    card opens the Workspace with GuardHang skipped and plays. Planted faults: 3 of 3 (the budget a whole
+    block, safe mode skipping nothing, the marker never written). Release tier: 39 jobs, 0 failed.
+  - **What the marker covers:** it is written when a plugin is made and removed 5 s later, by the
+    clock, not by blocks run. A part with voices renders every block, so its plugins run from the first
+    block and a hang then is covered. A plugin on a part with no voices doesn't run until the part gets
+    one; if that is more than 5 s later and it hangs, the restart isn't in safe mode. Once safe mode has
+    ended, opening the page tries the skipped slots again (`retryFailed`), so a hanging plugin left in a
+    slot hangs again; the marker covers that restart too. The device steps set such a slot to None first.
+  - **Not known until the unit:** the plugins' cost from SDRAM through the I-cache against F1 to F6's
+    figures with the built-in effects (F6 was 94 to 96 % slowest); a GuardSlow turn's cycles (2 to 6 are
+    possible; Heavy is over the budget unless a turn is under 1.8 cycles); the recorder's restart from a
+    hang inside a plugin.
+  - **Device test 2026-11-12,** `TrackerPlus_MT_synthfx_plugins_diag.ptf`, from `/mfx_log.txt` and the
+    Profiler:
+    - F1 to F6 through the plugins, as the built-in effects read before: F1 33 %, F2 37 %, F3 53 %, F4
+      60 %, F5 61 %, F6 95 % slowest (log: average 82 %, slowest 92 %, 0 blocks over time). Code from
+      SDRAM costs CE's engines nothing that shows.
+    - S5 (8 WAVE voices, dry): average 35 %, slowest 44 %.
+    - P2 (8 WAVE voices, the Distortion Pre and the Phaser on every part): average 68 %, slowest 77 %
+      (89 % on the first play). With Super Saw on both oscillators: average 80 to 81 %, slowest 89 %,
+      and 1 of 902 blocks over time on the first play (slowest 100 %). The built-in effects read
+      average 62 to 65 %, slowest 75 to 82 % there: WAVE's Pre through 8 plugin instances costs about
+      16 points more than the old Distortion in ITCM.
+    - GuardSlow Heavy: 8 of 30,077 blocks over time, all 8 back to back, slowest 107 %, then bypassed:
+      the time guard works. That puts a turn at about 5.6 cycles (Light about 16 % of a block). Light
+      itself wasn't read: the project opened in safe mode.
+    - Three lockups, all GuardHang (`pc` in the code pool, the same one instruction each sample, no
+      fault): G2 as planned, and twice before it, when FX1's list was scrolled past the Phaser. The list
+      makes each plugin as it is scrolled over, and GuardHang was on the card from the start, which the
+      steps shouldn't have done. The recorder restarted the unit each time, and the next start was in
+      safe mode ("Safe mode: Delay", no knobs) until a pick ran 5 s.
+    - **Bug:** the rows weren't redrawn once a plugin was made, so a pick stayed "Loading" until the page
+      was opened again, and the names drawn for the Loading layout sat over the values of the made one
+      (on WAVE, the encoder on "Placement" then changed FX1's plugin). CE calls a screen's `update` only
+      while its `moduleRefresh` is set, and the editor's `update` clears it, so `mtSynthFxPoll` ran once.
+      The page rig called `update` every pass, past that gate. Fixed: `mtSynthFxPoll` returns whether the
+      rows are shown, the editor's `update` keeps `moduleRefresh` set while they are, and button 3 sets
+      it. The rig now calls `update` only while `moduleRefresh` is set (found from the editor's first
+      write in `update`), and the page test has the device's case: on WAVE, FX1 Distortion Pre swapped
+      for the Bit Crusher with the rows open, Loading and then the rows by themselves, each name over its
+      value; the encoder on Placement sets Pre and leaves FX1 alone. With the gate, the old build failed 6
+      of the page checks; planted faults 3 of 3 (the poll gone, run only once, not started by button 3;
+      the last was missed until the rig ran the editor's first `update` after its start, as the unit does).
+    - **The wait (the user's choice, 2026-11-12).** A pick from a slot's list is made once the encoder
+      has rested `kPickRestMs` (400 ms), so turning through the list makes none of the plugins it
+      passes. `setRowStep` calls `remakeWhenStill`, which marks the slot; `updateSlots` (main loop)
+      remakes it once the time is up. Meanwhile the old plugin plays on, the slot reads Loading,
+      and `slotInstance` is -1, so no knob or Placement rows show. Delete (None) and Placement
+      still remake at once. Since the edit stores the record before the plugin is made, the slot
+      stores it again once its pick is made and the old one let go (`storeWhenMade`), so the
+      record has the plugin's knobs on its steps; before, a swap's knobs stayed NaN in the record
+      until the next edit. RAM: `live` (DTCM) is 48 bytes bigger, 8 a slot, 192 in all. The page test has the case:
+      three ticks 100 ms apart read and make none (a hook counts `plugins::create`), Loading with no
+      knob rows, then only the last made once the encoder rests, with its knobs in the record.
+      Planted faults: the pick made at once, the wait never ends, a waiting slot's knobs shown,
+      Delete waits, the record not stored when a pick is made, the record stored before a swap is
+      made. All 20 of the page's planted faults caught (Delete waiting was missed until the Delete
+      check counted instances; "an edit not marked for saving" is now caught by Placement's record
+      byte, since a pick's record is stored once it is made). Firmware for the retest:
+      `build/TrackerPlus_MT_synthfx_wait_diag.ptf`. Release tier: 33 run, 6 cached, 0 failed.
+  - **Retest 2026-11-12,** `TrackerPlus_MT_synthfx_wait_diag.ptf`, GuardHang off the card:
+    - The unit started normally (no safe mode).
+    - P1: FX1's list turned quickly end to end and back: Loading, no stall; Tremolo and Delay each
+      made about half a second after the encoder stopped. Playing, a slow turn past two or three
+      plugins left the sound alone until the encoder stopped. Log: average 25 %, slowest 45 %.
+    - P2: FX1 Distortion to Bit Crusher, stopped and playing: the rows redrew by themselves, each
+      name over its value; Placement changed Pre and Post and left FX1 alone; Delete read None at
+      once. The Profiler's slowest didn't rise during the swap. Log: average 62 to 68 %, slowest 76 to
+      86 %, 0 blocks over time.
+    - G1 Light: average 38 %, slowest 45 % (the Profiler read 66 % on the first play, 44 % on the
+      second; the log has no block over 45 % in that play). Light costs about 18 points against the
+      bypassed slot's 20 % average, as the 5.6 cycles a turn predicted (16 %).
+    - G1 Heavy mid-play: 8 blocks over time, all back to back, slowest 109 %, then bypassed (20 to
+      21 % average, 26 to 30 % slowest). The bypass lasts until the plugin is made again (a pick or
+      the project opened), so Light then Heavy again, or stop and play, stays at 29 %: as designed.
+    - Save and reopen: changed plugins and knobs, Save, another project played, the first reopened:
+      the slots as saved. Save within the 0.4 s wait: the new plugin in the slot on reopen.
+    - A missing plugin: `Delay.ptsfx` renamed, P1 opened: FX2 says so, no hang.
+    - USB storage mode with G1 open (Delay in a slot), `Delay.ptsfx` deleted from the computer: on
+      return the slot still read Delay and played it (its code is in RAM since it was made; nothing
+      reads the file again), and once FX1 was turned off it the list no longer had it (the page
+      rescans the card when it opens). Expected. But it showed a gap: `mods::update` runs during USB
+      storage mode, and nothing in the mods checks for it, while CE suspends its own card use there
+      (`handleFileTransferMode`). A pick still waiting its 0.4 s, or the start marker's removal
+      5 s after a plugin is made, could read or write the card while the computer has it: two
+      writers on one card, which can corrupt it.
+    - **Fixed (2026-11-12).** CE's `handleFileTransferMode` tells the mods (`mods::cardLent`), after
+      its own last saves on the way in and after the remount on the way out. While the card is lent,
+      `mods::update` returns at once, so Synth FX's waiting picks, slots and start marker wait for
+      the card, and every `CeFileIo` call fails (read, write, remove, makeDir, exists, list) as a
+      backstop. The lockup recorder's log waits too. Elsewhere: Copy Pattern and Color Song touch the
+      card only from their own screens, which USB storage mode replaces; Song Loop only reads, and
+      MIDI Start there plays in pattern mode (the Song screen isn't active); CE stops the sequencer on
+      the way in and suspends its saves and sample streaming. RAM: one byte of DTCM.
+      Tests: the boot rig goes in and out the way a user does (Config's action, then the mode
+      screen's button) with the release tier's Synth FX project just opened: 6 s in the mode, 0 card
+      calls from CE or the mods, the start marker kept, then removed once the mode ends (`boot synthfx`,
+      `--expect-usb`). The page test: a pick waiting and the marker due, 9 s lent and neither happens,
+      then both; the plugin list read while lent is empty. Planted faults 4 of 4 (CE never lends the
+      card, never gives it back, the update or the file calls ignore it). The MT_NO_MODS reference
+      is still byte-identical. Firmware: `build/TrackerPlus_MT_synthfx_usb_diag.ptf` (recorder) and
+      `build/TrackerPlus_MT_synthfx_usb_normal.ptf`.
+    - **Device test of the fix 2026-11-12,** `TrackerPlus_MT_synthfx_usb_diag.ptf`: G1, FX1 turned to
+      another plugin, then USB storage mode within 5 s. On the computer `/SynthFX/.starting` was
+      still there (the mods hadn't touched the card); a sample copied into `/Samples` and deleted, a
+      file in `/SynthFX` renamed and back. Out of the mode, FX1 had the picked plugin and played it;
+      in again 6 s later, the marker was gone. P2 and another project opened and played. Log: G1
+      average 21 %, slowest 28 %; P2 average 65 to 66 %, slowest 73 to 77 %, 0 blocks over time;
+      Shimmer + BBD project average 37 %, slowest 49 %. Then `TrackerPlus_MT_synthfx_usb_normal.ptf`
+      (no recorder, so no log), P2: the Profiler read 92 % on the first play and 73 % on the second,
+      as the recorder build's P2 (89 % first play). The first play's peak is the highest P2 reading
+      yet; the second play is under the diag's.
+  - **Status: done 2026-11-12.** Every phase built and the device ladder run. WAVE's Pre cost
+    accepted by the user (2026-11-12): about 16 points over the old built-in Distortion at 8
+    voices, P2 92 % on the first play and 0 blocks over time logged; the guide and the README say
+    so, with Post or fewer voices as the way out. Not read on the unit: a plugin on a PHASE part.
+    The ladder's plugin set had no PHASE row, which was missed when it was written, not chosen.
+    It is covered by the rest: on PHASE a slot runs once per part (Post), the path F1 to F6
+    measured on the unit at the built-in effects' cost; the plugins' own cost is the checker's
+    (under 5 % of a block each); PHASE's voices are S4's. Optional, not needed for done: S4 with
+    plugins, a 10-minute play.
+
 ## 4. Order and why
 
 | # | Mod | Proves | Effort |

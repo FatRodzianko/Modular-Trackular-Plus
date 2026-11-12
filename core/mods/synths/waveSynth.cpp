@@ -1,9 +1,12 @@
 // Modular-Trackular mods. SPDX-License-Identifier: MIT
 //
-// WAVE: a wavetable synth (wtEngine.h) as a CE Synth SDK engine, with the Distortion
-// (Pre or Post its filter) and a Chorus, Flanger or Phaser (synthsFx.h).
+// WAVE: a wavetable synth (wtEngine.h) as a CE Synth SDK engine. Its effects are Synth FX's
+// two slots (synthfx/synthfxMod.h): after the voices, or with Placement Pre in each voice
+// before its filter (the voice's Pre hook, here).
 //
-// Parameter ids are sy9's (Modular-Trackular's WAVE), 0-61, then the effects' 62-71.
+// Parameter ids are sy9's (Modular-Trackular's WAVE), 0-61, then the old effects' 62-71: kept
+// so patches saved before still load, and Synth FX turns them into the part's slots; nothing
+// here reads them, and no section shows them.
 
 #include "modsBuild.h"
 
@@ -15,6 +18,9 @@
 #include "synthsEngines.h"
 #include "synthsSdk.h"
 #include "wtEngine.h"
+#if MT_HAS_SYNTHFX
+#include "synthfx/synthfxMod.h"
+#endif
 
 namespace polysynth
 {
@@ -107,7 +113,14 @@ void waveSpecs(Spec* s)
 class WaveSynthVoice : public MtSynthVoice<WaveSynthVoice, WaveParamId>
 {
   public:
-    WaveSynthVoice() { wt_voice_init(&eng); }
+    WaveSynthVoice()
+    {
+        wt_voice_init(&eng);
+#if MT_HAS_SYNTHFX
+        eng.pre = &WaveSynthVoice::pre;
+        eng.pre_ctx = this;
+#endif
+    }
 
     bool isActive() final { return wt_voice_sounding(&eng) != 0; }
 
@@ -130,10 +143,7 @@ class WaveSynthVoice : public MtSynthVoice<WaveSynthVoice, WaveParamId>
         toStereo(out);
     }
 
-    /* the Post Distortion runs after the voices; the Pre one in each */
-    int postDistortion() const { return dist_on(p + P_EFFECT) && !dist_pre(p + P_EFFECT); }
-
-    static void createMetadata(Patch& patch, Patch::Metadata& metadata)
+    static void createMetadata(Patch& /*patch*/, Patch::Metadata& metadata)
     {
         metadata.params.resize(P_COUNT);
         metadata.params.shrink_to_fit();
@@ -142,8 +152,6 @@ class WaveSynthVoice : public MtSynthVoice<WaveSynthVoice, WaveParamId>
 
         Spec specs[P_COUNT];
         waveSpecs(specs);
-        specs[P_GAIN].name = distKnobName(patch, false);
-        specs[P_TONE].name = distKnobName(patch, true);
         sdk::ParamHelper<WaveSynthVoice> helper(metadata, paramHandlers);
         addAll(helper, specs, std::make_index_sequence<P_COUNT>{});
 
@@ -183,7 +191,6 @@ class WaveSynthVoice : public MtSynthVoice<WaveSynthVoice, WaveParamId>
               { .name = "LFOs", .shortName = "LFO", .elements = range(kLfoSection, 10) },
               { .name = "Modulation Matrix", .shortName = "Matrix", .elements = range(mtx.data(), mtx.size()) },
               { .name = "Voice", .shortName = "Voice", .elements = ids({ 35, 36, WP_VOLUME }) },
-              { .name = "FX", .shortName = "FX", .elements = range(kFxSection, P_COUNT - P_EFFECT) },
             },
         };
         metadata.layout23 = metadata.layoutFlat;
@@ -219,6 +226,16 @@ class WaveSynthVoice : public MtSynthVoice<WaveSynthVoice, WaveParamId>
     }
 
   private:
+#if MT_HAS_SYNTHFX
+    /* Audio interrupt, inside the voice's render, before Drive: Synth FX's Pre slots, with this
+     * voice's own instances; a note from idle starts them afresh */
+    static void pre(void* ctx, float* buf)
+    {
+        auto* v = static_cast<WaveSynthVoice*>(ctx);
+        mods::synthfx::runPre(v, buf, v->eng.fresh != 0);
+    }
+#endif
+
     struct wt_voice eng;
 };
 

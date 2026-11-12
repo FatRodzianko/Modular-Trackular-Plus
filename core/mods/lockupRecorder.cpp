@@ -471,7 +471,9 @@ void update()
         lastState = state;
     }
 
-    if (textWaiting && newFileManager.getStatus() == fmIdle && newFileManager.getCurrentOperation() == fmNoOperation)
+    // not in USB storage mode: the computer has the card
+    if (textWaiting && !cardIsLent() && newFileManager.getStatus() == fmIdle &&
+        newFileManager.getCurrentOperation() == fmNoOperation)
     {
         FileSystem* fileSystem = TrackerImpl::getInstance()->getPlatform()->getFileSystem();
         if (fileSystem->isSdCardInserted())

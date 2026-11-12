@@ -111,6 +111,15 @@ constexpr CountText kModCountText = makeCountText(kBuiltModCount);
 // Boot, after the file manager: loads the defaults from mods.cfg.
 void init(FileSystem* fileSystem);
 
+// Main loop, every pass (TrackerImpl::update).
+void update();
+
+// USB storage mode on and off (Interface::handleFileTransferMode, main loop). While the computer
+// has the card the mods leave it alone, as CE does: update waits (Synth FX's waiting picks, its
+// start marker, the slots), and the mods' file calls fail.
+void cardLent(bool lent);
+bool cardIsLent();
+
 // Config -> Mods action for every item: saves mods.cfg.
 void defaultsChanged();
 

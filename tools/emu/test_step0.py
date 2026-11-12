@@ -108,6 +108,9 @@ class FakeSd:
         self.next_handle = 0x100
         self.unexpected: list[str] = []
         self.calls: list[str] = []
+        # listDirContents' name filter is a std::function, which a stub can't call: the firmware's
+        # filter for each folder listed, in Python (Synth FX lists only .ptsfx files); others keep all
+        self.list_filters = {"SynthFX": lambda name: name.lower().endswith(".ptsfx")}
 
         impl_vt = m.addr("_ZTV14FileSystemImpl") + 8
         slots = m.sym("_ZTV14FileSystemImpl").size // 4 - 2
@@ -117,6 +120,7 @@ class FakeSd:
             "writeFile": self.write_file, "closeFile": self.close_file,
             "getFileSizeEPv": self.size_of_handle,
             "getFileSizeEPKc": self.size_of_path,
+            "listDirContents": self.list_dir,
         }
         self.vtable = m.alloc(4 * slots, 4)
         for i in range(slots):
@@ -191,6 +195,36 @@ class FakeSd:
 
     def close_file(self):
         self.handles.pop(self.m.arg(1), None)
+        return 0
+
+    def list_dir(self):
+        """listDirContents(dir, type, filter, names, namesSize, maxNameLen, int& count, char** list), as
+        FileSystemImpl's: up to count names, packed into names, each at most maxNameLen long, sorted;
+        kFiles (1) only, the files directly in dir."""
+        m = self.m
+        folder = m.cstr(m.arg(1)).strip("/")
+        kind, names, room, longest, count_at, entries = (m.arg(2), m.arg(4), m.arg(5), m.arg(6), m.arg(7),
+                                                         m.arg(8))
+        want = m.r32(count_at)
+        found = []
+        if kind == 1:
+            for path in self.files:
+                head, _, name = path.strip("/").rpartition("/")
+                if head == folder and name and self.list_filters.get(folder, lambda n: True)(name):
+                    found.append(name)
+        n = 0
+        for name in sorted(found, key=str.lower):
+            data = name.encode() + b"\0"
+            if n == want or len(data) > room:
+                break
+            if len(data) - 1 > longest:
+                continue
+            m.write(names, data)
+            m.w32(entries + 4 * n, names)
+            names += len(data)
+            room -= len(data)
+            n += 1
+        m.w32(count_at, n)
         return 0
 
 

@@ -189,6 +189,9 @@ void TrackerImpl::update()
 #endif
     engine.updateSdStream();
     sequencer.update();
+#if MT_MODS // MT: the mods' main-loop work
+    mods::update();
+#endif
 #if MT_LOCKUP_RECORDER // MT: diagnostic builds
     mods::lockup::update();
 #endif

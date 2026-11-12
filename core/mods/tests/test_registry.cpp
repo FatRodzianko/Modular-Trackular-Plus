@@ -129,7 +129,7 @@ const std::vector<Expected> kExpected = {
       nullptr },
 #endif
 #if MT_HAS_SYNTHFX
-    { Mod::synthfx, synthfx::kRecord, synthfx::kRecordVersion, nullptr, synthfx::load, nullptr, nullptr,
+    { Mod::synthfx, synthfx::kRecord, synthfx::kRecordVersion, synthfx::init, synthfx::load, nullptr, nullptr,
       synthfx::storeIfEdited, nullptr },
 #endif
 };

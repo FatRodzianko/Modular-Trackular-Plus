@@ -1,10 +1,12 @@
 // Modular-Trackular mods. SPDX-License-Identifier: MIT
 //
-// PHASE: a phase distortion synth (phEngine.h) as a CE Synth SDK engine, with the
-// Distortion and a Chorus, Flanger or Phaser after its voices (synthsFx.h). PHASE has no
-// filter, so Placement does nothing on it; it is there so the two engines' FX match.
+// PHASE: a phase distortion synth (phEngine.h) as a CE Synth SDK engine. Its effects are
+// Synth FX's two slots after its voices (synthfx/synthfxMod.h); it has no filter, so no
+// Placement Pre.
 //
-// Parameter ids are sy9's (Modular-Trackular's PHASE), 0-61, then the effects' 62-71.
+// Parameter ids are sy9's (Modular-Trackular's PHASE), 0-61, then the old effects' 62-71: kept
+// so patches saved before still load, and Synth FX turns them into the part's slots; nothing
+// here reads them, and no section shows them.
 
 #include "modsBuild.h"
 
@@ -126,10 +128,7 @@ class PhaseSynthVoice : public MtSynthVoice<PhaseSynthVoice, PhaseParamId>
         toStereo(out);
     }
 
-    /* no filter: the Distortion always runs after the voices */
-    int postDistortion() const { return dist_on(p + P_EFFECT); }
-
-    static void createMetadata(Patch& patch, Patch::Metadata& metadata)
+    static void createMetadata(Patch& /*patch*/, Patch::Metadata& metadata)
     {
         metadata.params.resize(P_COUNT);
         metadata.params.shrink_to_fit();
@@ -138,8 +137,6 @@ class PhaseSynthVoice : public MtSynthVoice<PhaseSynthVoice, PhaseParamId>
 
         Spec specs[P_COUNT];
         phaseSpecs(specs);
-        specs[P_GAIN].name = distKnobName(patch, false);
-        specs[P_TONE].name = distKnobName(patch, true);
         sdk::ParamHelper<PhaseSynthVoice> helper(metadata, paramHandlers);
         addAll(helper, specs, std::make_index_sequence<P_COUNT>{});
 
@@ -180,7 +177,6 @@ class PhaseSynthVoice : public MtSynthVoice<PhaseSynthVoice, PhaseParamId>
               { .name = "Modulation Matrix", .shortName = "Matrix", .elements = range(mtx.data(), mtx.size()) },
               { .name = "Voice", .shortName = "Voice",
                 .elements = ids({ PP_GLIDE_MODE, PP_GLIDE_TIME, PP_VOLUME }) },
-              { .name = "FX", .shortName = "FX", .elements = range(kFxSection, P_COUNT - P_EFFECT) },
             },
         };
         metadata.layout23 = metadata.layoutFlat;

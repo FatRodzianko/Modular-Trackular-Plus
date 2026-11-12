@@ -144,7 +144,7 @@ constexpr std::array<ModDescriptor, kBuiltModCount> kMods{ {
     .name = "Synth FX",          // the audio interrupt reads the switch: Off bypasses the insert
     .record = synthfx::kRecord,
     .recordVersion = synthfx::kRecordVersion,
-    .init = nullptr,
+    .init = synthfx::init,       // every slot empty (the slots are in SDRAM)
     .load = synthfx::load,
     .apply = nullptr,
     .reset = nullptr,

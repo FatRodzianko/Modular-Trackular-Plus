@@ -72,9 +72,19 @@ void changeParamsCCF(int16_t value);
 
 static void onNoteKeyboardHide();
 
+#if MT_HAS_SYNTHFX // MT: Synth FX's rows redrawn when a slot's plugin changes (SynthPatchEditor.cpp)
+bool mtSynthFxPoll();
+#endif
+
 void cInstrumentEditor::update()
 {
     moduleRefresh = 0;
+#if MT_HAS_SYNTHFX
+    if (mtSynthFxPoll())
+    {
+        moduleRefresh = 1; // polled every main loop while the rows are shown
+    }
+#endif
 }
 
 void cInstrumentEditor::start(uint32_t options)
