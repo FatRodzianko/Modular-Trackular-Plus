@@ -528,6 +528,13 @@ void cFileManager::setPatternStructChanged(uint8_t pattern)
 
 void cFileManager::setInstrumentStructChanged(uint8_t instrument)
 {
+    // Screens pass the current instrument, which can be a MIDI or synth instrument. Those have
+    // no slot here; their settings are saved with the project.
+    if (instrument >= kSampleInstrumentsCount)
+    {
+        return;
+    }
+
     changesFlags.instrument[instrument] = 1;
 }
 
