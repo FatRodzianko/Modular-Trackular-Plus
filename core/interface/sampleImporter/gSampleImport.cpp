@@ -479,7 +479,7 @@ void cSampleImporter::showRename()
 
 void cSampleImporter::showAddOrEnter(bool isShiftPressed)
 {
-    if (explorerNames != nullptr && *explorerNames[selectedFile] == '/')
+    if (isFolderRow(selectedFile))
     {
         display.setControlText(label[0], "Enter");
         display.setControlValue(label[0], 0);
@@ -509,7 +509,10 @@ void cSampleImporter::showAddOrEnter(bool isShiftPressed)
             display.setControlValue(label[0], 0);
         }
 
-        display.setControlColors(label[0], display.getTheme().activeButtonLabelsColors);
+        display.setControlColors(label[0],
+                                 isFileRow(selectedFile)
+                                   ? display.getTheme().activeButtonLabelsColors
+                                   : display.getTheme().inactiveButtonLabelsColors);
     }
 
     display.refreshControl(label[0]);
@@ -517,7 +520,7 @@ void cSampleImporter::showAddOrEnter(bool isShiftPressed)
 
 void cSampleImporter::addNextColorControl()
 {
-    if (explorerNames != nullptr && *explorerNames[selectedFile] != '/')
+    if (isFileRow(selectedFile))
     {
         display.setControlColors(label[1], display.getTheme().activeButtonLabelsColors);
     }
@@ -535,7 +538,7 @@ void cSampleImporter::previewColorControl()
 
     if (selectedPlace == 0)
     {
-        if (explorerNames != nullptr && *explorerNames[selectedFile] == '/')
+        if (!isFileRow(selectedFile))
         {
             colors = display.getTheme().inactiveButtonLabelsColors;
         }
@@ -611,7 +614,7 @@ void cSampleImporter::importColorControl()
 {
     const uint32_t* colors = display.getTheme().activeButtonLabelsColors;
 
-    if (explorerNames != nullptr && *explorerNames[selectedFile] == '/')
+    if (!isFileRow(selectedFile))
     {
         colors = display.getTheme().inactiveButtonLabelsColors;
     }
@@ -619,13 +622,9 @@ void cSampleImporter::importColorControl()
     {
         colors = display.getTheme().inactiveButtonLabelsColors;
     }
-    else
+    else if (hasFileExtension(explorerRowName(selectedFile), "pti"))
     {
-        char* fileName = explorerNames[selectedFile];
-        if (hasFileExtension(fileName, "pti"))
-        {
-            colors = display.getTheme().inactiveButtonLabelsColors;
-        }
+        colors = display.getTheme().inactiveButtonLabelsColors;
     }
 
     display.setControlColors(label[4], colors);
@@ -899,7 +898,7 @@ void cSampleImporter::showImportStartPointValue()
     float recTimeValue = importSampleSamplesCount / 44100.0;
     float localStartPoint = (recTimeValue * importStartPoint) / MAX_16BIT;
 
-    sprintf(startPointValueText, "%.3fs", localStartPoint);
+    snprintf(startPointValueText, sizeof(startPointValueText), "%.3fs", localStartPoint);
 
     display.setControlText2(label[1], startPointValueText);
     display.setControlShow(label[1]);
@@ -912,7 +911,7 @@ void cSampleImporter::showImportEndPointValue()
     float recTimeValue = importSampleSamplesCount / 44100.0;
     float localEndPoint = (recTimeValue * importEndPoint) / MAX_16BIT;
 
-    sprintf(endPointValueText, "%.3fs", localEndPoint);
+    snprintf(endPointValueText, sizeof(endPointValueText), "%.3fs", localEndPoint);
 
     display.setControlText2(label[2], endPointValueText);
     display.setControlShow(label[2]);
@@ -929,7 +928,7 @@ void cSampleImporter::showImportPreviewValue()
     if (playTimeValue >= (localEndPoint - 0.01))
         playTimeValue = localEndPoint;
 
-    sprintf(playTimeValueText, "%.3fs", playTimeValue);
+    snprintf(playTimeValueText, sizeof(playTimeValueText), "%.3fs", playTimeValue);
 
     display.setControlText2(label[0], playTimeValueText);
     display.setControlShow(label[0]);
