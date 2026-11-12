@@ -1364,8 +1364,10 @@ void cInstrumentEditor::showEnvDecay()
 void cInstrumentEditor::showEnvSustain()
 {
     const uint8_t envSlot = automationDestToEnvSlot(selectedEnvelope);
-    sprintf(
-      labelText[5], "%.0f", (float)(editorInstrument->envelope[envSlot].sustain * 100));
+    snprintf(labelText[5],
+             sizeof(labelText[5]),
+             "%.0f",
+             (float)(editorInstrument->envelope[envSlot].sustain * 100));
 
     if (editorInstrument->isAutomationDestEnabled(selectedEnvelope))
     {
@@ -1423,8 +1425,10 @@ void cInstrumentEditor::showEnvRelease()
 void cInstrumentEditor::showEnvAmount()
 {
     const uint8_t envSlot = automationDestToEnvSlot(selectedEnvelope);
-    sprintf(
-      labelText[7], "%.0f", (float)(editorInstrument->envelope[envSlot].amount * 100));
+    snprintf(labelText[7],
+             sizeof(labelText[7]),
+             "%.0f",
+             (float)(editorInstrument->envelope[envSlot].amount * 100));
 
     if (editorInstrument->isAutomationDestEnabled(selectedEnvelope))
     {
@@ -1488,7 +1492,10 @@ void cInstrumentEditor::showLfoAmount()
 {
     const uint8_t envSlot = automationDestToEnvSlot(selectedEnvelope);
     uint8_t col = (editorInstrument->envelope[envSlot].loop == 3) ? 7 : 5;
-    sprintf(labelText[col], "%.0f", (float)(editorInstrument->lfo[envSlot].amount * 100));
+    snprintf(labelText[col],
+             sizeof(labelText[col]),
+             "%.0f",
+             (float)(editorInstrument->lfo[envSlot].amount * 100));
     display.setControlText2(label[col], labelText[col]);
     display.refreshControl(label[col]);
 
