@@ -605,11 +605,10 @@ bool cFileManager::loadPerformanceTrackToBuffer(uint8_t pattIndex, uint8_t track
       (Sequencer::strPattern*)sequencer.getPatternToLoadFromFile();
     Sequencer::strPattern* patternTo = &fileManagerPerformancePatternBuffer;
 
-    if (fileSystem->exists(patternToLoad))
-    {
-        readPatternFile(patternToLoad, sequencer.getPatternToLoadFromFile());
-    }
-    else
+    // A read that fails leaves zeroed or partly read steps behind, and a zeroed step is a
+    // note of the first instrument, not an empty step.
+    if (!fileSystem->exists(patternToLoad) ||
+        !readPatternFile(patternToLoad, sequencer.getPatternToLoadFromFile()))
     {
         sequencer.clearPattern(patternFrom);
     }
