@@ -1195,7 +1195,8 @@ for every synth engine, CE's closed ones included.
 Planned 2026-11-11, from the source. Phase 1 (the runtime and the SDK) built 2026-11-11:
 "Phase 1, as built" below. Phase 2 (CE's engines on the two slots) built 2026-11-11: "Phase 2,
 as built" below. Phase 3 (WAVE and PHASE on the slots) built 2026-11-11: "Phase 3, as
-built" below. Phase 4 (the device) run 2026-11-12, then retested with the fixes: "Phase 4, prepared" below. Goal, the user's choices of
+built" below. Phase 4 (the device) run 2026-11-12, then retested with the fixes: "Phase 4, prepared" below.
+**Done 2026-11-12** ("Status" at the end of phase 4). Goal, the user's choices of
 2026-11-11: each synth part has two effect slots, FX1 and FX2, that pick from one list of
 `.ptsfx` plugins in `/SynthFX/` on the card. A part can't use the same effect in both
 slots. Today's six effects (Overdrive, Distortion, Bit Crusher, Chorus, Flanger, Phaser)
@@ -1690,6 +1691,15 @@ it, and copy it to the card. WAVE and PHASE use the same two slots.
       (no recorder, so no log), P2: the Profiler read 92 % on the first play and 73 % on the second,
       as the recorder build's P2 (89 % first play). The first play's peak is the highest P2 reading
       yet; the second play is under the diag's.
+  - **Status: done 2026-11-12.** Every phase built and the device ladder run. WAVE's Pre cost
+    accepted by the user (2026-11-12): about 16 points over the old built-in Distortion at 8
+    voices, P2 92 % on the first play and 0 blocks over time logged; the guide and the README say
+    so, with Post or fewer voices as the way out. Not read on the unit: a plugin on a PHASE part.
+    The ladder's plugin set had no PHASE row, which was missed when it was written, not chosen.
+    It is covered by the rest: on PHASE a slot runs once per part (Post), the path F1 to F6
+    measured on the unit at the built-in effects' cost; the plugins' own cost is the checker's
+    (under 5 % of a block each); PHASE's voices are S4's. Optional, not needed for done: S4 with
+    plugins, a 10-minute play.
 
 ## 4. Order and why
 

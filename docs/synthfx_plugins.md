@@ -196,6 +196,15 @@ A Pre slot on WAVE runs once per voice sounding. With all 8 voices on one WAVE p
 Distortion and the Bit Crusher both Pre cost 307,000 instructions a block between them
 (18 % of a block), in the emulator.
 
+On the unit, Pre is the heaviest way to use the slots. Three WAVE parts with 8 voices, the
+Distortion Pre and the Phaser on every part, read about 65 % on average and 73 to 77 % at the
+slowest, with no block over time; the Profiler read 92 % on the first play. That is about 16
+points more than the old built-in Distortion, whose code ran from the fast internal RAM: a
+plugin's code runs from SDRAM through the cache, and Pre runs it once per voice. On Post, and
+on every other engine, the plugins cost what the built-in effects did. With both oscillators
+on Super Saw as well, the first play had 1 block over time, an audible click. If a WAVE part
+is near the limit, put the Distortion on Post or use fewer voices.
+
 Costs inside a plugin:
 
 - the host's functions are calls: once per block or per 16 samples, not per sample, where
