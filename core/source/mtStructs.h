@@ -67,7 +67,8 @@ const uint32_t SAMPLE_MEMORY_SIZE = (45 * 256 * 1024);     // 11,25 MB = 133.746
 // Tmini / Tplus
 const uint32_t EXTERAL_MEMORY_ADDRESS = 0x80000000;
 const uint32_t TOTAL_EXTERNAL_MEMORY = (64 * 1024 * 1024); // 64 MB
-const uint32_t SAMPLE_MEMORY_SIZE = ((60 * 1024 - 64) * 1024); // ~60 MB minus 64 KB for pattern buffers
+const uint32_t PSYN_RAM_POOL_SIZE = (6 * 1024 * 1024);      // 6 MB for .psyn plugins & synth SamplePool
+const uint32_t SAMPLE_MEMORY_SIZE = ((60 * 1024 - 64) * 1024) - PSYN_RAM_POOL_SIZE; // ~54 MB
 #endif
 
 const uint32_t DELAY_MEMORY_SIZE = (3 * 512 * 1024);               // 1,5 MB

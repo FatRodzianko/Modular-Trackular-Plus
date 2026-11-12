@@ -23,9 +23,14 @@ MINI_POSTFIX     ?= $(EDITION_NAME)_$(MINI_VER_MAJOR).$(MINI_VER_MINOR).$(MINI_V
 
 .DEFAULT_GOAL := all
 
-.PHONY: all original plus mini ptfx clean version bump-patch bump-minor
+.PHONY: all original plus mini ptfx psyn clean version bump-patch bump-minor
 
-all: original plus mini
+all: original plus mini psyn
+
+psyn:
+	$(MAKE) -C "$(ROOT_DIR)/synth-plugin-sdk" all TOOLCHAIN="$(TOOLCHAIN)"
+	@mkdir -p "$(OUT_DIR)/Synths"
+	@cp $(ROOT_DIR)/synth-plugin-sdk/build/*.psyn "$(OUT_DIR)/Synths/"
 
 original:
 	@echo "=================================================================="
@@ -52,6 +57,11 @@ plus:
 	@echo " Building Tracker+ (IMX) - $(EDITION_NAME) $(PLUS_VER_MAJOR).$(PLUS_VER_MINOR).$(PLUS_VER_PATCH) ($(BUILD_TAG))"
 	@echo "=================================================================="
 	@rm -f "$(IMX_DIR)/build-PLUS/obj/source/PlatformImpl.o"
+	$(MAKE) -C "$(SYNTH_DIR)" -j$(NPROC) build \
+		TOOLCHAIN="$(TOOLCHAIN)" \
+		PLATFORM=IMX PRODUCT=TrackerPlus \
+		POLYUTIL_DIR="$(UTIL_DIR)" \
+		POLYDSP_DIR="$(SYNTH_DIR)"
 	$(MAKE) -C "$(CORE_DIR)" -j$(NPROC) build \
 		TOOLCHAIN="$(TOOLCHAIN)" \
 		PLATFORM=IMX PRODUCT=PLUS \
@@ -74,6 +84,11 @@ mini:
 	@echo " Building Tracker Mini (IMX) - $(EDITION_NAME) $(MINI_VER_MAJOR).$(MINI_VER_MINOR).$(MINI_VER_PATCH) ($(BUILD_TAG))"
 	@echo "=================================================================="
 	@rm -f "$(IMX_DIR)/build-MINI/obj/source/PlatformImpl.o"
+	$(MAKE) -C "$(SYNTH_DIR)" -j$(NPROC) build \
+		TOOLCHAIN="$(TOOLCHAIN)" \
+		PLATFORM=IMX PRODUCT=TrackerPlus \
+		POLYUTIL_DIR="$(UTIL_DIR)" \
+		POLYDSP_DIR="$(SYNTH_DIR)"
 	$(MAKE) -C "$(CORE_DIR)" -j$(NPROC) build \
 		TOOLCHAIN="$(TOOLCHAIN)" \
 		PLATFORM=IMX PRODUCT=MINI \
@@ -99,6 +114,7 @@ ptfx:
 	done
 
 clean:
+	$(MAKE) -C "$(SYNTH_DIR)" clean PLATFORM=IMX PRODUCT=TrackerPlus
 	$(MAKE) -C "$(CORE_DIR)" clean PLATFORM=MK66 PRODUCT=ORIGINAL
 	$(MAKE) -C "$(CORE_DIR)" clean PLATFORM=IMX PRODUCT=PLUS
 	$(MAKE) -C "$(CORE_DIR)" clean PLATFORM=IMX PRODUCT=MINI

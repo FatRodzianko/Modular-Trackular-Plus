@@ -9,6 +9,7 @@
 #include "core/songTimer.h"
 #include "core/titleBar.h"
 
+#include "fileBrowser/GlobalFileBrowser.h"
 #include "imageViewer/imageViewer.h"
 #include "instrumentEditor/instrumentEditor.h"
 #include "masterParams/masterParams.h"
@@ -65,9 +66,9 @@ const hModule Interface::modules[modulesCount] = {
     &configEditor,     // 7
     &sampleRecorder,   // 8
     &performanceMode,  // 9
-    &imageViewer,      // 10
-    nullptr,           // 11
-    &masterParams,     // 12
+    &imageViewer,       // 10
+    &globalFileBrowser, // 11
+    &masterParams,      // 12
 };
 
 const uint8_t Interface::modulesButtonsCount = 11;

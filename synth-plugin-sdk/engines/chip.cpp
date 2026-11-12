@@ -1,13 +1,9 @@
-#include "config.h"
-#ifdef FEATURE_SYNTH
-
-#include "ChiptuneSynthVoice.h"
+#include "psyn/psyn_cpp_bridge.h"
 #include "PolySynth/sdk/SynthVoiceSDK.h"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <numbers>
 
 namespace polysynth
 {
@@ -56,11 +52,6 @@ enum class ChipModel : int
     kChipDrum = 7,
 };
 
-} // namespace
-
-namespace
-{
-
 static constexpr std::array<const char*, 8> kModelNames = {
     "2A03 Pulse",   "SID Saw/Tri", "Noise / LFSR", "FM Bell",
     "Super Square", "Zap / Laser", "Arp Chord",    "Chip Drum",
@@ -104,7 +95,6 @@ inline float polyBlep(float t, float dt)
 using sdk::fastPow2;
 using sdk::fastSine;
 
-// The same as std::fmod(x, 1.0f) for x in [0, 2), which is all the pulse oscillators give it.
 inline float wrapPhase(float x)
 {
     return (x >= 1.0f) ? x - 1.0f : x;
@@ -113,7 +103,6 @@ inline float wrapPhase(float x)
 inline float nesSteppedTriangle(float phase01)
 {
     const float tri = (phase01 < 0.5f) ? (phase01 * 4.0f - 1.0f) : (3.0f - phase01 * 4.0f);
-    // 4-bit quantized 16-step triangle like the NES 2A03
     return std::round(tri * 7.5f) * (1.0f / 7.5f);
 }
 
@@ -123,6 +112,8 @@ inline uint16_t stepLfsr(uint16_t lfsr, bool metallicShortMode)
     const uint16_t bit = ((lfsr >> 0) ^ tap) & 1u;
     return static_cast<uint16_t>((lfsr >> 1) | (bit << 14));
 }
+
+} // namespace
 
 class ChiptuneSynthVoice : public sdk::CustomSynthVoice<ChiptuneSynthVoice, ChipParamId>
 {
@@ -149,7 +140,6 @@ class ChiptuneSynthVoice : public sdk::CustomSynthVoice<ChiptuneSynthVoice, Chip
         {
             envStage = EnvStage::kAttack;
             noteAgeSamples = 0;
-            sweepOffsetSemitones = 0.0f;
             arpStepCounter = 0;
             arpSampleCounter = 0;
             lfsrState = 0x7FFFu;
@@ -165,21 +155,19 @@ class ChiptuneSynthVoice : public sdk::CustomSynthVoice<ChiptuneSynthVoice, Chip
     }
 
     void renderVoiceAudio(const InstrumentVoiceContext& /*ctx*/,
-                          [[maybe_unused]] std::optional<AudioBufferStereoRef> inputBuffer,
-                          AudioBufferStereoRef outputBuffer,
-                          std::span<AudioBufferRef> /*auxOutBuffer*/) final
+                          AudioBufferStereoRef outputBuffer)
     {
         auto out = outputBuffer[0];
         if (envStage == EnvStage::kIdle)
         {
             std::fill(out.begin(), out.end(), 0.0f);
+            std::fill(lastGraphSamples.begin(), lastGraphSamples.end(), 0.0f);
             return;
         }
 
         const float sr = sdk::kSampleRate;
         const float invSr = 1.0f / sr;
 
-        // Envelope increments per sample
         const float attackInc =
           (ampAttackSec > 0.001f) ? (1.0f / (ampAttackSec * sr)) : 1.0f;
         const float decayDec =
@@ -187,31 +175,25 @@ class ChiptuneSynthVoice : public sdk::CustomSynthVoice<ChiptuneSynthVoice, Chip
         const float releaseDec =
           (ampReleaseSec > 0.002f) ? (1.0f / (ampReleaseSec * sr)) : 1.0f;
 
-        // Portamento / glide coefficient
         const float glideStep =
           (glideTimeSec > 0.001f) ? (1.0f / (glideTimeSec * sr)) : 1.0f;
 
-        // Arpeggio step length in samples
         const int effArpIdx =
           (model == ChipModel::kArpChord && arpChordIdx == 0) ? 3 : arpChordIdx;
         const uint32_t arpPeriodSamples =
           std::max<uint32_t>(64u, static_cast<uint32_t>(sr / std::max(5.0f, arpSpeedHz)));
 
-        // Pitch sweep decay coefficient
         const float sweepSamples = std::max(64.0f, sweepTimeSec * sr);
         const float invSweepSamples = 1.0f / sweepSamples;
         const float zapSweepScale = 12.0f + 24.0f * shape;
 
-        // Bitcrush quantization levels
         const bool crushActive = (bitcrushBits < 15.5f);
         const float crushScale = crushActive ? fastPow2(bitcrushBits - 1.0f) : 32768.0f;
         const float invCrushScale = 1.0f / crushScale;
         const int decimateFactor = std::clamp(static_cast<int>(decimateRate + 0.5f), 1, 32);
 
-        // Chamberlin SVF resonance / damping
         const float qDamper = std::clamp(1.0f - 0.85f * filterResonance, 0.12f, 1.0f);
 
-        // Per-block invariant oscillator / LFO / filter constants
         const float baseNoteOffset = tuneSemitones + (fineCents * 0.01f) + pitchBendSemitones;
         const float pwmPhaseInc = pwmRateHz * invSr;
         const float vibPhaseInc = vibRateHz * invSr;
@@ -230,7 +212,6 @@ class ChiptuneSynthVoice : public sdk::CustomSynthVoice<ChiptuneSynthVoice, Chip
         const float superSquareMult2 = 1.0f + superSquareSpread;
         const float superSquareMult3 = 1.0f - superSquareSpread;
 
-        // ChipDrum exponential pitch envelope state (e^(-n / (0.08 * sr)))
         static constexpr float kDrumDecayStep = 0.99971659f;
         float drumDecay = (model == ChipModel::kChipDrum)
                             ? fastPow2(-1.4426950f * static_cast<float>(noteAgeSamples) *
@@ -256,7 +237,6 @@ class ChiptuneSynthVoice : public sdk::CustomSynthVoice<ChiptuneSynthVoice, Chip
 
         for (size_t i = 0; i < out.size(); ++i)
         {
-            // 1. Update ADSR envelope
             switch (envStage)
             {
                 case EnvStage::kAttack:
@@ -289,10 +269,10 @@ class ChiptuneSynthVoice : public sdk::CustomSynthVoice<ChiptuneSynthVoice, Chip
                     break;
                 case EnvStage::kIdle:
                     out[i] = 0.0f;
+                    lastGraphSamples[i] = 0.0f;
                     continue;
             }
 
-            // 2. Update glide
             if (std::abs(currentGlideNote - targetGlideNote) > 0.001f)
             {
                 const float diff = targetGlideNote - currentGlideNote;
@@ -304,7 +284,6 @@ class ChiptuneSynthVoice : public sdk::CustomSynthVoice<ChiptuneSynthVoice, Chip
                 currentGlideNote = targetGlideNote;
             }
 
-            // 3. Update arpeggiator
             int8_t arpSemi = 0;
             if (effArpIdx > 0 && effArpIdx < 8)
             {
@@ -316,7 +295,6 @@ class ChiptuneSynthVoice : public sdk::CustomSynthVoice<ChiptuneSynthVoice, Chip
                 arpSemi = kArpChords[effArpIdx][arpStepCounter & 3u];
             }
 
-            // 4. Update LFOs (PWM & Vibrato)
             pwmPhase += pwmPhaseInc;
             if (pwmPhase >= 1.0f)
             {
@@ -332,28 +310,23 @@ class ChiptuneSynthVoice : public sdk::CustomSynthVoice<ChiptuneSynthVoice, Chip
             }
             const float vibSemitones = hasVibrato ? (fastSine(vibPhase) * vibDepthSemi) : 0.0f;
 
-            // 5. Pitch sweep envelope
             const float sweepProgress =
               std::min(1.0f, static_cast<float>(noteAgeSamples) * invSweepSamples);
             float activeSweepSemi = pitchSweepSemitones * sweepProgress;
             if (model == ChipModel::kZapLaser)
             {
-                // Zap/Laser has built-in rapid downward pitch drop modulated by Shape
                 const float zapEnv = 1.0f - sweepProgress;
                 activeSweepSemi += zapSweepScale * (zapEnv * zapEnv * zapEnv - 1.0f);
             }
 
             const float totalNote = currentGlideNote + baseNoteOffset +
                                     static_cast<float>(arpSemi) + vibSemitones + activeSweepSemi;
-            // sdk::noteToFreq(0, totalNote), as note 0 is MIDI note 0
             const float freq =
               std::clamp(8.1757989f * fastPow2(totalNote * (1.0f / 12.0f)), 16.0f, 18000.0f);
             const float dt = freq * invSr;
 
-            // Duty cycle with PWM modulation
             const float duty = std::clamp(baseDuty + pwmDutyScale * pwmLfo, 0.06f, 0.94f);
 
-            // 6. Synthesize selected voice model
             float sig = 0.0f;
             phase += dt;
             bool wrapped = false;
@@ -382,7 +355,6 @@ class ChiptuneSynthVoice : public sdk::CustomSynthVoice<ChiptuneSynthVoice, Chip
                     saw -= polyBlep(phase, dt);
                     const float tri =
                       (phase < 0.5f) ? (phase * 4.0f - 1.0f) : (3.0f - phase * 4.0f);
-                    // Ring-mod & waveform blend controlled by duty/shape
                     const float ring = saw * ((subPhase < 0.5f) ? 1.0f : -1.0f);
                     sig = ((1.0f - duty) * tri + duty * (0.65f * saw + 0.35f * ring)) * 0.8f;
                     break;
@@ -390,7 +362,6 @@ class ChiptuneSynthVoice : public sdk::CustomSynthVoice<ChiptuneSynthVoice, Chip
 
                 case ChipModel::kNoiseLfsr:
                 {
-                    // Clock LFSR at pitch-tracked rate
                     lfsrPhase += dt * lfsrRateMult;
                     while (lfsrPhase >= 1.0f)
                     {
@@ -403,7 +374,6 @@ class ChiptuneSynthVoice : public sdk::CustomSynthVoice<ChiptuneSynthVoice, Chip
 
                 case ChipModel::kFmBell:
                 {
-                    // 2-op OPL chiptune FM: integer/bell ratios selected by Shape
                     const float modDt = dt * fmRatio;
                     osc2Phase += modDt;
                     if (osc2Phase >= 1.0f)
@@ -412,7 +382,6 @@ class ChiptuneSynthVoice : public sdk::CustomSynthVoice<ChiptuneSynthVoice, Chip
                     }
                     const float modIndex = fmModScale * envLevel;
                     const float modSig = fastSine(osc2Phase + 0.15f * pwmLfo);
-                    // Quantize FM carrier to 6-bit OPL DAC character
                     const float rawCarrier = fastSine(phase + modIndex * modSig * 0.5f);
                     sig = std::round(rawCarrier * 31.0f) * (0.85f / 31.0f);
                     break;
@@ -420,7 +389,6 @@ class ChiptuneSynthVoice : public sdk::CustomSynthVoice<ChiptuneSynthVoice, Chip
 
                 case ChipModel::kSuperSquare:
                 {
-                    // 3 detuned pulse oscillators
                     const float dt2 = dt * superSquareMult2;
                     const float dt3 = dt * superSquareMult3;
                     osc2Phase += dt2;
@@ -448,7 +416,6 @@ class ChiptuneSynthVoice : public sdk::CustomSynthVoice<ChiptuneSynthVoice, Chip
 
                 case ChipModel::kChipDrum:
                 {
-                    // Morphs from Kick (0..0.33) -> Snare (0.33..0.67) -> Metallic Hat (0.67..1.0)
                     const float drumFreq =
                       freq * (1.0f + drumSweepScale * drumDecay * drumDecay);
                     drumDecay *= kDrumDecayStep;
@@ -469,7 +436,6 @@ class ChiptuneSynthVoice : public sdk::CustomSynthVoice<ChiptuneSynthVoice, Chip
                 }
             }
 
-            // 7. Add 4-bit stepped NES Sub-Oscillator (-1 octave)
             subPhase += dt * 0.5f;
             if (subPhase >= 1.0f)
             {
@@ -480,7 +446,6 @@ class ChiptuneSynthVoice : public sdk::CustomSynthVoice<ChiptuneSynthVoice, Chip
                 sig = sig * subMainGain + nesSteppedTriangle(subPhase) * subOscGain;
             }
 
-            // 8. Sample-rate decimation & bitcrusher
             if (++decimateCounter >= decimateFactor)
             {
                 decimateCounter = 0;
@@ -495,7 +460,6 @@ class ChiptuneSynthVoice : public sdk::CustomSynthVoice<ChiptuneSynthVoice, Chip
             }
             float postCrush = heldSample;
 
-            // 9. State-Variable Lowpass Filter with envelope modulation
             if (hasFilterEnv && envLevel != cachedFilterEnvLevel)
             {
                 cachedFilterEnvLevel = envLevel;
@@ -517,8 +481,27 @@ class ChiptuneSynthVoice : public sdk::CustomSynthVoice<ChiptuneSynthVoice, Chip
                 postCrush = svfLow;
             }
 
-            out[i] = postCrush * envLevel * volumeMult;
+            const float sampleOut = postCrush * envLevel * volumeMult;
+            out[i] = sampleOut;
+            lastGraphSamples[i] = sampleOut;
             ++noteAgeSamples;
+        }
+    }
+
+    void renderVoiceAudio(const InstrumentVoiceContext& ctx,
+                          [[maybe_unused]] std::optional<AudioBufferStereoRef> inputBuffer,
+                          AudioBufferStereoRef outputBuffer,
+                          std::span<AudioBufferRef> /*auxOutBuffer*/)
+    {
+        renderVoiceAudio(ctx, outputBuffer);
+    }
+
+    void renderGraph(std::span<float> points) override
+    {
+        for (size_t i = 0; i < points.size(); ++i)
+        {
+            const size_t srcIdx = (i * lastGraphSamples.size()) / std::max<size_t>(1, points.size());
+            points[i] = std::clamp(lastGraphSamples[srcIdx], -1.0f, 1.0f);
         }
     }
 
@@ -875,6 +858,103 @@ class ChiptuneSynthVoice : public sdk::CustomSynthVoice<ChiptuneSynthVoice, Chip
           },
           [](auto& voice, Patch::optional_paramvalue_t val) { voice.volumeMult = *val; });
 
+        metadata.layout33 = Patch::Metadata::EditorLayout{
+            .sections = {
+              {
+                .name = "Oscillator",
+                .shortName = "Osc",
+                .subsections = {
+                  {
+                    .elements = {
+                      { .type = EditorElement::Type::kParam, .id = *ChipParamId::kModel },
+                      { .type = EditorElement::Type::kParam, .id = *ChipParamId::kShape },
+                      { .type = EditorElement::Type::kParam, .id = *ChipParamId::kSubMix },
+                      { .type = EditorElement::Type::kParam, .id = *ChipParamId::kTune },
+                      { .type = EditorElement::Type::kParam, .id = *ChipParamId::kFine },
+                      { .type = EditorElement::Type::kEmpty },
+                      { .type = EditorElement::Type::kParam, .id = *ChipParamId::kPwmRate },
+                      { .type = EditorElement::Type::kParam, .id = *ChipParamId::kPwmDepth },
+                    },
+                  },
+                  {
+                    .elements = {
+                      { .type = EditorElement::Type::kParam, .id = *ChipParamId::kPlayMode },
+                      { .type = EditorElement::Type::kParam, .id = *ChipParamId::kGlideTime },
+                      { .type = EditorElement::Type::kParam, .id = *ChipParamId::kVolume },
+                    },
+                  },
+                },
+              },
+              {
+                .name = "Filter",
+                .shortName = "Filter",
+                .subsections = {
+                  {
+                    .elements = {
+                      { .type = EditorElement::Type::kParam, .id = *ChipParamId::kFilterCutoff },
+                      { .type = EditorElement::Type::kParam, .id = *ChipParamId::kFilterResonance },
+                      { .type = EditorElement::Type::kParam, .id = *ChipParamId::kFilterEnvAmount },
+                      { .type = EditorElement::Type::kParam, .id = *ChipParamId::kBitcrush },
+                      { .type = EditorElement::Type::kParam, .id = *ChipParamId::kDecimate },
+                    },
+                  },
+                },
+              },
+              {
+                .name = "Env",
+                .shortName = "Env",
+                .subsections = {
+                  {
+                    .name = "Amp",
+                    .elements = {
+                      { .type = EditorElement::Type::kParam, .id = *ChipParamId::kAmpAttack },
+                      { .type = EditorElement::Type::kParam, .id = *ChipParamId::kAmpDecay },
+                      { .type = EditorElement::Type::kParam, .id = *ChipParamId::kAmpSustain },
+                      { .type = EditorElement::Type::kParam, .id = *ChipParamId::kAmpRelease },
+                    },
+                  },
+                  {
+                    .name = "Sweep",
+                    .elements = {
+                      { .type = EditorElement::Type::kParam, .id = *ChipParamId::kPitchSweep },
+                      { .type = EditorElement::Type::kParam, .id = *ChipParamId::kSweepTime },
+                    },
+                  },
+                },
+              },
+              {
+                .name = "LFO",
+                .shortName = "LFO",
+                .subsections = {
+                  {
+                    .elements = {
+                      { .type = EditorElement::Type::kParam, .id = *ChipParamId::kVibRate },
+                      { .type = EditorElement::Type::kParam, .id = *ChipParamId::kVibDepth },
+                      { .type = EditorElement::Type::kEmpty },
+                      { .type = EditorElement::Type::kParam, .id = *ChipParamId::kPwmRate },
+                      { .type = EditorElement::Type::kParam, .id = *ChipParamId::kPwmDepth },
+                    },
+                  },
+                },
+              },
+              {
+                .name = "Mod",
+                .shortName = "Mod",
+                .subsections = {
+                  {
+                    .elements = {
+                      { .type = EditorElement::Type::kParam, .id = *ChipParamId::kArpChord },
+                      { .type = EditorElement::Type::kParam, .id = *ChipParamId::kArpSpeed },
+                      { .type = EditorElement::Type::kEmpty },
+                      { .type = EditorElement::Type::kParam, .id = *ChipParamId::kPitchSweep },
+                      { .type = EditorElement::Type::kParam, .id = *ChipParamId::kSweepTime },
+                    },
+                  },
+                },
+              },
+            },
+        };
+
         metadata.layoutFlat = Patch::Metadata::EditorLayout{
             .sections = {
               {
@@ -1035,7 +1115,6 @@ class ChiptuneSynthVoice : public sdk::CustomSynthVoice<ChiptuneSynthVoice, Chip
     float glideTimeSec = 0.0f;
     float volumeMult = 1.0f;
 
-    // Real-time voice state
     EnvStage envStage = EnvStage::kIdle;
     float envLevel = 0.0f;
     bool hasPlayedAnyNote = false;
@@ -1054,25 +1133,14 @@ class ChiptuneSynthVoice : public sdk::CustomSynthVoice<ChiptuneSynthVoice, Chip
     uint32_t noteAgeSamples = 0;
     uint32_t arpSampleCounter = 0;
     uint32_t arpStepCounter = 0;
-    float sweepOffsetSemitones = 0.0f;
 
     int decimateCounter = 0;
     float heldSample = 0.0f;
     float svfLow = 0.0f;
     float svfBand = 0.0f;
+    std::array<float, kAudioBufferSize> lastGraphSamples{};
 };
-
-} // namespace
-
-std::unique_ptr<InstrumentType> createChiptuneSynth()
-{
-    return std::make_unique<InstrumentType>(
-      InstrumentType{ .name = "CHIP",
-                      .createMetadata = &ChiptuneSynthVoice::createMetadata,
-                      .createVoice = [](int /*voiceIdx*/) -> std::unique_ptr<InstrumentVoice>
-                      { return std::make_unique<ChiptuneSynthVoice>(); } });
-}
 
 } // namespace polysynth
 
-#endif
+PSYN_REGISTER_CPP_VOICE(polysynth::ChiptuneSynthVoice)

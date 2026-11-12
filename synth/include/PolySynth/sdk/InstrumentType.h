@@ -12,10 +12,10 @@ class InstrumentVoice;
 
 /**
  * Instrument type holds all data relevant internally to handle specific
- * type of instrument (e.g. sample playback, FM synthesizer, Midi out instrument,
- * or custom open-source synthesizer engine).
+ * type of instrument (e.g. sample playback, FM synthesizer, Midi out instrument).
  *
  * Some of the data is exposed via Metadata API of the Patch class.
+ *
  */
 struct InstrumentType
 {
@@ -25,4 +25,4 @@ struct InstrumentType
     std::function<std::unique_ptr<InstrumentVoice>(int voiceIdx)> createVoice;
 };
 
-} // namespace polysynth
+}

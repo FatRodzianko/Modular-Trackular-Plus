@@ -64,11 +64,28 @@ std::optional<polysynth::FileSystem::FileHandle> FileSystemAdapter::open(
   const std::string& path,
   polysynth::FileSystem::OpenOptions options)
 {
-    auto [result, file] = platformFileSystem->openFile(
-      (pathPrefix + path).c_str(),
+    const auto mode =
       (static_cast<int>(options) & static_cast<int>(FileSystem::OpenOptions::kWrite)) != 0
         ? ::FileSystem::FileOpenMode::kWriteCreateNew
-        : ::FileSystem::FileOpenMode::kRead);
+        : ::FileSystem::FileOpenMode::kRead;
+    if (!path.empty() && path[0] == '/')
+    {
+        auto [absResult, absFile] = platformFileSystem->openFile(path.c_str(), mode);
+        if (absResult)
+        {
+            return std::optional<polysynth::FileSystem::FileHandle>(absFile);
+        }
+    }
+    auto [result, file] = platformFileSystem->openFile((pathPrefix + path).c_str(), mode);
+    if (!result && mode == ::FileSystem::FileOpenMode::kRead &&
+        (pathPrefix == "/Samples/" || pathPrefix == "/SynthSamples/"))
+    {
+        std::tie(result, file) = platformFileSystem->openFile(("/Samples/" + path).c_str(), mode);
+        if (!result)
+        {
+            std::tie(result, file) = platformFileSystem->openFile(("/" + path).c_str(), mode);
+        }
+    }
 
     return result ? std::optional<polysynth::FileSystem::FileHandle>(file) : std::nullopt;
 }
@@ -96,7 +113,15 @@ bool FileSystemAdapter::seek(FileHandle file, int offset)
 
 void FileSystemAdapter::createFolder(const std::string& path)
 {
-    platformFileSystem->mkdir(0, (pathPrefix + path).c_str());
+    std::string fullPath = pathPrefix + path;
+    while (fullPath.size() > 1 && fullPath.back() == '/')
+    {
+        fullPath.pop_back();
+    }
+    if (!platformFileSystem->exists(fullPath.c_str()))
+    {
+        platformFileSystem->mkdir(0, fullPath.c_str());
+    }
 }
 #endif
 // NOLINTEND

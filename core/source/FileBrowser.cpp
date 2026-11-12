@@ -3,6 +3,7 @@
 
 #include "util_string.h"
 
+#include <algorithm>
 #include <string.h>
 
 void FileBrowser::start(FileSystem* fileSystem, FileBrowserData* fileBrowserData)
@@ -57,6 +58,13 @@ void FileBrowser::refresh()
           folderListLength,
           folderList);
 
+        if (folderListLength > 1)
+        {
+            std::sort(folderList,
+                      folderList + folderListLength,
+                      [](const char* a, const char* b) { return strcasecmp(a, b) < 0; });
+        }
+
         // check is projects - selection list
         if (data->selectionEnabled && data->mode == kProjectBrowser)
         {
@@ -105,6 +113,16 @@ void FileBrowser::refresh()
           {
               if (data->mode == kSamplesBrowser)
               {
+                  if (data->customExtension != nullptr)
+                  {
+                      if (data->customExtension[0] == '\0')
+                      {
+                          return true;
+                      }
+                      const char* ext = data->customExtension[0] == '.' ? &data->customExtension[1]
+                                                                        : data->customExtension;
+                      return checkFilenameExtension(name, ext);
+                  }
                   return checkFilenameExtension(name, kWavFileExtension);
               }
               if (data->mode == kModBrowser)
@@ -119,6 +137,13 @@ void FileBrowser::refresh()
           kMaxFileNameLen,
           fileListLength,
           fileList);
+
+        if (fileListLength > 1)
+        {
+            std::sort(fileList,
+                      fileList + fileListLength,
+                      [](const char* a, const char* b) { return strcasecmp(a, b) < 0; });
+        }
 
         if (data->selectionEnabled && data->mode == kModBrowser)
         {

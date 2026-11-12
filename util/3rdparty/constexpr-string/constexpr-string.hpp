@@ -1,6 +1,6 @@
 #ifndef PROXICT_CONSTEXPR_STRING_HPP_
 #define PROXICT_CONSTEXPR_STRING_HPP_
-#include <iostream>
+#include <cstddef>
 #include <type_traits>
 
 template <bool TTest, typename TType = void>

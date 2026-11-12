@@ -39,6 +39,8 @@ struct Sample
 
     } format;
     tiny_optional<int> waveSize = std::nullopt;
+    bool ready = true;
+    note_t basePitch = kNoteC4;
 };
 
 enum class LoadStatus

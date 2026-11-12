@@ -14,6 +14,7 @@
 #include "PolySynth/Mixer.h"
 #include "PolySynth/PatchPool.h"
 #include "PolySynth/PatchStore.h"
+#include "PolySynth/SampleStore.h"
 #include "PolySynth/Synth.h"
 #include "PolySynth/config.h"
 
@@ -24,10 +25,14 @@
 #include "util_math.h"
 
 #include "PolySynth/Patch.h"
+#include "cr_section_macros.h"
 #include "fileManager.h"
 #include "interruptsControl.h"
 #include "mtStructs.h"
 #include <numeric>
+
+__NOINIT(EXTERNAL_RAM) alignas(32) static uint8_t s_psynRamPool[PSYN_RAM_POOL_SIZE];
+static std::size_t s_psynRamPoolOffset = 0;
 
 static const std::array kDefaultSettings = {
     SynthPartSettings{ .gainDb = Synth::kGainDefault,
@@ -85,23 +90,74 @@ Synth::~Synth() = default;
 
 void Synth::init(Platform* platform, std::function<tiny_optional<float>()> getTempo)
 {
+    s_psynRamPoolOffset = 0;
     synth = polysynth::Synth::createSynth(
-      [](size_t)
+      [](size_t size) -> void*
       {
-          // We don't want to use modules requiring allocation
-          assert(false);
-          return nullptr;
+          std::size_t aligned = (size + 31u) & ~31u;
+          if (s_psynRamPoolOffset + aligned > sizeof(s_psynRamPool))
+          {
+              return nullptr;
+          }
+          void* ptr = &s_psynRamPool[s_psynRamPoolOffset];
+          s_psynRamPoolOffset += aligned;
+          return ptr;
       });
 
     FileSystemAdapter::staticInit();
 
     filesystem = platform->getFileSystem();
+    if (!filesystem->exists("/Synths") && !filesystem->exists("/Synth"))
+    {
+        filesystem->mkdir(0, "/Synths");
+    }
+    auto synthsAdapter = std::make_unique<FileSystemAdapter>("/Synths", filesystem);
+    if (synthsAdapter
+          ->listFiles(
+            "", [](const std::string& name) { return name.size() > 5; }, std::nullopt)
+          .empty() &&
+        filesystem->exists("/Synth"))
+    {
+        synthsAdapter = std::make_unique<FileSystemAdapter>("/Synth", filesystem);
+    }
+    synth->addFileSystem(polysynth::Synth::FileSystemId::kSynths, std::move(synthsAdapter));
     synth->addFileSystem(
       polysynth::Synth::FileSystemId::kPatches,
       std::make_unique<FileSystemAdapter>(std::string(kPatchesFolder) + "/", filesystem));
     synth->addFileSystem(
       polysynth::Synth::FileSystemId::kWorkspace,
       std::make_unique<FileSystemAdapter>(std::string(kWorkspaceFolder) + "/", filesystem));
+    synth->addFileSystem(
+      polysynth::Synth::FileSystemId::kSamples,
+      std::make_unique<FileSystemAdapter>("/SynthSamples/", filesystem));
+
+    sampleStore = synth->createSampleStore(polysynth::Synth::FileSystemId::kSamples);
+    synth->initSamplePool(4 * 1024 * 1024, sampleStore);
+
+    synthTypes.clear();
+    const auto availableIds = synth->getInstrumentTypeIds();
+    for (auto preferredId : kSynthTypes)
+    {
+        if (std::ranges::find(availableIds, *preferredId) != availableIds.end())
+        {
+            synthTypes.push_back(preferredId);
+        }
+    }
+    for (int id : availableIds)
+    {
+        if (id > 0 && id < *polysynth::InstrumentTypeId::kDelay)
+        {
+            auto typeId = static_cast<polysynth::InstrumentTypeId>(id);
+            if (std::ranges::find(synthTypes, typeId) == synthTypes.end())
+            {
+                synthTypes.push_back(typeId);
+            }
+        }
+    }
+    if (synthTypes.empty())
+    {
+        synthTypes.push_back(static_cast<polysynth::InstrumentTypeId>(1));
+    }
 
     patchStore = synth->createPatchStore(polysynth::Synth::FileSystemId::kPatches, true);
     patchStoreWorkspace =
@@ -115,7 +171,7 @@ void Synth::init(Platform* platform, std::function<tiny_optional<float>()> getTe
         int partIdx = std::distance(parts.begin(), &part);
         auto& instrument = part.instrument;
 
-        part.instrumentTypeId = kSynthTypes[partIdx];
+        part.instrumentTypeId = synthTypes[partIdx % synthTypes.size()];
         part.patchName = kInitPatchName;
         setPatch(partIdx, patchStore->createPatch(*part.instrumentTypeId), part.patchName);
 
@@ -295,15 +351,23 @@ void Synth::setPatch(int part, std::shared_ptr<polysynth::Patch> patch, std::str
 
 std::string Synth::getInstrumentTypeName(int typeIdx)
 {
-    return synth->getInstrumentName(*kSynthTypes.at(typeIdx));
+    if (synthTypes.empty())
+    {
+        return "NONE";
+    }
+    int clamped = std::clamp<int>(typeIdx, 0, static_cast<int>(synthTypes.size()) - 1);
+    return synth->getInstrumentName(*synthTypes.at(clamped));
 }
 
 int Synth::getInstrumentTypeIdx(int part)
 {
-    auto it = std::ranges::find(kSynthTypes, parts[part].instrumentTypeId);
-    assert(it != kSynthTypes.end());
+    auto it = std::ranges::find(synthTypes, parts[part].instrumentTypeId);
+    if (it == synthTypes.end())
+    {
+        return 0;
+    }
 
-    return std::distance(kSynthTypes.begin(), it);
+    return std::distance(synthTypes.begin(), it);
 }
 
 int Synth::getSend(int part, int sendIdx)
@@ -372,6 +436,137 @@ const char* Synth::getMacroKnobName(int macroId)
     return macroId < std::ssize(kMacroKnobNames) ? kMacroKnobNames[macroId] : nullptr;
 }
 
+std::vector<std::string_view> Synth::listSamples(int part)
+{
+    if (part < 0 || part >= kSynthParts || !sampleStore || !synth)
+    {
+        return {};
+    }
+    std::string engineName = synth->getInstrumentName(*parts[part].instrumentTypeId);
+    return sampleStore->listSamples(engineName);
+}
+
+std::string Synth::getSampleSlotName(int part, int slotId)
+{
+    if (part < 0 || part >= kSynthParts || !parts[part].patch)
+    {
+        return "Sample";
+    }
+    const auto& slots = parts[part].patch->getMetadata().sampleSlots;
+    if (slotId >= 0 && slotId < static_cast<int>(slots.size()) && !slots[slotId].displayName.empty())
+    {
+        return slots[slotId].displayName;
+    }
+    return "Sample";
+}
+
+std::string Synth::getSampleName(int part, int slotId)
+{
+    if (part < 0 || part >= kSynthParts || !parts[part].patch)
+    {
+        return "Empty";
+    }
+    const auto& slots = parts[part].patch->getMetadata().sampleSlots;
+    if (slotId < 0 || slotId >= static_cast<int>(slots.size()))
+    {
+        return "Empty";
+    }
+
+    const auto* sample = parts[part].patch->getSample(slotId);
+    if (!sample || sample->name.empty())
+    {
+        return "Empty";
+    }
+
+    const std::string& path = sample->name;
+    auto slashPos = path.find_last_of("/\\");
+    std::string name = (slashPos != std::string::npos) ? path.substr(slashPos + 1) : path;
+    auto dotPos = name.find_last_of('.');
+    if (dotPos != std::string::npos)
+    {
+        name = name.substr(0, dotPos);
+    }
+    return name.empty() ? "Empty" : name;
+}
+
+int Synth::getSampleIndex(int part, int slotId)
+{
+    auto samples = listSamples(part);
+    if (samples.empty())
+    {
+        return 0;
+    }
+    std::string currentName = getSampleName(part, slotId);
+    for (std::size_t i = 0; i < samples.size(); ++i)
+    {
+        if (samples[i] == currentName)
+        {
+            return static_cast<int>(i);
+        }
+    }
+    return 0;
+}
+
+bool Synth::loadSampleByIndex(int part, int slotId, int idx)
+{
+    if (part < 0 || part >= kSynthParts || !parts[part].patch || !sampleStore || !synth)
+    {
+        return false;
+    }
+    auto samples = listSamples(part);
+    if (samples.empty())
+    {
+        return false;
+    }
+    int clampedIdx = std::clamp<int>(idx, 0, static_cast<int>(samples.size()) - 1);
+    std::string sampleName(samples[clampedIdx]);
+    std::string engineName = synth->getInstrumentName(*parts[part].instrumentTypeId);
+    std::string fullRelPath = engineName + "/" + sampleName + ".wav";
+
+    if (parts[part].patch->loadSample(slotId, fullRelPath) == polysynth::LoadStatus::kSuccess)
+    {
+        parts[part].patchDirty = true;
+        return true;
+    }
+    return false;
+}
+
+bool Synth::loadSampleByPath(int part, int slotId, const std::string& fullSdPath)
+{
+    if (part < 0 || part >= kSynthParts || !parts[part].patch || fullSdPath.empty())
+    {
+        return false;
+    }
+
+    std::string storePath = fullSdPath;
+    static constexpr std::string_view kSynthSamplesPrefix = "/SynthSamples/";
+    if (storePath.rfind(kSynthSamplesPrefix, 0) == 0)
+    {
+        storePath.erase(0, kSynthSamplesPrefix.size());
+    }
+
+    if (parts[part].patch->loadSample(slotId, storePath) == polysynth::LoadStatus::kSuccess)
+    {
+        parts[part].patchDirty = true;
+        return true;
+    }
+    return false;
+}
+
+std::string Synth::getEngineSampleFolder(int part)
+{
+    if (part < 0 || part >= kSynthParts || !synth)
+    {
+        return "/SynthSamples";
+    }
+    std::string engineName = synth->getInstrumentName(*parts[part].instrumentTypeId);
+    if (engineName.empty())
+    {
+        return "/SynthSamples";
+    }
+    return "/SynthSamples/" + engineName;
+}
+
 void Synth::updateToSettings(const strMtValues& settings, bool resetAllVoices)
 {
     if (resetAllVoices)
@@ -385,7 +580,9 @@ void Synth::updateToSettings(const strMtValues& settings, bool resetAllVoices)
     for (int part = 0; part < kSynthParts; part++)
     {
         setVoiceCount(part, settings.synthPart[part].voiceCount);
-        setInstrumentType(part, kSynthTypes.at(settings.synthPart[part].synthType));
+        int clampedType = std::clamp<int>(
+          settings.synthPart[part].synthType, 0, std::max<int>(0, static_cast<int>(synthTypes.size()) - 1));
+        setInstrumentType(part, synthTypes.at(clampedType));
         parts[part].patchName = settings.synthPart[part].patchName;
     }
 }
@@ -395,6 +592,10 @@ void Synth::updateToSettings(const strMtValues& settings, bool resetAllVoices)
 void Synth::initSynthPartSettings(int part, SynthPartSettings& settings)
 {
     settings = kDefaultSettings.at(part);
+    if (!synthTypes.empty() && settings.synthType >= static_cast<int>(synthTypes.size()))
+    {
+        settings.synthType = 0;
+    }
 
     initSynthPartMacrosValues(part, settings);
 
@@ -428,7 +629,8 @@ void Synth::validateSynthPartSettings(int part, SynthPartSettings& settings)
         }
     }
 
-    if (isOutOfRange<int>(settings.synthType, 0, std::ssize(kSynthTypes) - 1) ||
+    int maxSynthType = std::max<int>(0, static_cast<int>(synthTypes.size()) - 1);
+    if (isOutOfRange<int>(settings.synthType, 0, maxSynthType) ||
         isOutOfRange<int>(settings.voiceCount, 0, kSynthMaxVoices) ||
         isOutOfRange<float>(settings.gainDb, kGainSilence, kGainMax) ||
         isOutOfRange<float>(settings.panning, -kPanningMax, kPanningMax) ||

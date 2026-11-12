@@ -17,6 +17,7 @@ namespace polysynth
 {
 class Synth;
 class PatchStore;
+class SampleStore;
 class Instrument;
 class Mixer;
 class PatchPool;
@@ -66,6 +67,7 @@ class Synth
     void setVoiceCount(int part, int voiceCount);
     int getMaxVoiceCount(int part);
     void setInstrumentType(int part, polysynth::InstrumentTypeId typeId);
+    const std::vector<polysynth::InstrumentTypeId>& getSynthTypes() const { return synthTypes; }
 
     std::string getInstrumentTypeName(int typeIdx);
     int getInstrumentTypeIdx(int part);
@@ -74,6 +76,14 @@ class Synth
     std::string getParamFullName(int part, int paramId);
     const char* getMacroKnobName(int macroId);
     const char* getDefault(int macroId);
+
+    std::vector<std::string_view> listSamples(int part);
+    std::string getSampleSlotName(int part, int slotId);
+    std::string getSampleName(int part, int slotId);
+    int getSampleIndex(int part, int slotId);
+    bool loadSampleByIndex(int part, int slotId, int idx);
+    bool loadSampleByPath(int part, int slotId, const std::string& fullSdPath);
+    std::string getEngineSampleFolder(int part);
 
     int getSend(int part, int sendIdx); // in percent
     float getPanning(int part);         // +- percent
@@ -102,10 +112,12 @@ class Synth
     std::array<Part, kSynthParts> parts;
     std::shared_ptr<polysynth::Synth> synth;
     std::unique_ptr<polysynth::PatchPool> patchPool;
+    std::shared_ptr<polysynth::SampleStore> sampleStore;
     std::shared_ptr<polysynth::PatchStore> patchStore;
     std::shared_ptr<polysynth::PatchStore> patchStoreWorkspace;
     std::unique_ptr<MidiAdapter> midiAdapter;
     FileSystem* filesystem;
+    std::vector<polysynth::InstrumentTypeId> synthTypes;
 
     void setPatch(int part, std::shared_ptr<polysynth::Patch> patch, std::string name);
 

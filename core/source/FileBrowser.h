@@ -26,6 +26,7 @@ struct FileBrowserData
     char* fileNamesBuffer;
 
     const char* defaultPath;
+    const char* customExtension;
 
     // outputs
     int browserListLength;

@@ -454,6 +454,7 @@ class cSampleEditor : public ModuleBase
     uint8_t selectedEffect = editorEffectDelay;
     uint8_t selectedPlace[enScreenType::screenTypeCount];
     uint8_t effectScreenPage = 0;
+    uint8_t mainScreenButtonPage = 0;
 
     const strEffectDefaultParams* effectDefaultParamsPtr = effectDefaultParamsTable;
     const strEffectDisplayConstantParams* effectDisplayConstantParamsPtr =

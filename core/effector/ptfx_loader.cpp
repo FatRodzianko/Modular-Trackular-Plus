@@ -11,31 +11,9 @@
 
 extern uint8_t externalRamScratchBuff[];
 
-static void hostSetExtraSamples(uint32_t prependSamples, uint32_t appendSamples)
-{
-    sampleEditorModular.setExtraSamples(prependSamples, appendSamples);
-}
-
-// Host API Function Pointer Table
-static const PtfxHostApi s_ptfxHostApi = {
-    .sample_rate       = 44100,
-    .sinf              = ::sinf,
-    .cosf              = ::cosf,
-    .tanf              = ::tanf,
-    .tanhf             = ::tanhf,
-    .powf              = ::powf,
-    .expf              = ::expf,
-    .sqrtf             = ::sqrtf,
-    .logf              = ::logf,
-    .log10f            = ::log10f,
-    .fminf             = ::fminf,
-    .fmaxf             = ::fmaxf,
-    .fabsf             = ::fabsf,
-    .memcpy            = ::memcpy,
-    .memset            = ::memset,
-    .rand              = ::rand,
-    .set_extra_samples = hostSetExtraSamples,
-};
+static uint32_t s_secondarySampleFrames = 0;
+static uint8_t s_secondarySampleChannels = 0;
+static char s_selectedFilePaths[12][kMaxFilePathLen + 1]{};
 
 static FileSystem* getFileSystem()
 {
@@ -46,6 +24,197 @@ static FileSystem* getFileSystem()
     if (!platform)
         return nullptr;
     return platform->getFileSystem();
+}
+
+static void hostSetExtraSamples(uint32_t prependSamples, uint32_t appendSamples)
+{
+    sampleEditorModular.setExtraSamples(prependSamples, appendSamples);
+}
+
+static int32_t hostReadFile(const char* path, void* buffer, uint32_t maxBytes)
+{
+    FileSystem* fs = getFileSystem();
+    if (!fs || !path || !buffer || maxBytes == 0)
+        return -1;
+
+    auto [isOpen, fileHandle] = fs->openFile(path, FileSystem::FileOpenMode::kRead);
+    if (!isOpen)
+        return -1;
+
+    uint8_t* dst = static_cast<uint8_t*>(buffer);
+    uint32_t totalRead = 0;
+    while (totalRead < maxBytes)
+    {
+        uint32_t chunk = maxBytes - totalRead;
+        if (chunk > 256)
+            chunk = 256;
+        int32_t n = fs->readFile(dst + totalRead, chunk, fileHandle);
+        if (n <= 0)
+            break;
+        totalRead += static_cast<uint32_t>(n);
+        if (static_cast<uint32_t>(n) < chunk)
+            break;
+    }
+    fs->closeFile(fileHandle);
+    return static_cast<int32_t>(totalRead);
+}
+
+static int32_t hostWriteFile(const char* path, const void* buffer, uint32_t numBytes)
+{
+    FileSystem* fs = getFileSystem();
+    if (!fs || !path || !buffer)
+        return -1;
+
+    if (fs->exists(path))
+    {
+        fs->remove(path);
+    }
+
+    auto [isOpen, fileHandle] = fs->openFile(path, FileSystem::FileOpenMode::kWriteCreateNew);
+    if (!isOpen)
+        return -1;
+
+    const uint8_t* src = static_cast<const uint8_t*>(buffer);
+    uint32_t totalWritten = 0;
+    while (totalWritten < numBytes)
+    {
+        uint32_t chunk = numBytes - totalWritten;
+        if (chunk > 256)
+            chunk = 256;
+        int32_t n = fs->writeFile(src + totalWritten, chunk, fileHandle);
+        if (n <= 0)
+            break;
+        totalWritten += static_cast<uint32_t>(n);
+        if (static_cast<uint32_t>(n) < chunk)
+            break;
+    }
+    fs->closeFile(fileHandle);
+    return static_cast<int32_t>(totalWritten);
+}
+
+static const int16_t* hostGetSecondarySample(uint32_t* outFrames, uint8_t* outChannels)
+{
+    return PtfxLoader::getSecondarySample(outFrames, outChannels);
+}
+
+static const char* hostGetSelectedFilePath(uint8_t paramIndex)
+{
+    return PtfxLoader::getSelectedFilePath(paramIndex);
+}
+
+// Host API Function Pointer Table
+static const PtfxHostApi s_ptfxHostApi = {
+    .sample_rate             = 44100,
+    .sinf                    = ::sinf,
+    .cosf                    = ::cosf,
+    .tanf                    = ::tanf,
+    .tanhf                   = ::tanhf,
+    .powf                    = ::powf,
+    .expf                    = ::expf,
+    .sqrtf                   = ::sqrtf,
+    .logf                    = ::logf,
+    .log10f                  = ::log10f,
+    .fminf                   = ::fminf,
+    .fmaxf                   = ::fmaxf,
+    .fabsf                   = ::fabsf,
+    .memcpy                  = ::memcpy,
+    .memset                  = ::memset,
+    .rand                    = ::rand,
+    .set_extra_samples       = hostSetExtraSamples,
+    .read_file               = hostReadFile,
+    .write_file              = hostWriteFile,
+    .get_secondary_sample    = hostGetSecondarySample,
+    .get_selected_file_path  = hostGetSelectedFilePath,
+};
+
+bool PtfxLoader::loadSecondaryWavFile(const char* filepath)
+{
+    s_secondarySampleFrames = 0;
+    s_secondarySampleChannels = 0;
+
+    FileSystem* fs = getFileSystem();
+    if (!fs || !filepath || filepath[0] == '\0')
+        return false;
+
+    auto [isOpen, fileHandle] = fs->openFile(filepath, FileSystem::FileOpenMode::kRead);
+    if (!isOpen)
+        return false;
+
+    strWavFileHeader wavHdr{};
+    int32_t hdrRead = fs->readFile(&wavHdr, sizeof(strWavFileHeader), fileHandle);
+    if (hdrRead != static_cast<int32_t>(sizeof(strWavFileHeader)) ||
+        wavHdr.AudioFormat != 1 ||
+        wavHdr.bitsPerSample != 16 ||
+        (wavHdr.numChannels != 1 && wavHdr.numChannels != 2) ||
+        wavHdr.subchunk2Size == 0)
+    {
+        fs->closeFile(fileHandle);
+        return false;
+    }
+
+    uint32_t bytesToRead = wavHdr.subchunk2Size;
+    if (bytesToRead > kPtfxSecondarySampleBytes)
+    {
+        bytesToRead = kPtfxSecondarySampleBytes;
+    }
+    uint32_t frameBytes = static_cast<uint32_t>(wavHdr.numChannels) * sizeof(int16_t);
+    bytesToRead = (bytesToRead / frameBytes) * frameBytes;
+
+    uint8_t* dst = externalRamScratchBuff + kPtfxSecondarySampleOffset;
+    uint32_t totalRead = 0;
+    while (totalRead < bytesToRead)
+    {
+        uint32_t chunk = bytesToRead - totalRead;
+        if (chunk > 256)
+            chunk = 256;
+        int32_t n = fs->readFile(dst + totalRead, chunk, fileHandle);
+        if (n <= 0)
+            break;
+        totalRead += static_cast<uint32_t>(n);
+    }
+    fs->closeFile(fileHandle);
+
+    s_secondarySampleFrames = totalRead / frameBytes;
+    s_secondarySampleChannels = static_cast<uint8_t>(wavHdr.numChannels);
+    return s_secondarySampleFrames > 0;
+}
+
+const int16_t* PtfxLoader::getSecondarySample(uint32_t* outFrames, uint8_t* outChannels)
+{
+    if (outFrames)
+        *outFrames = s_secondarySampleFrames;
+    if (outChannels)
+        *outChannels = s_secondarySampleChannels;
+    if (s_secondarySampleFrames == 0)
+        return nullptr;
+    return reinterpret_cast<const int16_t*>(externalRamScratchBuff + kPtfxSecondarySampleOffset);
+}
+
+void PtfxLoader::setSelectedFilePath(uint8_t paramIndex, const char* filepath)
+{
+    if (paramIndex >= 12)
+        return;
+    if (!filepath)
+    {
+        s_selectedFilePaths[paramIndex][0] = '\0';
+        return;
+    }
+    strncpy(s_selectedFilePaths[paramIndex], filepath, kMaxFilePathLen);
+    s_selectedFilePaths[paramIndex][kMaxFilePathLen] = '\0';
+}
+
+const char* PtfxLoader::getSelectedFilePath(uint8_t paramIndex)
+{
+    if (paramIndex >= 12)
+        return "";
+    return s_selectedFilePaths[paramIndex];
+}
+
+void PtfxLoader::clearSelectedFiles()
+{
+    s_secondarySampleFrames = 0;
+    s_secondarySampleChannels = 0;
+    memset(s_selectedFilePaths, 0, sizeof(s_selectedFilePaths));
 }
 
 uint8_t* PtfxLoader::getCodeBuffer()

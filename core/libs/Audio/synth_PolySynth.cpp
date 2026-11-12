@@ -111,11 +111,6 @@ AUDIO_CORE_RAM void PolySynth::update(void)
 
         polysynth::AudioBufferRef tempBufRef = tempBufSendsCommonLeft;
 
-        assert(hasSends ==
-               isStereo); // Assumption to simplify handling. The only one stereo and with internal
-                          // synths is PERC, the other are mono and without sends. Refactor the
-                          // handling if needed for new synth.
-
         if (hasSends)
         {
             auto* srcSend1 = tempBufSend[0].begin();

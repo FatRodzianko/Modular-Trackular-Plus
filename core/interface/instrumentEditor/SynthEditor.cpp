@@ -21,16 +21,8 @@ static const uint16_t framesPlacesSynth[1][4] = {
     { (800 / 8) * 6 + 1, 31, 800 / 4 - 3, 391 },
 };
 
-const char* const synthModelNames[Synth::kSynthTypes.size()] = {
-    "ACD", "FAT", "VAP", "WTFM", "PERC", "DIRT", "CHIP",
-};
-
-static const int synthModelListImages[Synth::kSynthTypes.size()] = {
-    enDisplayBitmaps::kBitmapMiniACD,  enDisplayBitmaps::kBitmapMiniFAT,
-    enDisplayBitmaps::kBitmapMiniVAP,  enDisplayBitmaps::kBitmapMiniWTFM,
-    enDisplayBitmaps::kBitmapMiniPERC, enDisplayBitmaps::kBitmapMiniDIRT,
-    enDisplayBitmaps::kBitmapMiniCHIP
-};
+static std::vector<std::string> synthModelNamesStorage;
+static std::vector<char*> synthModelNamesPtrs;
 
 static cInstrumentEditor* IE = &instrumentEditor;
 
@@ -396,7 +388,8 @@ void cInstrumentEditor::changeSynthModel(int16_t value)
     int syntPartIdx = mtProject.values.lastUsedInstrument - SYNTH_INSTRUMENTS_START_IDX;
     assert(syntPartIdx >= 0 && syntPartIdx < kSynthInstrumentsCount);
 
-    int modelMaxValue = (Synth::kSynthTypes.size() - 1);
+    const auto& synthTypes = synth->getSynthTypes();
+    int modelMaxValue = std::max<int>(0, static_cast<int>(synthTypes.size()) - 1);
 
     int32_t previousSynthType = mtProject.values.synthPart[syntPartIdx].synthType;
 
@@ -417,7 +410,7 @@ void cInstrumentEditor::changeSynthModel(int16_t value)
     }
 
     synth->setInstrumentType(
-      syntPartIdx, Synth::kSynthTypes.at(mtProject.values.synthPart[syntPartIdx].synthType));
+      syntPartIdx, synthTypes.at(mtProject.values.synthPart[syntPartIdx].synthType));
 
     changeSynthPolyphony(0);
 
@@ -573,7 +566,7 @@ void cInstrumentEditor::setDefaultSynthDelay()
 
 [[maybe_unused]] void cInstrumentEditor::setDefaultSynthModel()
 {
-    int modelMaxValue = (Synth::kSynthTypes.size() - 1);
+    int modelMaxValue = std::max<int>(0, static_cast<int>(synth->getSynthTypes().size()) - 1);
     changeSynthModel(-modelMaxValue);
 }
 
@@ -815,12 +808,22 @@ void cInstrumentEditor::showSynthParamsScreen()
     display.setControlPosition(noteLabel, 625, 45);
     display.setControlSize(noteLabel, 170, 30);
 
+    const auto& synthTypes = synth->getSynthTypes();
+    std::size_t modelCount = synthTypes.size();
+    synthModelNamesStorage.resize(modelCount);
+    synthModelNamesPtrs.resize(modelCount);
+    for (std::size_t i = 0; i < modelCount; ++i)
+    {
+        synthModelNamesStorage[i] = synth->getInstrumentTypeName(i);
+        synthModelNamesPtrs[i] = synthModelNamesStorage[i].data();
+    }
+
     modelListData.start = mtProject.values.synthPart[syntPartIdx].synthType;
-    modelListData.length = Synth::kSynthTypes.size();
-    modelListData.linesCount = std::min<uint16_t>(Synth::kSynthTypes.size(), 7);
-    modelListData.rowHeight = 50;
-    modelListData.params = nullptr;
-    modelListData.imageIds = synthModelListImages;
+    modelListData.length = modelCount;
+    modelListData.linesCount = std::min<uint16_t>(modelCount, 14);
+    modelListData.rowHeight = 0;
+    modelListData.params = synthModelNamesPtrs.data();
+    modelListData.imageIds = nullptr;
     modelListData.scrollText = true;
 
     display.setControlData(modelListControl, &modelListData);

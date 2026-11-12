@@ -4,6 +4,7 @@
 #include "PolySynth/MidiEvent.h"
 #include "PolySynth/Patch.h"
 
+#include <algorithm>
 #include <memory>
 #include <span>
 
@@ -15,6 +16,8 @@ class InstrumentVoice
     struct InstrumentVoiceContext
     {
         float tempo;
+        float pitchbendRangeSemitones = 2.0f;
+
         bool operator==(const InstrumentVoiceContext& rhs) const { return tempo == rhs.tempo; }
         bool operator!=(const InstrumentVoiceContext& rhs) const { return !(rhs == *this); }
     };
@@ -26,10 +29,18 @@ class InstrumentVoice
     /**
      * Render audio of a single voice.
      */
-    virtual void renderVoiceAudio(const InstrumentVoiceContext& ctx,
-                                  std::optional<AudioBufferStereoRef> inputBuffer,
-                                  AudioBufferStereoRef outputBuffer,
-                                  std::span<AudioBufferRef> auxOutBuffer) = 0;
+    virtual void renderVoiceAudio(const InstrumentVoiceContext& /*ctx*/,
+                                  std::optional<AudioBufferStereoRef> /*inputBuffer*/,
+                                  AudioBufferStereoRef /*outputBuffer*/)
+    {
+    }
+
+    virtual void renderVoiceAudio(const InstrumentVoiceContext& /*ctx*/,
+                                  std::optional<AudioBufferStereoRef> /*inputBuffer*/,
+                                  AudioBufferStereoRef /*outputBuffer*/,
+                                  std::span<AudioBufferRef> /*auxOutBuffer*/)
+    {
+    }
 
     /**
      * Apply post processing / fx on final audio - mixdown of all voices.
@@ -37,6 +48,8 @@ class InstrumentVoice
      */
     virtual void renderPostProcessAudio(const InstrumentVoiceContext& /*ctx*/,
                                         AudioBufferStereoRef /*outputBuffer*/){};
+
+    virtual void renderGraph(std::span<float> points) { std::ranges::fill(points, 0); };
 
     /**
      * Does the voice produce sound of any note, including after releasing it.
@@ -70,11 +83,13 @@ class InstrumentVoice
      */
     virtual void clearPreviousNotes(){};
 
+    virtual void reset(){};
+
     [[nodiscard]] Patch* getPatch() const { return patch.get(); };
-    void setPatch(std::shared_ptr<Patch> patch) { this->patch = std::move(patch); };
+    virtual void setPatch(std::shared_ptr<Patch> patch) { this->patch = std::move(patch); };
 
   private:
     std::shared_ptr<Patch> patch = nullptr;
 };
 
-} // namespace polysynth
+}
