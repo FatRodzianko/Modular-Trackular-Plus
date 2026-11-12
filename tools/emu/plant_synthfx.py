@@ -4,11 +4,12 @@ test section that has to fail, on the check named. A fault the test misses is a 
 The slots' faults go to tools/emu/test_synthfx.py (as_before and old_patches with --before, the phase 1
 build); the
 patch editor's and the project's to test_synthfx_page.py ("page:<section>"); the record's rules to the
-host test, core/mods/tests/test_synthfx.cpp ("host", built in the tree with its g++). The plugins'
-own arithmetic has its faults in tools/synthfx/rig/plant.py.
+host test, core/mods/tests/test_synthfx.cpp ("host", built in the tree with its g++); USB storage
+mode's through CE's own switch to boot_rig.py ("boot", the release tier's Synth FX project, made from
+--project). The plugins' own arithmetic has its faults in tools/synthfx/rig/plant.py.
 
     python tools/emu/plant_synthfx.py <reference.axf> --before <phase 1 axf> [--tree WSL_DIR]
-        [--toolchain PREFIX] [--jobs N] [--only NAME] [--keep]
+        [--toolchain PREFIX] [--jobs N] [--only NAME] [--keep] [--project SOURCE]
 
 The builds run in WSL in a copy of this checkout (--tree, default ~/mtplant_synthfx), synced from it
 first, so each fault rebuilds only its own file; one fault at a time with --jobs compilers (default
@@ -23,12 +24,14 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "build" / "emu" / "plant_synthfx"
 TEST = ROOT / "tools" / "emu" / "test_synthfx.py"
 PAGE_TEST = ROOT / "tools" / "emu" / "test_synthfx_page.py"
+BOOT = ROOT / "tools" / "emu" / "boot_rig.py"
 MOD = "core/mods/synthfx/synthfxMod.cpp"         # the slots in the audio interrupt
 SLOTS = "core/mods/synthfx/synthfxSlots.cpp"     # the slots' plugins made and let go
 PAGE = "core/mods/synthfx/synthfxPage.cpp"       # the rows
@@ -149,6 +152,17 @@ FAULTS = [
      "if (l.storeWhenMade)", "page:page", "", "stored once it was made over the old one"),
     ("Delete on a slot waits", PAGE, "        if (changed)\n        {\n            remake(part, slot, false);\n",
      "        if (false)\n        {\n            remake(part, slot, false);\n", "page:page", "", "Delete on FX1"),
+    # USB storage mode (the unit, 2026-11-12): the mods touched the card while the computer had it
+    ("CE never lends the card", "core/interface/core/interface.cpp",
+     "        mods::cardLent(true);\n", "", "boot", "", "the card touched in USB storage mode"),
+    ("the card never given back", "core/interface/core/interface.cpp",
+     "        mods::cardLent(false);\n", "", "boot", "", "the card touched in USB storage mode"),
+    ("the mods' update ignores the lent card", "core/mods/mods.cpp",
+     "    if (lentNow)\n    {\n        return; // USB", "    if (false)\n    {\n        return; // USB",
+     "page:page", "", "USB storage mode with a pick waiting"),
+    ("the mods' file calls ignore the lent card", "core/mods/mods.cpp",
+     "return fileSystem != nullptr && !lentNow;", "return fileSystem != nullptr;", "page:page", "",
+     "the mods' file calls fail"),
     ("the other slot's plugin offered", PAGE, "e->status != plugins::Status::ok || usedByOtherSlot(part, slot, e->file)",
      "e->status != plugins::Status::ok", "page:page", "", "FX2's list"),
     ("Delete leaves a knob", PAGE, "        plugins::setKnob(id, static_cast<uint32_t>(knob), p->default_val);\n", "",
@@ -177,6 +191,7 @@ def main() -> int:
     ap.add_argument("--jobs", type=int, default=3)
     ap.add_argument("--only", help="faults whose name has this, or whose test is this (host, page)")
     ap.add_argument("--keep", action="store_true")
+    ap.add_argument("--project", type=Path, help="a project to make the boot faults' Synth FX project from")
     a = ap.parse_args()
     tree, src = a.tree, wsl_path(ROOT)
     # by content, and without the source's times: a changed file gets a new one, so make rebuilds it
@@ -191,6 +206,13 @@ def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     missed = []
     faults = [f for f in FAULTS if not a.only or a.only in f[0] or a.only == f[4].split(":")[0]]
+    boot_project = None
+    if any(f[4] == "boot" for f in faults):
+        if a.project is None:
+            print("FAIL the boot faults need --project")
+            return 1
+        import make_masterfx_test_project as maker
+        boot_project = maker.make_synthfx(a.project, Path(tempfile.mkdtemp()))
     for name, file, old, new, section, engines, expect in faults:
         text = (ROOT / file).read_bytes().decode("utf-8")
         if "\r\n" in text:
@@ -221,6 +243,10 @@ def main() -> int:
             t = host
         elif section.startswith("page:"):
             cmd = [sys.executable, str(PAGE_TEST), str(axf), a.ref, "--only", section[5:]]
+            t = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT)
+        elif section == "boot":
+            cmd = [sys.executable, str(BOOT), str(axf), str(boot_project), "--blocks", "300", "--expect-synthfx",
+                   "--expect-usb"]
             t = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT)
         else:
             cmd = [sys.executable, str(TEST), str(axf), a.ref, "--before", a.before, "--only", section] +                 (["--engines", engines] if engines else [])

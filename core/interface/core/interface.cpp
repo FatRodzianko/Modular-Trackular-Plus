@@ -31,6 +31,7 @@
 #include "VoiceStreamManager.h"
 #include "config.h"
 #include "log.h"
+#include "mods.h" // MT:
 #include "mtHardware.h"
 #include "mtSleep.h"
 
@@ -409,6 +410,9 @@ void Interface::handleFileTransferMode(uint8_t state)
         newFileManager.flushWorkspaceSave();
         newFileManager.setWorkspaceSaveSuspended(true);
         voiceStreamManager.setSuspended(true);
+#if MT_MODS // MT: the mods leave the card alone too
+        mods::cardLent(true);
+#endif
         LOG("USB storage mode on");
     }
     else
@@ -422,6 +426,9 @@ void Interface::handleFileTransferMode(uint8_t state)
         {
             voiceStreamManager.rebindAllInstrumentStreamFiles();
         }
+#if MT_MODS // MT: the card is the device's again
+        mods::cardLent(false);
+#endif
         voiceStreamManager.setSuspended(false);
         newFileManager.setWorkspaceSaveSuspended(false);
         activateInterface();

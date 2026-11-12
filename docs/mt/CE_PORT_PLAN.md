@@ -1653,6 +1653,43 @@ it, and copy it to the card. WAVE and PHASE use the same two slots.
     - G1 Heavy mid-play: 8 blocks over time, all back to back, slowest 109 %, then bypassed (20 to
       21 % average, 26 to 30 % slowest). The bypass lasts until the plugin is made again (a pick or
       the project opened), so Light then Heavy again, or stop and play, stays at 29 %: as designed.
+    - Save and reopen: changed plugins and knobs, Save, another project played, the first reopened:
+      the slots as saved. Save within the 0.4 s wait: the new plugin in the slot on reopen.
+    - A missing plugin: `Delay.ptsfx` renamed, P1 opened: FX2 says so, no hang.
+    - USB storage mode with G1 open (Delay in a slot), `Delay.ptsfx` deleted from the computer: on
+      return the slot still read Delay and played it (its code is in RAM since it was made; nothing
+      reads the file again), and once FX1 was turned off it the list no longer had it (the page
+      rescans the card when it opens). Expected. But it showed a gap: `mods::update` runs during USB
+      storage mode, and nothing in the mods checks for it, while CE suspends its own card use there
+      (`handleFileTransferMode`). A pick still waiting its 0.4 s, or the start marker's removal
+      5 s after a plugin is made, could read or write the card while the computer has it: two
+      writers on one card, which can corrupt it.
+    - **Fixed (2026-11-12).** CE's `handleFileTransferMode` tells the mods (`mods::cardLent`), after
+      its own last saves on the way in and after the remount on the way out. While the card is lent,
+      `mods::update` returns at once, so Synth FX's waiting picks, slots and start marker wait for
+      the card, and every `CeFileIo` call fails (read, write, remove, makeDir, exists, list) as a
+      backstop. The lockup recorder's log waits too. Elsewhere: Copy Pattern and Color Song touch the
+      card only from their own screens, which USB storage mode replaces; Song Loop only reads, and
+      MIDI Start there plays in pattern mode (the Song screen isn't active); CE stops the sequencer on
+      the way in and suspends its saves and sample streaming. RAM: one byte of DTCM.
+      Tests: the boot rig goes in and out the way a user does (Config's action, then the mode
+      screen's button) with the release tier's Synth FX project just opened: 6 s in the mode, 0 card
+      calls from CE or the mods, the start marker kept, then removed once the mode ends (`boot synthfx`,
+      `--expect-usb`). The page test: a pick waiting and the marker due, 9 s lent and neither happens,
+      then both; the plugin list read while lent is empty. Planted faults 4 of 4 (CE never lends the
+      card, never gives it back, the update or the file calls ignore it). The MT_NO_MODS reference
+      is still byte-identical. Firmware: `build/TrackerPlus_MT_synthfx_usb_diag.ptf` (recorder) and
+      `build/TrackerPlus_MT_synthfx_usb_normal.ptf`.
+    - **Device test of the fix 2026-11-12,** `TrackerPlus_MT_synthfx_usb_diag.ptf`: G1, FX1 turned to
+      another plugin, then USB storage mode within 5 s. On the computer `/SynthFX/.starting` was
+      still there (the mods hadn't touched the card); a sample copied into `/Samples` and deleted, a
+      file in `/SynthFX` renamed and back. Out of the mode, FX1 had the picked plugin and played it;
+      in again 6 s later, the marker was gone. P2 and another project opened and played. Log: G1
+      average 21 %, slowest 28 %; P2 average 65 to 66 %, slowest 73 to 77 %, 0 blocks over time;
+      Shimmer + BBD project average 37 %, slowest 49 %. Then `TrackerPlus_MT_synthfx_usb_normal.ptf`
+      (no recorder, so no log), P2: the Profiler read 92 % on the first play and 73 % on the second,
+      as the recorder build's P2 (89 % first play). The first play's peak is the highest P2 reading
+      yet; the second play is under the diag's.
 
 ## 4. Order and why
 

@@ -347,6 +347,10 @@ def main():
                     help="fail unless the project's Synth FX slots loaded, their plugins were made and the "
                          "insert ran on every block")
     ap.add_argument("--card-files", type=Path, help="a folder whose files go in /SynthFX/ on the card")
+    ap.add_argument("--expect-usb", action="store_true",
+                    help="then CE's own switch into USB storage mode while playing: fail unless the card sees "
+                         "no call while the computer has it (the start marker due to go stays) and, back, the "
+                         "marker goes")
     ap.add_argument("--expect-hang", action="store_true",
                     help="the project's GuardHang plugin never returns: fail unless the Open hangs inside the "
                          "plugins' code with the start marker on the card and no file open, and a second start "
@@ -505,6 +509,41 @@ def main():
                 r.interrupt_allocs:
             print("FAILED: Synth FX isn't in play")
             return 1
+    if args.expect_usb:
+        return usb_mode(r, step)
+    return 0
+
+
+def usb_mode(r, step):
+    """USB storage mode (the unit, 2026-11-12) as a user goes in and out, from playback (CE stops it on the way in): Config's USB
+    storage action, then the mode screen's button to end it. CE suspends its card use and lends the
+    card to the mods' side too. The project's plugins were made under a second ago,
+    so the start marker is on the card and due to go 5 s after; 6 s pass with the computer holding
+    the card, and nothing may touch it. Back, the marker goes."""
+    m = r.m
+    lent = lambda: m.r8(m.addr("lentNow"))  # noqa: E731  (mods::cardIsLent, not linked in a normal build)
+    marker = MARKER in r.sd.files
+    m.call(m.addr("_Z21startFileTransferModev"), max_insns=300_000_000)
+    on = lent()
+    before = len(r.sd.calls)
+    for _ in range(40):
+        r.now += 150
+        step()
+    during = r.sd.calls[before:]
+    kept = MARKER in r.sd.files
+    lent_during = lent()
+    m.call(m.addr("_ZL24functEndFileTransferModev"), max_insns=300_000_000)
+    back = lent()
+    for _ in range(10):
+        r.now += 20
+        step()
+    gone = MARKER not in r.sd.files
+    print("USB storage mode: lent at once", on, "and after 6 s", lent_during, "card calls while on",
+          len(during), during[:6], "marker before", marker, "kept", kept, "; ended, lent", back,
+          "marker gone after", gone, "failures", r.failures, flush=True)
+    if not (marker and on and lent_during and not during and kept and not back and gone and not r.failures):
+        print("FAILED: the card touched in USB storage mode, or the mods' work not back after it")
+        return 1
     return 0
 
 

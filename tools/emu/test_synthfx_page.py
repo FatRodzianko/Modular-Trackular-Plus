@@ -51,8 +51,8 @@ from test_masterfx_rig import LIMIT, MasterPage  # noqa: E402
 from test_step0 import store_image  # noqa: E402
 from test_swing import Projects  # noqa: E402
 from test_synths import WAVE  # noqa: E402
-from test_synthfx import (FILE_SIZE, INSTANCE_BYTES, INSTANCE_STATE, KNOBS, NAMES, PERC, PRE_BYTE,  # noqa: E402
-                          SLOT_BYTES, SYNTHFX_MOD)
+from test_synthfx import (FILE_SIZE, INSTANCE_BYTES, INSTANCE_STATE, KNOBS, MARKER, NAMES, PERC,  # noqa: E402
+                          PRE_BYTE, SLOT_BYTES, SYNTHFX_MOD)
 from test_synths import PHASE  # noqa: E402
 
 SYNTH0 = 64                 # SYNTH_INSTRUMENTS_START_IDX
@@ -231,6 +231,16 @@ class EditorPage(MasterPage):
             m.call(m.addr("_ZN4mods7synthfx7rowTextEiiPcj"), part, row, out, 64)
             rows.append((name, m.cstr(out)))
         return rows
+
+    def lend(self, lent):
+        """USB storage mode on or off, as CE's handleFileTransferMode tells the mods"""
+        self.m.call(self.m.addr("_ZN4mods8cardLentEb"), 1 if lent else 0)
+
+    def catalog(self):
+        """The plugin list read again from the card now: how many"""
+        m = self.m
+        m.call(m.addr("_ZN4mods7synthfx7plugins4scanEv"), max_insns=200_000_000)
+        return m.call(m.addr("_ZN4mods7synthfx7plugins12catalogCountEv"))
 
     def made(self):
         """Plugin instances made now"""
@@ -433,6 +443,34 @@ def test_page(mods):
     want = record_slot(rec[1], 0, 0) if rec and len(rec[1]) == RECORD_SIZE else None
     check(want is not None and want[0] == last and not any(math.isnan(k) for k in want[1][:len(KNOB_ROWS[last])]),
           f"and the record has it with its knobs, stored once it was made over the old one ({want and want[:2]})")
+
+    # USB storage mode (the unit, 2026-11-12): the computer has the card, and the mods leave it alone.
+    # A pick waiting its 0.4 s, and the start marker due to go 5 s after a plugin is made, wait for
+    # the card; back, both happen
+    p.turn(-1)
+    waiting = p.slot()[0]
+    n, marker, card = len(p.created), MARKER in p.r.sd.files, dict(p.r.sd.files)
+    p.lend(True)
+    for _ in range(3):
+        p.main_loop(3000)
+    held = (len(p.created) - n, dict(p.r.sd.files) == card, MARKER in p.r.sd.files, p.instance())
+    check(marker and held == (0, True, True, -1),
+          f"USB storage mode with a pick waiting and the marker due to go: 9 s pass and neither happens "
+          f"({held[0]} made, the card unchanged {held[1]}, the marker kept {held[2]} of {marker})")
+    p.lend(False)
+    p.main_loop()
+    p.main_loop()
+    texts, _ = p.drawn()
+    check(p.created[n:] == [waiting] and p.instance() >= 0 and after(texts, "FX1") == NAME.get(waiting),
+          f"back from it, the pick is made ({p.created[n:]}, drawn {after(texts, 'FX1')}) and the marker "
+          f"renewed for it ({MARKER in p.r.sd.files})")
+    # and while it is lent, every file call of the mods fails: the plugin list read then is empty
+    p.lend(True)
+    empty = p.catalog()
+    p.lend(False)
+    full = p.catalog()
+    check(empty == 0 and full == len(PACK), f"while lent, the mods' file calls fail: the plugin list read then "
+          f"has {empty}, and {full} once the card is back")
 
     # Delete on FX1: None, the knobs' rows gone, and the plugin let go at once (a press: no wait)
     p.press("delete")

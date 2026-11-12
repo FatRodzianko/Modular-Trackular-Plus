@@ -40,14 +40,22 @@ namespace mods
 namespace
 {
 
+bool lentNow = false; // USB storage mode: the computer has the card (cardLent)
+
 class CeFileIo : public FileIo
 {
   public:
     FileSystem* fileSystem = nullptr;
 
+    // the card, or none while it is lent
+    bool usable() const
+    {
+        return fileSystem != nullptr && !lentNow;
+    }
+
     size_t read(const char* path, uint8_t* buffer, size_t capacity) override
     {
-        if (fileSystem == nullptr || !fileSystem->exists(path))
+        if (!usable() || !fileSystem->exists(path))
         {
             return kReadFailed;
         }
@@ -68,7 +76,7 @@ class CeFileIo : public FileIo
 
     bool write(const char* path, const uint8_t* data, size_t length) override
     {
-        if (fileSystem == nullptr)
+        if (!usable())
         {
             return false;
         }
@@ -87,7 +95,7 @@ class CeFileIo : public FileIo
 
     void remove(const char* path) override
     {
-        if (fileSystem != nullptr && fileSystem->exists(path))
+        if (usable() && fileSystem->exists(path))
         {
             fileSystem->remove(path);
         }
@@ -95,7 +103,7 @@ class CeFileIo : public FileIo
 
     void makeDir(const char* path) override
     {
-        if (fileSystem != nullptr && !fileSystem->exists(path))
+        if (usable() && !fileSystem->exists(path))
         {
             fileSystem->mkdir(0, path);
         }
@@ -103,12 +111,12 @@ class CeFileIo : public FileIo
 
     bool exists(const char* path) override
     {
-        return fileSystem != nullptr && fileSystem->exists(path);
+        return usable() && fileSystem->exists(path);
     }
 
     size_t list(const char* dir, const char* suffix, char* names, size_t count, size_t nameSize) override
     {
-        if (fileSystem == nullptr || count == 0 || nameSize < 2 || !fileSystem->exists(dir))
+        if (!usable() || count == 0 || nameSize < 2 || !fileSystem->exists(dir))
         {
             return 0;
         }
@@ -199,8 +207,22 @@ void init(FileSystem* fileSystem)
 #endif
 }
 
+void cardLent(bool lent)
+{
+    lentNow = lent;
+}
+
+bool cardIsLent()
+{
+    return lentNow;
+}
+
 void update()
 {
+    if (lentNow)
+    {
+        return; // USB storage mode: picks, the start marker and the slots wait for the card
+    }
 #if MT_HAS_SYNTHFX
     if (!synthfx::plugins::started())
     {

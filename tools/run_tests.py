@@ -171,7 +171,8 @@ def jobs_for(args, projects):
         # Synth FX at its heaviest on three PERC parts (1 voice each, PERC's limit), under the worst
         # pattern: mods only (CE has no insert)
         fx = projects["synthfx"]
-        jobs.append(Job("boot synthfx", boot, mods, fx, "--blocks", 300, "--expect-synthfx", inputs=[mods, fx]))
+        jobs.append(Job("boot synthfx", boot, mods, fx, "--blocks", 300, "--expect-synthfx", "--expect-usb",
+                        inputs=[mods, fx]))
         jobs.append(Job("preempt synthfx", boot, mods, fx, "--blocks", worst_loops["worst"], "--expect-synthfx",
                         "--preempt", "3000,120000", "--preempt-play", play_gaps, inputs=[mods, fx]))
         # A project whose plugin never returns (GuardHang): the Open hangs with the start marker on
