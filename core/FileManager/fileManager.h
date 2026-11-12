@@ -402,7 +402,7 @@ class cFileManager
     void clearWorkspace();
     bool createWorkspaceDirs();
 
-    void createCurrentProjectFolderTree();
+    bool createCurrentProjectFolderTree();
 
     bool isInstrumentStereo(int idx);
     void setInstrumentSampleAddress(int idx, uint16_t channelCount, uint32_t samplesCount);
