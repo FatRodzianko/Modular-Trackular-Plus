@@ -190,7 +190,9 @@ void cPatternEditor::update()
 
         uint8_t button = interfaceButtonSampleLoad;
         PTE->firstFreeInstrumentSlotFound++;
-        PTE->eventFunct(eventSwitchModule, PTE, &button, &PTE->firstFreeInstrumentSlotFound);
+        // The handler reads the options through a uint32_t pointer.
+        uint32_t slot = static_cast<uint8_t>(PTE->firstFreeInstrumentSlotFound);
+        PTE->eventFunct(eventSwitchModule, PTE, &button, &slot);
     }
     else if (managerStatus >= fmLoadEnd && managerStatus < fmError) // 	lapie cala reszte Endow
     {

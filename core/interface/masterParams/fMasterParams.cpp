@@ -1107,7 +1107,9 @@ static void functSwitchModule(uint8_t button)
 
     if (MP->sourceModuleButton == interfaceButtonSampleRec)
     {
-        MP->eventFunct(eventSwitchModule, MP, &MP->sourceModuleButton, &button);
+        // The handler reads the options through a uint32_t pointer.
+        uint32_t option = button;
+        MP->eventFunct(eventSwitchModule, MP, &MP->sourceModuleButton, &option);
     }
     else
     {

@@ -217,7 +217,9 @@ void cSampleRecorder::update()
         {
             uint8_t button = interfaceButtonSampleLoad;
             SR->firstFreeInstrumentSlotFound++;
-            SR->eventFunct(eventSwitchModule, SR, &button, &SR->firstFreeInstrumentSlotFound);
+            // The handler reads the options through a uint32_t pointer.
+            uint32_t slot = static_cast<uint8_t>(SR->firstFreeInstrumentSlotFound);
+            SR->eventFunct(eventSwitchModule, SR, &button, &slot);
         }
         else
         {
@@ -2307,7 +2309,8 @@ static void functSwitchModule(uint8_t button)
     if (button == interfaceButtonMaster && !SR->isSwitchingFromMenu)
     {
         SR->dontTurnOffRadio = 1;
-        uint8_t option = interfaceButtonSampleRec;
+        // The handler reads the options through a uint32_t pointer.
+        uint32_t option = interfaceButtonSampleRec;
         SR->eventFunct(eventSwitchModule, SR, &button, &option);
         return;
     }
