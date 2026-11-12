@@ -260,6 +260,78 @@ class BootRig(SoundRig):
                 sd.files[f"Workspace/{rel}"] = data
 
 
+MARKER = "/SynthFX/.starting"
+SKIPPED = 7                     # plugins::Status::skipped
+
+
+def card_files(rig, folder):
+    """The files of folder in /SynthFX/ on the card, as a user copies plugins there"""
+    for f in sorted(Path(folder).iterdir()):
+        if f.is_file():
+            rig.sd.files[f"/SynthFX/{f.name}"] = f.read_bytes()
+
+
+def second_start(axf, first, blocks):
+    """A start from the card the first run left, as the lockup recorder's restart: CE opens the
+    Workspace, Synth FX finds the marker, so the project's plugins aren't made (safe mode), and
+    Play plays. Returns 0 if so."""
+    r = BootRig(axf)
+    r.sd.files, r.sd.dirs = dict(first.sd.files), set(first.sd.dirs)
+    m = r.m
+    pattern_updates, notes = [0], [0]
+
+    def bump(counter):
+        def f(mm):
+            counter[0] += 1
+        return f
+    r.watch(m.addr("_ZN14cPatternEditor6updateEv"), bump(pattern_updates))
+    r.watch(m.addr("_ZN9Sequencer10sendNoteOnEhPNS_9strPlayer14strPlayerTrack11strSendStepE"), bump(notes))
+    status = m.addr("_ZN4mods7synthfx10slotStatusEii")
+    instance = m.addr("_ZN4mods7synthfx12slotInstanceEii")
+    try:
+        r.fill_stack()
+        r.boot()
+        for i in range(3000):
+            r.loop()
+            r.interrupt()
+            if pattern_updates[0] > 5:
+                break
+        before, quiet = len(r.sd.calls), 0
+        for i in range(20000):          # the Workspace's load, then the mods' main loop
+            r.loop()
+            r.interrupt()
+            quiet = quiet + 1 if len(r.sd.calls) == before else 0
+            before = len(r.sd.calls)
+            if quiet > 200:
+                break
+        slots = m.addr("_ZN4mods7synthfx5slotsE")
+        files = [m.read(slots + 100 * i, 48).split(b"\0")[0].decode() for i in range(6)]
+        statuses = [m.call(status, i // 2, i % 2) & 0xFF for i in range(6)]
+        made = [m.call(instance, i // 2, i % 2) < 0x80000000 for i in range(6)]
+        print("second start: Pattern screen up, slots", files, "statuses", statuses, "made", made,
+              "marker", MARKER in r.sd.files, "free heap", r.free_heap(), flush=True)
+        PLAY = 23
+        r.press(PLAY)
+        r.loop()
+        r.interrupt()
+        r.release(PLAY)
+        peak = 0
+        for i in range(blocks):
+            r.loop()
+            left, right = r.interrupt()
+            peak = max(peak, max(map(abs, left)), max(map(abs, right)))
+        print(f"second start: {blocks} blocks played, notes {notes[0]}, peak {peak}, failures {r.failures}",
+              flush=True)
+    except RuntimeError as e:
+        print("second start STOPPED", e, "failures", r.failures)
+        return 1
+    hung = [i for i, f in enumerate(files) if f == "GuardHang.ptsfx"]
+    if not hung or any(made[i] or statuses[i] != SKIPPED for i in hung) or notes[0] == 0 or r.failures:
+        print("FAILED: the second start isn't in safe mode with the project's plugin skipped, or doesn't play")
+        return 1
+    return 0
+
+
 def main():
     import bisect
 
@@ -274,9 +346,16 @@ def main():
     ap.add_argument("--expect-synthfx", action="store_true",
                     help="fail unless the project's Synth FX slots loaded, their plugins were made and the "
                          "insert ran on every block")
+    ap.add_argument("--card-files", type=Path, help="a folder whose files go in /SynthFX/ on the card")
+    ap.add_argument("--expect-hang", action="store_true",
+                    help="the project's GuardHang plugin never returns: fail unless the Open hangs inside the "
+                         "plugins' code with the start marker on the card and no file open, and a second start "
+                         "from that card is in safe mode (the project's plugin not made) and plays")
     args = ap.parse_args()
     r = BootRig(args.axf)
     m = r.m
+    if args.card_files:
+        card_files(r, args.card_files)
     funcs = sorted((s.addr & ~1, n) for n, s in r.syms.items() if s.is_func and s.addr)
     addrs = [a for a, _ in funcs]
 
@@ -386,8 +465,23 @@ def main():
                       f" stack {r.max_stack()} failures {r.failures} effects {active()}"
                       f" interrupts inside main {fired[0]}", flush=True)
     except RuntimeError as e:
+        if args.expect_hang:
+            pc = m.uc.reg_read(UC_ARM_REG_PC)
+            pool = max((s for n, s in r.syms.items() if "synthfx" in n and "codePool" in n), key=lambda s: s.size)
+            inside = pool.addr <= pc < pool.addr + pool.size
+            marker = MARKER in r.sd.files
+            workspace = [k for k in r.sd.files if k.endswith("Workspace/mods.bin")]
+            print("hung:", e, "inside the plugins' code", inside, "marker", marker, "open files",
+                  len(r.sd.handles), "Workspace mods.bin", workspace, flush=True)
+            if not (inside and marker and not r.sd.handles and workspace):
+                print("FAILED: not the hang the start marker is for")
+                return 1
+            return second_start(args.axf, r, args.blocks)
         print("STOPPED", e, "failures", r.failures)
         where()
+        return 1
+    if args.expect_hang:
+        print("FAILED: the project's plugin never hung")
         return 1
     print("sd unexpected", sorted(set(r.sd.unexpected))[:12], "allocations in the interrupt", r.interrupt_allocs)
     if args.expect_tracklen:

@@ -8,6 +8,7 @@
     python tools/emu/make_masterfx_test_project.py "<project>" "<out folder>" --synths
     python tools/emu/make_masterfx_test_project.py "<project>" "<out folder>" --sound
     python tools/emu/make_masterfx_test_project.py "<project>" "<out folder>" --synthfx
+    python tools/emu/make_masterfx_test_project.py "<project>" "<out folder>" --synthfx-plugins
 
 The project given is only read. In the copy:
 - project.mt: the new name, the voices given on the three synth parts, both sends at 60.
@@ -27,6 +28,8 @@ resets a part whose synthType it doesn't know).
 
 --synthfx writes the Synth FX set (SYNTHFX_LADDER), lightest first: mods.bin has Synth FX and Master FX
 On and record 16 holds each part's effect settings, the rest of the source's mods.bin kept.
+--synthfx-plugins writes the plugin set (PLUGIN_LADDER) the same way, with record 16 version 3: each
+slot's plugin file and knobs, and WAVE's Placement.
 
 --sound writes that file's last set. `A1 Master FX sound` is one voice of ACD Init with a short note every 16
 steps, so the gaps let the reverb and delay be heard, with no masterfx.bin. `R2 Real project sends` is the source
@@ -253,9 +256,45 @@ def store_records(data: bytes) -> list:
     return records
 
 
-def synthfx_mods_file(source: bytes, parts, effects=None) -> bytes:
-    """The source's mods.bin (or none) with Synth FX and Master FX On and record 16 holding parts.
-    effects: (reverb, delay) for Master FX's record, or the source's kept."""
+# Record 16 version 3 (synthfxSettings.cpp): for each part, FX1 then FX2, a slot's file name (48 B)
+# and its 12 knobs (NaN: the plugin's default); then a Placement byte for each slot, 1 for Pre.
+SLOTS_VERSION = 3
+SLOT_FILE, SLOT_KNOBS = 48, 12
+
+
+def slots_record(parts) -> bytes:
+    """parts: for each of the 3, (FX1, FX2), each None or (plugin, knobs, pre)"""
+    slots, placement = b"", b""
+    for part in parts:
+        for slot in part:
+            name, knobs, pre = slot or ("", (), False)
+            file = f"{name}.ptsfx".encode() if name else b""
+            assert len(file) < SLOT_FILE and len(knobs) <= SLOT_KNOBS
+            vals = list(knobs) + [float("nan")] * (SLOT_KNOBS - len(knobs))
+            slots += file.ljust(SLOT_FILE, b"\0") + struct.pack("<12f", *vals)
+            placement += bytes([1 if name and pre else 0])
+    assert len(slots + placement) == 582
+    return slots + placement
+
+
+# The plugin set: name, voices, (reverb, delay), engine, each part's slots; lightest first and the
+# hang last. The Delay and the two Guard plugins are files of build/device/synthfx_card
+# (tools/synthfx/device/build.sh), which go in /SynthFX/ on the card.
+DIST_PRE = ("Distortion", (100, 50, 0), True)                  # Gain 100 %, Tone 50 %, 0 dB, Pre
+PHASER_WORST = ("Phaser", (50, 50, 90, 100), False)            # Rate, Depth, Feedback +90 %, Mix 100 %
+NONE = (None, None)                                             # a part with both slots empty
+PLUGIN_LADDER = (
+    ("P1 1 voice ACD Delay", (1, 0, 0), None, "ACD", ((None, ("Delay", (), False)), NONE, NONE)),
+    ("P2 8 WAVE Pre worst FX", (4, 2, 2), None, "WAVE", ((DIST_PRE, PHASER_WORST),) * 3),
+    ("G1 1 voice ACD GuardSlow", (1, 0, 0), None, "ACD", ((("GuardSlow", (), False), None), NONE, NONE)),
+    ("G2 1 voice ACD GuardHang", (1, 0, 0), None, "ACD", ((("GuardHang", (), False), None), NONE, NONE)),
+)
+
+
+def synthfx_mods_file(source: bytes, parts, effects=None, version=1) -> bytes:
+    """The source's mods.bin (or none) with Synth FX and Master FX On and record 16 holding parts
+    (version 1: each part's ten steps; 3: the bytes of slots_record). effects: (reverb, delay) for
+    Master FX's record, or the source's kept."""
     dropped = (0, SYNTHFX_RECORD) + ((MASTERFX_RECORD,) if effects else ())
     records = [r for r in store_records(source) if r[0] not in dropped]
     switches = bytearray(MOD_SYNTHFX + 1)
@@ -263,9 +302,12 @@ def synthfx_mods_file(source: bytes, parts, effects=None) -> bytes:
     if old:
         switches[:len(old[0][2])] = old[0][2][:len(switches)]
     switches[MOD_MASTERFX] = switches[MOD_SYNTHFX] = 1
-    settings = b"".join(bytes(p) for p in parts)
-    assert len(settings) == 30
-    records = [(0, 1, bytes(switches))] + records + [(SYNTHFX_RECORD, 1, settings)]
+    if version == 1:
+        settings = b"".join(bytes(p) for p in parts)
+        assert len(settings) == 30
+    else:
+        settings = bytes(parts)
+    records = [(0, 1, bytes(switches))] + records + [(SYNTHFX_RECORD, version, settings)]
     if effects:
         records.append((MASTERFX_RECORD, 1, bytes(effects)))
     payload = b"".join(struct.pack("<BBH", i, v, len(d)) + d for i, v, d in records)
@@ -289,6 +331,20 @@ def make_synthfx_ladder(source: Path, parent: Path) -> list:
         out.append(make_synthfx(source, parent, name, voices, worst=False, engine=engine, parts=parts,
                                 effects=effects))
     return out
+
+
+def make_plugin_project(source: Path, parent: Path, entry, name=None) -> Path:
+    """One of PLUGIN_LADDER, under its own name or the one given"""
+    title, voices, effects, engine, parts = entry
+    folder = make(source, parent, name or title, voices, engine=engine)
+    old = folder / "mods.bin"
+    old_bytes = old.read_bytes() if old.exists() else b""
+    old.write_bytes(synthfx_mods_file(old_bytes, slots_record(parts), effects or (0, 0), SLOTS_VERSION))
+    return folder
+
+
+def make_plugin_ladder(source: Path, parent: Path) -> list:
+    return [make_plugin_project(source, parent, entry) for entry in PLUGIN_LADDER]
 
 
 def make_ladder(source: Path, parent: Path) -> list:
@@ -372,11 +428,13 @@ def main() -> int:
     parser.add_argument("--synths", action="store_true")
     parser.add_argument("--sound", action="store_true")
     parser.add_argument("--synthfx", action="store_true")
+    parser.add_argument("--synthfx-plugins", action="store_true")
     args = parser.parse_args()
     try:
-        if args.ladder or args.engines or args.sound or args.synths or args.synthfx:
+        if args.ladder or args.engines or args.sound or args.synths or args.synthfx or args.synthfx_plugins:
             maker = (make_ladder if args.ladder else make_engines if args.engines else make_sound if args.sound
                      else make_synthfx_ladder if args.synthfx
+                     else make_plugin_ladder if args.synthfx_plugins
                      else lambda source, parent: make_engines(source, parent, SYNTHS_LADDER))
             for folder in maker(args.project, args.out):
                 print(f"Copy written: {folder}")

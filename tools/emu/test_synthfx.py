@@ -46,6 +46,12 @@ Each part plays note 60 (PERC: 48, which differs left and right, so a lost right
    filter and Post doesn't; on another engine a Pre slot runs as Post, sample for sample; a knob edit
    reaches every voice's instance; all 8 voices with two Pre slots, and 3 WAVE parts 3 + 3 + 2, under
    the rules, and their cost.
+13. The guards and a user's plugin, with the device test's files (build/device/synthfx_card, from
+   tools/synthfx/device/build.sh) on the card and a clock that counts the plugins' instructions as
+   cycles: GuardSlow at Light keeps running, at Heavy is bypassed after 8 blocks over a quarter block,
+   the sound untouched either way; the SDK's Delay echoes, under the rules; with the marker on the
+   card at start a project's plugins aren't made, a user's pick is, and safe mode ends 5 s after it;
+   the marker is on the card before a new plugin's first block (GuardHang's, which never returns).
 
 Usage: python tools/emu/test_synthfx.py <mods.axf> <reference.axf> [--before <phase 1 axf>] [--only SECTION]
        [--engines 1,6]
@@ -61,10 +67,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from unicorn.arm_const import UC_ARM_REG_R0  # noqa: E402
+from unicorn.arm_const import UC_ARM_REG_PC, UC_ARM_REG_R0  # noqa: E402
 
 from machine import Machine  # noqa: E402
-from sound_rig import BLOCK, SoundRig, peak  # noqa: E402
+from sound_rig import BLOCK, BLOCK_MS, SoundRig, peak  # noqa: E402
 from test_step0 import menu_item_named  # noqa: E402
 from test_synths import BLOCK_BUDGET, CHORD, PHASE, WAVE, clip_run  # noqa: E402
 from test_synths import Rig as SynthsRig  # noqa: E402
@@ -863,8 +869,195 @@ def pre(mods):
               f"({100 * extra / BLOCK_BUDGET:.1f} % of a block's {BLOCK_BUDGET:,}; plan: under 25 %)")
 
 
+# ---- 13. the guards and a user's plugin, before the unit (DEVICE_TEST_LADDER.md's plugin set) ----
+GUARD_CARD = Path(__file__).resolve().parents[2] / "build" / "device" / "synthfx_card" / "SynthFX"
+ACD = 1
+MARKER = "/SynthFX/.starting"
+CYCLES_PER_US = 600                 # the unit's 600 MHz core
+BUDGET = CYCLES_PER_US * (2902 // 4)  # synthfxPluginsCe.cpp: a quarter of a block
+EMPTY, LOADING, RUNNING, BYPASSED, FAILED = range(5)   # synthfxMod.h's SlotState
+SKIPPED = 7                         # plugins::Status::skipped
+
+
+class GuardRig(Rig):
+    """The Rig with files on the card before the mods start (the marker among them, if asked) and a
+    cycle clock that counts the plugins' own instructions, an instruction as a cycle, so the time
+    guard reads what it reads on the unit; the firmware's code adds nothing to it."""
+
+    def __init__(self, axf, files=None, marker=False):
+        self.pool_insns = 0
+        self._card = dict(files or {})
+        if marker:
+            self._card[MARKER] = b"1"
+        super().__init__(axf)
+        m = self.m
+        lo, hi = self.code_pool
+        self.hook_range(lo, hi, lambda uc, x, sz, u: setattr(self, "pool_insns", self.pool_insns + 1))
+        m.uc.ctl_flush_tb()
+        self._state = m.addr("_ZN4mods7synthfx9slotStateEii")
+        self._status = m.addr("_ZN4mods7synthfx10slotStatusEii")
+        self._safe = sym_containing(self.syms, "synthfx", "inSafeMode").addr   # safeMode() is not linked
+
+    def _fake_timer(self):
+        super()._fake_timer()
+        m = self.m
+        vt = m.r32(self.timer)          # Timer's slots: millis, micros, delay, clockCycles, clockCyclesPerUs
+        m.w32(vt + 4 * 3, m.add_stub(lambda mm: (int(self.now * 1000 * CYCLES_PER_US) + self.pool_insns)
+                                     & 0xFFFFFFFF))
+        m.w32(vt + 4 * 4, m.add_stub(lambda mm: CYCLES_PER_US))
+
+    def _fake_platform(self):
+        super()._fake_platform()
+        self.sd.files.update(self._card)
+
+    def from_project(self, part, slot, name, knobs=()):
+        """A project's slot, as a load sets it: safe mode may skip it"""
+        self.set_slot(part, slot, name, knobs)
+        self.m.call(self._remake, part, slot, 1, max_insns=50_000_000)
+        self.m.uc.ctl_flush_tb()
+
+    def state(self, part, slot) -> int:
+        return self.m.call(self._state, part, slot) & 0xFF
+
+    def status(self, part, slot) -> int:
+        return self.m.call(self._status, part, slot) & 0xFF
+
+    def safe_mode(self) -> bool:
+        return self.m.r8(self._safe) != 0
+
+
+def card_files(*names):
+    return {f"/SynthFX/{n}.ptsfx": (GUARD_CARD / f"{n}.ptsfx").read_bytes() for n in names}
+
+
+def rms(x):
+    return math.sqrt(sum(v * v for v in x) / max(1, len(x)))
+
+
+def guards(mods):
+    """13. The time guard, the start marker and safe mode, and the SDK's Delay as a user's plugin, on
+    the real firmware, with the files the device test puts on the card"""
+    if not GUARD_CARD.is_dir():
+        check(False, f"guards: {GUARD_CARD} (tools/synthfx/device/build.sh) is there")
+        return
+    files = card_files("GuardSlow", "GuardHang", "Delay")
+
+    # The time guard: GuardSlow passes the sound through, so a part with it sounds as without it,
+    # running or bypassed; Light stays under the budget, Heavy is bypassed after 8 blocks over it
+    def slow(load):
+        r = GuardRig(mods, files)
+        r.set_instrument(0, ACD)
+        r.note(0, 60, True)
+        out = list(r.blocks(4)[0])
+        if load is not None:
+            r.fx(0, 0, "GuardSlow", (load,))
+        costs, states = [], []
+        for _ in range(24):
+            n0 = r.pool_insns
+            out += r.block()[0]
+            r.update()
+            costs.append(r.pool_insns - n0)
+            states.append(r.state(0, 0))
+        return r, out, costs, states
+
+    _, dry, _, _ = slow(None)
+    r, light, costs, states = slow(0)
+    turn = max(costs) / 50_000
+    check(light == dry and all(s == RUNNING for s in states[1:]) and 0 < max(costs) < BUDGET,
+          f"GuardSlow Light: keeps running and passes the part through, sample for sample; "
+          f"{max(costs):,} instructions a block of the budget's {BUDGET:,} ({turn:.1f} a turn), states {states[:4]}")
+    r, heavy, costs, states = slow(1)
+    over = [c > BUDGET for c in costs]
+    first = over.index(True) if any(over) else None
+    ran = sum(over)
+    check(heavy == dry and first is not None and ran == 8 and not any(over[first + 8:])
+          and all(s == BYPASSED for s in states[first + 8:]) and r.instances() == 1,
+          f"GuardSlow Heavy: over the budget for 8 blocks in a row ({ran}, from block {first}), then bypassed "
+          f"(states {states[first + 7:first + 10] if first is not None else states}) and not run, the sound "
+          f"untouched (sample for sample as without it: {heavy == dry}), the plugin kept ({r.instances()})")
+
+    # The SDK's Delay, from the card as a user's file: echoes after the note, the part made stereo
+    def delay(on):
+        r = GuardRig(mods, files)
+        r.set_instrument(0, ACD)
+        r.note(0, 60, True)
+        r.blocks(2)
+        if on:
+            r.fx(0, 1, "Delay", (180, 60, 50))      # Time 180 ms, Feedback 60 %, Mix 50 %
+        left, right = r.blocks(8)
+        r.note(0, 60, False)
+        heap0 = r.heap_brk
+        cost = r.count_open(lambda: r.blocks(4)) // 4
+        tail_l, tail_r = r.blocks(150)
+        return r, left + tail_l, right + tail_r, cost, heap0
+
+    r0, dl, dr, dcost, _ = delay(False)
+    r1, wl, wr, wcost, heap0 = delay(True)
+    late = slice(60 * BLOCK, 150 * BLOCK)           # 0.2 s on: the note's own release has gone
+    check(rms(wl[late]) > 4 * rms(dl[late]) + 20 and stereo(wl, wr) and not stereo(dl, dr)
+          and rules_ok(r1, heap0) and peak(wl + wr) < 32767 and r1.status(0, 1) == 0,
+          f"Delay (synthfx-sdk/examples) from the card: echoes after the note (rms {rms(wl[late]):.0f} "
+          f"against {rms(dl[late]):.0f} without it), the part stereo, under the rules, no clipping")
+    check(wcost - dcost <= BLOCK_BUDGET // 4,
+          f"Delay: {wcost - dcost:,} instructions a block, its own included ({100 * (wcost - dcost) / BLOCK_BUDGET:.1f} %)")
+
+    # Safe mode: the marker left by a stop. A project's plugins aren't made, a user's pick is, and
+    # 5 s after it the marker goes and safe mode ends; the skipped slots stay as they are
+    r = GuardRig(mods, files, marker=True)
+    was = r.safe_mode()
+    r.set_instrument(0, ACD)
+    r.note(0, 60, True)
+    r.from_project(0, 0, "GuardHang")
+    r.from_project(0, 1, "Delay")
+    skipped = [r.status(0, 0), r.status(0, 1)], [r.state(0, 0), r.state(0, 1)]
+    try:
+        out = []
+        for _ in range(10):             # r.block(), with a short limit so a hang stops soon
+            r.m.call(r._update, r.engine, r.left, r.right, BLOCK, max_insns=20_000_000)
+            r.now += BLOCK_MS
+            out += struct.unpack(f"<{BLOCK}h", r.m.read(r.left, 2 * BLOCK))
+    except RuntimeError as e:          # GuardHang made after all, and run
+        print("     ", e)
+        check(False, f"safe mode: the marker found at start, a project's GuardHang and Delay not made "
+                     f"(statuses {skipped[0]}, states {skipped[1]}): it ran and never returned")
+        return
+    made0 = r.instances()
+    r.fx(1, 0, "Chorus", PACK["Chorus"])
+    made1, kept, still = r.instances(), MARKER in r.sd.files, r.safe_mode()
+    r.now += 5001
+    r.update()
+    gone, after = MARKER not in r.sd.files, r.safe_mode()
+    r.blocks(4)
+    check(was and skipped == ([SKIPPED, SKIPPED], [FAILED, FAILED]) and made0 == 0 and peak(out) > 100,
+          f"safe mode: the marker found at start, a project's GuardHang and Delay not made (statuses "
+          f"{skipped[0]}, states {skipped[1]}, {made0} made), and the part plays dry (peak {peak(out)})")
+    check(made1 == 1 and kept and still and gone and not after and r.status(0, 0) == SKIPPED and r.instances() == 1,
+          f"safe mode: a user's pick is made ({made1}), the marker kept for 5 s ({kept}, {still}) then removed and "
+          f"safe mode over ({gone}, {not after}); the project's slots still not made ({r.status(0, 0)})")
+
+    # The marker before the plugin's code first runs: a project's GuardHang is made, and the
+    # marker is on the card before its first block, which never returns
+    r = GuardRig(mods, files)
+    r.set_instrument(0, ACD)
+    r.note(0, 60, True)
+    r.blocks(2)
+    r.from_project(0, 0, "GuardHang")
+    written = MARKER in r.sd.files
+    lo, hi = r.code_pool
+    pc = None
+    try:
+        r.m.call(r._update, r.engine, r.left, r.right, BLOCK, max_insns=2_000_000)
+    except RuntimeError as e:
+        pc = r.m.uc.reg_read(UC_ARM_REG_PC)
+        print("     ", e)
+    check(written and pc is not None and lo <= pc <= hi,
+          f"GuardHang: the marker on the card when it is made ({written}), before its first block, which "
+          f"never returns (stopped at {pc if pc is None else hex(pc)}, inside the plugins' code: "
+          f"{pc is not None and lo <= pc <= hi})")
+
+
 SECTIONS = ("config", "off_is_ce", "mix_zero", "as_before", "each_effect", "order_and_swap", "release",
-            "shared", "garbage", "rules_and_cost", "wave_off_and_mono", "old_patches", "pre")
+            "shared", "garbage", "rules_and_cost", "wave_off_and_mono", "old_patches", "pre", "guards")
 
 
 def main() -> int:

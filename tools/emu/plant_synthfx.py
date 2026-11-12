@@ -34,6 +34,8 @@ SLOTS = "core/mods/synthfx/synthfxSlots.cpp"     # the slots' plugins made and l
 PAGE = "core/mods/synthfx/synthfxPage.cpp"       # the rows
 SETTINGS = "core/mods/synthfx/synthfxSettings.cpp"
 WAVE = "core/mods/synths/waveSynth.cpp"          # its voices' Pre hook
+PLUGINS = "core/mods/synthfx/synthfxPlugins.cpp"  # the guards: the marker and safe mode
+PLATFORM = "core/mods/synthfx/synthfxPluginsCe.cpp"  # the time guard's budget
 EDITOR = "core/interface/instrumentEditor/SynthPatchEditor.cpp"   # CRLF: a fault's \n matches its \r\n
 INSTR = "core/interface/instrumentEditor/fIinstrEdit.cpp"         # CRLF
 
@@ -109,6 +111,13 @@ FAULTS = [
      "placement[part * kSlots + slot] != 0 ? 1 : 0", "host", "", "Pre only as 1"),
     ("version 2 read at any length", SETTINGS, "else if (version == kRecordVersionV2 && length == kRecordSizeV2)",
      "else if (version == kRecordVersionV2)", "host", "", "version 2 at version 3's length"),
+    # the guards on the real firmware, with the device test's plugins (test_synthfx.py's guards)
+    ("the time budget a whole block", PLATFORM, "timer()->clockCyclesPerUs() * (2902u / 4u)",
+     "timer()->clockCyclesPerUs() * 2902u", "guards", "", "GuardSlow Heavy"),
+    ("safe mode skips nothing", PLUGINS, "if (fromProject && inSafeMode)", "if (fromProject && inSafeMode && !fromProject)",
+     "guards", "", "safe mode: the marker found at start"),
+    ("the marker never written", PLUGINS, "        io->write(kMarker, &one, 1);\n", "        (void)one;\n",
+     "guards", "", "GuardHang: the marker on the card"),
     # the page
     ("button 3 with the mod Off", MOD, "    return mods::on(Mod::synthfx);\n}\n\nbool partIsWave(int part)",
      "    return true;\n}\n\nbool partIsWave(int part)", "page:off", "", "mod Off"),
@@ -117,10 +126,29 @@ FAULTS = [
     ("Placement Pre not made again", PAGE, "        remake(part, slot, false); // a Pre plugin is one instance per voice: made again\n",
      "", "page:page", "", "WAVE, FX1 Distortion: Placement"),
     ("an edit not marked for saving", EDITOR, "    mods::projectSettingEdited();\n    mtFxShowList(true);",
-     "    mtFxShowList(true);", "page:page", "", "the pick lands in the project's record 16"),
+     "    mtFxShowList(true);", "page:page", "", "Pre then"),  # a pick's record is stored once it is made
     ("the same section keeps the rows", EDITOR, "if (previousValue != sectionListPos || mtFxLeft)",
      "if (previousValue != sectionListPos)", "page:page", "", "a section, even the same one"),
-    ("no redraw when a plugin is made", INSTR, "    mtSynthFxPoll();\n", "", "page:page", "", "then its knobs"),
+    ("no redraw when a plugin is made", INSTR, "    if (mtSynthFxPoll())", "    if (false)", "page:page", "",
+     "then its knobs"),
+    # the device's P2, 2026-11-12: CE calls the editor's update only while moduleRefresh is set
+    ("the rows polled only once", INSTR, "        moduleRefresh = 1; // polled every main loop while the rows are shown",
+     "", "page:page", "", "the rows redrawn by themselves"),
+    ("button 3 doesn't start the poll", EDITOR, "        IE->moduleRefresh = 1; // CE calls the editor's update",
+     "        // CE calls the editor's update", "page:page", "", "the rows redrawn by themselves"),
+    # the device, 2026-11-12: turning through a list made every plugin it passed
+    ("the pick made at once", PAGE, "    remakeWhenStill(part, slot); // made once", "    remake(part, slot, false); // made once",
+     "page:page", "", "none of them read or made"),
+    ("the wait never ends", SLOTS, "if (l.picked && plugins::now() - l.pickedAt >= kPickRestMs)",
+     "if (l.picked && plugins::now() - l.pickedAt >= kPickRestMs * 1000)", "page:page", "", "FX1 picks the Overdrive"),
+    ("a waiting slot's knobs shown", SLOTS, "live[part][slot].count > 0 && !live[part][slot].picked ?",
+     "live[part][slot].count > 0 ?", "page:page", "", "with no knob rows"),
+    ("the record not stored when a pick is made", SLOTS, "    if (picksMade)", "    if (false)", "page:page", "",
+     "the pick lands in the project's record"),
+    ("the record stored before a swap is made", SLOTS, "if (l.storeWhenMade && !l.pending)",
+     "if (l.storeWhenMade)", "page:page", "", "stored once it was made over the old one"),
+    ("Delete on a slot waits", PAGE, "        if (changed)\n        {\n            remake(part, slot, false);\n",
+     "        if (false)\n        {\n            remake(part, slot, false);\n", "page:page", "", "Delete on FX1"),
     ("the other slot's plugin offered", PAGE, "e->status != plugins::Status::ok || usedByOtherSlot(part, slot, e->file)",
      "e->status != plugins::Status::ok", "page:page", "", "FX2's list"),
     ("Delete leaves a knob", PAGE, "        plugins::setKnob(id, static_cast<uint32_t>(knob), p->default_val);\n", "",

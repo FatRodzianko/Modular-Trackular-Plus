@@ -43,6 +43,9 @@ CACHE = ROOT / "build" / "test_cache.json"
 SYNTHFX_RIG = ROOT / "build" / "emu" / "synthfx_rig.axf"
 SYNTHFX_PACK = ROOT / "build" / "synthfx" / "pack"
 LEVEL_A = ROOT / "build" / "emu" / "synths_level_a.axf"
+# The Synth FX device test's plugins (tools/synthfx/device/build.sh, in WSL too): the SDK's examples
+# and the guard tests, which test_synthfx.py's guards and the hang's boot put on the card
+SYNTHFX_CARD = ROOT / "build" / "device" / "synthfx_card" / "SynthFX"
 # Synth FX phase 1's firmware (commit 42a415e, built with `make plus EDITION_NAME=MT`): the built-in
 # effects a version 1 project played, which test_synthfx.py's as_before compares the plugins with
 SYNTHFX_BEFORE = ROOT / "build" / "emu" / "TrackerPlus_MT_p1.axf"
@@ -116,7 +119,8 @@ def jobs_for(args, projects):
         Job("songloop", e / "test_songloop.py", mods, ref, inputs=both),
         Job("sound rig", e / "test_sound_rig.py", mods, ref, inputs=both),
         Job("synths", e / "test_synths.py", mods, inputs=[mods]),
-        Job("synthfx", e / "test_synthfx.py", mods, ref, "--before", SYNTHFX_BEFORE, inputs=both + (SYNTHFX_BEFORE,)),
+        Job("synthfx", e / "test_synthfx.py", mods, ref, "--before", SYNTHFX_BEFORE,
+            inputs=both + (SYNTHFX_BEFORE, SYNTHFX_CARD)),
         Job("synthfx page", e / "test_synthfx_page.py", mods, ref, inputs=both),
         Job("synthfx plugins", ROOT / "tools" / "synthfx" / "test_runtime.py", SYNTHFX_RIG,
             inputs=[SYNTHFX_RIG, SYNTHFX_PACK, ROOT / "build" / "synthfx" / "rig"]),
@@ -150,7 +154,7 @@ def jobs_for(args, projects):
                             inputs=[args.diag, projects["worst"]]))
     if projects:
         for label, folder in projects.items():
-            if label in ("tracklen", "synthfx"):
+            if label in ("tracklen", "synthfx", "synthfx hang"):
                 continue
             for firmware, axf in (("mods", mods), ("reference", ref)):
                 jobs.append(Job(f"boot {label} {firmware}", boot, axf, folder, "--blocks", 300, inputs=[axf, folder]))
@@ -170,13 +174,19 @@ def jobs_for(args, projects):
         jobs.append(Job("boot synthfx", boot, mods, fx, "--blocks", 300, "--expect-synthfx", inputs=[mods, fx]))
         jobs.append(Job("preempt synthfx", boot, mods, fx, "--blocks", worst_loops["worst"], "--expect-synthfx",
                         "--preempt", "3000,120000", "--preempt-play", play_gaps, inputs=[mods, fx]))
+        # A project whose plugin never returns (GuardHang): the Open hangs with the start marker on
+        # the card, and a second start from that card is in safe mode and plays
+        hang = projects["synthfx hang"]
+        jobs.append(Job("boot synthfx hang", boot, mods, hang, "--blocks", 100, "--card-files", SYNTHFX_CARD,
+                        "--expect-hang", inputs=[mods, hang, SYNTHFX_CARD]))
     return jobs
 
 
 def make_projects(source, parent):
     """The test projects, in a temporary folder: 8 voices held, and the worst case. Both with their effects.
     The third is the worst case with a track length on every track of every pattern, from a 1.2.0 tracklen.bin.
-    The fourth is the worst case on PERC with Synth FX at its heaviest on every part."""
+    The fourth is the worst case on PERC with Synth FX at its heaviest on every part. The fifth is one ACD
+    voice with GuardHang in FX1, the plugin that never returns."""
     import make_masterfx_test_project as maker
     from test_tracklen import side_file
     short = maker.make(source, parent, "tracklen", keep_masterfx=True, worst=True)
@@ -185,7 +195,8 @@ def make_projects(source, parent):
     return {"held": maker.make(source, parent, "held", keep_masterfx=True),
             "worst": maker.make(source, parent, "worst", keep_masterfx=True, worst=True),
             "tracklen": short,
-            "synthfx": maker.make_synthfx(source, parent)}
+            "synthfx": maker.make_synthfx(source, parent),
+            "synthfx hang": maker.make_plugin_project(source, parent, maker.PLUGIN_LADDER[-1], "synthfx hang")}
 
 
 def main():

@@ -45,12 +45,15 @@ struct Live
     uint8_t oldCount;
     bool pending;           // the slot's plugin to be made once old is freed
     bool fromProject;
+    bool picked;            // the page's pick, made once the encoder rests (remakeWhenStill)
+    bool storeWhenMade;     // a pick: the project's record again once made, its knobs then on its steps
     uint8_t status;         // plugins::Status of the last try
     uint32_t oldSince;
+    uint32_t pickedAt;
 
     constexpr Live()
         : id{ -1, -1, -1, -1, -1, -1, -1, -1 }, old{ -1, -1, -1, -1, -1, -1, -1, -1 }, count(0), oldCount(0),
-          pending(false), fromProject(false), status(0), oldSince(0)
+          pending(false), fromProject(false), picked(false), storeWhenMade(false), status(0), oldSince(0), pickedAt(0)
     {
     }
 };
@@ -151,6 +154,8 @@ void remake(int part, int slot, bool fromProject)
         return;
     }
     Live& l = live[part][slot];
+    l.picked = false;
+    l.storeWhenMade = false;
     if (l.count > 0) // only once the last old ones are freed (step makes the new one after)
     {
         retire(part, slot);
@@ -168,6 +173,18 @@ void remake(int part, int slot, bool fromProject)
     step(part, slot);
 }
 
+void remakeWhenStill(int part, int slot)
+{
+    if (!validSlot(part, slot))
+    {
+        return;
+    }
+    Live& l = live[part][slot];
+    l.picked = true;
+    l.pickedAt = plugins::now();
+    changedSince = true;
+}
+
 void remakeSoon(int part)
 {
     if (part >= 0 && part < kParts)
@@ -183,6 +200,7 @@ bool updateSlots()
         return false;
     }
     bool changed = false;
+    bool picksMade = false;
     const bool loaded = takeLoaded();
     for (int part = 0; part < kParts; part++)
     {
@@ -200,8 +218,25 @@ bool updateSlots()
     {
         for (int slot = 0; slot < kSlots; slot++)
         {
+            Live& l = live[part][slot];
+            if (l.picked && plugins::now() - l.pickedAt >= kPickRestMs)
+            {
+                remake(part, slot, false);
+                l.storeWhenMade = true;
+                changed = true;
+            }
             changed = step(part, slot) || changed;
+            if (l.storeWhenMade && !l.pending) // made (or failed), the old one let go first
+            {
+                l.storeWhenMade = false;
+                picksMade = true;
+            }
         }
+    }
+    if (picksMade)
+    {
+        // the record again: the edit stored it before the plugin was made and put its knobs on its steps
+        mods::projectSettingEdited();
     }
     if (plugins::takeBypassed() >= 0)
     {
@@ -239,6 +274,10 @@ SlotState slotState(int part, int slot)
         return SlotState::empty;
     }
     const Live& l = live[part][slot];
+    if (l.picked) // the old one plays on until the pick is made
+    {
+        return SlotState::loading;
+    }
     if (l.count > 0)
     {
         return plugins::bypassed(l.id[0]) ? SlotState::bypassed : SlotState::running;
@@ -257,7 +296,9 @@ uint8_t slotStatus(int part, int slot)
 
 int slotInstance(int part, int slot)
 {
-    return validSlot(part, slot) && live[part][slot].count > 0 ? live[part][slot].id[0] : -1;
+    // none while a pick waits: the one playing is the old plugin, not the slot's setting
+    return validSlot(part, slot) && live[part][slot].count > 0 && !live[part][slot].picked ? live[part][slot].id[0]
+                                                                                         : -1;
 }
 
 bool slotRunsPre(int part, int slot)

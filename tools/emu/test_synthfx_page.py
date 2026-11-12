@@ -42,7 +42,8 @@ import struct
 import sys
 from pathlib import Path
 
-from unicorn import UC_HOOK_MEM_READ
+from unicorn import UC_HOOK_CODE, UC_HOOK_MEM_READ, UC_HOOK_MEM_WRITE
+from unicorn.arm_const import UC_ARM_REG_R0
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from sound_rig import SoundRig  # noqa: E402
@@ -65,6 +66,8 @@ RECORD_SIZE = 3 * 2 * SLOT_RECORD + 6   # version 3: then each slot's Placement,
 # the pack as the lists show it (each plugin's own name)
 PACK = ("Bit Crusher", "Chorus", "Distortion", "Flanger", "Overdrive", "Phaser")
 NAN = float("nan")
+PICK_REST_MS = 400          # kPickRestMs: a pick from a slot's list is made once the encoder rests this long
+CREATE = "_ZN4mods7synthfx7plugins6createEPKcbPNS1_6StatusE"
 NAME = {f"{n.replace(' ', '')}.ptsfx": n for n in PACK}
 KNOB_ROWS = {"BitCrusher.ptsfx": ("Bits", "Rate", "Level"), "Chorus.ptsfx": ("Rate", "Depth", "Mix"),
              "Distortion.ptsfx": ("Gain", "Tone", "Level"), "Flanger.ptsfx": ("Rate", "Depth", "Feedback", "Mix"),
@@ -132,12 +135,36 @@ class EditorPage(MasterPage):
             start_mods(r, on)
             self.slots = m.addr(SLOTS)
             self.fx_table = next(s.addr for n, s in r.syms.items() if "synthfx" in n and "instanceTable" in n)
+            # every plugins::create, by its file: a plugin read from the card and made
+            self.created = []
+            at = m.addr(CREATE) & ~1
+            m.uc.hook_add(UC_HOOK_CODE, lambda uc, a, size, user: self.created.append(m.cstr(uc.reg_read(UC_ARM_REG_R0))),
+                          begin=at, end=at)
         r.set_instrument(0, engine)
         settings = m.alloc(512, 4)
         r.call("_ZN5Synth21initSynthPartSettingsEiR17SynthPartSettings", r.synth, 0, settings)
         r.call("_ZN11audioEngine28refreshSynthInstrumentParamsER17SynthPartSettingsi", r.engine, settings, 0)
         m.write(m.addr("mtProject") + self._last_used(), bytes([SYNTH0]))
+        # CE calls a screen's update only while its moduleRefresh is set (Interface::update), and the
+        # editor's start sets it; the editor's update clears it
+        self.refresh_at = self._refresh_offset()
+        m.write(self.page + self.refresh_at, bytes([1]))
+        # and the first main loop after start runs it, long before a first press
+        m.call(m.addr("_ZN17cInstrumentEditor6updateEv"), self.page, max_insns=200_000_000)
         self.take_log()
+
+    def _refresh_offset(self):
+        """cModuleBase::moduleRefresh: the editor's update writes it first (moduleRefresh = 0)"""
+        m = self.m
+        seen = []
+
+        def on_write(uc, access, address, sz, value, user):
+            if not seen and sz == 1:
+                seen.append(address - self.page)
+        h = m.uc.hook_add(UC_HOOK_MEM_WRITE, on_write, begin=self.page, end=self.page + 0x4000)
+        m.call(m.addr("_ZN17cInstrumentEditor6updateEv"), self.page, max_insns=200_000_000)
+        m.uc.hook_del(h)
+        return seen[0]
 
     def _last_used(self):
         """mtProject.values.lastUsedInstrument: the first byte of mtProject the patch editor reads."""
@@ -177,19 +204,33 @@ class EditorPage(MasterPage):
 
     def main_loop(self, ms=100):
         """Time passes (a swapped plugin is let go after 50 ms when no audio runs), then a main-loop
-        pass: the mods' update (the slots' plugins made and freed) and the editor's own update,
-        which redraws the rows when a slot changed."""
+        pass: the mods' update (the slots' plugins made and freed) and, as Interface::update calls it,
+        only while its moduleRefresh is set, the editor's own update, which redraws the rows when a
+        slot changed."""
         m = self.m
         self.r.now += ms
         m.call(m.addr("_ZN4mods6updateEv"), max_insns=200_000_000)
         m.uc.ctl_flush_tb()
-        m.call(m.addr("_ZN17cInstrumentEditor6updateEv"), self.page, max_insns=200_000_000)
+        if m.read(self.page + self.refresh_at, 1)[0]:
+            m.call(m.addr("_ZN17cInstrumentEditor6updateEv"), self.page, max_insns=200_000_000)
 
     def slot(self, part=0, slot=0):
         return slot_of(slot_bytes(self.m, self.slots), part, slot)
 
     def pre(self, part=0, slot=0):
         return pre_of(slot_bytes(self.m, self.slots), part, slot)
+
+    def rows(self, part=0):
+        """The Synth FX rows as the firmware has them now: (name, value)"""
+        m = self.m
+        out = m.alloc(64, 4)
+        rows = []
+        for row in range(m.call(m.addr("_ZN4mods7synthfx8rowCountEi"), part)):
+            m.call(m.addr("_ZN4mods7synthfx7rowNameEiiPcj"), part, row, out, 64)
+            name = m.cstr(out)
+            m.call(m.addr("_ZN4mods7synthfx7rowTextEiiPcj"), part, row, out, 64)
+            rows.append((name, m.cstr(out)))
+        return rows
 
     def made(self):
         """Plugin instances made now"""
@@ -218,12 +259,14 @@ class EditorPage(MasterPage):
         return [e[2] for e in self.log if e[0] == kind]
 
     def pick(self, file, slot=0, part=0, most=10):
-        """The encoder on a slot's row until the slot has file (the row must be selected), then a
-        main-loop pass: a pick over a made plugin is Loading until the main loop has let it go"""
+        """The encoder on a slot's row until the slot has file (the row must be selected), then the
+        encoder rests: a main-loop pass past the wait makes the pick, and a pick over a made plugin is
+        Loading until the next pass has let the old one go"""
         for _ in range(most):
             if self.slot(part, slot)[0] == file:
                 break
             self.turn(1)
+        self.main_loop(PICK_REST_MS + 100)
         self.main_loop()
         return self.slot(part, slot)[0] == file and self.instance(part, slot) >= 0
 
@@ -347,22 +390,58 @@ def test_page(mods):
     loading = after(texts, "FX1")
     check(file not in ("", "Overdrive.ptsfx", "Chorus.ptsfx") and loading == "Loading" and "Gain" not in texts and
           p.instance() == -1, f"a swap: FX1 to {file}, the row Loading ({loading}) and the old knobs gone")
+    p.main_loop(PICK_REST_MS + 100)
     p.main_loop()
     made = p.instance()
     count = sum(p.instance(0, s) >= 0 for s in range(2))
     texts, _ = p.drawn()
     now = after(texts, "FX1")
-    check(made >= 0 and count == 2, f"then the main loop lets the Overdrive go and makes it ({made}, {count} made)")
+    check(made >= 0 and count == 2 and p.created[-1:] == [file],
+          f"then, the encoder at rest, the main loop lets the Overdrive go and makes it ({made}, {count} made, "
+          f"{p.created[-1:]} the last read)")
     rows = KNOB_ROWS.get(file, ("?",))
     check(now == NAME.get(file) and all(after(texts, k) for k in rows),
           f"the page redraws itself once the plugin is made: FX1 {now}, then its knobs {rows}")
 
-    # Delete on FX1: None, the knobs' rows gone
+    # the wait (the unit, 2026-11-12: turning through the list made every plugin it passed, and a hang
+    # in one hung the unit): the encoder back through FX1's list, a tick every 100 ms, makes none of the
+    # plugins it passes. The one made plays on, and the slot is Loading with no knob rows of its own.
+    # The last one is made once the encoder has rested, and the record has its knobs
+    before = (p.made(), len(p.created))
+    passed = []
+    for _ in range(3):
+        p.turn(1)
+        passed.append(p.slot()[0])
+        p.main_loop()
+    texts, _ = p.drawn()
+    names = [n for n, _ in p.rows()]
+    waiting = (p.made(), len(p.created), p.instance())
+    check(len(set(passed)) == 3 and "" not in passed and waiting == (before[0], before[1], -1) and
+          after(texts, "FX1") == "Loading" and names[:2] == ["FX1", "FX2"],
+          f"turning through {passed} 100 ms a tick: none of them read or made ({waiting[1] - before[1]} read, "
+          f"{waiting[0]} made, as before {before[0]}), FX1 Loading ({after(texts, 'FX1')}) with no knob rows "
+          f"({names[:3]})")
+    p.main_loop(PICK_REST_MS)
+    p.main_loop()
+    texts, _ = p.drawn()
+    last = passed[-1]
+    check(p.created[before[1]:] == [last] and p.instance() >= 0 and after(texts, "FX1") == NAME.get(last) and
+          all(after(texts, k) for k in KNOB_ROWS.get(last, ("?",))),
+          f"the encoder at rest: only the last, {last}, read and made ({p.created[before[1]:]}), its rows drawn "
+          f"({after(texts, 'FX1')})")
+    rec = p.record()
+    want = record_slot(rec[1], 0, 0) if rec and len(rec[1]) == RECORD_SIZE else None
+    check(want is not None and want[0] == last and not any(math.isnan(k) for k in want[1][:len(KNOB_ROWS[last])]),
+          f"and the record has it with its knobs, stored once it was made over the old one ({want and want[:2]})")
+
+    # Delete on FX1: None, the knobs' rows gone, and the plugin let go at once (a press: no wait)
     p.press("delete")
     p.main_loop()
     texts, _ = p.drawn()
-    check(p.slot()[0] == "" and after(texts, "FX1") == "None" and after(texts, "FX2") == "Chorus" and p.instance() == -1,
-          f"Delete on FX1: None, its plugin let go, FX2 kept ({after(texts, 'FX1')}, {after(texts, 'FX2')})")
+    check(p.slot()[0] == "" and after(texts, "FX1") == "None" and after(texts, "FX2") == "Chorus" and p.instance() == -1
+          and p.made() == 1,
+          f"Delete on FX1: None, its plugin let go by the next main loop, FX2 kept ({after(texts, 'FX1')}, "
+          f"{after(texts, 'FX2')}, {p.made()} made)")
     others = slot_bytes(p.m, p.slots)[2 * SLOT_BYTES:]
     check(all(slot_of(others, part, s)[0] == "" for part in range(2) for s in range(2)),
           "the other parts' slots untouched")
@@ -433,6 +512,32 @@ def test_page(mods):
     texts, _ = p.drawn()
     check(texts.count("Placement") == 1 and p.instance(0, 1) >= 0,
           f"WAVE, FX2 Chorus: no Placement row of its own ({texts.count('Placement')} in all)")
+    # The device's P2 (2026-11-12): FX1 Distortion Pre swapped for the Bit Crusher, the rows left open.
+    # Loading, then the rows come back by themselves, each row's name over its own value; the
+    # encoder on Placement changes the Placement, not FX1's plugin
+    for _ in range(5):
+        p.press("up")                   # FX2 -> FX1
+    p.turn(1)
+    loading = p.drawn()[0]
+    p.main_loop(PICK_REST_MS + 100)     # the encoder rests
+    for _ in range(2):
+        p.main_loop()
+    texts, _ = p.drawn()
+    rows = p.rows()
+    paired = all(after(texts, n) == v for n, v in rows if texts.count(n) == 1)
+    check(p.slot()[0] == "BitCrusher.ptsfx" and "Loading" in loading and "Loading" not in texts and paired
+          and [n for n, _ in rows][:3] == ["FX1", "Placement", "Bits"] and after(texts, "FX2") == "Chorus",
+          f"WAVE, FX1 Distortion Pre -> Bit Crusher, the rows left open: Loading, then the rows redrawn by "
+          f"themselves, each name over its value ({rows[:5]}; drawn {texts[:12]})")
+    p.press("down")                     # Placement: a new plugin starts Post
+    p.turn(-1)
+    for _ in range(2):
+        p.main_loop()
+    texts, _ = p.drawn()
+    check(p.slot()[0] == "BitCrusher.ptsfx" and p.pre() and p.made() == 9 and after(texts, "Placement") == "Pre"
+          and after(texts, "FX1") == "Bit Crusher",
+          f"the encoder on Placement: Pre, FX1 still the Bit Crusher ({p.slot()[0]}, Pre {p.pre()}, "
+          f"{p.made()} made: 8 and FX2's, drawn {after(texts, 'FX1')}, {after(texts, 'Placement')})")
     for e, name in ((PHASE, "PHASE"), (1, "ACD")):
         q = EditorPage(mods, e, on=True)
         q.open()

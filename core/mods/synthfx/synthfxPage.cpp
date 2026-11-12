@@ -434,7 +434,7 @@ bool setRowStep(int part, int row, int step)
         }
         setSlotFile(part, slot, e->file);
     }
-    remake(part, slot, false);
+    remakeWhenStill(part, slot); // made once the encoder rests: turning past a plugin doesn't make it
     return true;
 }
 
@@ -452,7 +452,13 @@ bool defaultRow(int part, int row)
     }
     if (knob < 0)
     {
-        return setRowStep(part, row, 0); // None
+        // None at once: Delete is a press, not a turn through the list
+        const bool changed = setRowStep(part, row, 0);
+        if (changed)
+        {
+            remake(part, slot, false);
+        }
+        return changed;
     }
     const PtsfxParam* p = paramOf(part, slot, knob);
     if (p != nullptr)

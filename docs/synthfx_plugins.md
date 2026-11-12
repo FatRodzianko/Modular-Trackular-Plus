@@ -21,6 +21,9 @@ rows: FX1, its plugin's knobs, FX2, its plugin's knobs. On every engine, WAVE an
 
 - **A slot's row** picks the plugin: None, then every plugin in `/SynthFX/` that loaded
   cleanly, by its header's name, without the one in the part's other slot.
+- **A pick is loaded once the encoder rests** for 0.4 s, so turning through the list loads
+  none of the plugins it passes. Until then the old plugin plays on. Delete empties a slot at
+  once.
 - **While a plugin loads,** the row reads Loading. The page redraws when the plugin is
   ready.
 - **A knob's row** shows its label and its text. A `PTSFX_PARAM_LIST` knob with up to 16
@@ -159,7 +162,8 @@ A plugin is someone else's code in the audio interrupt, so the firmware watches 
 
 - **Time.** Each `process` call is timed with the cycle counter. Over a quarter of a block
   (about 435,000 cycles at 600 MHz) for 8 blocks in a row, the slot is bypassed and the page
-  says so.
+  says so. It stays bypassed, even if a knob makes the plugin faster, until you pick the plugin
+  again or open the project again.
 - **Output.** NaN or infinity becomes 0, and the plugin is reset before its next block.
   Anything beyond ±4 is held at ±4.
 - **Start.** A marker file, `/SynthFX/.starting`, is on the card from when a new plugin is first

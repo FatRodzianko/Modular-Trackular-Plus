@@ -188,6 +188,11 @@ bool takeSlotsChanged();
 // slots, as a project's, on the next updateSlots once the plugins have started.
 void remake(int part, int slot, bool fromProject);
 void remakeSoon(int part);
+// Main loop: the page's pick from a slot's list, made once the encoder has rested kPickRestMs (a
+// user's choice), so turning past a plugin doesn't make it. Until then the old plugin plays on and
+// the slot is loading, with no knob rows.
+constexpr uint32_t kPickRestMs = 400;
+void remakeWhenStill(int part, int slot);
 // Main loop: the slots that failed are tried again (the page opens; the card may have changed).
 void retryFailed();
 SlotState slotState(int part, int slot);

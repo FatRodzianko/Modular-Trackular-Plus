@@ -216,15 +216,17 @@ static void mtFxDefault()
     mtFxEdited(mods::synthfx::defaultRow(mtFxPart(), mtFxRow()));
 }
 
-// Main loop (cInstrumentEditor::update): a slot's plugin made, let go or stopped since: redraw
-void mtSynthFxPoll()
+// Main loop (cInstrumentEditor::update): a slot's plugin made, let go or stopped since: redraw.
+// Returns whether the rows are shown, so the editor keeps its update coming (moduleRefresh).
+bool mtSynthFxPoll()
 {
-    if (mods::synthfx::takeSlotsChanged() && mtFxView && IE->mode == mtInstEditModeSynthPatchEdit &&
-        !IE->keyboardManager.getState())
+    const bool shown = mtFxView && IE->mode == mtInstEditModeSynthPatchEdit;
+    if (mods::synthfx::takeSlotsChanged() && shown && !IE->keyboardManager.getState())
     {
         mtFxShowList(true);
         mtFxShowValue(true);
     }
+    return shown;
 }
 #endif
 
@@ -703,6 +705,7 @@ static void functSynthFx()
     if (mtFxView)
     {
         mods::synthfx::pageOpened();
+        IE->moduleRefresh = 1; // CE calls the editor's update only while this is set: mtSynthFxPoll
     }
     IE->paramListPos = 0;
     IE->selectedPlace[mtInstEditModeSynthPatchEdit] = 1;

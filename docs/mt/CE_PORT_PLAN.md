@@ -1195,7 +1195,7 @@ for every synth engine, CE's closed ones included.
 Planned 2026-11-11, from the source. Phase 1 (the runtime and the SDK) built 2026-11-11:
 "Phase 1, as built" below. Phase 2 (CE's engines on the two slots) built 2026-11-11: "Phase 2,
 as built" below. Phase 3 (WAVE and PHASE on the slots) built 2026-11-11: "Phase 3, as
-built" below. Phase 4 (the device) not started. Goal, the user's choices of
+built" below. Phase 4 (the device) run 2026-11-12, then retested with the fixes: "Phase 4, prepared" below. Goal, the user's choices of
 2026-11-11: each synth part has two effect slots, FX1 and FX2, that pick from one list of
 `.ptsfx` plugins in `/SynthFX/` on the card. A part can't use the same effect in both
 slots. Today's six effects (Overdrive, Distortion, Bit Crusher, Chorus, Flanger, Phaser)
@@ -1563,6 +1563,96 @@ it, and copy it to the card. WAVE and PHASE use the same two slots.
     - Tight: PHASE at Feedback 90 % agrees with the phase 1 build from block 166, against a
       limit of 170.
     - Not run: anything on the unit (phase 4, `DEVICE_TEST_LADDER.md` S5).
+- **Phase 4, prepared (2026-11-11).** No firmware change: the device test's files and the emulator
+  runs of them first. Firmware `build/TrackerPlus_MT_synthfx_plugins_diag.ptf`, the lockup recorder
+  build of 761cfc1 that the release tier ran.
+  - **Files:** `tools/synthfx/device/` (GuardSlow, GuardHang, `build.sh`, which also builds the SDK's
+    Delay and Tremolo into `build/device/synthfx_card/SynthFX`); `make_masterfx_test_project.py
+    --synthfx-plugins` (record 16 version 3: P1 the Delay, P2 8 WAVE voices with the Distortion Pre and
+    the Phaser on every part, G1 GuardSlow, G2 GuardHang); `DEVICE_TEST_LADDER.md`'s plugin set.
+  - **Emulator, before the unit:** `test_synthfx.py`'s `guards`, with a clock that counts only the
+    plugins' own instructions, as cycles: GuardSlow Light 300,020 instructions a block (6.0 a turn), kept
+    running, of the budget's 435,000; Heavy over it for exactly 8 blocks, then bypassed, the sound sample
+    for sample as without it; the Delay echoes, 22,262 instructions a block (1.3 %), under the rules;
+    with the marker on the card a project's GuardHang and Delay aren't made, a user's pick is, and safe
+    mode ends 5 s after it; the marker is on the card before GuardHang's first block. `boot_rig.py
+    --expect-hang` (release tier `boot synthfx hang`): CE's own Open of G2 hangs inside the plugin, with
+    the marker on the card, no file open and the Workspace's `mods.bin` written; a second start from that
+    card opens the Workspace with GuardHang skipped and plays. Planted faults: 3 of 3 (the budget a whole
+    block, safe mode skipping nothing, the marker never written). Release tier: 39 jobs, 0 failed.
+  - **What the marker covers:** it is written when a plugin is made and removed 5 s later, by the
+    clock, not by blocks run. A part with voices renders every block, so its plugins run from the first
+    block and a hang then is covered. A plugin on a part with no voices doesn't run until the part gets
+    one; if that is more than 5 s later and it hangs, the restart isn't in safe mode. Once safe mode has
+    ended, opening the page tries the skipped slots again (`retryFailed`), so a hanging plugin left in a
+    slot hangs again; the marker covers that restart too. The device steps set such a slot to None first.
+  - **Not known until the unit:** the plugins' cost from SDRAM through the I-cache against F1 to F6's
+    figures with the built-in effects (F6 was 94 to 96 % slowest); a GuardSlow turn's cycles (2 to 6 are
+    possible; Heavy is over the budget unless a turn is under 1.8 cycles); the recorder's restart from a
+    hang inside a plugin.
+  - **Device test 2026-11-12,** `TrackerPlus_MT_synthfx_plugins_diag.ptf`, from `/mfx_log.txt` and the
+    Profiler:
+    - F1 to F6 through the plugins, as the built-in effects read before: F1 33 %, F2 37 %, F3 53 %, F4
+      60 %, F5 61 %, F6 95 % slowest (log: average 82 %, slowest 92 %, 0 blocks over time). Code from
+      SDRAM costs CE's engines nothing that shows.
+    - S5 (8 WAVE voices, dry): average 35 %, slowest 44 %.
+    - P2 (8 WAVE voices, the Distortion Pre and the Phaser on every part): average 68 %, slowest 77 %
+      (89 % on the first play). With Super Saw on both oscillators: average 80 to 81 %, slowest 89 %,
+      and 1 of 902 blocks over time on the first play (slowest 100 %). The built-in effects read
+      average 62 to 65 %, slowest 75 to 82 % there: WAVE's Pre through 8 plugin instances costs about
+      16 points more than the old Distortion in ITCM.
+    - GuardSlow Heavy: 8 of 30,077 blocks over time, all 8 back to back, slowest 107 %, then bypassed:
+      the time guard works. That puts a turn at about 5.6 cycles (Light about 16 % of a block). Light
+      itself wasn't read: the project opened in safe mode.
+    - Three lockups, all GuardHang (`pc` in the code pool, the same one instruction each sample, no
+      fault): G2 as planned, and twice before it, when FX1's list was scrolled past the Phaser. The list
+      makes each plugin as it is scrolled over, and GuardHang was on the card from the start, which the
+      steps shouldn't have done. The recorder restarted the unit each time, and the next start was in
+      safe mode ("Safe mode: Delay", no knobs) until a pick ran 5 s.
+    - **Bug:** the rows weren't redrawn once a plugin was made, so a pick stayed "Loading" until the page
+      was opened again, and the names drawn for the Loading layout sat over the values of the made one
+      (on WAVE, the encoder on "Placement" then changed FX1's plugin). CE calls a screen's `update` only
+      while its `moduleRefresh` is set, and the editor's `update` clears it, so `mtSynthFxPoll` ran once.
+      The page rig called `update` every pass, past that gate. Fixed: `mtSynthFxPoll` returns whether the
+      rows are shown, the editor's `update` keeps `moduleRefresh` set while they are, and button 3 sets
+      it. The rig now calls `update` only while `moduleRefresh` is set (found from the editor's first
+      write in `update`), and the page test has the device's case: on WAVE, FX1 Distortion Pre swapped
+      for the Bit Crusher with the rows open, Loading and then the rows by themselves, each name over its
+      value; the encoder on Placement sets Pre and leaves FX1 alone. With the gate, the old build failed 6
+      of the page checks; planted faults 3 of 3 (the poll gone, run only once, not started by button 3;
+      the last was missed until the rig ran the editor's first `update` after its start, as the unit does).
+    - **The wait (the user's choice, 2026-11-12).** A pick from a slot's list is made once the encoder
+      has rested `kPickRestMs` (400 ms), so turning through the list makes none of the plugins it
+      passes. `setRowStep` calls `remakeWhenStill`, which marks the slot; `updateSlots` (main loop)
+      remakes it once the time is up. Meanwhile the old plugin plays on, the slot reads Loading,
+      and `slotInstance` is -1, so no knob or Placement rows show. Delete (None) and Placement
+      still remake at once. Since the edit stores the record before the plugin is made, the slot
+      stores it again once its pick is made and the old one let go (`storeWhenMade`), so the
+      record has the plugin's knobs on its steps; before, a swap's knobs stayed NaN in the record
+      until the next edit. RAM: `live` (DTCM) is 48 bytes bigger, 8 a slot, 192 in all. The page test has the case:
+      three ticks 100 ms apart read and make none (a hook counts `plugins::create`), Loading with no
+      knob rows, then only the last made once the encoder rests, with its knobs in the record.
+      Planted faults: the pick made at once, the wait never ends, a waiting slot's knobs shown,
+      Delete waits, the record not stored when a pick is made, the record stored before a swap is
+      made. All 20 of the page's planted faults caught (Delete waiting was missed until the Delete
+      check counted instances; "an edit not marked for saving" is now caught by Placement's record
+      byte, since a pick's record is stored once it is made). Firmware for the retest:
+      `build/TrackerPlus_MT_synthfx_wait_diag.ptf`. Release tier: 33 run, 6 cached, 0 failed.
+  - **Retest 2026-11-12,** `TrackerPlus_MT_synthfx_wait_diag.ptf`, GuardHang off the card:
+    - The unit started normally (no safe mode).
+    - P1: FX1's list turned quickly end to end and back: Loading, no stall; Tremolo and Delay each
+      made about half a second after the encoder stopped. Playing, a slow turn past two or three
+      plugins left the sound alone until the encoder stopped. Log: average 25 %, slowest 45 %.
+    - P2: FX1 Distortion to Bit Crusher, stopped and playing: the rows redrew by themselves, each
+      name over its value; Placement changed Pre and Post and left FX1 alone; Delete read None at
+      once. The Profiler's slowest didn't rise during the swap. Log: average 62 to 68 %, slowest 76 to
+      86 %, 0 blocks over time.
+    - G1 Light: average 38 %, slowest 45 % (the Profiler read 66 % on the first play, 44 % on the
+      second; the log has no block over 45 % in that play). Light costs about 18 points against the
+      bypassed slot's 20 % average, as the 5.6 cycles a turn predicted (16 %).
+    - G1 Heavy mid-play: 8 blocks over time, all back to back, slowest 109 %, then bypassed (20 to
+      21 % average, 26 to 30 % slowest). The bypass lasts until the plugin is made again (a pick or
+      the project opened), so Light then Heavy again, or stop and play, stays at 29 %: as designed.
 
 ## 4. Order and why
 

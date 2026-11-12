@@ -140,6 +140,41 @@ them to 1 a part only when the project before had another engine, so a run's fig
 On each, the patch editor's button 3 reads "Synth FX" and shows the part's rows, so the settings can
 be checked and changed by hand there.
 
+## The Synth FX plugin set: the slots, WAVE's Pre, a user's plugin and the guards
+
+Since 3.17 phase 2, Synth FX plays through `.ptsfx` plugins in `/SynthFX/`. The F set above still
+works: its projects hold version 1 settings, which the firmware converts into the two slots, so
+its figures compare with the built-in effects'. This set adds what only plugins have.
+
+`python tools/emu/make_masterfx_test_project.py "<project>" build/device/synthfx_plugins --synthfx-plugins`
+writes the projects, with record 16 version 3 (each slot's plugin, knobs and Placement), and
+`tools/synthfx/device/build.sh` writes the card's extra plugins to `build/device/synthfx_card/SynthFX`:
+the SDK's Delay and Tremolo, built as a user would, and two guard tests that are not for music.
+GuardSlow passes the sound through after a busy loop: Light is well under the time guard's quarter
+block, Heavy well over. GuardHang's first block never returns.
+
+| Project | Voices | Engine | Synth FX | What it isolates |
+|---|---|---|---|---|
+| `P1 1 voice ACD Delay` | 1 | ACD | FX2 the Delay | A user's plugin from the card, opened from a project |
+| `P2 8 WAVE Pre worst FX` | 8 | WAVE | Distortion Pre, Phaser at Feedback +90 % and Mix 100 %, every part | WAVE's Pre, 8 instances a slot, at the limit |
+| `G1 1 voice ACD GuardSlow` | 1 | ACD | FX1 GuardSlow | The time guard |
+| `G2 1 voice ACD GuardHang` | 1 | ACD | FX1 GuardHang | The start marker: the unit hangs, the recorder restarts it, safe mode |
+
+GuardHang goes on the card only for `G2`, after everything else: on 2026-11-12 it was there from
+the start, and turning FX1's list past the Phaser hung the unit twice. A list then made each plugin
+it was turned over; since then a pick is made only once the encoder rests 0.4 s, but resting on
+GuardHang still hangs the unit. `G2` hangs the unit on purpose, so it is last and only on the recorder build. The hang comes at the
+Open, with the sequencer stopped, so the recorder restarts the unit after its 20 s. CE then opens the
+Workspace, which is `G2`, and the marker must keep its plugin from loading. Take
+`/SynthFX/GuardHang.ptsfx` off the card after it. If the unit hangs again at every start, the marker
+failed: take the card out and delete that file on a computer.
+
+The emulator ran each before the unit: `test_synthfx.py`'s `guards` (GuardSlow, the Delay, safe
+mode, the marker before a plugin's first block) and the release tier's `boot synthfx hang` (CE's own
+Open of `G2` hangs inside the plugin with the marker on the card and no file open, and a second start
+from that card is in safe mode and plays). Neither has a clock, so the time guard's reading there is
+instructions taken as cycles.
+
 ## What a firmware comes with
 
 Each one handed over says what ran, what didn't, and the risk to the unit.
