@@ -57,9 +57,27 @@
 
 * **Sequencer, MIDI & Pattern Editor Fixes (All 3 Devices)**:
 	* **Fixed Freeze After Leaving Performance Mode (Tracker+ & Tracker Mini)**: Moved the pending pattern reload on sequencer stop out of the audio interrupt callback and into the main loop, fixing a freeze when previewing steps or receiving MIDI Stop after exiting Performance Mode.
+	* **Smoother Song Playback & External `MIDI Start` Reliability**: Fixed freezes when background auto-saving overlapped a pattern change during Song playback or when receiving `MIDI Start` on the Song screen, and ensured playback stops cleanly if the next pattern cannot be loaded in time instead of playing or saving the wrong pattern.
+	* **Full 255-Slot Song Fixes**: Fixed freezes and unexpected jumps back to Slot 1 when playing to the end of, or deleting slots from, a full 255-slot song, and ignored Song slot paste when nothing has been copied yet.
+	* **Pattern Editor Cursor, Fill, Pad & Roll Fixes**: Fixed the cursor jumping past the end of a pattern after pasting long selections with a large Edit Step, kept `Note Up` Rolls on the highest note (`G9`) instead of wrapping down to `C0`, fixed `Random Fx` and `Off` ranges in the Fill popup, ignored unused pads `47–48` in the `FX` pad shortcut, and kept pads in normal note layout when a MIDI or Synth instrument is selected.
 	* **Fixed Synth FX MIDI CC Control in Performance Mode**: Restored MIDI CC control over synth effect parameters in Performance Mode.
 	* **Fixed Song Mode Block Copy/Paste**: Fixed copying and pasting song arrangement blocks smaller than 32 steps.
 	* **Fixed Beat-Slice Pad Guide Lights in Live Recording Mode (Tracker & Tracker+)**: Enabled beat-slice pad guide lights in the Pattern Editor when Live Recording (`Rec + Play`) is active, matching step-record mode and the Instrument Parameters screen.
+
+* **Performance Mode Fixes (All 3 Devices)**:
+	* **Fixed Pattern Edits Resetting After Visiting `Perform` While Stopped**: Leaving `Instrument Parameters` or `Master` after opening them from `Perform` while playback is stopped now exits Performance Mode immediately, preventing the pattern from reloading from the SD card and undoing recent edits on the next note preview.
+	* **Fixed FX Slot Swapping & MIDI CC Row Handling**: Swapping two FX slots (`Shift + Left/Right`) now moves their selected row, live value, MIDI CC state, and pad lights together, and turning the encoder on a MIDI CC row no longer overwrites neighboring slot values.
+	* **Safe Missing/Unreadable Pattern Fallback**: Selecting a missing or unreadable pattern for a Performance track now plays silence instead of triggering unexpected notes.
+
+* **Sample Loader, Sample Playback, Sample Editor & Sample Recorder Fixes (All 3 Devices)**:
+	* **Sample Loader Folder, Import & `Delete Unused` Fixes**: Fixed opening folders with parentheses in their names (such as `Loops (120-140 BPM)`), handled unreadable or deeply nested folders gracefully, prevented multi-file imports from exceeding Slot 48 or available sample memory, fixed time labels above `100s` on the crop-import screen, fixed renaming instruments when a MIDI/Synth instrument was previously active, and fixed `Delete unused` removing samples only used on the last step of a track, in Pattern 255, or in unsaved edits of the current pattern.
+	* **Sample Playback & Sample Editor Fixes**: Fixed `Add` slice corrupting slice markers after `Slice Evenly` or `Auto Slice`, improved zoomed waveform display when switching from a long sample to a short one, and prevented selected MIDI/Synth instruments from interfering with Sample Playback controls and MIDI CC.
+	* **Sample Recorder Fixes**: Pressing `Record` again now cancels a count-in waiting on a missing external MIDI/USB clock, project samples are reliably reloaded if recording is interrupted by standby or USB Storage, and the previously selected instrument is always restored on exit.
+	* **`Analog Kick Gen` `.ptfx` Click Fix**: Removed an audible click at the end of the kick decay in the `Analog Kick Gen` Sample Editor generator plugin.
+
+* **File Screen, Instrument Parameters & Synth Patch Editor Stability Fixes**:
+	* **File Screen Reliability (All 3 Devices)**: Fixed `Save As` and `Export` hanging if a folder could not be created (such as on a full or write-protected SD card), prevented `Cancel` in `Save As` from triggering an earlier `New` or `Open` action later on, and properly closed hidden file lists after `Overwrite` and `Save` prompts.
+	* **Navigation & Synth Patch Editor Stability**: Preserved "return to previous screen" behavior after brief standby taps or USB Storage sessions on all devices, prevented removing the SD card during `Init patch` on Tracker+ / Tracker Mini from locking up the controls, and fixed several display and Synth Patch Editor stability edge cases.
 
 * **Hardened File Validation, WAV Parsing, SD I/O & Sample Recorder Stop**:
 	* Fixed Sample Recorder stop deadlocks on stereo buffer imbalance and full sample memory.

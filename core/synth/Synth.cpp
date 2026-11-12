@@ -334,6 +334,11 @@ std::string Synth::getSynthName(int part)
 std::string Synth::getParamFullName(int part, int paramId)
 {
     const auto& metadata = parts[part].patch->getMetadata();
+    // The id can come from a macro modifier stored in a patch file.
+    if (paramId < 0 || paramId >= std::ssize(metadata.params))
+    {
+        return "Empty";
+    }
     const auto& paramName = !metadata.params[paramId].displayName.empty()
                               ? metadata.params[paramId].displayName
                               : "Empty";

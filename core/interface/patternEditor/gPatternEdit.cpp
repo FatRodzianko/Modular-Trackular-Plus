@@ -898,9 +898,11 @@ void cPatternEditor::refreshFillFrom()
         }
         else
         {
-            int16_t min_fx = sequencer.getFxMin(interfaceGlobals.fxIDs[fillData[fillIdx].param]);
+            int16_t min_fx =
+              sequencer.getFxMin(interfaceGlobals.fxNameToId(fillData[fillIdx].param));
 
-            int16_t max_fx = sequencer.getFxMax(interfaceGlobals.fxIDs[fillData[fillIdx].param]);
+            int16_t max_fx =
+              sequencer.getFxMax(interfaceGlobals.fxNameToId(fillData[fillIdx].param));
 
             if (fillData[fillIdx].from < min_fx)
                 fillData[fillIdx].from = min_fx;
@@ -913,14 +915,17 @@ void cPatternEditor::refreshFillFrom()
 
             sequencer.makeFxValLabelWithAlgin(fillText1,
                                               fillTextLen,
-                                              interfaceGlobals.fxIDs[fillData[fillIdx].param],
+                                              interfaceGlobals.fxNameToId(fillData[fillIdx].param),
                                               fillData[fillIdx].from,
                                               Sequencer::fxValLabelAlign_center);
 
             display.setControlText2(label[4], fillText1);
 
-            display.setControlValue(val1PopupBar,
-                                    ((fillData[fillIdx].from - min_fx) * 100) / (max_fx - min_fx));
+            // An FX with a single value, like Off, has no range to place the bar in.
+            int16_t range_fx = max_fx - min_fx;
+            display.setControlValue(
+              val1PopupBar,
+              range_fx > 0 ? ((fillData[fillIdx].from - min_fx) * 100) / range_fx : 0);
         }
     }
 
@@ -992,8 +997,10 @@ void cPatternEditor::refreshFillTo()
         }
         else
         {
-            int16_t min_fx = sequencer.getFxMin(interfaceGlobals.fxIDs[fillData[fillIdx].param]);
-            int16_t max_fx = sequencer.getFxMax(interfaceGlobals.fxIDs[fillData[fillIdx].param]);
+            int16_t min_fx =
+              sequencer.getFxMin(interfaceGlobals.fxNameToId(fillData[fillIdx].param));
+            int16_t max_fx =
+              sequencer.getFxMax(interfaceGlobals.fxNameToId(fillData[fillIdx].param));
 
             if (fillData[fillIdx].to < min_fx)
                 fillData[fillIdx].to = min_fx;
@@ -1009,14 +1016,16 @@ void cPatternEditor::refreshFillTo()
 
             sequencer.makeFxValLabelWithAlgin(fillText2,
                                               fillTextLen,
-                                              interfaceGlobals.fxIDs[fillData[fillIdx].param],
+                                              interfaceGlobals.fxNameToId(fillData[fillIdx].param),
                                               fillData[fillIdx].to,
                                               Sequencer::fxValLabelAlign_center);
 
             display.setControlText2(label[5], fillText2);
 
-            display.setControlValue(val2PopupBar,
-                                    ((fillData[fillIdx].to - min_fx) * 100) / (max_fx - min_fx));
+            // An FX with a single value, like Off, has no range to place the bar in.
+            int16_t range_fx = max_fx - min_fx;
+            display.setControlValue(
+              val2PopupBar, range_fx > 0 ? ((fillData[fillIdx].to - min_fx) * 100) / range_fx : 0);
             display.refreshControl(label[5]);
         }
     }
