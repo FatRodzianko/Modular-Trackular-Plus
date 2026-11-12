@@ -380,11 +380,7 @@ void cSampleImporter::setDefaultScreenFunct()
 
 static void instrumentAdd(bool addNext)
 {
-    if (SI->explorerNames == nullptr)
-    {
-        return;
-    }
-    if (*SI->explorerNames[SI->selectedFile] == '/')
+    if (!SI->isFileRow(SI->selectedFile))
     {
         return;
     }
@@ -427,7 +423,7 @@ static void instrumentAdd(bool addNext)
     }
     else
     {
-        if (SI->explorerNames != nullptr && *SI->explorerNames[SI->selectedFile] != '/')
+        if (SI->isFileRow(SI->selectedFile))
         {
             SI->sampleType = mtSampleTypeWaveFile;
             SI->addNextFlag = addNext;
@@ -529,11 +525,7 @@ void cSampleImporter::processPoints()
 
 static void functInstrumentImport()
 {
-    if (SI->explorerNames == nullptr)
-    {
-        return;
-    }
-    if (*SI->explorerNames[SI->selectedFile] == '/')
+    if (!SI->isFileRow(SI->selectedFile))
     {
         return;
     }
@@ -544,8 +536,7 @@ static void functInstrumentImport()
 
     SI->playFromPads(INTERFACE_BUTTON_PREVIEW, buttonRelease, -1);
 
-    char* fileName = SI->explorerNames[SI->selectedFile];
-    if (hasFileExtension(fileName, "pti"))
+    if (hasFileExtension(SI->explorerRowName(SI->selectedFile), "pti"))
     {
         return;
     }
@@ -1421,10 +1412,7 @@ void cSampleImporter::refreshActionButtons()
 
 void cSampleImporter::BrowseOrAdd()
 {
-    if (SI->explorerNames == nullptr)
-        return;
-
-    if (*explorerNames[selectedFile] == '/')
+    if (isFolderRow(selectedFile))
     {
         if (selectedPlace == 0)
         {
@@ -1436,7 +1424,7 @@ void cSampleImporter::BrowseOrAdd()
             }
         }
     }
-    else
+    else if (isFileRow(selectedFile))
     {
         if (SI->buttons->isButtonPressed(interfaceButtonShift) &&
             SI->selectionLength[listFiles] == 0)
@@ -1692,6 +1680,11 @@ void cSampleImporter::playSelectedSdFile(uint16_t from, uint16_t to)
 
     stopPlayingAll();
 
+    if (explorerRowName(selectedFile) == nullptr)
+    {
+        return;
+    }
+
     if (newFileManager.previevSamplefromSD(selectedFile, from, to))
     {
         //		ip->blockAllInputsExcept(interfaceButton4);
@@ -1945,12 +1938,29 @@ int16_t cSampleImporter::getSelectionEnd(uint8_t whichSelect)
 
 bool cSampleImporter::checkIfValidSelection(uint8_t positionToCheck)
 {
-    if (explorerNames != nullptr && !(*explorerNames[positionToCheck] == '/'))
+    return isFileRow(positionToCheck);
+}
+
+const char* cSampleImporter::explorerRowName(uint16_t row) const
+{
+    if (explorerNames == nullptr || row >= locationExplorerCount)
     {
-        return true;
+        return nullptr;
     }
 
-    return false;
+    return explorerNames[row];
+}
+
+bool cSampleImporter::isFolderRow(uint16_t row) const
+{
+    const char* name = explorerRowName(row);
+    return name != nullptr && *name == '/';
+}
+
+bool cSampleImporter::isFileRow(uint16_t row) const
+{
+    const char* name = explorerRowName(row);
+    return name != nullptr && *name != '/';
 }
 
 char* cSampleImporter::parseNewName(uint8_t num)
@@ -2367,7 +2377,7 @@ static void functDeleteInstrumentDeny()
 
 static void functReplaceInstrumentConfirm()
 {
-    if (SI->explorerNames != nullptr && *SI->explorerNames[SI->selectedFile] != '/')
+    if (SI->isFileRow(SI->selectedFile))
     {
         SI->sampleType = mtSampleTypeWaveFile;
         SI->addNextFlag = SI->addNextOperationWantReplaceInstrument ? 1 : 0;

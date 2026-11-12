@@ -134,6 +134,10 @@ class cSampleImporter : public ModuleBase
     uint16_t locationExplorerCount = 0;
     char** explorerNames;
     uint8_t selectedFile = 0;
+    // Null for a row the list does not have: the list is empty, or it is being read again.
+    const char* explorerRowName(uint16_t row) const;
+    bool isFolderRow(uint16_t row) const;
+    bool isFileRow(uint16_t row) const;
     char copyingInfo[20];
     uint32_t* currentFolderMemoryFileUsage;
 
