@@ -221,6 +221,7 @@ void cSongEditor::lightUpPadBoard()
     padsBacklight.clearGlobalPads(0, 1, 1);
 
     bool isBeatSlice =
+      mtProject.values.lastUsedInstrument < kSampleInstrumentsCount &&
       mtProject.instrument[mtProject.values.lastUsedInstrument].playMode == playModeBeatSlice;
 
     if (isBeatSlice)
@@ -517,12 +518,17 @@ static void functDeleteSlot()
         return;
     }
 
-    mtProject.song.playlist[SE->songLength] = 0;
+    // A song that fills the playlist has no terminator after its last slot.
+    if (SE->songLength < SONG_MAX)
+    {
+        mtProject.song.playlist[SE->songLength] = 0;
+    }
 
-    for (int i = SE->selectedSongPosition; i < SE->songLength; i++)
+    for (int i = SE->selectedSongPosition; i < SE->songLength - 1; i++)
     {
         mtProject.song.playlist[i] = mtProject.song.playlist[i + 1];
     }
+    mtProject.song.playlist[SE->songLength - 1] = 0;
 
     SE->songLength--;
 
@@ -1140,6 +1146,7 @@ static void functPads(uint8_t pad, uint8_t state, int16_t)
     }
 
     bool isBeatSlice =
+      mtProject.values.lastUsedInstrument < kSampleInstrumentsCount &&
       mtProject.instrument[mtProject.values.lastUsedInstrument].playMode == playModeBeatSlice;
     if (state == buttonPress)
     {
@@ -1576,6 +1583,12 @@ static void functPaste()
     }
     else if (SE->selectedPlace == 1)
     {
+        // Until the first copy the copied block is empty: no source, no progress to show.
+        if (SE->copyCurrentData.patternSelectionLength == 0)
+        {
+            return;
+        }
+
         SE->selectSongPosition(SE->selectedSongPosition);
 
         SE->currentCopyElement = 0;

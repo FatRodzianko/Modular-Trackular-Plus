@@ -1656,8 +1656,9 @@ void cPatternEditor::changneFillDataByPad(uint8_t pad)
             if (editParam == EditNote)
             {
                 bool isBeatSlice =
+                  mtProject.values.lastUsedInstrument < kSampleInstrumentsCount &&
                   mtProject.instrument[mtProject.values.lastUsedInstrument].playMode ==
-                  playModeBeatSlice;
+                    playModeBeatSlice;
 
                 fillData[fillIdx].from = mtPadBoard.getNoteFromPad(pad, isBeatSlice);
             }
@@ -1686,8 +1687,9 @@ void cPatternEditor::changneFillDataByPad(uint8_t pad)
             if (editParam == EditNote)
             {
                 bool isBeatSlice =
+                  mtProject.values.lastUsedInstrument < kSampleInstrumentsCount &&
                   mtProject.instrument[mtProject.values.lastUsedInstrument].playMode ==
-                  playModeBeatSlice;
+                    playModeBeatSlice;
 
                 fillData[fillIdx].to = mtPadBoard.getNoteFromPad(pad, isBeatSlice);
             }
@@ -4465,8 +4467,9 @@ static void functMiniMiddle(uint8_t state)
         case cPatternEditor::EditNote: // nuta
         {
             // xxx niedorobione
-            bool isBeatSlice = mtProject.instrument[mtProject.values.lastUsedInstrument].playMode ==
-                               playModeBeatSlice;
+            bool isBeatSlice = mtProject.values.lastUsedInstrument < kSampleInstrumentsCount &&
+                               mtProject.instrument[mtProject.values.lastUsedInstrument].playMode ==
+                                 playModeBeatSlice;
             uint8_t noteFromPad = isBeatSlice
                                     ? /*padToBeatNoteConverter.getNoteFromPad(pad)*/ mtProject
                                         .values.lastUsedNote // <<<< tu moze byc zle
@@ -4641,6 +4644,7 @@ static void functPads(uint8_t pad, uint8_t state, int16_t velo)
         sendSelection();
 
         bool isBeatSlice =
+          mtProject.values.lastUsedInstrument < kSampleInstrumentsCount &&
           mtProject.instrument[mtProject.values.lastUsedInstrument].playMode == playModeBeatSlice;
 
         uint8_t noteToPlay = mtPadBoard.getNoteFromPad(pad, isBeatSlice);
@@ -4688,8 +4692,9 @@ static void functPads(uint8_t pad, uint8_t state, int16_t velo)
             case cPatternEditor::EditNote: // nuta
             {
                 bool isBeatSlice =
+                  mtProject.values.lastUsedInstrument < kSampleInstrumentsCount &&
                   mtProject.instrument[mtProject.values.lastUsedInstrument].playMode ==
-                  playModeBeatSlice;
+                    playModeBeatSlice;
                 uint8_t noteFromPad = mtPadBoard.getNoteFromPad(pad, isBeatSlice);
                 if (sequencer.isRec())
                 {
