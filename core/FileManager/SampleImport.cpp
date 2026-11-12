@@ -315,6 +315,22 @@ bool SampleImport::importSampleToProject(char* filePath,
 
 //=================================================================================================
 //=================================================================================================
+// The estimate that lets an import start can be too low, so the room is checked again where
+// each file is given its place in sample memory. The files of one import are placed one behind
+// the other, and the instruments behind the imported slots move up by the same amount: a file
+// has to fit between the instruments in front of it and those that follow the imported slots.
+static bool importedSampleFits(int slot, int lastSlot, uint16_t channelCount, uint32_t framesInRam)
+{
+    uint64_t usedBytes = newFileManager.getSampleMemorySize(0, slot - 1);
+    usedBytes += newFileManager.getSampleMemorySize(lastSlot + 1, kSampleInstrumentsCount - 1);
+
+    uint64_t sampleBytes = (uint64_t)framesInRam * channelCount * sizeof(int16_t);
+
+    return usedBytes + sampleBytes <= mtProject.max_memory;
+}
+
+//=================================================================================================
+//=================================================================================================
 void SampleImport::loadImportingSamplesData(FileManagerOperation::SampleLoadData* sampleImportData,
                                             char* sourceFilePath,
                                             char** sourceFileNameList)
@@ -413,6 +429,20 @@ void SampleImport::loadImportingSamplesData(FileManagerOperation::SampleLoadData
                     mtProject.instrument[instrIdx].setStreamPreferred(
                       sampleImportData[instrIdx].shouldStream);
 
+                    bool onlyPreCache =
+                      sampleImportData[instrIdx].shouldStream && totalBytes > availableForStaging;
+                    if (!importedSampleFits(
+                          instrIdx,
+                          importEndSlot,
+                          isStereo ? 2 : 1,
+                          onlyPreCache ? std::min<uint32_t>(fullFrames, kStreamPreCacheFrames)
+                                       : fullFrames))
+                    {
+                        // Left empty, like a file that cannot be read.
+                        newFileManager.completeLoadedInstrumentStruct(instrIdx, false);
+                        continue;
+                    }
+
                     if (sampleImportData[instrIdx].shouldStream && totalBytes > availableForStaging)
                     {
                         uint32_t preCache = std::min<uint32_t>(fullFrames, kStreamPreCacheFrames);
@@ -501,6 +531,20 @@ void SampleImport::loadImportingSamplesData(FileManagerOperation::SampleLoadData
                                      totalBytes >= kStreamThresholdBytes));
                     mtProject.instrument[instrIdx].setStreamPreferred(
                       sampleImportData[instrIdx].shouldStream);
+
+                    bool onlyPreCache =
+                      sampleImportData[instrIdx].shouldStream && totalBytes > availableForStaging;
+                    if (!importedSampleFits(
+                          instrIdx,
+                          importEndSlot,
+                          sampleImportData[instrIdx].destChannelCount,
+                          onlyPreCache ? std::min<uint32_t>(fullFrames, kStreamPreCacheFrames)
+                                       : fullFrames))
+                    {
+                        // Left empty, like a file that cannot be read.
+                        newFileManager.completeLoadedInstrumentStruct(instrIdx, false);
+                        continue;
+                    }
 
                     if (sampleImportData[instrIdx].shouldStream && totalBytes > availableForStaging)
                     {
