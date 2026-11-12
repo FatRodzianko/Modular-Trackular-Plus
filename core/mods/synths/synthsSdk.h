@@ -1,8 +1,9 @@
 // Modular-Trackular mods. SPDX-License-Identifier: MIT
 //
 // What WAVE's and PHASE's CE Synth SDK classes share (waveSynth.cpp, phaseSynth.cpp): the
-// type ids, a table-driven parameter builder, the value displays, the LFOs' and effects'
-// parameters, and the voice base class that runs the effects after the voices.
+// type ids, a table-driven parameter builder, the value displays, the LFOs' parameters and the
+// old effects' (kept for patches saved before), and the voice base class. Their effects are
+// Synth FX's slots (synthfx/synthfxMod.h), run on the part after the voices.
 //
 // Main loop: the metadata, the value displays (they allocate std::strings). Audio
 // interrupt: the voice's handlers, renderVoiceAudio and renderPostProcessAudio (no heap).
@@ -60,17 +61,13 @@ struct Spec
  * names for the type chosen). */
 polysynth::Patch::Metadata::Param makeParam(const Spec& s);
 
-/* The Distortion's knob names for the type in `patch` (Gain / Tone, or Bits / Rate) */
-const char* distKnobName(const polysynth::Patch& patch, bool tone);
-
 /* The LFO and effect rows every engine has: 27-34 (the LFOs' Ratio, Waveform, Retrigger,
  * Sync), 35-36 (Glide), 39 (Volume), 42-59 (the Mod Matrix, with the engine's lists),
- * 60-61 (Polarity), 62-71 (the effects). */
+ * 60-61 (Polarity), 62-71 (the old effects: in no section, read only to convert them). */
 void sharedSpecs(Spec* s, const char* const* srcs, uint8_t srcCount, const char* const* dests,
                  uint8_t destCount);
 
-/* The FX tile's controls, in the signal's order; and the LFO tile's */
-extern const int kFxSection[P_COUNT - P_EFFECT];
+/* The LFO tile's controls */
 extern const int kLfoSection[10];
 
 /* An LFO's Ratio (0..1) as the engine reads it: Hz (0.01-100, exponential), or with Sync
@@ -95,15 +92,13 @@ void addAll(polysynth::sdk::ParamHelper<V>& h, const Spec* specs, std::index_seq
     (h.addParam(static_cast<int>(I), makeParam(specs[I]), SetParam<V, I>{}), ...);
 }
 
-/* A voice of WAVE or PHASE: the parameters as the engine reads them (p, by parameter id),
- * and the effects on the instrument's first voice. `Derived` supplies the engine. */
+/* A voice of WAVE or PHASE: the parameters as the engine reads them (p, by parameter id).
+ * `Derived` supplies the engine. */
 template<class Derived, class ParamEnum>
 class MtSynthVoice : public polysynth::sdk::CustomSynthVoice<Derived, ParamEnum>
 {
   public:
     using Ctx = polysynth::InstrumentVoice::InstrumentVoiceContext;
-
-    ~MtSynthVoice() override { fx_release(this); }
 
     /* Audio interrupt, or the main loop with it masked: a store, and the LFOs' Ratio */
     void setParam(int id, float v)
@@ -126,17 +121,11 @@ class MtSynthVoice : public polysynth::sdk::CustomSynthVoice<Derived, ParamEnum>
         p[id] = v;
     }
 
+    /* The part's sum of voices, mono, into both sides (as the old effects' dry path did); Synth
+     * FX's slots run on it after this, from the left side (synthfxMod.h) */
     void renderPostProcessAudio(const Ctx& /*ctx*/, polysynth::AudioBufferStereoRef out) final
     {
-        float* L = out[0].data();
-        float* R = out[1].data();
-        struct mt_fx* s = fx_claim(this);
-        if (s == nullptr) {                         /* every state taken: dry */
-            for (uint32_t n = 0; n < WT_BLOCK; n++)
-                R[n] = L[n];
-            return;
-        }
-        fx_block(s, p + P_EFFECT, L, R, static_cast<Derived*>(this)->postDistortion());
+        toStereo(out);
     }
 
   protected:

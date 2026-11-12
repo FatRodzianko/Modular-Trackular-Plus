@@ -110,9 +110,11 @@ problem.
 | `S6 8 WAVE Shimmer BBD` | 8 | WAVE | Shimmer + BBD | Master FX on top |
 
 The heaviest case can't be written into a project (patches are the closed library's format), so it
-is set by hand on `S5`: on each of the three parts, Wave 1 and Wave 2 on Super Saw, Distortion on
-Distortion with Placement Pre, Effect on Phaser. Instructions per block for that, from
-[CE_PORT_PLAN.md](CE_PORT_PLAN.md) 3.15: about 719,000, against 528,000 for 8 voices of VAP.
+is set by hand on `S5`: on each of the three parts, Wave 1 and Wave 2 on Super Saw; with Synth FX
+On, button 3: FX1 the Distortion with Placement Pre, FX2 the Phaser. Instructions per block for that
+with the old built-in effects, from [CE_PORT_PLAN.md](CE_PORT_PLAN.md) 3.15: about 719,000, against
+528,000 for 8 voices of VAP; the slots' share through the plugins is in 3.17's phase 3. With Synth
+FX Off, WAVE and PHASE have no effects (since 3.17 phase 3).
 
 ## The Synth FX set: the insert on CE's engines
 

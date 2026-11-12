@@ -73,13 +73,6 @@ float lfoRatio(float v, bool sync)
     return kRatioMinHz * exp2f_fast(v * kRatioOctaves);
 }
 
-const char* distKnobName(const Patch& patch, bool tone)
-{
-    if (distType(patch) == DIST_CRUSHER)
-        return tone ? "Rate" : "Bits";
-    return tone ? "Tone" : "Gain";
-}
-
 Patch::Metadata::Param makeParam(const Spec& s)
 {
     Patch::Metadata::Param p{};
@@ -209,17 +202,13 @@ void sharedSpecs(Spec* s, const char* const* srcs, uint8_t srcCount, const char*
     s[P_MIX] = Spec{ .name = "FX Mix", .def = 0.5f };
     s[P_FEEDBACK] = Spec{ .name = "Feedback", .def = 0.5f, .min = -0.95f, .max = 0.95f };
     s[P_DIST] = Spec{ .name = "Distortion", .max = DIST_TYPES - 1, .fmt = Fmt::kList,
-                      .list = kDistortions, .listLen = DIST_TYPES, .invalidates = true };
+                      .list = kDistortions, .listLen = DIST_TYPES };
     s[P_GAIN] = Spec{ .name = "Gain", .def = 0.5f, .fmt = Fmt::kDistGain };
     s[P_TONE] = Spec{ .name = "Tone", .def = 0.5f, .fmt = Fmt::kDistTone };
     s[P_PLACEMENT] = Spec{ .name = "Placement", .def = PLACE_POST, .max = 1, .fmt = Fmt::kList,
                            .list = kPlacements, .listLen = 2 };
     s[P_LEVEL] = Spec{ .name = "Level", .def = 0, .min = -30, .max = 6, .fmt = Fmt::kLevel };
 }
-
-const int kFxSection[P_COUNT - P_EFFECT] = {
-    P_DIST, P_GAIN, P_TONE, P_LEVEL, P_PLACEMENT, P_EFFECT, P_RATE, P_DEPTH, P_FEEDBACK, P_MIX,
-};
 
 const int kLfoSection[10] = { 30, 27, 28, 29, 60, 34, 31, 32, 33, 61 };
 

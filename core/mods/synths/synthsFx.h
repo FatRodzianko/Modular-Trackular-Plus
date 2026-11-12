@@ -1,8 +1,8 @@
 // Modular-Trackular mods. SPDX-License-Identifier: MIT
 //
-// Where WAVE's and PHASE's effect settings sit: their parameters 62-71, read from the
-// instrument's first voice, in synthfx/synthFx.h's order. The effects themselves are the
-// shared ones there; each call takes p + P_EFFECT, the first of the ten.
+// Where WAVE's and PHASE's old effect settings sit: their parameters 62-71, in synthfx/synthFx.h's
+// order. Their effects are Synth FX's slots now; these stay in the patch so one saved before
+// still loads, and Synth FX turns them into the part's slots once (synthfxMod.h).
 //   62 Effect, 63 Rate, 64 Depth, 65 Mix, 66 Feedback, 67 Distortion, 68 Gain, 69 Tone,
 //   70 Placement (WAVE: before or after its filter; PHASE: no effect), 71 Level
 

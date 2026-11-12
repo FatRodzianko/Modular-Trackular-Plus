@@ -214,6 +214,7 @@ void update()
         synthfx::plugins::update();
         synthfx::updateSlots(); // a project's slots made, old plugins let go
     }
+    synthfx::convertOldPatches(); // WAVE's and PHASE's old patch effects into their slots, On or Off
 #endif
 }
 

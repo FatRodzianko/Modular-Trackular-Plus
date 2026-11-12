@@ -27,8 +27,8 @@
 // state saturates (OB); and the clean 2-pole one (SVF). The 24 dB OB and SVF types put a
 // second, unresonant stage before it. Cutoff, envelope and key tracking are set per block.
 // Drive puts the filter's input through a soft clip first, up to +24 dB into it, with the
-// level made up; at 0 there is no such stage. The Distortion, Placement Pre, runs before
-// Drive (synthsFx.h), one per voice; a note from idle starts it at full, without the fade.
+// level made up; at 0 there is no such stage. Before Drive, the voice's `pre` hook runs, if set:
+// Synth FX's slots with Placement Pre, one plugin instance per voice (waveSynth.cpp, MT+).
 //
 // Envelopes (x3, ADSR): advanced once per block, a linear attack and exponential decay and
 // release; the amp envelope is ramped across the block. The amp envelope's end makes the
@@ -87,7 +87,8 @@ struct wt_voice {
     float lfo_hold[2];                      /* Random S&H: the value held this cycle */
     uint8_t lfo_done[2];                    /* One Shot: the cycle has run */
     uint8_t pad2[2];
-    struct mt_dist pre;                     /* the Distortion, Placement Pre (MT+) */
+    void (*pre)(void *ctx, float *buf);     /* Placement Pre (MT+): before Drive, or null */
+    void *pre_ctx;
 };
 
 /* ---- the voice ---------------------------------------------------------------------- */
@@ -124,7 +125,8 @@ static inline void wt_voice_init(struct wt_voice *e)
         e->lfo_hold[k] = 0.0f;
         e->lfo_done[k] = 0;
     }
-    e->pre = mt_dist{};
+    e->pre = nullptr;
+    e->pre_ctx = nullptr;
 }
 
 /* ---- the LFOs ---------------------------------------------------------------------- */
@@ -202,10 +204,8 @@ static void wt_note_on(struct wt_voice *e, const float *p, uint32_t note)
             }
         }
     }
-    if (e->aenv.stage == ENV_IDLE) {
+    if (e->aenv.stage == ENV_IDLE)
         e->fresh = 1;
-        dist_reset(&e->pre, p + P_EFFECT, dist_pre(p + P_EFFECT));
-    }
     if (!legato) {                          /* attack again from where the envelopes are */
         e->aenv.stage = ENV_ATTACK;
         e->fenv.stage = ENV_ATTACK;
@@ -618,7 +618,8 @@ static void wt_voice_render(struct wt_voice *e, const float *p, float *out, floa
         }
         e->noise = nz;
     }
-    dist_block(&e->pre, out, p + P_EFFECT, dist_pre(p + P_EFFECT));   /* the Distortion, Pre (MT+) */
+    if (e->pre != nullptr)                  /* Placement Pre (MT+) */
+        e->pre(e->pre_ctx, out);
     float drive = clampf(p[WP_DRIVE], 0.0f, 1.0f);
     if (drive > 0.0f) {                     /* Drive: the filter's input through the soft clip */
         float dg = exp2f_fast(drive * DRIVE_OCTAVES);

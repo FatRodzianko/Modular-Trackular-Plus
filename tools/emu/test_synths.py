@@ -8,14 +8,14 @@ hooks inside them (sound_rig's Guard); what comes out is what is checked.
    picker leaves them; the engines' loudness keeps level A's relation.
 1. Each engine: a note sounds and stops after its release, the same twice, no asserts, the audio
    interrupt turned back on as often as off.
-2. 8 voices, CE's total across its 3 parts: an 8-note chord on one part, every effect and the
-   Distortion in each place, and 3 parts sharing the 8 (3 + 3 + 2): sound, no asserts, no
-   clipping run, the heap and the block pool held.
+2. 8 voices, CE's total across its 3 parts: an 8-note chord on one part, and 3 parts sharing
+   the 8 (3 + 3 + 2): sound, no asserts, no clipping run, the heap and the block pool held. (The
+   effects are Synth FX's slots now: tools/emu/test_synthfx.py runs the chords with them.)
 3. The SDK's rules: no malloc and no createMetadata in the audio interrupt (every block, notes
    on and off, chords, effects switched); notes reach the engines from Synth's own calls.
-4. Dynamic names: Distortion set to Bit Crusher (through the patch, as the editor sets it) names
-   Gain "Bits" and Tone "Rate", back to Overdrive "Gain" and "Tone"; how long the rebuild keeps
-   the audio interrupt off (instructions, against a block's worth).
+4. The old effect parameters (62-71, kept so old patches load): setting the Distortion through
+   the patch, as an old patch does, rebuilds nothing (no createMetadata), changes no name and
+   leaves the sound as it was.
 5. Engine switches: 30 rounds of WAVE, PHASE, CHIP and back on a part, notes held: no heap growth
    after the first round.
 6. The switch Off: a part already on WAVE or PHASE keeps playing, sample for sample as On.
@@ -262,13 +262,10 @@ def engines(axf):
 
 def chords(axf):
     """CE's synth has 8 voices in all, shared by its 3 parts (kSynthMaxVoices, asserted in
-    Synth::setVoiceCount). So the heaviest cases are one part with all 8 voices (Pre Distortion
-    runs once per voice) and 3 parts sharing them 3 + 3 + 2 (each part has its own effect state)."""
-    combos = [(e, n, fx, dist, place, (8, 0, 0)) for e, n in ((WAVE, "WAVE"), (PHASE, "PHASE"))
-              for fx in (0, 1, 2, 3) for dist, place in ((0, 1), (2, 0), (1, 1), (3, 0))]
-    combos += [(e, n, fx, dist, place, (3, 3, 2)) for e, n in ((WAVE, "WAVE"), (PHASE, "PHASE"))
-               for fx, (dist, place) in zip((0, 1, 2, 3), ((2, 0), (1, 1), (3, 0), (2, 1)))]
-    for e, name, fx, dist, place, layout in combos:
+    Synth::setVoiceCount). So the heaviest cases are one part with all 8 voices and 3 parts
+    sharing them 3 + 3 + 2."""
+    combos = [(e, n, layout) for e, n in ((WAVE, "WAVE"), (PHASE, "PHASE")) for layout in ((8, 0, 0), (3, 3, 2))]
+    for e, name, layout in combos:
         r = Rig(axf)
         used = [part for part in range(3) if layout[part]]
         for part in range(3):                       # free the voices first, then hand them out
@@ -277,8 +274,6 @@ def chords(axf):
         for part in used:
             r.set_instrument(part, e)
             r.set_voices(part, layout[part])
-            for pid, v in ((P_EFFECT, fx), (P_DIST, dist), (P_PLACEMENT, place), (P_GAIN, 1.0)):
-                r.set_param(part, pid, v)
         heap0 = r.heap_brk
         held = {part: CHORD[:layout[part]] if len(used) > 1 else CHORD for part in used}
         for part in used:
@@ -290,8 +285,7 @@ def chords(axf):
                 r.note(part, n + 12 * part - 12, False)
         more = r.blocks(30)
         clipped, run = clip_run(left + more[0])
-        what = (f"{name}, {'+'.join(str(layout[p]) for p in used)} voices, Effect {fx}, "
-                f"Distortion {dist} {'Pre' if place == 0 else 'Post'}")
+        what = f"{name}, {'+'.join(str(layout[p]) for p in used)} voices"
         ok = (not r.failures and peak(left) > 100 and peak(right) > 100 and not clipped
               and r.heap_brk == heap0 and r.malloc_in_block == 0 and r.meta_calls["block"] == 0
               and r.interrupts["disable"] == r.interrupts["enable"])
@@ -300,32 +294,34 @@ def chords(axf):
                   f"block pool peak {r.pool_peak()} {r.failures[:1]}")
 
 
-def names(axf):
+def old_params(axf):
     for e, name in ((WAVE, "WAVE"), (PHASE, "PHASE")):
-        r = Rig(axf)
-        r.set_instrument(0, e)
-        r.note(0, 60, True)
-        r.blocks(4)
-        before = r.meta_calls["other"]
-        cost = r.set_param(0, P_DIST, 3)
-        rebuilt = r.meta_calls["other"] - before
-        crush = (r.full_name(0, P_GAIN), r.full_name(0, P_TONE))
-        r.blocks(4)
-        cost2 = r.set_param(0, P_DIST, 1)
-        od = (r.full_name(0, P_GAIN), r.full_name(0, P_TONE))
-        plain = r.set_param(0, P_GAIN, 0.3)
-        r.blocks(4)
-        check("Bits" in crush[0] and "Rate" in crush[1] and "Gain" in od[0] and "Tone" in od[1],
-              f"{name}: Bit Crusher names {crush}, Overdrive {od}")
-        check(rebuilt >= 1, f"{name}: the library calls createMetadata when the Distortion changes ({rebuilt})")
-        check(max(cost, cost2) < BLOCK_BUDGET // 2,
-              f"{name}: a Distortion change keeps the interrupt off for {max(cost, cost2):,} open-code instructions "
-              f"(a plain one {plain:,}; a block is {BLOCK_BUDGET:,} cycles)")
-        check(r.meta_calls["block"] == 0 and r.malloc_in_block == 0,
-              f"{name}: none of it in the audio interrupt (createMetadata {r.meta_calls['block']}, "
-              f"malloc {r.malloc_in_block})")
-        check(abs(r.get_param(0, P_GAIN) - 0.3) < 1e-3, f"{name}: the patch holds the value set "
-                                                         f"({r.get_param(0, P_GAIN):.3f})")
+        outs = []
+        for dist in (0, 2):
+            r = Rig(axf)
+            r.set_instrument(0, e)
+            r.note(0, 60, True)
+            r.blocks(4)
+            before = r.meta_calls["other"]
+            names = (r.full_name(0, P_GAIN), r.full_name(0, P_TONE))
+            cost = r.set_param(0, P_DIST, dist)
+            for pid, v in ((P_EFFECT, 2 if dist else 0), (P_PLACEMENT, 0), (P_GAIN, 1.0)):
+                r.set_param(0, pid, v)
+            rebuilt = r.meta_calls["other"] - before
+            after = (r.full_name(0, P_GAIN), r.full_name(0, P_TONE))
+            outs.append(r.blocks(20))
+            if dist:
+                check(rebuilt == 0 and names == after and cost < BLOCK_BUDGET // 2,
+                      f"{name}: an old Distortion set through the patch rebuilds nothing (createMetadata "
+                      f"{rebuilt}, names {after}, {cost:,} open-code instructions)")
+                check(r.meta_calls["block"] == 0 and r.malloc_in_block == 0,
+                      f"{name}: none of it in the audio interrupt (createMetadata {r.meta_calls['block']}, "
+                      f"malloc {r.malloc_in_block})")
+                check(abs(r.get_param(0, P_GAIN) - 1.0) < 1e-3, f"{name}: the patch holds the value set "
+                                                                 f"({r.get_param(0, P_GAIN):.3f})")
+        check(outs[0] == outs[1] and peak(outs[0][0]) > 100,
+              f"{name}: the old Effect, Distortion and Placement don't change the sound (the Synth FX "
+              f"slots play them, once converted)")
 
 
 def switches(axf):
@@ -383,7 +379,7 @@ def main() -> int:
     axf = Path(sys.argv[1])
     init_values(axf)
     engines(axf)
-    names(axf)
+    old_params(axf)
     switch_off(axf)
     switches(axf)
     patch_files(axf)

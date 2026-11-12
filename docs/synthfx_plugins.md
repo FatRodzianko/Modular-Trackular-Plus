@@ -9,14 +9,15 @@ The six effects that used to be built in (Overdrive, Distortion, Bit Crusher, Ch
 Phaser) are plugins too: the default pack. The firmware writes each pack file to `/SynthFX/`
 when it is missing there, so delete one to get the firmware's copy back.
 
-Status: the runtime (loading, the pools, the guards, the pack) and the two slots on CE's synth
-engines (ACD to CHIP) are in the firmware. WAVE and PHASE keep their own FX section until the
-next phase (`docs/mt/CE_PORT_PLAN.md` §3.17).
+Status: the runtime (loading, the pools, the guards, the pack) and the two slots on every synth
+engine, CE's (ACD to CHIP) and WAVE and PHASE, are in the firmware. WAVE and PHASE no longer
+have effects of their own: with the Synth FX mod off they play dry, as CE's engines do. Not yet
+tested on the unit (`docs/mt/CE_PORT_PLAN.md` §3.17, phase 4).
 
 ## On the synth page
 
 With the Synth FX mod on, button 3 on a synth part's Edit Patch screen shows the Synth FX
-rows: FX1, its plugin's knobs, FX2, its plugin's knobs.
+rows: FX1, its plugin's knobs, FX2, its plugin's knobs. On every engine, WAVE and PHASE too.
 
 - **A slot's row** picks the plugin: None, then every plugin in `/SynthFX/` that loaded
   cleanly, by its header's name, without the one in the part's other slot.
@@ -32,6 +33,21 @@ rows: FX1, its plugin's knobs, FX2, its plugin's knobs.
   It loads again when the page next opens, once the file is back.
 - **A swap** fades the old plugin out over one block and the new one in over its first
   block, so a slot can change while the part plays.
+- **Placement,** on a WAVE part only, is a row under a slot whose plugin allows it
+  (`PTSFX_FLAG_PRE`; in the pack, the Overdrive, the Distortion and the Bit Crusher). Post,
+  the default, runs the plugin on the part, after the voices, as on every engine. Pre runs it
+  in each voice, before the voice's filter, as WAVE's own Distortion did: the slot is made
+  again with one instance for each of the 8 voices, and a knob turned reaches them all. On
+  any other engine a Pre slot runs as Post.
+- **An old WAVE or PHASE patch** (from a build where their effects were inside) has its
+  Effect and Distortion moved into the part's slots once it has loaded: the Distortion
+  type in FX1 (Pre on WAVE if its Placement was Pre), the modulation effect in FX2, with the
+  same values. The patch's own are then set to None and Off, so this happens once; save the
+  project to keep that. It happens with the mod on or off, and is heard once the mod is on.
+
+A card that has the pack from an earlier build keeps those files: the firmware only writes
+the pack files that are missing. The Overdrive, Distortion and Bit Crusher from before this
+build don't allow Pre, so delete those three from `/SynthFX/` to get the new ones.
 
 ## What you need
 
@@ -91,7 +107,10 @@ PTSFX_INFO = {
   - `PTSFX_FLAG_WIDENS`: the effect makes stereo from mono, as a chorus does. On a mono part
     the host gives `R` for output, with `in_channels` 1.
   - `PTSFX_FLAG_PRE`: the effect may run in each voice of WAVE, before the filter
-    (Placement Pre). There it is mono and `R` is null.
+    (Placement Pre). There each voice has its own instance, 8 in all, with the knobs set
+    alike; each is mono (`in_channels` 1, `R` null), and `reset` is called when its voice
+    starts a note from silence or another voice takes its place. A Pre slot costs 8 times
+    the state, and its cost goes with the voices sounding.
   - A plugin can't have both.
 - **State:** 1 byte to 64 KB per instance.
 - **Code:** up to 32 KB.
@@ -165,7 +184,13 @@ Instructions per block, the checker's mean and most, over its settings, mono and
 | Tremolo (example) | 1,400 | 1,600 | 0.1 % |
 | Delay (example) | 8,500 | 8,700 | 0.5 % |
 
-The most is on a stereo part, where a Distortion runs on each side.
+The most is on a stereo part, where a Distortion runs on each side. WAVE and PHASE parts
+are mono, whatever their output: a slot runs once on them until a widening plugin has made
+them stereo.
+
+A Pre slot on WAVE runs once per voice sounding. With all 8 voices on one WAVE part, the
+Distortion and the Bit Crusher both Pre cost 307,000 instructions a block between them
+(18 % of a block), in the emulator.
 
 Costs inside a plugin:
 

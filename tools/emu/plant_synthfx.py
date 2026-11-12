@@ -1,7 +1,8 @@
 # Modular-Trackular mods. SPDX-License-Identifier: MIT
 """Planted faults for Synth FX: each makes one mistake, builds the full firmware with it and runs the
 test section that has to fail, on the check named. A fault the test misses is a gap in the test.
-The slots' faults go to tools/emu/test_synthfx.py (as_before with --before, the phase 1 build); the
+The slots' faults go to tools/emu/test_synthfx.py (as_before and old_patches with --before, the phase 1
+build); the
 patch editor's and the project's to test_synthfx_page.py ("page:<section>"); the record's rules to the
 host test, core/mods/tests/test_synthfx.cpp ("host", built in the tree with its g++). The plugins'
 own arithmetic has its faults in tools/synthfx/rig/plant.py.
@@ -32,36 +33,62 @@ MOD = "core/mods/synthfx/synthfxMod.cpp"         # the slots in the audio interr
 SLOTS = "core/mods/synthfx/synthfxSlots.cpp"     # the slots' plugins made and let go
 PAGE = "core/mods/synthfx/synthfxPage.cpp"       # the rows
 SETTINGS = "core/mods/synthfx/synthfxSettings.cpp"
+WAVE = "core/mods/synths/waveSynth.cpp"          # its voices' Pre hook
 EDITOR = "core/interface/instrumentEditor/SynthPatchEditor.cpp"   # CRLF: a fault's \n matches its \r\n
 INSTR = "core/interface/instrumentEditor/fIinstrEdit.cpp"         # CRLF
 
 # (name, file, text, replacement, test section, engines, a check the test must fail: a substring of its line)
 FAULTS = [
     # the slots in the audio interrupt
-    ("Off doesn't bypass", MOD, "if (!mods::on(Mod::synthfx) || patch == nullptr || hasOwnEffects(patch))",
-     "if (patch == nullptr || hasOwnEffects(patch))", "off_is_ce", "1", "Synth FX Off with Distortion"),
-    ("a mono part never goes stereo", MOD, "return { true, engineStereo || widens };", "return { true, engineStereo };",
-     "each_effect", "1", "ACD, Chorus in FX1"),
-    ("WAVE not skipped", MOD, "return synths::ownsLayout(patch->getMetadata().instrumentTypeId);", "return false;",
-     "skipped_and_shared", "", "WAVE: skipped"),
-    ("no fade in", MOD, "r.phase = id >= 0 ? kFadeIn : kGone;", "r.phase = id >= 0 ? kOn : kGone;",
-     "each_effect", "1", "ACD, Overdrive in FX1"),
+    ("Off doesn't bypass", MOD, "if (!mods::on(Mod::synthfx) || patch == nullptr)",
+     "if (patch == nullptr)", "off_is_ce", "1", "Synth FX Off with Distortion"),
+    ("a mono part never goes stereo", MOD, "return { true, engineStereo || widens, engineStereo && !sidesAlike(patch) };",
+     "return { true, engineStereo, engineStereo && !sidesAlike(patch) };", "each_effect", "1", "ACD, Chorus in FX1"),
+    ("WAVE taken as stereo in", MOD, "return { true, engineStereo || widens, engineStereo && !sidesAlike(patch) };",
+     "return { true, engineStereo || widens, engineStereo };", "wave_off_and_mono", "", "WAVE: FX1 runs on"),
+    ("no fade in", MOD, "r.phase = count > 0 && ids[0] >= 0 ? kFadeIn : kGone;",
+     "r.phase = count > 0 && ids[0] >= 0 ? kOn : kGone;", "each_effect", "1", "ACD, Overdrive in FX1"),
     ("no fade out", MOD, "runs[part][slot].phase = kLeaving;", "runs[part][slot].phase = kGone;",
      "release", "", "ACD: cleared, the slots fade out"),
     ("FX2 before FX1", MOD, "    for (int slot = 0; slot < kSlots; slot++)\n    {\n        Run& r = runs[part][slot];",
      "    for (int s = 0; s < kSlots; s++)\n    {\n        const int slot = kSlots - 1 - s;\n        Run& r = runs[part][slot];",
      "order_and_swap", "", "ACD: FX1 runs before FX2"),
+    # Placement Pre on WAVE, in the audio interrupt
+    ("a Pre slot run on the part as well", MOD, "if (preInVoices[part] && r.count > 1)", "if (false)",
+     "pre", "", "WAVE, FX1 Distortion Pre"),
+    ("the voices share one instance", MOD, "const int id = r.id[seat];", "const int id = r.id[0];",
+     "pre", "", "WAVE, FX1 Distortion Pre"),
+    ("Pre never reset", MOD, "        if (fresh)\n        {\n            plugins::reset(id);",
+     "        if (false)\n        {\n            plugins::reset(id);", "pre", "", "WAVE, FX1 Distortion Pre"),
+    ("WAVE's voices never run Pre", WAVE, "mods::synthfx::runPre(v, buf, v->eng.fresh != 0);", "(void)v;",
+     "pre", "", "WAVE: Pre goes through the filter"),
+    # an old WAVE or PHASE patch's effects, in the main loop
+    ("an old patch's own effects left on", MOD,
+     "        patch.setParamValue(kOldFirstParam + kOldEffect, 0, polysynth::Patch::ParamChangeSource::kPatchAssign);\n"
+     "        patch.setParamValue(kOldFirstParam + kOldDist, 0, polysynth::Patch::ParamChangeSource::kPatchAssign);\n",
+     "", "old_patches", "", "an old patch's Distortion and Phaser move"),
+    ("converted while the file manager is busy", MOD,
+     "if (newFileManager.getStatus() != fmIdle || newFileManager.getCurrentOperation() != fmNoOperation)",
+     "if (false)", "old_patches", "", "an old patch's Distortion and Phaser move"),
+    ("an old patch's Gain not in percent", SETTINGS, "fx1.knobs[0] = knobFrom(fx[kOldGain], 100.0f);",
+     "fx1.knobs[0] = knobFrom(fx[kOldGain], 1.0f);", "host", "", "WAVE: the Distortion in FX1"),
+    ("an old PHASE patch's Distortion Pre", SETTINGS, "fx1.pre = wave && pick(fx[kOldPlacement], 2) == 0 ? 1 : 0;",
+     "fx1.pre = ((void)wave, pick(fx[kOldPlacement], 2) == 0) ? 1 : 0;", "host", "", "PHASE: the same, Post"),
     # the slots' plugins in the main loop
-    ("the old plugin never freed", SLOTS, "        plugins::destroy(l.old);\n", "",
+    ("the old plugin never freed", SLOTS, "            plugins::destroy(l.old[v]);\n", "",
      "release", "", "ACD: cleared, the plugins fade out"),
+    ("a Pre slot made once", SLOTS, "want.pre != 0 && (h->flags & PTSFX_FLAG_PRE) != 0 ? kVoices : 1", "1",
+     "pre", "", "WAVE, FX1 Distortion Pre"),
+    ("a knob edit on the first voice's alone", SLOTS, "        plugins::setKnob(l.id[i], knob, v);\n", "",
+     "pre", "", "a knob edit on FX1 reaches every voice's"),
     ("freed before it faded", SLOTS, "if (!retired(part, slot) && plugins::now() - l.oldSince < kRetireMs)", "if (false)",
      "order_and_swap", "", "ACD: Overdrive swapped"),
     ("a project's knobs not set", SLOTS, "if (isFinite(want.knobs[k]))", "if (false)",
      "as_before", "1", "ACD, Overdrive"),
-    ("knobs not snapped", SLOTS, "        want.knobs[k] = plugins::knob(id, k); // on the plugin's steps, as it will be saved\n",
+    ("knobs not snapped", SLOTS, "        want.knobs[k] = plugins::knob(first, k); // on the plugin's steps, as it will be saved\n",
      "", "garbage", "", "ACD: garbage knobs"),
-    ("an opened project's slots never made", SLOTS, "if (takeLoaded())", "if (false && takeLoaded())",
-     "page:projects", "", "Open: each slot's plugin made"),
+    ("an opened project's slots never made", SLOTS, "const bool loaded = takeLoaded();",
+     "const bool loaded = false && takeLoaded();", "page:projects", "", "Open: each slot's plugin made"),
     # the record
     ("the record never written", SETTINGS, "return store.put(kRecord, kRecordVersion, nowBytes, kRecordSize);",
      "return false;", "page:projects", "", "Save: reopened with its slots"),
@@ -76,11 +103,19 @@ FAULTS = [
      "if (version == kRecordVersion)", "host", "", "another length"),
     ("infinite knobs kept", SETTINGS, "s.knobs[k] = finite(f) ? f : noKnob();", "s.knobs[k] = f;",
      "host", "", "infinities and NaNs are the default"),
+    ("the Placements never saved", SETTINGS, "bytes[kRecordSizeV2 + part * kSlots + slot] = s.file[0] != 0 && s.pre != 0 ? 1 : 0;",
+     "bytes[kRecordSizeV2 + part * kSlots + slot] = 0;", "host", "", "the Placements: a byte for each slot"),
+    ("any Placement byte read as Pre", SETTINGS, "placement[part * kSlots + slot] == 1 ? 1 : 0",
+     "placement[part * kSlots + slot] != 0 ? 1 : 0", "host", "", "Pre only as 1"),
+    ("version 2 read at any length", SETTINGS, "else if (version == kRecordVersionV2 && length == kRecordSizeV2)",
+     "else if (version == kRecordVersionV2)", "host", "", "version 2 at version 3's length"),
     # the page
-    ("button 3 with the mod Off", MOD, "return mods::on(Mod::synthfx) && !hasOwnEffects(&patch);",
-     "return !hasOwnEffects(&patch);", "page:off", "", "mod Off"),
-    ("button 3 on WAVE", MOD, "return mods::on(Mod::synthfx) && !hasOwnEffects(&patch);",
-     "return mods::on(Mod::synthfx);", "page:off", "", "WAVE, mod On: no button 3"),
+    ("button 3 with the mod Off", MOD, "    return mods::on(Mod::synthfx);\n}\n\nbool partIsWave(int part)",
+     "    return true;\n}\n\nbool partIsWave(int part)", "page:off", "", "mod Off"),
+    ("a Placement row on every engine", PAGE, "return h != nullptr && (h->flags & PTSFX_FLAG_PRE) != 0 && partIsWave(part);",
+     "return h != nullptr && (h->flags & PTSFX_FLAG_PRE) != 0;", "page:page", "", "PHASE, FX1 Distortion: no Placement"),
+    ("Placement Pre not made again", PAGE, "        remake(part, slot, false); // a Pre plugin is one instance per voice: made again\n",
+     "", "page:page", "", "WAVE, FX1 Distortion: Placement"),
     ("an edit not marked for saving", EDITOR, "    mods::projectSettingEdited();\n    mtFxShowList(true);",
      "    mtFxShowList(true);", "page:page", "", "the pick lands in the project's record 16"),
     ("the same section keeps the rows", EDITOR, "if (previousValue != sectionListPos || mtFxLeft)",

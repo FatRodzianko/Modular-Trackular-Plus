@@ -60,7 +60,7 @@ static void functSynthInit();
 static void functSynthInitConfirm();
 static void functSynthInitCancel();
 
-#if MT_HAS_SYNTHFX // MT: Synth FX's rows in the parameter list, on button 3, for CE's engines (synthfxMod.h)
+#if MT_HAS_SYNTHFX // MT: Synth FX's rows in the parameter list, on button 3, for every engine (synthfxMod.h)
 static void functSynthFx();
 
 static bool mtFxView = false; // the parameter list shows Synth FX's rows
@@ -1055,7 +1055,7 @@ void cInstrumentEditor::changeSynthPatchParamValue(int16_t value)
 
     getSynth()->setPatchDirty(syntPartIdx);
 
-#if MT_HAS_SYNTHS // MT: WAVE's and PHASE's Distortion and LFO Sync rename or redisplay other controls: the list again
+#if MT_HAS_SYNTHS // MT: WAVE's and PHASE's LFO Sync redisplays other controls: the list again
     bool mtRebuild = false;
     if (!isMacroSelected())
     {

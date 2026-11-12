@@ -402,7 +402,8 @@ def main():
         # made as a plugin from the card; each block runs the insert on every part sounding, so at
         # least one run a block
         slots = m.addr("_ZN4mods7synthfx5slotsE")
-        files = [m.read(slots + 96 * i, 48).split(b"\0")[0].decode() for i in range(6)]
+        # a Slot is 100 bytes (padded), its file name first
+        files = [m.read(slots + 100 * i, 48).split(b"\0")[0].decode() for i in range(6)]
         made = [m.call(m.addr("_ZN4mods7synthfx12slotInstanceEii"), i // 2, i % 2) < 0x80000000 for i in range(6)]
         print("Synth FX slots:", files, "made", made, "insert runs", fx_runs[0],
               "allocations in the interrupt", r.interrupt_allocs, flush=True)

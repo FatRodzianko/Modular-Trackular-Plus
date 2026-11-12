@@ -1194,7 +1194,8 @@ for every synth engine, CE's closed ones included.
 
 Planned 2026-11-11, from the source. Phase 1 (the runtime and the SDK) built 2026-11-11:
 "Phase 1, as built" below. Phase 2 (CE's engines on the two slots) built 2026-11-11: "Phase 2,
-as built" below. Phases 3 and 4 not started. Goal, the user's choices of
+as built" below. Phase 3 (WAVE and PHASE on the slots) built 2026-11-11: "Phase 3, as
+built" below. Phase 4 (the device) not started. Goal, the user's choices of
 2026-11-11: each synth part has two effect slots, FX1 and FX2, that pick from one list of
 `.ptsfx` plugins in `/SynthFX/` on the card. A part can't use the same effect in both
 slots. Today's six effects (Overdrive, Distortion, Bit Crusher, Chorus, Flanger, Phaser)
@@ -1494,6 +1495,74 @@ it, and copy it to the card. WAVE and PHASE use the same two slots.
       clean.
     - Not run: no device test (phase 4). Real time, SDRAM cache misses and the plugins' cost
       with 8 voices sounding are device readings.
+- **Phase 3, as built (2026-11-11).** WAVE and PHASE play their effects through the same two
+  slots; their own effects (the Distortion in the voice, and `synthFx.cpp`'s block after it)
+  are gone from them. With Synth FX Off they play dry, as CE's engines do (the user's choice,
+  2026-11-11).
+  - **Files:**
+    - `wtEngine.h`: the voice's Distortion is a hook, `pre(pre_ctx, out)`, where
+      `dist_block` was: before Drive and the filter. `fresh` is still set on a note from idle.
+    - `waveSynth.cpp`: the hook calls `synthfx::runPre(voice, buf, fresh)`; the FX section
+      and its names are gone. `phaseSynth.cpp`: the same, without a hook.
+    - `synthsSdk.h`, `synthsSdk.cpp`: the post process is `toStereo` alone; `distKnobName`,
+      `kFxSection` and the Distortion's `.invalidates` are gone. Parameters 62 to 71 stay,
+      so old patches load, and do nothing; a macro aimed at one no longer changes the sound.
+    - `synthfxMod.cpp`: `begin` and `run` take WAVE and PHASE; `runPre`; `partIsWave`;
+      `convertOldPatches`. `synthfxSlots.cpp`: a Pre slot is made 8 times.
+      `synthfxSettings.cpp`: record version 3, `setSlotPre`, `fromOldPatch`.
+      `synthfxPage.cpp`: the Placement row. `mods.cpp`: `mods::update` calls
+      `convertOldPatches`.
+    - The pack: the Overdrive, Distortion and Bit Crusher have `PTSFX_FLAG_PRE`.
+  - **The audio path:**
+    - A WAVE or PHASE part goes into the slots in mono (`Insert.inStereo` false): its two
+      sides are alike, so FX1 runs on one channel, and a widening plugin makes it stereo.
+    - Placement Pre (a slot with Pre and a plugin flagged PRE) is made with 8 instances. On a
+      WAVE part each voice runs its own on its block before the filter (`runPre`), and `run`
+      skips the slot on the part, moving its fade on. On another engine the first instance
+      runs on the part, as Post.
+    - CE's library passes voice index 0 to every voice, so `runPre` gives voices seats by
+      address: a voice that rendered in the last block keeps its seat; any other takes a
+      seat nobody rendered in last block, and that seat's instances reset, as they do when
+      the voice starts a note from idle.
+  - **Old patches.** `convertOldPatches` runs in the main loop, with the mod On or Off, and
+    only while the file manager is idle (a project opening may not have its record in yet).
+    A WAVE or PHASE patch with an Effect or a Distortion has them moved into its part's
+    slots, as record version 1 is (the patch's floats × 100, Level as it is; FX1 Pre if WAVE
+    and Placement Pre). It then sets the patch's Effect to None and Distortion to Off
+    (`kPatchAssign`, with the audio interrupt off), marks the patch and the project edited,
+    and has the slots made again.
+  - **Changed from the plan above:**
+    - Record 16 version 3 is 582 B: version 2's 576, then a Placement byte per slot (1:
+      Pre; anything else, or an empty slot, is Post). Version 2 loads with every slot Post.
+    - The `Slot` is 100 B (the file at 0, the knobs at 48, Pre at 96, padded).
+    - Old patches are converted by the main loop after they load, not inside the load: one
+      check covers a patch opened, a project opened and a patch picked, and a project's
+      record is in by then.
+  - **The page.** Button 3 is on every engine when the mod is On; WAVE's and PHASE's FX tile
+    is gone (8 sections). On a WAVE part, a slot with a PRE plugin has a Placement row (Pre,
+    Post) under it; Delete sets Post. Changing it makes the slot again. A knob's edit is
+    copied to all 8 instances (`knobEdited`). Display list: WAVE's patch screen as it opens
+    is now the worst, 7,092 B (limit 8,172); PHASE 6,576 B; 5,952 B with WAVE's 10 rows.
+  - **Memory** (`tools/mem_budget.py`, full build, against phase 2's):
+    - ITCM free 9,808 B (was 2,264): `dist_block` and its copy no longer linked;
+    - SDRAM free 688,492 B (was 675,204);
+    - DTCM free 14,272 B (was 14,456): `runs` grows to 8 ids a slot (72 B), `live` to
+      168 B, and the seats (192 B);
+    - instances: 56, enough for every slot Pre on every part (48).
+    - Cost (emulator instructions, the plugins' own included): one WAVE part with all 8
+      voices, the Distortion and the Bit Crusher both Pre, 307,397 a block (18.1 %); three
+      WAVE parts 3 + 3 + 2, each the Distortion Pre and the Phaser, 307,051 (18.1 %).
+  - **Tests (2026-11-11):**
+    - `tools/run_tests.py --tier release`: 37 run, 0 failed (synthfx plugins cached);
+    - host tests (`core/mods/tests`): 65 checks, 0 failed;
+    - `test_synthfx.py`'s new sections: `wave_off_and_mono` 7/0, `old_patches` 22/0, `pre` 9/0;
+      `test_synths.py` 32/0; `test_synths_dsp.py` passes; the page test passes;
+    - planted faults: `plant_synthfx.py` 40 of 40 caught, Level A 3 of 3;
+    - the diagnostic build has only CE's own warnings; the `MT_NO_MODS` reference is
+      byte-identical.
+    - Tight: PHASE at Feedback 90 % agrees with the phase 1 build from block 166, against a
+      limit of 170.
+    - Not run: anything on the unit (phase 4, `DEVICE_TEST_LADDER.md` S5).
 
 ## 4. Order and why
 
