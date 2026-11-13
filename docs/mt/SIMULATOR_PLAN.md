@@ -1,7 +1,12 @@
 # Whole-firmware simulator: plan
 
-Status: **plan only.** Nothing here has been built, run or measured. Written 2026-11-13 against
-`modular` at `c32fee7`. Section 11 says what was read and what wasn't.
+Status: **narrowed on 2026-11-13.** Stage 1 (the virtual-time kernel) is built; its results are in
+[SIMULATOR_STAGE1.md](SIMULATOR_STAGE1.md). The user then chose not to build stages 2 to 5: no
+calibration session on the unit (D5), and instead one targeted test on the stage 1 kernel,
+`tools/emu/sim_songstop.py`, which checks section 1's song stop with Color Song and Copy to New on
+the reference, `modular` and `modular` with the fix. The rest of this file is the original plan,
+kept for reference. Written 2026-11-13 against `modular` at `c32fee7`. Section 11 says what was read
+and what wasn't.
 
 ## Summary
 
@@ -730,16 +735,19 @@ Costs are guesses in working sessions (one agent session with your review), plus
   - Building it to see whether it compiles needs `gcc-multilib`, `g++-multilib` and i386 libraries
     installed in WSL (section 2.6). Recommendation: not now.
 - **D4. Card layer:** L1 folder now. L2 FAT image later or never. For L2, our own Python FAT32 writer
-  or an install of `mtools`/`dosfstools`.
+  or an install of `mtools`/`dosfstools`. **Decided 2026-11-13: L1 now, as recommended.**
 - **D5. Calibration:** OK to build the calibration firmware and run section 6.4's steps on your unit
   with your usual card, after the release tier and ladder `L1`. Measurements are of normal use
-  only, with no synthetic card writes.
+  only, with no synthetic card writes. **2026-11-13: the user turned down the 45-minute session as
+  too much. Stage 4 is to be re-planned smaller or dropped; until then the simulator makes no
+  absolute timing claims.**
 - **D6. Pass criterion for 8.3:** relative to CE's reference (recommended), or absolute latencies
-  after calibration.
+  after calibration. **Decided 2026-11-13: relative to CE, as recommended.**
 - **D7. The release:** does `modular-1.0` wait for stage 3 (the fix shown in the simulator), stage 4
   (calibrated), or stage 5?
 - **D8. The waiting fix:** stage 3 needs it built (F) next to the committed `modular` (N). Committing
-  it is separate and needs your OK as usual.
+  it is separate and needs your OK as usual. **Decided 2026-11-13: build F for stage 3, as
+  recommended.**
 
 ## 11. What this plan checked and what it didn't
 

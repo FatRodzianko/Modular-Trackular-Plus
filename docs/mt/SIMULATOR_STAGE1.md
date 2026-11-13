@@ -765,3 +765,81 @@ Open and 2 virtual seconds of Play. Five runs in parallel, so the wall times inc
 - Determinism on more than one run.
 - The calibration row in `PAST_FAILURES.md` and the release-tier jobs (2.6).
 - The 4 B heap difference with interrupts during `init`.
+
+## Targeted test: does a mod stop the song? (2026-11-13)
+
+After stage 1 the user chose one targeted test instead of stages 2 to 5 of the plan:
+`tools/emu/sim_songstop.py`, on the stage 1 kernel. It checks [SIMULATOR_PLAN.md](SIMULATOR_PLAN.md)
+section 1: since CE's `15c3d23` and `c476ce1`, the next pattern is read in the main loop after the
+audio interrupt asks for it, and must be in memory by the end of that step, or CE stops the song.
+
+**Setup:**
+- **Builds:**
+  - R, the CE reference (`TrackerPlus_ref_cemerge.axf`; no core change between it and `c32fee7`);
+  - N, `modular` at `c32fee7`;
+  - F, `c32fee7` plus the waiting fix (both mods also wait while `isPatternLoading()`), built from a
+    clean copy for this test. The fix itself isn't committed.
+- **Project:** `held`'s sounds, with a song of 48 patterns of 16 steps at 800 BPM (a step is 18.75
+  ms, a pattern 300 ms). Every pattern is marked as used, and no Color Song colours are saved, so
+  Color Song reads every pattern file once.
+- **Color Song:** switched On after Open, Song screen, Play 40 ms later. It reads a pattern file
+  every 100 ms while the song plays.
+- **Copy to New:** the song started from the Song screen, then the Pattern screen. The job the button
+  starts is called every 137 ms, so each press checks the card and writes a 16 KB pattern.
+  That's far more often than anyone presses it; it's a stress case.
+- **The card:** `--card-scale` multiplies the placeholder card times (100 µs a call, 50 ns a byte).
+  At scale 1 a whole pattern load takes about 2.4 ms; at scale 8, about 17 ms. **No scale is known to
+  match a real card.**
+- **A stop** is `Sequencer::stop` called in the audio interrupt while playing.
+  `stopForMissingNextPattern` is inlined; nothing else stops the song in this scenario.
+
+**Results** (the first stop, if any, in 6 virtual seconds; "margin" is the smallest time between the
+pattern landing in memory and the step's end):
+
+| Card scale | R (CE) | N, mods Off | N, Color Song | F, Color Song | N, Copy to New | F, Copy to New |
+|---|---|---|---|---|---|---|
+| 4 | plays | | | | plays, margin 0.9 ms | |
+| 6 | | | stops at 1.51 s | stops at 1.51 s | plays, margin 0.58 ms | plays, margin 0.58 ms |
+| 7 | | | stops at 0.32 s | stops at 0.32 s | | |
+| 8 | plays, margin 0.39 ms | plays, same load times as R | stops at 0.32 s | stops at 0.32 s | stops at 2.41 s | stops at 2.41 s |
+| 9, 10 | stops | stops (9) | | | | |
+
+Blank cells weren't run.
+
+**What it shows:**
+1. **Both mods can stop the song at card speeds where CE alone plays.** CE alone stops from scale
+   9. Color Song stops from scale 6 or lower; Copy to New, pressed this often, at 8.
+2. **The waiting fix made no difference in any run.** F's results equal N's to the 0.01 ms. In every
+   delayed load, the mod's card access had started before the request (Color Song 6 to 15 ms
+   before; Copy to New about 7 ms before) and was still running when it came. The load started only
+   after that access ended, 2 to 7 ms late instead of 0.9 ms. The fix stops a mod from *starting* an
+   access once a load is requested. It can't stop one already under way, which is the window
+   SIMULATOR_PLAN.md section 1 already said stays open, and here it's the one that matters.
+3. **How much it costs:** a mod's access already under way delays the load by up to its own length,
+   about one pattern read. CE alone has room for one load inside a step. With a mod access in front
+   of it, it needs room for about two.
+4. **Why Color Song hit it so often:** its reads are 100 ms apart, and a 300 ms pattern is exactly 3
+   of those, so once a read overlaps a pattern end it overlaps every one. Other tempos and pattern
+   lengths drift in and out of it.
+
+**What it doesn't show:**
+- **Whether a real card is ever this slow.** The card times are placeholders, and no calibration is
+  planned. At 120 BPM a step is 125 ms, so the same overlap needs a load about 7 times slower than
+  at 800 BPM. The risk grows with tempo and with slower or busier cards.
+- **The fix's own case,** a mod access starting between the request and the load start, wasn't hit.
+  That window is the part of a pass before the mod's update, much shorter than an access.
+- Only `held`'s sounds, 16-step patterns, one seed, one interrupt phase and one Play delay.
+- Copy to New's presses were made by calling the job directly, not through the menu.
+- Color Song reads only while it builds its colours: the first visit to the Song screen, or after
+  edits. Once the colours are known it doesn't read.
+
+**What would close it:** a mod could avoid starting a card access while a pattern end is near in
+song mode (for example, not in the last steps before the end, with a margin of a pattern read or
+more). Then nothing of the mod's is under way when the request lands. The same test checks it:
+the mod's stops should move to CE's own threshold (scale 9 here). This is a design note, not
+built.
+
+Each run takes about 1 to 1.5 minutes of wall time. Run five at a time to stay inside the 75 % CPU
+limit. Example:
+
+    python tools/emu/sim_songstop.py <axf> <held project> --patterns 48 --card-scale 8 --mod colorsong
