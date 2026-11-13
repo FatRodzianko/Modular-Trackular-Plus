@@ -56,7 +56,8 @@ SECTIONS
         __audio_flash_functions_begin = .;
         . = ALIGN(4);
         *(SORT(.audio_flash_functions*))
-        *libPolyDSP.a:*.o(.text.*C1E* .text.*C2E* .text.*D0E* .text.*D1E* .text.*D2E*)
+        *libPolySynth.a:Amplifier.o(.text.*C1E* .text.*C2E* .text.*D0E* .text.*D1E* .text.*D2E*)
+        *libPolySynth.a:Mixer.o(.text.*C1E* .text.*C2E* .text.*D0E* .text.*D1E* .text.*D2E*)
         *libPolySynth.a:*PatchImpl_perf*.o(.text.*C1E* .text.*C2E* .text.*D0E* .text.*D1E* .text.*D2E* .text.*subscribe* .text.*unsubscribe*)
         *libPolySynth.a:*InstrumentImpl*.o(.text.*C1E* .text.*C2E* .text.*D0E* .text.*D1E* .text.*D2E* .text.*connect* .text.*disconnect*)
         __audio_flash_functions_end = .;
@@ -112,7 +113,8 @@ SECTIONS
         *(.data.$SRAM_ITC.*)
         
         *(.audio_ram_functions*)
-        *libPolyDSP.a:*.o(.text*)
+        *libPolySynth.a:Amplifier.o(.text*)
+        *libPolySynth.a:Mixer.o(.text*)
         *libPolySynth.a:*PatchImpl_perf*.o(.text*)
         *libPolySynth.a:*InstrumentImpl*.o(.text*)
         *lib_a-memcpy-stub.o(.text*)

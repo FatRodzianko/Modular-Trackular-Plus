@@ -21,9 +21,11 @@ typedef enum {
 } PtfxFlags;
 
 typedef enum {
-    PARAM_FLOAT = 'f', // Rendered as decimal (e.g. 1.25)
-    PARAM_INT   = 'd', // Rendered as integer (e.g. 42)
-    PARAM_LIST  = 'l'  // Rendered as scrollable string list (cList)
+    PARAM_FLOAT     = 'f', // Rendered as decimal (e.g. 1.25)
+    PARAM_INT       = 'd', // Rendered as integer (e.g. 42)
+    PARAM_LIST      = 'l', // Rendered as scrollable string list (cList)
+    PARAM_FILE      = 'w', // Opens GlobalFileBrowser to pick a .wav (or custom extension in unit[])
+    PARAM_SAVE_FILE = 's'  // Opens GlobalFileBrowser in Save mode to pick an output file path
 } PtfxParamDisplayType;
 
 // Exactly 32 bytes; all float fields are 4-byte aligned (offsets +8, +12, +16, +20)
@@ -37,7 +39,7 @@ typedef struct __attribute__((packed, aligned(4))) {
     float   default_val;   // +0x10: Initial load value (4-byte aligned!)
     float   step;          // +0x14: Value delta per encoder tick (4-byte aligned!)
     char    unit[6];       // +0x18: Unit string (max 5 chars + '\0') or list_offset/item_count
-    uint8_t display_type;  // +0x1E: 'f', 'd', or 'l' (PtfxParamDisplayType)
+    uint8_t display_type;  // +0x1E: 'f', 'd', 'l', or 'w' (PtfxParamDisplayType)
     uint8_t padding;       // +0x1F: Pad struct to 32 bytes
 } PtfxParamDef;
 
@@ -87,6 +89,11 @@ typedef struct {
     int   (*rand)(void);
     // Optional Sample Length Extension (prepend / append samples to selection)
     void  (*set_extra_samples)(uint32_t prepend_samples, uint32_t append_samples);
+    // File I/O & Secondary Sample Access (for convolution, vocoder, morphing, presets)
+    int32_t (*read_file)(const char* path, void* buffer, uint32_t max_bytes);
+    int32_t (*write_file)(const char* path, const void* buffer, uint32_t num_bytes);
+    const int16_t* (*get_secondary_sample)(uint32_t* out_frames, uint8_t* out_channels);
+    const char* (*get_selected_file_path)(uint8_t param_index);
 } PtfxHostApi;
 
 // Plugin Function Pointer Types

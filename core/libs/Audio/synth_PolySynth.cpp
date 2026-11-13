@@ -6,6 +6,8 @@
 #include "PolySynth/Instrument.h"
 #include "PolySynth/Synth.h"
 #include "Synth.h"
+#include "Platform.h"
+#include "Tracker.h"
 #include "config.h"
 #include <span>
 //#include "Audio.h"
@@ -20,6 +22,23 @@ AUDIO_CORE_RAM void PolySynth::update(void)
         return;
     }
 
+    static constexpr uint32_t kMaxSynthRealtimeBudgetUs = 2100;
+    static constexpr uint8_t kOverloadCooldownBlocks = 32;
+
+    if (!AudioStream::renderMode && overloadCooldownBlocks > 0)
+    {
+        --overloadCooldownBlocks;
+        return;
+    }
+
+    Timer* timer = (!AudioStream::renderMode && Tracker::getInstance() != nullptr &&
+                    Tracker::getInstance()->getPlatform() != nullptr)
+                     ? Tracker::getInstance()->getPlatform()->getTimer()
+                     : nullptr;
+    const uint32_t maxCycles =
+      timer != nullptr ? kMaxSynthRealtimeBudgetUs * timer->clockCyclesPerUs() : 0;
+    const uint32_t startCycles = timer != nullptr ? timer->clockCycles() : 0;
+
     static_assert(std::is_same<polysynth::sample_t, float>::value);
 
     static std::array<polysynth::sample_t, polysynth::kAudioBufferSize> tempBufSendsCommonLeft;
@@ -33,7 +52,7 @@ AUDIO_CORE_RAM void PolySynth::update(void)
     {
         auto& part = trackerSynth->parts[partIdx];
 
-        if (part.instrument->getVoiceCount() == 0)
+        if (part.loading.load(std::memory_order_acquire) || part.instrument->getVoiceCount() == 0)
         {
             if (!AudioStream::renderMode)
             {
@@ -52,6 +71,12 @@ AUDIO_CORE_RAM void PolySynth::update(void)
             transmit(blockZero, kSend2Offset + partIdx);
             release(blockZero);
             continue;
+        }
+
+        if (partIdx > 0 && timer != nullptr && (timer->clockCycles() - startCycles) > maxCycles)
+        {
+            overloadCooldownBlocks = kOverloadCooldownBlocks;
+            return;
         }
 
         bool isStereo =
@@ -99,6 +124,13 @@ AUDIO_CORE_RAM void PolySynth::update(void)
           std::span<polysynth::AudioBufferRef>(tempSendsBufArray),
           partIdx);
 
+        bool budgetExceeded =
+          (timer != nullptr && (timer->clockCycles() - startCycles) > maxCycles);
+        if (budgetExceeded)
+        {
+            overloadCooldownBlocks = kOverloadCooldownBlocks;
+        }
+
         const bool reuseUnmodifiedMono = (!hasSends && !isStereo && gainDB[partIdx] == 0.0f);
         if (!reuseUnmodifiedMono)
         {
@@ -110,11 +142,6 @@ AUDIO_CORE_RAM void PolySynth::update(void)
         }
 
         polysynth::AudioBufferRef tempBufRef = tempBufSendsCommonLeft;
-
-        assert(hasSends ==
-               isStereo); // Assumption to simplify handling. The only one stereo and with internal
-                          // synths is PERC, the other are mono and without sends. Refactor the
-                          // handling if needed for new synth.
 
         if (hasSends)
         {
@@ -212,6 +239,10 @@ AUDIO_CORE_RAM void PolySynth::update(void)
         if (blockPostFaderRight != NULL)
         {
             release(blockPostFaderRight);
+        }
+        if (budgetExceeded)
+        {
+            break;
         }
     }
 }

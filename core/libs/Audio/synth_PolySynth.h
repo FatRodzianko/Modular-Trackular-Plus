@@ -24,4 +24,5 @@ class PolySynth : public AudioStream
     Synth* trackerSynth = nullptr;
     bool isBlocked = true;
     float gainDB[kSynthParts] = {};
+    uint8_t overloadCooldownBlocks = 0;
 };

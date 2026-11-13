@@ -14,6 +14,7 @@ Built directly from the original Polyend firmware source code, Tracker CE opens 
 Automatically built from the latest changes in `main` (for all 3 devices):
 
 * Download the latest [Beta Firmware builds (`.zip`)](https://nightly.link/polyend/tracker-ce/workflows/build.yml/main/polyend-tracker-ce-firmware.zip)
+* Download the latest [Synth Engines (`.zip`)](https://nightly.link/polyend/tracker-ce/workflows/build.yml/main/polyend-tracker-ce-synths.zip)
 * Download the latest [Sample Editor Effects (`.zip`)](https://nightly.link/polyend/tracker-ce/workflows/build.yml/main/polyend-tracker-ce-effects.zip)
 * See [`UPCOMING.md`](UPCOMING.md) to find out what's new in these Beta Builds.
 
@@ -47,13 +48,15 @@ This unified codebase powers all three hardware instruments in the Tracker famil
 ├── CONTRIBUTING.md         # Contribution rules & hardware testing workflow
 ├── LICENSE                 # MIT License (+ No Wholesale Commercial Clones & Precompiled Synth Terms)
 ├── NOTICE.md               # Third-party open-source attributions
-├── core/                   # Shared Tracker application, audio engine, UI & open synth engines
+├── core/                   # Shared Tracker application, audio engine, UI (GlobalFileBrowser, editors) & synth host glue
 ├── platforms/
 │   ├── mk66/               # Original Tracker (Kinetis MK66) HAL, drivers & linker scripts
 │   └── imx/                # Tracker+ & Tracker Mini (i.MX RT1051) HAL, drivers & linker scripts
 ├── synth/
 │   ├── include/PolySynth/  # PolySynth public headers & Open Synth SDK (synth/include/PolySynth/sdk/)
-│   └── lib/                # Precompiled libPolySynth.a & libPolyDSP.a + LICENSE-PROPRIETARY.txt
+│   ├── source/             # Open-source PolySynth host, PsynLoader, PolyDSP (Amplifier/Mixer) & Master FX
+│   └── prebuilt/           # Precompiled factory .psyn synth plugins + LICENSE-PROPRIETARY.txt
+├── synth-plugin-sdk/       # .psyn loadable Synth Engine SDK, builder & engines/ sources
 ├── util/                   # Shared C++ utility headers & third-party header libraries (ETL, magic_enum)
 ├── editor-fx-sdk/          # .ptfx Sample Editor plugin SDK, builder & effects/ sources
 └── docs/                   # User guides, SDK tutorials & architecture documentation
@@ -106,6 +109,12 @@ make mini       # -> build/TrackerMini_CE_1.0.0.ptf
 # Build reference .ptfx Sample Editor effects into editor-fx-sdk/build/Effects/:
 make ptfx
 
+# Build open-source .psyn synth (CHIP.psyn) and stage all factory + open-source .psyn plugins into build/Synths/:
+make psyn
+
+# Or compile only the synth-plugin-sdk reference plugin (CHIP.psyn -> synth-plugin-sdk/build/):
+make -C synth-plugin-sdk
+
 # Clean all build directories:
 make clean
 ```
@@ -130,6 +139,8 @@ make bump-minor TARGET=all        # or TARGET=original | TARGET=plus | TARGET=mi
    * *Note*: Keep `.ptf` filenames at **31 characters or fewer** so the Original Tracker's 32-byte `/Firmware/_fwinfo` bootloader buffer remains null-terminated.
 2. On the device, open **Config > Firmware > Firmware update**, select the `.ptf` file, and confirm.
 
+If you prefer a video, have a look here: https://youtu.be/1F6wx2ftFVA
+
 > **Bootloader Resilience & Emergency Firmware Recovery**:
 > * The Polyend Tracker bootloader is isolated from the application firmware:
 >   * On the **Original Tracker (`MK66`)**, the bootloader runs on a separate dedicated microcontroller (`kBootloaderTrig`).
@@ -151,7 +162,8 @@ Full user and developer documentation is available in [`docs/`](docs/Home.md) an
   * [SD Card Image Viewer](docs/image_viewer.md)
 * **Developer & Architecture Guides**:
   * [Firmware Architecture, Hardware Limits & Developer Gotchas](docs/developer_guide.md)
-  * [Custom Synth Engine SDK](docs/custom_synth_sdk.md)
+  * [Global File Browser Developer Guide](docs/global_file_browser.md)
+  * [Custom Synth Engine & `.psyn` Plugin SDK](docs/custom_synth_sdk.md)
   * [Modular Sample Editor Effects & `.ptfx` Developer SDK](docs/modular_effects_system.md)
 
 ---
@@ -169,9 +181,9 @@ This repository is part of a growing open-source ecosystem around the Polyend Tr
 
 ## License
 
-* **Source Code, SDKs, Open Synth Engines (`core/synth/engines/`), `.ptfx` Sample Editor SDK (`editor-fx-sdk/`), Drivers & Utilities**: Licensed under the **MIT License with a Wholesale Commercial Clone Restriction** (see [`LICENSE`](LICENSE)).
+* **Source Code, SDKs, Open Synth Engines (`synth-plugin-sdk/`), `.ptfx` Sample Editor SDK (`editor-fx-sdk/`), PolySynth Host & DSP (`synth/source/`), Drivers & Utilities**: Licensed under the **MIT License with a Wholesale Commercial Clone Restriction** (see [`LICENSE`](LICENSE)).
   * **Musicians & Creators**: Using the firmware for commercial music production, albums, paid live performances/gigs, sample packs, and monetized streaming/YouTube content is **expressly permitted**.
-  * **Developers & Plugin Authors**: Reusing individual source files, drivers, DSP algorithms, UI widgets, or open-source C++ synth engines (`CHIP`, etc.) in your own open-source or commercial projects—and selling `.ptfx` Sample Editor plugins—is **expressly permitted** under the MIT License.
+  * **Developers & Plugin Authors**: Reusing individual source files, drivers, DSP algorithms, UI widgets, or open-source C++ synth engines (`CHIP`, etc.) in your own open-source or commercial projects—and selling custom `.ptfx` Sample Editor or custom `.psyn` synth plugins—is **expressly permitted** under the MIT License.
   * **No Wholesale Commercial Clones**: You may **not** sell compiled `.ptf` firmware builds, manufacture/sell commercial clone hardware running the Tracker firmware, or sell a direct port/wholesale clone of the complete Tracker application as a paid software product.
-* **Precompiled Synth & DSP Libraries (`synth/lib/libPolySynth.a`, `synth/lib/libPolyDSP.a`)**: Provided under the [Polyend Precompiled Synthesizer & DSP Library License](synth/lib/LICENSE-PROPRIETARY.txt), permitting free use on authentic Polyend hardware as well as personal/DIY non-commercial projects (commercial embedding of the precompiled `.a` binaries is prohibited).
+* **Precompiled Factory Synth Plugins (`synth/prebuilt/*.psyn`)**: Provided under the [Polyend Precompiled Factory Synthesizer Plugins License](synth/prebuilt/LICENSE-PROPRIETARY.txt), permitting free use on authentic Polyend hardware as well as personal/DIY non-commercial projects (commercial embedding or paid distribution of these proprietary factory `.psyn` binaries is prohibited).
 * **Third-Party Components**: See [`NOTICE.md`](NOTICE.md).

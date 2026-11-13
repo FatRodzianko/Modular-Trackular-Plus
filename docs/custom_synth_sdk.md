@@ -1,808 +1,405 @@
-# Polyend Tracker Custom Synth Engine SDK - Developer Guide
+# Polyend Custom Synth Engine & `.psyn` Plugin SDK - Developer Guide
 
-The **Polyend Tracker Custom Synth Engine SDK** ([`synth/include/PolySynth/sdk/`](../synth/include/PolySynth/sdk/)) lets developers create, register, and customize polyphonic real-time synthesizer engines on **Polyend Tracker+** and **Polyend Tracker Mini** (`NXP i.MX RT1064`, ARM Cortex-M7 @ 600 MHz) without requiring the proprietary `PolyDSP` source code.
+The **Polyend Community Edition Synth Plugin SDK** ([`synth-plugin-sdk/`](../synth-plugin-sdk/) + [`synth/include/PolySynth/sdk/`](../synth/include/PolySynth/sdk/)) lets developers create standalone, relocatable `.psyn` synthesizer engines loaded directly from `/Synths/*.psyn` on the microSD card, **without recompiling the firmware** and with full cross-device binary compatibility across IMX powered Polyend devices (`ARMv7E-M` Cortex-M7 @ 600 MHz, Thumb-2, VFPv5 hard-float).
 
 ---
 
 ## Table of Contents
 
-1. [Architecture Overview](#1-architecture-overview)
-2. [SDK Headers Reference](#2-sdk-headers-reference)
+1. [Architecture Overview (`PsynLoader` & `/Synths/*.psyn`)](#1-architecture-overview-psynloader--synthspsyn)
+2. [SDK Headers & Two Authoring Modes](#2-sdk-headers--two-authoring-modes)
 3. [Voice Lifecycle & Audio Rendering Model](#3-voice-lifecycle--audio-rendering-model)
-4. [Step-by-Step Tutorial: Creating a Custom Synth Engine](#4-step-by-step-tutorial-creating-a-custom-synth-engine)
-   - [Step 1: Add an `InstrumentTypeId` Enum Value](#step-1-add-an-instrumenttypeid-enum-value)
-   - [Step 2: Define Your Parameter Enum](#step-2-define-your-parameter-enum)
-   - [Step 3: Implement Your Voice Class](#step-3-implement-your-voice-class)
-   - [Step 4: Define Parameters, UI Sections & Default Macros](#step-4-define-parameters-ui-sections--default-macros)
-   - [Step 5: Register the Engine in `core/synth/registry.cpp`](#step-5-register-the-engine-in-coresynthregistrycpp)
-   - [Step 6: Add UI Badges & Wire into the Tracker UI](#step-6-add-ui-badges--wire-into-the-tracker-ui)
-   - [Step 7: Build & Flash `.ptf` Firmware](#step-7-build--flash-ptf-firmware)
-5. [Patch Metadata, Curves, Macros & UI Layout Reference](#5-patch-metadata-curves-macros--ui-layout-reference)
-6. [DSP Utilities & Value Formatters](#6-dsp-utilities--value-formatters)
-7. [Real-Time Audio, CPU & Memory Guidelines](#7-real-time-audio-cpu--memory-guidelines)
-8. [Reference Implementation: `CHIP` (`ChiptuneSynthVoice`)](#8-reference-implementation-chip-chiptunesynthvoice)
+4. [Step-by-Step Tutorial: Building & Packaging a `.psyn` Engine](#4-step-by-step-tutorial-building--packaging-a-psyn-engine)
+5. [Sample-Based Synth Engines (`SampleSlot` & `SamplePool`)](#5-sample-based-synth-engines-sampleslot--samplepool)
+6. [Direct SD Card & WAV File I/O (`PsynHostApi`)](#6-direct-sd-card--wav-file-io-psynhostapi)
+7. [Global File Browser Integration (Patches & Sample Slots)](#7-global-file-browser-integration-patches--sample-slots)
+8. [Patch Metadata, Curves, Macros & UI Layout Reference](#8-patch-metadata-curves-macros--ui-layout-reference)
+9. [DSP Utilities & Value Formatters](#9-dsp-utilities--value-formatters)
+10. [Real-Time Audio, CPU & Memory Guidelines](#10-real-time-audio-cpu--memory-guidelines)
+11. [Reference Implementations (`chip.cpp` & `simple_sine.c`)](#11-reference-implementations-chipcpp--simple_sinec)
 
 ---
 
-## 1. Architecture Overview
+## 1. Architecture Overview (`PsynLoader` & `/Synths/*.psyn`)
 
-The Tracker synthesizer subsystem uses a hybrid architecture that combines precompiled factory libraries with an open-source C++20 SDK:
+All synthesizer engines in `tracker-ce` (built-in factory engines `ACD`, `FAT`, `VAP`, `WTFM`, `PERC`, `DIRT`, the open-source reference engine `CHIP`, as well as any third-party community engine) are distributed and loaded dynamically as standalone **`.psyn`** plugins on the SD card:
 
+```text
+┌────────────────────────────────────────────────────────────────────────────┐
+│                           Tracker Application                              │
+│  ┌────────────────────────────────┐  ┌──────────────────────────────────┐  │
+│  │ core/synth/Synth.cpp           │  │ SynthEditor / SynthPatchEditor   │  │
+│  │ core/synth/FileSystemAdapter   │  │ GlobalFileBrowser (patches/WAVs) │  │
+│  └───────────────┬────────────────┘  └─────────────────┬────────────────┘  │
+│                  │                                     │                   │
+│  ┌───────────────▼─────────────────────────────────────▼────────────────┐  │
+│  │                    libPolySynth.a + PsynLoader                       │  │
+│  │  • Scans /Synths/*.psyn headers at boot                              │  │
+│  │  • Loads up to 1,024 KB into the 1,920 KB SDRAM plugin arena at boot │  │
+│  │  • Loads additional engines on demand & LRU-evicts inactive engines  │  │
+│  │  • Shares 4 MB SamplePool across all active sample-based voices      │  │
+│  └──────────────────────────────────┬───────────────────────────────────┘  │
+└─────────────────────────────────────┼──────────────────────────────────────┘
+                                      │
+                   ┌──────────────────▼──────────────────┐
+                   │     SD Card (/Synths/*.psyn)        │
+                   │  • Built using synth-plugin-sdk/    │
+                   │  • C++20 (psyn_cpp_bridge.h)        │
+                   │  • or Pure C (psyn_plugin.h)        │
+                   └─────────────────────────────────────┘
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         Tracker Application                             │
-│  ┌─────────────────────────┐  ┌──────────────────────────────────────┐  │
-│  │ core/synth/Synth.cpp │  │ SynthEditor.cpp / SynthPatchEditor   │  │
-│  └────────────┬────────────┘  └──────────────────┬───────────────────┘  │
-│               │                                  │                      │
-│  ┌────────────▼──────────────────────────────────▼───────────────────┐  │
-│  │               core/synth/registry.cpp (Open Source)            │  │
-│  │   Registers Factory Engines (ACD, FAT, VAP, WTFM, PERC, DIRT)     │  │
-│  │   + Open-Source Custom Engines (CHIP, your custom engines...)     │  │
-│  └────────────┬──────────────────────────────────┬───────────────────┘  │
-└───────────────┼──────────────────────────────────┼──────────────────────┘
-                │                                  │
-┌───────────────▼────────────────┐ ┌───────────────▼──────────────────────┐
-│  Precompiled Factory Archives  │ │      Open-Source Synth Engines       │
-│  • libPolySynth.a (no registry)│ │  • synth/include/PolySynth/sdk/  │
-│  • libPolyDSP.a                │ │  • ChiptuneSynthVoice.cpp (CHIP)     │
-│  (Stripped, ABI-stable)        │ │  • YourCustomSynthVoice.cpp          │
-└────────────────────────────────┘ └──────────────────────────────────────┘
-```
 
-- **Factory Synth Libraries (`libPolySynth.a` + `libPolyDSP.a`)**: Provide the core `PolySynth` engine, voice allocator, patch serializer, macro modulation matrix, and the 6 factory synth engines (`ACD`, `FAT`, `VAP`, `WTFM`, `PERC`, `DIRT`).
-- **Open-Source Registration ([`core/synth/registry.cpp`](../core/synth/registry.cpp))**: `registry.o` is extracted from `libPolySynth.a` and compiled directly inside `Tracker`, giving firmware developers full control over which synth engines are registered.
-- **Zero `PolyDSP` Dependency**: Custom synth engines only include [`PolySynth/sdk/SynthVoiceSDK.h`](../synth/include/PolySynth/sdk/SynthVoiceSDK.h).
+### Key Architectural Facts
+* **Zero Firmware Changes Needed:** Drop any compiled `MYENGINE.psyn` onto the SD card under `/Synths/`. `PsynLoader` ([`synth/source/synths/PsynLoader.h`](../synth/source/synths/PsynLoader.h), [`PsynLoader.cpp`](../synth/source/synths/PsynLoader.cpp)) discovers `.psyn` headers automatically at boot and [`SynthEditor`](../core/interface/instrumentEditor/SynthEditor.cpp) populates the model selector dynamically from `synth->getSynthTypes()`.
+* **Dedicated `6 MB` Synth SDRAM Pool (`PSYN_RAM_POOL_SIZE`):** Defined in [`core/source/mtStructs.h`](../core/source/mtStructs.h):
+  * **`1,920 KB` `.psyn` Executable & Heap Arena (`PsynLoader::kArenaSize = 3 * 640 KB`):** Holds relocated plugin code, `.rodata`, `.data`, `.bss`, `.init_array` constructors, per-engine `slot_alloc` allocations, and `load_wav_file` buffers. Boot preloading caches engines up to `kMaxPreloadBytes = 1,024 KB`; remaining `.psyn` plugins load lazily when selected, with **LRU eviction** of inactive engines when headroom is needed.
+  * **`4 MB` Synth `SamplePool` (`initSamplePool(4 * 1024 * 1024)`):** Shared reference-counted SDRAM pool for engine `SampleSlot` assets (custom sample-based `.psyn` engines) with content deduplication across instruments and patches.
+* **Cross-Device Compatibility:** Every `.psyn` header carries both `type_id_wave` (Polyend Synth) and `type_id_play_tracker` (Play/Tracker), or `0` to auto-assign deterministic non-colliding dynamic runtime IDs (`0x100+`).
 
 ---
 
-## 2. SDK Headers Reference
+## 2. SDK Headers & Two Authoring Modes
 
-All SDK headers live in [`synth/include/PolySynth/sdk/`](../synth/include/PolySynth/sdk/):
+You can implement a `.psyn` plugin in either **C++20** or **Pure C**:
+
+### Mode A: C++20 (`psyn_cpp_bridge.h` + `PolySynth/sdk/`)
+Recommended for full-featured engines sharing code cleanly with Polyend's `Patch`, `Metadata`, `CustomSynthVoice`, and value formatters.
 
 | Header | Purpose |
 | :--- | :--- |
-| [`InstrumentType.h`](../synth/include/PolySynth/sdk/InstrumentType.h) | Defines `polysynth::InstrumentType` (`name`, `createMetadata`, `createVoice`). |
-| [`InstrumentVoice.h`](../synth/include/PolySynth/sdk/InstrumentVoice.h) | Pure virtual voice interface (`onMidiEvent`, `onParamChange`, `renderVoiceAudio`, `renderPostProcessAudio`, note query methods). |
-| [`InstrumentTypeRegistry.h`](../synth/include/PolySynth/sdk/InstrumentTypeRegistry.h) | Defines `InstrumentTypeRegistry::addInstrumentType(int id, std::unique_ptr<InstrumentType>)` and `registerInstrumentTypes()`. |
-| [`SynthVoiceSDK.h`](../synth/include/PolySynth/sdk/SynthVoiceSDK.h) | Header-only C++20 SDK base class [`CustomSynthVoice`](../synth/include/PolySynth/sdk/SynthVoiceSDK.h#L202-L371), [`ParamHelper`](../synth/include/PolySynth/sdk/SynthVoiceSDK.h#L166-L196), DSP math utilities, standard [`MidiCCs`](../synth/include/PolySynth/sdk/SynthVoiceSDK.h#L80-L112), and value string formatters. |
+| [`synth-plugin-sdk/include/psyn/psyn_cpp_bridge.h`](../synth-plugin-sdk/include/psyn/psyn_cpp_bridge.h) | Translates any `polysynth::InstrumentVoice` subclass into the C `.psyn` plugin ABI via `PSYN_REGISTER_CPP_VOICE(VoiceClass)`. |
+| [`synth/include/PolySynth/sdk/SynthVoiceSDK.h`](../synth/include/PolySynth/sdk/SynthVoiceSDK.h) | Header-only C++20 base class `CustomSynthVoice`, `ParamHelper`, math helpers, standard `MidiCCs`, and formatters. |
+| [`synth/include/PolySynth/sdk/InstrumentVoice.h`](../synth/include/PolySynth/sdk/InstrumentVoice.h) | Pure virtual voice interface (`onMidiEvent`, `onParamChange`, `renderVoiceAudio`, `renderPostProcessAudio`, note query methods). |
+| [`synth/include/PolySynth/sdk/InstrumentType.h`](../synth/include/PolySynth/sdk/InstrumentType.h) | Engine factory interface (`createMetadata`, `createVoice`). |
+| [`synth/include/PolySynth/Core.h`](../synth/include/PolySynth/Core.h) | Core types (`sample_t = float`, `note_t = uint8_t`, `AudioBufferRef`, `AudioBufferStereoRef`, `kNoteA4 = 69`, `kMaxMacroCount = 8`, `kUserMacroCount = 6`). |
+| [`synth/include/PolySynth/Patch.h`](../synth/include/PolySynth/Patch.h) | `Patch`, `Patch::Metadata`, `Param`, `Macro`, `SampleSlot`, `EditorLayout`, `EditorElement`, `OutputChannels`. |
+| [`synth/include/PolySynth/SampleStore.h`](../synth/include/PolySynth/SampleStore.h) | `Sample` / `SamplePool` data types (`data`, `format`, `waveSize`, `ready`, `basePitch`). |
+| [`synth/include/PolySynth/MidiEvent.h`](../synth/include/PolySynth/MidiEvent.h) | `MidiEvent` structure delivered to `onMidiEvent`. |
 
-Supporting public headers in [`synth/include/PolySynth/`](../synth/include/PolySynth/):
-- [`Core.h`](../synth/include/PolySynth/Core.h): Fundamental types (`sample_t = float`, `note_t = uint8_t`, `AudioBufferRef`, `AudioBufferStereoRef`, constants `kNoteA4 = 69`, `kMaxMacroCount = 8`, `kUserMacroCount = 6`).
-- [`Patch.h`](../synth/include/PolySynth/Patch.h): `Patch` and `Patch::Metadata` (`Param`, `Macro`, `EditorLayout`, `OutputChannels`).
-- [`MidiEvent.h`](../synth/include/PolySynth/MidiEvent.h): `MidiEvent` structure passed to `onMidiEvent`.
-- [`config.h`](../synth/include/PolySynth/config.h): `InstrumentTypeId` enum.
+### Mode B: Pure C (`psyn_plugin.h`)
+| Header | Purpose |
+| :--- | :--- |
+| [`synth-plugin-sdk/include/psyn/psyn_plugin.h`](../synth-plugin-sdk/include/psyn/psyn_plugin.h) | Self-contained 128-byte `PsynHeader` (`PSYN_MAGIC = 0x4E595350`, `PSYN_API_VERSION = 1`, `PSYN_FLAG_HAS_SAMPLE_SLOTS = 0x0001`), `PsynHostApi` callbacks, `PsynPluginApi` vtable, and `psyn_plugin_entry(const PsynHostApi* host)`. |
 
 ---
 
 ## 3. Voice Lifecycle & Audio Rendering Model
 
-The Tracker audio engine supports **3 active synth slots** (`SYN 1`, `SYN 2`, `SYN 3`) with up to **8 voices total** allocated dynamically across those 3 slots.
+The Tracker audio engine supports **3 active synth slots** (`SYN 1`, `SYN 2`, `SYN 3`) sharing up to **8 voices total**:
 
-### How Voices Are Allocated and Called
-
-1. **Engine Selection**:
-   When a user selects your synth engine on `SYN 1`–`SYN 3` (or loads a project/patch using it), `PolySynth`:
-   - Calls your static `createMetadata(const Patch&, Patch::Metadata&)` function once to build the parameter table, UI layout, and default macros.
-   - Calls your `createVoice()` factory up to `metadata.maxVoices` times (up to 8 voices) to instantiate your `CustomSynthVoice` subclass on the heap.
-   - Sends initial `onParamChange(paramId, defaultValue)` calls for every parameter so your voice state is synchronized with the patch.
-
-2. **Parameter & Macro Updates (`onParamChange`)**:
-   - Whenever the user turns a knob, changes a macro, sends MIDI CC, or triggers a step FX locking a macro/param, `PolySynth` computes the final modulated parameter value (base parameter + all active macro modifiers + per-voice velocity/aftertouch modifiers) and calls `onParamChange(paramId, newValue)`.
-   - [`CustomSynthVoice`](../synth/include/PolySynth/sdk/SynthVoiceSDK.h#L246-L253) automatically dispatches `onParamChange` in $O(1)$ time via a static table of 4-byte function pointers (`paramHandlers`) registered in `createMetadata()`.
-
-3. **Note & Transport Events (`onMidiEvent`)**:
-   [`CustomSynthVoice`](../synth/include/PolySynth/sdk/SynthVoiceSDK.h#L213-L244) handles `MidiEvent` messages, maintains a per-voice held-note stack (`heldNotes`, supporting mono/legato note priority and polyphonic voice stealing), tracks `pitchBendSemitones` ($\pm 2$ semitones), and calls your virtual hooks:
-   - `onNoteOn(const InstrumentVoiceContext& ctx, note_t note, float velocity, bool isLegatoStep)`:
-     - `note`: MIDI note number (`0`–`127`, where `60` = C4 and `69` = A4 = `440 Hz`).
-     - `velocity`: Normalized velocity in `[0.0f, 1.0f]`.
-     - `isLegatoStep`: `true` when `playMode == PlayMode::kLegato` and a previous note was still held on this voice (allowing you to glide pitch without retriggering envelopes).
-   - `onNoteOff(const InstrumentVoiceContext& ctx, note_t note)`:
-     - Called when the last held note on this voice is released. If an earlier note was still held (in mono/legato overlap), `CustomSynthVoice` automatically retriggers `onNoteOn` for the previously held note instead!
-   - `onStart()` / `onClock()`:
-     - Optional hooks for MIDI Start and 24 PPQN MIDI Clock ticks.
-
-4. **Per-Voice Audio Rendering (`renderVoiceAudio`)**:
-   Called once per audio block (`128` samples at `44100 Hz`, i.e. every `2.902 ms`) for each allocated voice of the synth slot:
-   ```cpp
-   void renderVoiceAudio(const InstrumentVoiceContext& ctx,
-                         std::optional<AudioBufferStereoRef> inputBuffer,
-                         AudioBufferStereoRef outputBuffer,
-                         std::span<AudioBufferRef> auxOutBuffer) override;
-   ```
-   - `ctx.tempo`: Current project tempo in BPM.
-   - `outputBuffer`: Pair of `std::span<float>` (`outputBuffer[0]` = Left / Mono channel, `outputBuffer[1]` = Right channel), each `128` samples long.
-     - If `metadata.outputChannels == Patch::Metadata::OutputChannels::kMono`, write your voice output to `outputBuffer[0]` (`PolySynth` automatically pans/copies mono voices to stereo at the instrument mixer stage).
-     - If `metadata.outputChannels == Patch::Metadata::OutputChannels::kStereo`, write to both `outputBuffer[0]` and `outputBuffer[1]`.
-     - **Important**: Always overwrite every sample in `outputBuffer[0]` (and `outputBuffer[1]` if stereo). If `!isActive()`, fill the output buffer with `0.0f` and return.
-   - `auxOutBuffer`: Optional per-voice send buffers (`auxOutBuffer[0]` = Delay send, `auxOutBuffer[1]` = Reverb send), only used when `metadata.rendersAuxSends = true` (e.g. `PERC` drum synth where each drum voice has independent send levels). Standard synths leave `metadata.rendersAuxSends = false`, and the Tracker mixer handles Delay/Reverb sends automatically.
-
-5. **Post-Mixdown Audio Rendering (`renderPostProcessAudio`)**:
-   ```cpp
-   void renderPostProcessAudio(const InstrumentVoiceContext& ctx,
-                               AudioBufferStereoRef outputBuffer) override;
-   ```
-   - Called **once per audio block on the first voice (`voice[0]`) only**, after all voices of the instrument have been summed together into `outputBuffer`.
-   - Useful for shared master saturation, master filtering, or bus effects across all voices of the synth.
+1. **Discovery & Initialization**: On SD mount, `PsynLoader` reads the 128-byte `PsynHeader` from every `.psyn` file in `/Synths/` (falling back to `/Synth/`), registers its `InstrumentType`, and creates `/SynthSamples/<CODE_NAME>/` if `PSYN_FLAG_HAS_SAMPLE_SLOTS` is set.
+2. **Activation & Instantiation**: When a user selects the engine or loads a `.patch`, `PsynLoader` relocates the `.psyn` ELF sections into the `1,920 KB` SDRAM arena (if not already resident), calls static `.init_array` constructors, and constructs active voices (`create_voice`).
+3. **Parameter Synchronization**: Changing a knob, macro, or loading a patch triggers `onParamChange(paramId, newValue)` (or `voice_on_param_change` in C).
+4. **MIDI Delivery**: Pattern notes, pads, and external MIDI trigger `onMidiEvent(ctx, event)` (or `CustomSynthVoice::onNoteOn` / `onNoteOff`).
+5. **128-Sample Audio Rendering**: Every audio block (`block_size = 128` samples at `44,100 Hz`), active voices render normalized floating-point audio (`[-1.0f, +1.0f]`) via `renderVoiceAudio` (`voice_render_audio`).
+   - Stereo voices receive both Left (`outputBuffer[0]`) and Right (`outputBuffer[1]`).
+   - Mono voices render into `outputBuffer[0]`.
+   - Voices may optionally write stereo post-processing (`renderPostProcessAudio`) or scope waveform previews (`renderGraph` / `voice_render_graph`).
 
 ---
 
-## 4. Step-by-Step Tutorial: Creating a Custom Synth Engine
+## 4. Step-by-Step Tutorial: Building & Packaging a `.psyn` Engine
 
-Below is the complete end-to-end workflow for adding a new synth engine (e.g. `kMySynth` / `"MY"`).
+### Step 1: Write Your Voice Class (`my_synth.cpp`)
 
-### Step 1: Add an `InstrumentTypeId` Enum Value
-
-Edit [`synth/include/PolySynth/config.h`](../synth/include/PolySynth/config.h) and add your new enum entry immediately before `kLastSynth`, then update `kLastSynth`:
+Include `SynthVoiceSDK.h` and `psyn/psyn_cpp_bridge.h`, define your `ParamId` enum, implement `CustomSynthVoice<MySynthVoice, MyParamId>`, and export with `PSYN_REGISTER_CPP_VOICE`:
 
 ```cpp
-enum class InstrumentTypeId
-{
-    kMidiOut,
-    kSimpleAnalogSynth,
-    kFatAnalogSynth,
-    kWaveTableSynth,
-    kVASynth,
-    kFMSynth,
-    kDrumSynth,
-    kShapingSynth,
-    kChiptuneSynth,
-    kMySynth,
-    kLastSynth = kMySynth,
-    // Keep FX IDs at 1000+
-    kDelay = 1000,
-    kReverb,
-    kLastFx = kReverb
-};
-```
-
-> **Compatibility Rule**: Never reorder existing `InstrumentTypeId` values above your entry. Existing project and `.pti` / `.pts` patch files serialize the integer `InstrumentTypeId`.
-
----
-
-### Step 2: Define Your Parameter Enum
-
-Create your header `core/synth/engines/MySynthVoice.h` and implementation `core/synth/engines/MySynthVoice.cpp`.
-
-Define a contiguous, zero-based `enum class` for your parameters:
-
-```cpp
-enum class MySynthParamId : int
-{
-    // Oscillator
-    kWaveform = 0,
-    kDetune,
-    // Filter
-    kCutoff,
-    kResonance,
-    // Amplifier
-    kAttack,
-    kRelease,
-    // Voice
-    kPolyphony,
-    kVolume,
-};
-```
-
-> **Important (`enumutil::EnumMax` Limit)**:
-> `CustomSynthVoice` uses `enumutil::EnumMax<ParamIdEnum>::value` to automatically size the static `paramHandlers` array at compile time. By default, `enum_util.h` scans enum values in the range `[-5, 64]`. Keep your enum values contiguous starting at `0` and `<= 64`.
-
----
-
-### Step 3: Implement Your Voice Class
-
-Inherit from [`polysynth::sdk::CustomSynthVoice<MySynthVoice, MySynthParamId>`](../synth/include/PolySynth/sdk/SynthVoiceSDK.h#L202-L371):
-
-```cpp
-// core/synth/engines/MySynthVoice.h
-#pragma once
-
-#include "PolySynth/sdk/InstrumentType.h"
-#include <memory>
-
-namespace polysynth
-{
-std::unique_ptr<InstrumentType> createMySynth();
-} // namespace polysynth
-```
-
-```cpp
-// core/synth/engines/MySynthVoice.cpp
-#include "MySynthVoice.h"
-#include "config.h"
-
-#ifdef FEATURE_SYNTH
-
 #include "PolySynth/sdk/SynthVoiceSDK.h"
-#include <algorithm>
+#include "psyn/psyn_cpp_bridge.h"
 #include <cmath>
 
-namespace polysynth
+enum class MyParamId : int
 {
-namespace
-{
-
-enum class Waveform : int
-{
-    kSaw = 0,
-    kSquare = 1,
-    kTriangle = 2,
-};
-
-const char* toString(Waveform w)
-{
-    switch (w)
-    {
-        case Waveform::kSaw:      return "Saw";
-        case Waveform::kSquare:   return "Square";
-        case Waveform::kTriangle: return "Triangle";
-    }
-    return "";
-}
-
-enum class PolyphonyMode : int
-{
-    kMono = 0,
-    kLegato = 1,
-    kPoly = 2,
-};
-
-const char* toString(PolyphonyMode m)
-{
-    switch (m)
-    {
-        case PolyphonyMode::kMono:   return "Mono";
-        case PolyphonyMode::kLegato: return "Legato";
-        case PolyphonyMode::kPoly:   return "Poly";
-    }
-    return "";
-}
-
-} // namespace
-
-enum class MySynthParamId : int
-{
-    kWaveform = 0,
-    kDetune,
-    kCutoff,
+    kCutoff = 0,
     kResonance,
     kAttack,
     kRelease,
-    kPolyphony,
-    kVolume,
+    kPlayMode,
 };
 
-class MySynthVoice : public sdk::CustomSynthVoice<MySynthVoice, MySynthParamId>
+namespace polysynth
+{
+
+class MySynthVoice : public sdk::CustomSynthVoice<MySynthVoice, MyParamId>
 {
   public:
     MySynthVoice() = default;
 
-    bool isActive() final { return envStage != EnvStage::kIdle; }
+    bool isActive() final { return envLevel > 0.0001f || gate; }
 
-    void onNoteOn(const InstrumentVoiceContext& /*ctx*/,
-                  note_t note,
-                  float velocity,
-                  bool isLegatoStep) final
+    void onNoteOn(const InstrumentVoiceContext&, note_t note, float velocity, bool isLegato) final
     {
-        currentNote = note;
-        noteVelocity = velocity;
-        if (!isLegatoStep || envStage == EnvStage::kIdle)
+        noteFreq = sdk::noteToFreq(note);
+        velGain = velocity;
+        gate = true;
+        if (!isLegato)
         {
-            envStage = EnvStage::kAttack;
+            phase = 0.0f;
         }
     }
 
-    void onNoteOff(const InstrumentVoiceContext& /*ctx*/, note_t /*note*/) final
+    void onNoteOff(const InstrumentVoiceContext&, note_t) final
     {
-        if (envStage != EnvStage::kIdle)
-        {
-            envStage = EnvStage::kRelease;
-        }
+        gate = false;
     }
 
-    void renderVoiceAudio(const InstrumentVoiceContext& /*ctx*/,
-                          std::optional<AudioBufferStereoRef> /*inputBuffer*/,
-                          AudioBufferStereoRef outputBuffer,
-                          std::span<AudioBufferRef> /*auxOutBuffer*/) final
+    void renderVoiceAudio(const InstrumentVoiceContext&, AudioBufferStereoRef out) final
     {
-        auto out = outputBuffer[0];
-        if (!isActive())
+        auto left = out[0];
+        auto right = out[1];
+        const float dt = noteFreq / sdk::kSampleRate;
+
+        for (size_t i = 0; i < left.size(); ++i)
         {
-            std::fill(out.begin(), out.end(), 0.0f);
-            return;
-        }
-
-        const float freq =
-          sdk::noteToFreq(currentNote, pitchBendSemitones + detuneCents * 0.01f);
-        const float dt = std::clamp(freq / sdk::kSampleRate, 0.0001f, 0.49f);
-        const float atkStep = 1.0f / (std::max(0.001f, attackSec) * sdk::kSampleRate);
-        const float relStep = 1.0f / (std::max(0.002f, releaseSec) * sdk::kSampleRate);
-        const float f = std::clamp(
-          2.0f * std::sin(3.14159265f * std::min(cutoffHz, 18000.0f) / sdk::kSampleRate),
-          0.005f,
-          0.95f);
-        const float q = std::clamp(1.0f - resonance * 0.85f, 0.15f, 1.0f);
-
-        for (auto& sample : out)
-        {
-            // Envelope
-            if (envStage == EnvStage::kAttack)
-            {
-                envLevel += atkStep;
-                if (envLevel >= 1.0f)
-                {
-                    envLevel = 1.0f;
-                    envStage = EnvStage::kSustain;
-                }
-            }
-            else if (envStage == EnvStage::kRelease)
-            {
-                envLevel -= relStep;
-                if (envLevel <= 0.0f)
-                {
-                    envLevel = 0.0f;
-                    envStage = EnvStage::kIdle;
-                }
-            }
-
-            // Oscillator
+            envLevel += ((gate ? 1.0f : 0.0f) - envLevel) * (gate ? attackCoeff : releaseCoeff);
             phase += dt;
-            if (phase >= 1.0f)
-            {
-                phase -= 1.0f;
-            }
+            if (phase >= 1.0f) phase -= 1.0f;
 
-            float sig = 0.0f;
-            switch (waveform)
-            {
-                case Waveform::kSaw:
-                    sig = 2.0f * phase - 1.0f;
-                    break;
-                case Waveform::kSquare:
-                    sig = (phase < 0.5f) ? 1.0f : -1.0f;
-                    break;
-                case Waveform::kTriangle:
-                    sig = 1.0f - 4.0f * std::fabs(phase - 0.5f);
-                    break;
-            }
-
-            // 2-pole Chamberlin SVF Lowpass
-            svfLow += f * svfBand;
-            float high = sig - svfLow - q * svfBand;
-            svfBand += f * high;
-
-            sample = std::clamp(svfLow * envLevel * noteVelocity * volumeGain, -1.0f, 1.0f);
+            float sig = (2.0f * phase - 1.0f) * envLevel * velGain * 0.4f;
+            left[i] = sig;
+            right[i] = sig;
         }
     }
 
-    static void createMetadata(Patch& patch, Patch::Metadata& metadata);
+    static void createMetadata(const Patch&, Patch::Metadata& metadata)
+    {
+        using namespace sdk;
+        const size_t n = 5;
+        metadata.params.resize(n);
+        if (paramHandlers.empty()) paramHandlers.resize(n);
+
+        ParamHelper<MySynthVoice> helper(metadata, paramHandlers);
+        helper.addParam(*MyParamId::kCutoff, {
+            .displayName = "Cutoff",
+            .defaultValue = 2000.0f,
+            .minValue = 40.0f,
+            .maxValue = 18000.0f,
+            .editCurve = Patch::Metadata::Param::Curve::kExponential,
+            .midiCC = *MidiCCs::kFilterCutoff,
+            .valueFormatter = createFrequencyFormatter(18000.0f),
+        }, [](auto& v, Patch::optional_paramvalue_t val) { v.cutoffHz = *val; });
+        // ... register remaining parameters and metadata.layoutFlat sections ...
+    }
 
   private:
-    enum class EnvStage : uint8_t
-    {
-        kIdle,
-        kAttack,
-        kSustain,
-        kRelease,
-    };
-
-    Waveform waveform = Waveform::kSaw;
-    float detuneCents = 0.0f;
-    float cutoffHz = 8000.0f;
-    float resonance = 0.1f;
-    float attackSec = 0.005f;
-    float releaseSec = 0.25f;
-    float volumeGain = sdk::dbToAmplitude(-6.0f);
-
-    note_t currentNote = 60;
-    float noteVelocity = 1.0f;
+    static inline std::vector<ParamHandler> paramHandlers;
     float phase = 0.0f;
+    float noteFreq = 440.0f;
+    float velGain = 1.0f;
     float envLevel = 0.0f;
-    EnvStage envStage = EnvStage::kIdle;
-    float svfLow = 0.0f;
-    float svfBand = 0.0f;
+    float cutoffHz = 2000.0f;
+    float attackCoeff = 0.01f;
+    float releaseCoeff = 0.002f;
+    bool gate = false;
 };
-```
-
----
-
-### Step 4: Define Parameters, UI Sections & Default Macros
-
-Still inside `MySynthVoice.cpp`, implement `MySynthVoice::createMetadata` and the factory function `createMySynth()`:
-
-```cpp
-void MySynthVoice::createMetadata(Patch& patch, Patch::Metadata& metadata)
-{
-    using ParamId = MySynthParamId;
-    using Param = Patch::Metadata::Param;
-    using EditorSection = Patch::Metadata::EditorLayout::EditorSection;
-    using EditorElement = Patch::Metadata::EditorLayout::EditorElement;
-
-    constexpr auto kParamCount = enumutil::EnumMax<ParamId>::value + 1;
-    metadata.instrumentTypeId = static_cast<int>(InstrumentTypeId::kMySynth);
-    metadata.outputChannels = Patch::Metadata::OutputChannels::kMono;
-    metadata.params.resize(kParamCount);
-    paramHandlers.resize(kParamCount);
-
-    sdk::ParamHelper<MySynthVoice> helper(metadata, paramHandlers);
-
-    helper.addParam(
-      static_cast<int>(ParamId::kWaveform),
-      {
-        .displayName = "Waveform",
-        .defaultValue = static_cast<float>(Waveform::kSaw),
-        .minValue = 0,
-        .maxValue = enumutil::EnumMax<Waveform>::value,
-        .isEnum = true,
-        .midiCC = static_cast<uint8_t>(sdk::MidiCCs::kOscParam0),
-        .valueFormatter =
-          [](const Patch&, Patch::paramvalue_t v)
-        { return toString(static_cast<Waveform>(std::lround(v))); },
-      },
-      [](MySynthVoice& v, Patch::optional_paramvalue_t val)
-      { v.waveform = static_cast<Waveform>(std::lround(*val)); });
-
-    helper.addParam(
-      static_cast<int>(ParamId::kDetune),
-      {
-        .displayName = "Fine Tune",
-        .defaultValue = 0.0f,
-        .minValue = -100.0f,
-        .maxValue = 100.0f,
-        .midiCC = static_cast<uint8_t>(sdk::MidiCCs::kOscParam0) + 1,
-        .valueFormatter = sdk::createCentsFormatter(),
-      },
-      [](MySynthVoice& v, Patch::optional_paramvalue_t val) { v.detuneCents = *val; });
-
-    helper.addParam(
-      static_cast<int>(ParamId::kCutoff),
-      {
-        .displayName = "Cutoff",
-        .defaultValue = 8000.0f,
-        .minValue = 40.0f,
-        .maxValue = 18000.0f,
-        .editCurve = Param::Curve::kExponential,
-        .macroOperation = Param::MacroOperation::kMult,
-        .midiCC = static_cast<uint8_t>(sdk::MidiCCs::kFilterCutoff),
-        .valueFormatter = sdk::createFrequencyFormatter(),
-      },
-      [](MySynthVoice& v, Patch::optional_paramvalue_t val) { v.cutoffHz = *val; });
-
-    helper.addParam(
-      static_cast<int>(ParamId::kResonance),
-      {
-        .displayName = "Resonance",
-        .defaultValue = 0.1f,
-        .minValue = 0.0f,
-        .maxValue = 1.0f,
-        .midiCC = static_cast<uint8_t>(sdk::MidiCCs::kFilterResonance),
-        .valueFormatter = sdk::createPercentFormatter(),
-      },
-      [](MySynthVoice& v, Patch::optional_paramvalue_t val) { v.resonance = *val; });
-
-    helper.addParam(
-      static_cast<int>(ParamId::kAttack),
-      {
-        .displayName = "Attack",
-        .defaultValue = 0.005f,
-        .minValue = 0.001f,
-        .maxValue = 4.0f,
-        .editCurve = Param::Curve::kExponential,
-        .midiCC = static_cast<uint8_t>(sdk::MidiCCs::kAmpEnvAttack),
-        .valueFormatter = sdk::createTimeFormatter(),
-      },
-      [](MySynthVoice& v, Patch::optional_paramvalue_t val) { v.attackSec = *val; });
-
-    helper.addParam(
-      static_cast<int>(ParamId::kRelease),
-      {
-        .displayName = "Release",
-        .defaultValue = 0.25f,
-        .minValue = 0.005f,
-        .maxValue = 8.0f,
-        .editCurve = Param::Curve::kExponential,
-        .midiCC = static_cast<uint8_t>(sdk::MidiCCs::kAmpEnvRelease),
-        .valueFormatter = sdk::createTimeFormatter(),
-      },
-      [](MySynthVoice& v, Patch::optional_paramvalue_t val) { v.releaseSec = *val; });
-
-    helper.addParam(
-      static_cast<int>(ParamId::kPolyphony),
-      {
-        .displayName = "Play Mode",
-        .defaultValue = static_cast<float>(PolyphonyMode::kPoly),
-        .minValue = 0,
-        .maxValue = enumutil::EnumMax<PolyphonyMode>::value,
-        .isEnum = true,
-        .invalidatesOtherMetadata = true, // Re-evaluates maxVoices when changed!
-        .valueFormatter =
-          [](const Patch&, Patch::paramvalue_t v)
-        { return toString(static_cast<PolyphonyMode>(std::lround(v))); },
-      },
-      [](MySynthVoice& v, Patch::optional_paramvalue_t val)
-      {
-          auto mode = static_cast<PolyphonyMode>(std::lround(*val));
-          v.playMode = (mode == PolyphonyMode::kLegato) ? PlayMode::kLegato : PlayMode::kAlways;
-      });
-
-    helper.addParam(
-      static_cast<int>(ParamId::kVolume),
-      {
-        .displayName = "Gain",
-        .defaultValue = -6.0f,
-        .minValue = -30.0f,
-        .maxValue = 6.0f,
-        .valueFormatter = [](const Patch&, Patch::paramvalue_t v)
-        { return fmt::format("{:.1f} dB", v); },
-      },
-      [](MySynthVoice& v, Patch::optional_paramvalue_t val)
-      { v.volumeGain = sdk::dbToAmplitude(*val); });
-
-    // Dynamic maxVoices based on kPolyphony parameter
-    if (auto poly = patch.getParamValue(static_cast<int>(ParamId::kPolyphony)))
-    {
-        auto mode = static_cast<PolyphonyMode>(std::lround(*poly));
-        metadata.maxVoices = (mode == PolyphonyMode::kPoly) ? 8 : 1;
-    }
-
-    // Patch Editor UI Sections (layoutFlat)
-    auto paramElem = [](ParamId id)
-    {
-        return EditorElement{ .type = EditorElement::Type::kParam, .id = static_cast<int>(id) };
-    };
-
-    metadata.layoutFlat.sections = {
-        EditorSection{
-          .name = "Oscillator",
-          .shortName = "Osc",
-          .elements = { paramElem(ParamId::kWaveform), paramElem(ParamId::kDetune) },
-        },
-        EditorSection{
-          .name = "Filter",
-          .shortName = "Filter",
-          .elements = { paramElem(ParamId::kCutoff), paramElem(ParamId::kResonance) },
-        },
-        EditorSection{
-          .name = "Amplifier",
-          .shortName = "Amp",
-          .elements = { paramElem(ParamId::kAttack), paramElem(ParamId::kRelease) },
-        },
-        EditorSection{
-          .name = "Voice",
-          .shortName = "Voice",
-          .elements = { paramElem(ParamId::kPolyphony), paramElem(ParamId::kVolume) },
-        },
-    };
-    metadata.layout23 = metadata.layoutFlat;
-
-    // Default Macros (6 user macros: indices 0..5, plus system velocity macro)
-    metadata.initDefaultMacros = [](std::vector<Patch::Metadata::Macro>& macros)
-    {
-        macros[0] = {
-            .displayName = "Cutoff",
-            .modifiers = { { static_cast<int>(ParamId::kCutoff), 0.5f } },
-        };
-        macros[1] = {
-            .displayName = "Resonance",
-            .modifiers = { { static_cast<int>(ParamId::kResonance), 0.5f } },
-        };
-        macros[2] = {
-            .displayName = "Envelope",
-            .modifiers = {
-              { static_cast<int>(ParamId::kAttack), 0.3f },
-              { static_cast<int>(ParamId::kRelease), 0.5f },
-            },
-        };
-        macros[static_cast<int>(Patch::SystemMacroId::kVelocity)].modifiers = {
-            { static_cast<int>(ParamId::kVolume), 1.0f },
-        };
-    };
-}
-
-std::unique_ptr<InstrumentType> createMySynth()
-{
-    return std::make_unique<InstrumentType>(
-      InstrumentType{ .name = "MY",
-                      .createMetadata = &MySynthVoice::createMetadata,
-                      .createVoice = [](int /*voiceIdx*/) -> std::unique_ptr<InstrumentVoice>
-                      { return std::make_unique<MySynthVoice>(); } });
-}
 
 } // namespace polysynth
-#endif
+
+PSYN_REGISTER_CPP_VOICE(polysynth::MySynthVoice);
 ```
 
----
+### Step 2: Compile ELF & Package `.psyn`
 
-### Step 5: Register the Engine in `core/synth/registry.cpp`
-
-Open [`core/synth/registry.cpp`](../core/synth/registry.cpp), include your header, and add your engine to `InstrumentTypeRegistry::registerInstrumentTypes`:
-
-```cpp
-#include "engines/MySynthVoice.h"
-// ...
-void InstrumentTypeRegistry::registerInstrumentTypes(
-  InstrumentTypeRegistry& registry,
-  [[maybe_unused]] const Synth::Allocator& largeBuffersAlloc)
-{
-    registry.addInstrumentType(static_cast<int>(InstrumentTypeId::kMidiOut), createMidiOut());
-    registry.addInstrumentType(static_cast<int>(InstrumentTypeId::kSimpleAnalogSynth),
-                               createSimpleAnalogSynth());
-    registry.addInstrumentType(static_cast<int>(InstrumentTypeId::kFatAnalogSynth),
-                               createFatAnalogSynth());
-    registry.addInstrumentType(static_cast<int>(InstrumentTypeId::kVASynth), createVASynth());
-    registry.addInstrumentType(static_cast<int>(InstrumentTypeId::kFMSynth), createFMSynth());
-    registry.addInstrumentType(static_cast<int>(InstrumentTypeId::kDrumSynth), createDrumSynth());
-    registry.addInstrumentType(static_cast<int>(InstrumentTypeId::kShapingSynth),
-                               createShapingSynth());
-    registry.addInstrumentType(static_cast<int>(InstrumentTypeId::kChiptuneSynth),
-                               createChiptuneSynth());
-    registry.addInstrumentType(static_cast<int>(InstrumentTypeId::kMySynth),
-                               createMySynth());
-}
-```
-
-> **Note**: Any `.cpp` file placed in `core/synth/engines/` is automatically discovered and compiled by [`core/makefile`](../core/makefile) via `rwildcard`.
-
----
-
-### Step 6: Add UI Badges & Wire into the Tracker UI
-
-To expose the new engine in the Tracker's Synth model selector and Patch Editor:
-
-1. **Add to `Synth::kSynthTypes`** in [`core/synth/Synth.h`](../core/synth/Synth.h):
-   ```cpp
-   static constexpr std::array kSynthTypes = {
-       polysynth::InstrumentTypeId::kSimpleAnalogSynth,
-       polysynth::InstrumentTypeId::kFatAnalogSynth,
-       polysynth::InstrumentTypeId::kVASynth,
-       polysynth::InstrumentTypeId::kFMSynth,
-       polysynth::InstrumentTypeId::kDrumSynth,
-       polysynth::InstrumentTypeId::kShapingSynth,
-       polysynth::InstrumentTypeId::kChiptuneSynth,
-       polysynth::InstrumentTypeId::kMySynth,
-   };
-   ```
-
-2. **Create or Reuse Badge Bitmaps (`L2` 2-bit Grayscale Format)**:
-   Each synth uses two small `L2` (2 bits per pixel, 4-level grayscale, MSB-first packed) bitmaps in `core/libs/images/`:
-   - **Mini Badge (`80x28` pixels, `560` bytes, stride `20`)**: Displayed in the Instrument Parameter screen (`SynthEditor`). See [`chip_mini_nomark_80x28_L2.h`](../core/libs/images/chip_mini_nomark_80x28_L2.h).
-   - **Medium Badge (`108x40` pixels, `1080` bytes, stride `27`)**: Displayed in the Patch Editor (`SynthPatchEditor`). See [`chip_med_108x40_L2.h`](../core/libs/images/chip_med_108x40_L2.h).
-   - Register the bitmap enum IDs in [`core/libs/NewDisplay/displayStructs.h`](../core/libs/NewDisplay/displayStructs.h#L51-L85) (`enDisplayBitmaps`) and add their FT812 `RAM_G` entries in [`core/libs/NewDisplay/display.cpp`](../core/libs/NewDisplay/display.cpp#L172-L211) (`bitmaps[]`).
-
-3. **Add Name & Bitmap Entries to the Synth Editors**:
-   - In [`core/interface/instrumentEditor/SynthEditor.cpp`](../core/interface/instrumentEditor/SynthEditor.cpp#L24-L33):
-     Append your engine's short name to `synthModelNames` and its mini bitmap ID to `synthModelListImages`.
-   - In [`core/interface/instrumentEditor/SynthPatchEditor.cpp`](../core/interface/instrumentEditor/SynthPatchEditor.cpp#L19-L22):
-     Append its medium bitmap ID to `synthModelListImages`.
-
----
-
-### Step 7: Build & Flash `.ptf` Firmware
-
-From the repository root, build the firmware using the top-level [`Makefile`](../Makefile):
+Compile with `arm-none-eabi-g++` targeting Cortex-M7 hard-float with relocations (`-mcpu=cortex-m7 -mthumb -mfloat-abi=hard -mfpu=fpv5-sp-d16 -mword-relocations -Wl,--emit-relocs -T synth-plugin-sdk/tools/psyn.ld`), then pack with [`synth-plugin-sdk/tools/psyn_builder.py`](../synth-plugin-sdk/tools/psyn_builder.py):
 
 ```bash
-# Build all three devices (Original Tracker, Tracker+, Tracker Mini)
-make all
+# Quick test build of the bundled reference engine (CHIP.psyn -> synth-plugin-sdk/build/CHIP.psyn):
+make -C synth-plugin-sdk
 
-# Or build only Tracker+ or Tracker Mini:
-make plus
-make mini
+# Or bundle all factory + open-source .psyn engines into build/Synths/:
+# (also downloadable ready-to-use from the `polyend-tracker-ce-synths` CI artifact / GitHub Releases)
+make psyn
+
+# Packaging a custom engine ELF:
+python3 synth-plugin-sdk/tools/psyn_builder.py \
+    --elf build/MySynth.elf \
+    --out build/MYSYN.psyn \
+    --code-name "MYSYN" \
+    --display-name "My Synth" \
+    --patch-folder "MYSYN" \
+    --type-id-wave 0 \
+    --type-id-play-tracker 0 \
+    --default-voices 4 \
+    --max-voices 8 \
+    --output-channels 2 \
+    --renders-aux 0 \
+    --has-sample-slots 0
 ```
 
-The flashable `.ptf` files are generated in `build/`:
-- `build/TrackerPlus_CE_1.0.0.ptf`
-- `build/TrackerMini_CE_1.0.0.ptf`
+> [!TIP]
+> Always set `--type-id-wave 0` and `--type-id-play-tracker 0` for new third-party engines. `PsynLoader` hashes `code_name` into a deterministic runtime `InstrumentTypeId` (`0x100+`) so community engines coexist safely without colliding with factory IDs.
 
-Copy the `.ptf` file to the `/Firmware/` directory on your Tracker's SD card and flash via **Config → Firmware → Firmware update**.
+### Step 3: Deploy onto SD Card
+Copy the `.psyn` binary to `/Synths/MYSYN.psyn` and any preset patches to `/Patches/MYSYN/*.patch`. Reboot or re-enter the Synth menu — your new engine appears automatically in the Synth model selector (`SynthEditor`).
 
 ---
 
-## 5. Patch Metadata, Curves, Macros & UI Layout Reference
+## 5. Sample-Based Synth Engines (`SampleSlot` & `SamplePool`)
+
+Engines can play `.wav` samples or wavetables directly from the shared **`4 MB` `SamplePool`** while taking advantage of firmware sample caching, deduplication, and `GlobalFileBrowser` WAV browsing.
+
+### 1. Declaring Sample Slots
+* **In C++20 (`Patch::Metadata`)**: Populate `metadata.sampleSlots` and reference each slot index using `EditorElement::Type::kSampleSlot`:
+  ```cpp
+  metadata.sampleSlots.push_back({
+      .displayName = "Sample A",
+      .type = Patch::Metadata::SampleSlot::Type::kSample, // or kWaveTable
+      .section = 0,
+      .subsection = 0,
+      .defaultSamplePath = "/SynthSamples/MYSYN/Init.wav",
+  });
+
+  metadata.layoutFlat.sections[0].elements.push_back({
+      .type = Patch::Metadata::EditorElement::Type::kSampleSlot,
+      .id = 0,
+  });
+  ```
+* **In Pure C (`psyn_plugin.h`)**: Register via `host->meta_add_sample_slot(meta_builder, &slot_desc)` and add `PsynLayoutElement{.type = 2 /* SampleSlot */, .reserved = 0, .id = 0}`.
+* **Packager flag**: Pass `--has-sample-slots 1` to `psyn_builder.py` so `PsynHeader::flags` includes `PSYN_FLAG_HAS_SAMPLE_SLOTS` (`0x0001`).
+
+### 2. Reading Loaded Sample Audio Inside Your Voice
+* **C++20**: Query `patch->getSample(slotId)` inside `setPatch()` or `renderVoiceAudio()`:
+  ```cpp
+  if (patch != nullptr)
+  {
+      const polysynth::Sample* s = patch->getSample(0);
+      if (s != nullptr && s->ready && !s->data.empty())
+      {
+          // s->data is std::span<sample_store_t> (16-bit signed int16_t PCM)
+          // s->format.channels (1 or 2), s->format.sampleRate, s->waveSize, s->basePitch
+      }
+  }
+  ```
+* **Pure C**: Call `PsynSampleData sd; if (host->patch_get_sample(host_patch, slot_id, &sd) && sd.ready)` to access `sd.data` (`const int16_t*`), `sd.size`, `sd.channels`, `sd.sample_rate`, and `sd.wave_size`.
+
+### 3. Auto-Created Sample Directories & Path Fallback
+* **On Tracker+ / Tracker Mini & Play / Play+:** Whenever `PsynLoader` discovers any built-in sample engine or any `.psyn` engine carrying `PSYN_FLAG_HAS_SAMPLE_SLOTS`, it automatically ensures `/SynthSamples/<CODE_NAME>/` exists on the SD card (`PsynLoader::ensurePluginSampleFolder`). Keeping synth samples under `/SynthSamples/` prevents cluttering users' `/Samples/` tracker instrument libraries.
+* **On Polyend Synth:** Auto-created engine folders live under `/Samples/<CODE_NAME>/`.
+* **Path Resolution:** [`core/synth/FileSystemAdapter.cpp`](../core/synth/FileSystemAdapter.cpp) resolves sample reads starting with `/SynthSamples/` and falls back cleanly across `/Samples/`, `/`, and `/Patches/`.
+
+---
+
+## 6. Direct SD Card & WAV File I/O (`PsynHostApi`)
+
+For custom lookup tables, alternative bank formats, or plugin-managed assets beyond `SampleSlot`, `PsynHostApi` exposes four direct SD card and WAV helper callbacks (implemented in [`synth/source/synths/PsynLoader.cpp`](../synth/source/synths/PsynLoader.cpp)):
+
+```c
+int32_t (*read_file)(const char* path, void* buffer, uint32_t max_len);
+int32_t (*write_file)(const char* path, const void* data, uint32_t len);
+bool    (*load_wav_file)(const char* path,
+                         int16_t** out_pcm_data,
+                         uint32_t* out_sample_count,
+                         uint8_t* out_channels,
+                         uint32_t* out_sample_rate);
+void    (*free_wav_file)(int16_t* pcm_data);
+```
+
+* `read_file` / `write_file`: Perform chunked FatFs transfers and return bytes transferred (or `< 0` / `-1` on error).
+* `load_wav_file`: Decodes mono or stereo 8/16/24/32-bit PCM and 32-bit float `.wav` files into an `int16_t` buffer allocated from the `.psyn` SDRAM arena (`kArenaSize`, returning `false` on decode/allocation failure). Always release allocated buffers with `free_wav_file(*out_pcm_data)`.
+
+> [!CAUTION]
+> **Never Call SD / WAV I/O on the Audio Thread!**
+> FatFs operations block for milliseconds and are not interrupt-safe. Only call `read_file()`, `write_file()`, `load_wav_file()`, or `free_wav_file()` during plugin initialization (`psyn_plugin_entry`), `voice_set_patch`, or voice destruction (`destroy_voice`) — **never** inside `renderVoiceAudio()` / `voice_render_audio()` or `renderPostProcessAudio()`.
+
+---
+
+## 7. Global File Browser Integration (Patches & Sample Slots)
+
+Both synth **Patch Load / Save As** ([`SynthEditor.cpp`](../core/interface/instrumentEditor/SynthEditor.cpp)) and **Sample Slot `.wav` Pickers** ([`SynthPatchEditor.cpp`](../core/interface/instrumentEditor/SynthPatchEditor.cpp)) run through the unified [`GlobalFileBrowser`](global_file_browser.md):
+
+* **Synth Patch Browser (`/Patches/<patch_folder>/*.patch`):**
+  * Displays parsed `.patch` metadata in the Details pane via `onDescribeItem()` using immediate FatFs handle cleanup (`closeFile(fh)` with `deleteOnClose = true`) and a 1-entry `PatchWireInfo` cache so scrolling rapidly never leaks FatFs file handles.
+  * Silences active synth voices (`silencePart(syntPartIdx)`) cleanly before loading the next patch so sustained tails never freeze while reading SD data.
+  * Forwards Tracker pad events (`onPadEvent`) for polyphonic pad auditioning directly inside the browser.
+* **Sample Slot WAV Browser (`kLoadWav`):**
+  * Selecting any `SampleSlot` in `SynthPatchEditor` opens `GlobalFileBrowser` in `kLoadWav` mode (defaulting to `/SynthSamples/<CODE_NAME>/`), providing built-in `.wav` metadata, preview playback with adjustable Preview Vol, and `Left`-arrow jump-to-top navigation.
+
+---
+
+## 8. Patch Metadata, Curves, Macros & UI Layout Reference
 
 ### Parameter Definition (`Patch::Metadata::Param`)
 
-Every parameter in `metadata.params` is configured via [`Patch::Metadata::Param`](../synth/include/PolySynth/Patch.h#L114-L141):
+Every parameter in `metadata.params` is configured via [`Patch::Metadata::Param`](../synth/include/PolySynth/Patch.h):
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `displayName` | `std::string` | Label shown in the Patch Editor parameter list (keep `<= 18` chars for clean UI fitting). |
 | `defaultValue` | `optional_paramvalue_t` | Initial value on `Init Patch` and when resetting via **Delete** button. |
-| `minValue` | `__fp16` / `float` | Minimum parameter value (note: stored as IEEE 754 half-precision `__fp16` on ARM, max $\pm 65504$). |
-| `maxValue` | `__fp16` / `float` | Maximum parameter value (keep within $[-65500, +65500]$). |
+| `minValue` | `__fp16` / `float` | Minimum parameter value (stored as IEEE 754 half-precision `__fp16` on ARM, max magnitude `65504`). |
+| `maxValue` | `__fp16` / `float` | Maximum parameter value (keep within `[-65500, +65500]`). |
 | `editCurve` | `Param::Curve` | Response curve for knob turning and macro modulation (`kLinear`, `kExponential`, `kExponentialSteep`, `kPower`). |
-| `macroOperation` | `Param::MacroOperation` | How macro modifiers combine with the parameter (`kAdd` = additive in normalized curve space; `kMult` = multiplicative scaling, ideal for filter cutoff). |
-| `isEnum` | `bool` | Set `true` for discrete integer options (`0..N`). The UI will step by `1` on knob turns. |
-| `midiCC` | `tiny::optional<uint8_t, 0xff>` | Optional MIDI CC number (see [`sdk::MidiCCs`](../synth/include/PolySynth/sdk/SynthVoiceSDK.h#L80-L112)). |
+| `macroOperation` | `Param::MacroOperation` | How macro modifiers combine with the parameter (`kAdd` = additive in normalized curve space; `kMult` = multiplicative scaling). |
+| `isEnum` | `bool` | Set `true` for discrete integer options (`0..N`). The UI steps by `1` on knob turns. |
+| `midiCC` | `tiny::optional<uint8_t, 0xff>` | Optional MIDI CC number (see `sdk::MidiCCs`). |
 | `invalidatesOtherMetadata` | `bool` | Set `true` if changing this parameter alters `metadata.maxVoices` or dynamic parameter names (triggers `createMetadata` refresh). |
-| `valueFormatter` | `std::function<std::string(const Patch&, float)>` | Formats the current parameter value into a human-readable string for the Tracker display. |
+| `valueFormatter` | `std::function<std::string(const Patch&, float)>` | Formats the parameter value into a human-readable string for the UI. |
 
 ### Patch Editor Section Icons (`layoutFlat.sections`)
 
-The Tracker Patch Editor displays a **2x6 grid of tiles**: the **top 6 tiles** represent your engine's parameter sections (`metadata.layoutFlat.sections`, up to 6 sections), and the **bottom 6 tiles** represent the 6 user Macros.
-
-[`SynthPatchEditor.cpp`](../core/interface/instrumentEditor/SynthPatchEditor.cpp#L1178-L1287) automatically selects the tile icon and grid label by matching a substring in `EditorSection::name`:
+The Tracker Patch Editor displays a **2x6 grid of tiles**: the **top 6 tiles** correspond to your engine's parameter sections (`metadata.layoutFlat.sections`, up to 6 sections), and the **bottom 6 tiles** correspond to the 6 user Macros. [`SynthPatchEditor.cpp`](../core/interface/instrumentEditor/SynthPatchEditor.cpp) selects tile icons by matching substrings in `EditorSection::name`:
 
 | `EditorSection::name` Substring | Tile Short Label | Tile Icon | Typical Use |
 | :--- | :--- | :--- | :--- |
-| `"Oscillator"` | `Osc` | `kBitmapOsc` (Waveform icon) | Main oscillators, wave models, tuning, sub-osc |
-| `"Modulation"` | `Mod` | `kBitmapMod` (Mod matrix icon) | LFOs, PWM, vibrato, pitch sweeps, arpeggiator |
-| `"Amplifier"` | `Amp` | `kBitmapEnv` (ADSR envelope icon) | Amp ADSR envelope, velocity sensitivity |
-| `"Amp Envelope"` | `Amp Env` | `kBitmapEnv` (ADSR envelope icon) | Amplitude ADSR envelope |
-| `"Envelope"` | `Env 1`, `Env 2`... | `kBitmapEnv` (Auto-numbered) | Auxiliary/modulation envelopes |
-| `"LFO"` | `LFO 1`, `LFO 2`... | `kBitmapLfo` (Auto-numbered) | Dedicated LFO sections |
-| `"Filter"` | `Filter` | `kBitmapFilter` (Filter curve icon) | Lowpass/highpass/bandpass filter, bitcrusher |
-| `"Shaper"` | `Shp` | `kBitmapShaper` (Waveshaper icon) | Distortion, wavefolder, drive (`DIRT`) |
-| `"Voice"` | `Voice` | `kBitmapGear` (Gear icon) | Play mode (`Mono`/`Legato`/`Poly`), glide, gain |
+| `"Oscillator"` | `Osc` | `kBitmapOsc` | Main oscillators, wavetables/samples, tuning |
+| `"Modulation"` | `Mod` | `kBitmapMod` | LFOs, PWM, vibrato, pitch sweeps, mod matrix |
+| `"Amplifier"` / `"Amp Envelope"` | `Amp` / `Amp Env` | `kBitmapEnv` | Amp ADSR envelope, velocity sensitivity |
+| `"Envelope"` | `Env 1`, `Env 2`... | `kBitmapEnv` | Auxiliary/modulation envelopes |
+| `"LFO"` | `LFO 1`, `LFO 2`... | `kBitmapLfo` | Dedicated LFO sections |
+| `"Filter"` | `Filter` | `kBitmapFilter` | Lowpass/highpass/bandpass filter, resonance |
+| `"Shaper"` | `Shp` | `kBitmapShaper` | Distortion, wavefolder, drive (`DIRT`) |
+| `"Voice"` | `Voice` | `kBitmapGear` | Play mode (`Mono`/`Legato`/`Poly`), glide, gain |
 | `"FX"` | `FX` | `kBitmapFX` | Built-in voice/synth effects |
-| `"Mixer"` | `Mixer` | `kBitmapMixer` | Oscillator or drum channel mixer |
+| `"Mixer"` | `Mixer` | `kBitmapMixer` | Oscillator or drum mixer |
 | `"Kick"`, `"Tom"`, `"Snare"`, `"Hihat"`, `"Cymbal"`, `"Percussion"` | Same as name | Drum icons | Drum synth voices (`PERC`) |
 
-> **Tip**: Always include one of the substrings above in each `EditorSection::name` (and keep `metadata.layoutFlat.sections.size() <= 6`) so every tile in the top half of the 2x6 Patch Editor grid has a matching hardware icon and label.
+> [!TIP]
+> Include one of the substrings above in each `EditorSection::name` and keep `metadata.layoutFlat.sections.size() <= 6` so every tile in the 2x6 Patch Editor grid receives an icon.
 
 ---
 
-## 6. DSP Utilities & Value Formatters
+## 9. DSP Utilities & Value Formatters
 
-[`synth/include/PolySynth/sdk/SynthVoiceSDK.h`](../synth/include/PolySynth/sdk/SynthVoiceSDK.h) provides header-only helpers in namespace `polysynth::sdk`:
+[`synth/include/PolySynth/sdk/SynthVoiceSDK.h`](../synth/include/PolySynth/sdk/SynthVoiceSDK.h) provides header-only helpers in `namespace polysynth::sdk`:
 
 ### Constants & Math Helpers
-- `sdk::kSampleRate` (`44100.0f`): Audio engine sample rate in Hz.
-- `sdk::kSilenceGainDb` (`-90.0f`): Silence threshold in dB.
-- `sdk::dbToAmplitude(float db)`: Converts dB to linear amplitude (`0.0f` at or below `-90 dB`).
-- `sdk::amplitudeToDb(float amplitude)`: Converts linear amplitude to dB.
-- `sdk::noteToFreq(note_t note, float detuneSemitones = 0.0f)`: Converts MIDI note + fractional semitone offset to frequency in Hz ($A_4 = 440\text{ Hz}$).
-- `sdk::detuneMult(float detuneSemitones)`: Returns $2^{\Delta / 12}$ frequency multiplier.
-- `sdk::saturateSoftClip(std::span<sample_t> buf, float gainDb)`: Applies pre-gain in dB followed by cubic soft-clipping ($y = x - x^3 / 6.72$, clamped to $[-1, 1]$).
+* `sdk::kSampleRate` (`44100.0f`): Audio engine sample rate in Hz.
+* `sdk::kSilenceGainDb` (`-90.0f`): Silence threshold in dB.
+* `sdk::dbToAmplitude(float db)`: Converts dB to linear amplitude (`0.0f` at or below `-90 dB`).
+* `sdk::amplitudeToDb(float amplitude)`: Converts linear amplitude to dB.
+* `sdk::noteToFreq(note_t note, float detuneSemitones = 0.0f)`: Converts MIDI note + fractional semitone offset to Hz ($A_4 = 440\text{ Hz}$).
+* `sdk::detuneMult(float detuneSemitones)`: Returns $2^{\Delta / 12}$ frequency multiplier.
+* `sdk::saturateSoftClip(std::span<sample_t> buf, float gainDb)`: Applies pre-gain in dB followed by cubic soft-clipping ($y = x - x^3 / 6.72$, clamped to $[-1, 1]$).
 
 ### Built-In Value Formatters
-- `sdk::createPercentFormatter(bool showPercentSign = true)`: Formats `[0.0, 1.0]` as `"0 %"` .. `"100 %"`.
-- `sdk::createTimeFormatter()`: Formats seconds as `"0.05 s"` (`< 1 s`) or `"2.5 s"` (`>= 1 s`).
-- `sdk::createFrequencyFormatter(float max)`: Formats Hz/kHz automatically (`"8.50 Hz"`, `"440 Hz"`, `"12.5 kHz"`).
-- `sdk::createSemitoneFormatter()`: Formats integer semitones with sign (`"-12 st"`, `"0 st"`, `"+7 st"`).
-- `sdk::createCentsFormatter()`: Formats integer cents with sign (`"-50 ct"`, `"0 ct"`, `"+25 ct"`).
+* `sdk::createPercentFormatter(bool showPercentSign = true)`: Formats `[0.0, 1.0]` as `"0 %"` .. `"100 %"`.
+* `sdk::createTimeFormatter()`: Formats seconds as `"0.05 s"` (`< 1 s`) or `"2.5 s"` (`>= 1 s`).
+* `sdk::createFrequencyFormatter(float max)`: Formats Hz/kHz automatically (`"8.50 Hz"`, `"440 Hz"`, `"12.5 kHz"`).
+* `sdk::createSemitoneFormatter()`: Formats integer semitones (`"-12 st"`, `"0 st"`, `"+7 st"`).
+* `sdk::createCentsFormatter()`: Formats integer cents (`"-50 ct"`, `"0 ct"`, `"+25 ct"`).
 
 ---
 
-## 7. Real-Time Audio, CPU & Memory Guidelines
+## 10. Real-Time Audio, CPU & Memory Guidelines
 
-1. **Stateless Parameter Handlers (`static_assert(std::is_empty_v<Fn>)`)**:
-   `sdk::ParamHelper::addParam` stores each parameter handler as a 4-byte C function pointer (`void (*)(VoiceType&, Patch::optional_paramvalue_t)`).
-   - Handler lambdas **must not capture variables** (`[]` only).
-   - Because of this design, a custom synth engine's static `.bss` footprint in `SRAM_DTC` is only **~100 bytes** (`4 bytes * numParams`), leaving plenty of `SRAM_DTC` headroom for multiple custom engines.
-
-2. **Zero Heap Allocations on the Audio Thread**:
-   - Never call `new`, `malloc`, `std::vector::push_back`, or `std::string` inside `renderVoiceAudio()`, `renderPostProcessAudio()`, `onNoteOn()`, `onNoteOff()`, or `onParamChange()`.
-   - Allocate all per-voice state directly as value members of your `CustomSynthVoice` subclass. Voice objects are only allocated on the heap when your engine is actively selected on one of the 3 synth slots.
-
-3. **Keep `minValue` / `maxValue` Within `__fp16` Range**:
-   On ARM targets, `Patch::Metadata::Param::minValue` and `maxValue` are stored as 16-bit half-precision floats (`__fp16`, max magnitude `65504.0f`). Never use `FLT_MAX` or values above `65500.0f` for parameter bounds.
-
-4. **CPU Budget (`600 MHz` Cortex-M7 with Hardware Single-Precision FPU)**:
-   - Use `float` (`0.0f`, `std::sinf`, `std::powf`, `std::fabsf`) everywhere, never `double`.
-   - Hoist per-block coefficient calculations (such as filter coefficients, envelope increments, and `noteToFreq` base pitch when not pitch-modulated at audio rate) outside the `128`-sample `for (auto& sample : out)` loop whenever possible.
-   - Use `PolyBLEP` or band-limiting on sharp discontinuities (saw/pulse resets) to keep high notes alias-free at `44.1 kHz`.
+1. **Stateless Parameter Handlers (`static_assert(std::is_empty_v<Fn>)`):**
+   `sdk::ParamHelper::addParam` stores each handler as a 4-byte stateless function pointer (`void (*)(VoiceType&, Patch::optional_paramvalue_t)`). Handler lambdas must not capture variables (`[]` only), keeping `.bss` overhead near zero (`4 bytes * numParams`).
+2. **Zero Allocations or Blocking Calls in Audio Loops:**
+   Never allocate heap memory (`new`, `malloc`, `std::vector::push_back`, `std::string`) or perform SD card I/O inside `renderVoiceAudio()`, `renderPostProcessAudio()`, `onNoteOn()`, `onNoteOff()`, or `onParamChange()`.
+3. **Budget Within the `.psyn` SDRAM Arena (`1,920 KB` Total):**
+   Keep `.text` + `.rodata` + `.data` + `.bss` + `slot_alloc` usage compact so multiple engines remain co-resident in `PsynLoader::kArenaSize` (`1,920 KB`) without triggering frequent LRU evictions when switching synth parts (`SYN 1`–`SYN 3`). Keep `__fp16` parameter ranges within `[-65500, +65500]`.
+4. **Hardware Single-Precision FPU (`VFPv5`):**
+   Use single-precision `float` (`0.0f`, `std::sinf`, `std::powf`, `std::fabsf`), never `double`. Hoist per-block filter/envelope/frequency computations outside the `128`-sample audio loop, and band-limit sharp waveform discontinuities (e.g. PolyBLEP).
 
 ---
 
-## 8. Reference Implementation: `CHIP` (`ChiptuneSynthVoice`)
+## 11. Reference Implementations (`chip.cpp` & `simple_sine.c`)
 
-For a full-featured production example built exclusively with `PolySynth/sdk/SynthVoiceSDK.h`, study the open-source **`CHIP`** synth engine:
+Study both reference plugins included in `synth-plugin-sdk/`:
 
-- **Header**: [`core/synth/engines/ChiptuneSynthVoice.h`](../core/synth/engines/ChiptuneSynthVoice.h)
-- **Implementation**: [`core/synth/engines/ChiptuneSynthVoice.cpp`](../core/synth/engines/ChiptuneSynthVoice.cpp)
-- **Memory Footprint**: `21.4 KB` Flash (`QSPI_FLASH`), `105 B` static RAM (`SRAM_DTC`), `224 B` per active voice on the heap.
-
-### What `ChiptuneSynthVoice.cpp` Demonstrates
-- **8 Distinct Synthesis Models in One Voice Class**:
-  1. `2A03 Pulse` (PolyBLEP variable-duty pulse with LFO PWM)
-  2. `SID Saw/Tri` (Combined saw/triangle with sub-octave ring modulation)
-  3. `Noise / LFSR` (15-bit NES/GameBoy pitch-tracked LFSR with white & metallic periodic modes)
-  4. `FM Bell` (2-operator quantized OPL-style FM with 8 carrier:modulator ratios)
-  5. `Super Square` (3-oscillator detuned pulse unison stack)
-  6. `Zap / Laser` (Arcade pitch-drop percussion/lead)
-  7. `Arp Chord` (4-step 50/60 Hz chiptune chord arpeggiator with 7 chord tables)
-  8. `Chip Drum` (Stepped triangle pitch sweep + LFSR noise burst morphing from Kick to Snare to Hat)
-- **Dynamic Voice Allocation**: Switching `Play Mode` (`Mono` / `Legato` / `Poly`) uses `.invalidatesOtherMetadata = true` to dynamically switch `metadata.maxVoices` between `1` and `8`.
-- **5 Patch Editor Sections** (`Oscillator`, `Modulation`, `Amplifier`, `Filter`, `Voice`) and **6 Pre-Mapped Performance Macros** (`Timbre / PWM`, `Arp / Chord`, `Sweep / Vibrato`, `Env Decay / Rel`, `Crush / Lo-Fi`, `Filter Cutoff`).
+* **C++20 Production Example (`CHIP`)**: [`synth-plugin-sdk/engines/chip.cpp`](../synth-plugin-sdk/engines/chip.cpp)
+  * Uses `sdk::CustomSynthVoice<ChiptuneSynthVoice, ChipParamId>` and exports via `PSYN_REGISTER_CPP_VOICE(polysynth::ChiptuneSynthVoice)`.
+  * Implements 8 synthesis models (`2A03 Pulse`, `SID Saw/Tri`, `Noise / LFSR`, `FM Bell`, `Super Square`, `Zap / Laser`, `Arp Chord`, `Chip Drum`), dynamic voice count switching (`Mono` / `Legato` / `Poly` via `invalidatesOtherMetadata = true`), 5 Patch Editor sections, and 6 default macros.
+* **Pure C ABI Example (`Simple Sine`)**: [`synth-plugin-sdk/examples/simple_sine.c`](../synth-plugin-sdk/examples/simple_sine.c)
+  * Demonstrates raw `PsynPluginApi`, `PsynHostApi` callbacks, and `psyn_plugin_entry()` without C++ runtime dependencies.

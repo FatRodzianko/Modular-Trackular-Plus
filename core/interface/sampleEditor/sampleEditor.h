@@ -340,6 +340,10 @@ class cSampleEditor : public ModuleBase
     int getParamsPagesCount();
     int getCurrentPageParams();
     bool areThereMoreThanOneParamsPage();
+    bool isModularPresetPage() const;
+    void openModularPresetLoadBrowser();
+    void openModularPresetSaveBrowser();
+    void resetModularEffectParams();
 
     //*******************
     float samplePosToTime(uint32_t pos);
@@ -454,6 +458,7 @@ class cSampleEditor : public ModuleBase
     uint8_t selectedEffect = editorEffectDelay;
     uint8_t selectedPlace[enScreenType::screenTypeCount];
     uint8_t effectScreenPage = 0;
+    uint8_t mainScreenButtonPage = 0;
 
     const strEffectDefaultParams* effectDefaultParamsPtr = effectDefaultParamsTable;
     const strEffectDisplayConstantParams* effectDisplayConstantParamsPtr =

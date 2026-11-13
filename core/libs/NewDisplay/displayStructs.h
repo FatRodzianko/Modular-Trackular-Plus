@@ -43,16 +43,6 @@ enum enDisplayBitmaps
     displayBatteryCh,
 
 #ifdef FEATURE_SYNTH
-    kBitmapMiniACD,
-    kBitmapMiniFAT,
-    kBitmapMiniVAP,
-    kBitmapMiniWTFM,
-
-    kBitmapACD,
-    kBitmapFAT,
-    kBitmapVAP,
-    kBitmapWTFM,
-
     kBitmapEnv,
     kBitmapFilter,
     kBitmapGear,
@@ -60,11 +50,6 @@ enum enDisplayBitmaps
     kBitmapMacro,
     kBitmapMod,
     kBitmapOsc,
-
-    kBitmapMiniPERC,
-    kBitmapMiniPHZ,
-    kBitmapPERC,
-    kBitmapPHZ,
 
     kBitmapFX,
     kBitmapCymbal,
@@ -75,11 +60,7 @@ enum enDisplayBitmaps
     kBitmapSnare,
     kBitmapTom,
 
-    kBitmapMiniDIRT,
-    kBitmapDIRT,
     kBitmapShaper,
-    kBitmapMiniCHIP,
-    kBitmapCHIP,
 
 #endif
 

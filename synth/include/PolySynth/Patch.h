@@ -177,6 +177,7 @@ class Patch : private boost::noncopyable
             } type;
             int section = 0;
             int subsection = 0;
+            std::string defaultSamplePath = {};
         };
 
         enum class OutputChannels
@@ -227,6 +228,9 @@ class Patch : private boost::noncopyable
         bool rendersAuxSends = false;
         int maxVoices = std::numeric_limits<int>::max();
 
+        // 3 columns / 3 rows editor layout
+        EditorLayout layout33 = {};
+
         // 2 columns / 3 rows editor layout
         EditorLayout layout23 = {};
 
@@ -249,6 +253,8 @@ class Patch : private boost::noncopyable
                                    optional_paramvalue_t newValue,
                                    ParamChangeSource source,
                                    tiny_optional<int> voiceId) = 0;
+
+        virtual void onPatchReset() {}
 
         [[nodiscard]] virtual int getVoiceCount() const = 0;
 
