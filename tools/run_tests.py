@@ -118,6 +118,8 @@ def jobs_for(args, projects):
         Job("copypattern", e / "test_copypattern.py", mods, ref, inputs=both),
         Job("songloop", e / "test_songloop.py", mods, ref, inputs=both),
         Job("sound rig", e / "test_sound_rig.py", mods, ref, inputs=both),
+        # the simulator's clock on synthetic code, no firmware (docs/mt/SIMULATOR_STAGE1.md 2.4)
+        Job("sim kernel", e / "test_sim_kernel.py"),
         Job("synths", e / "test_synths.py", mods, inputs=[mods]),
         Job("synthfx", e / "test_synthfx.py", mods, ref, "--before", SYNTHFX_BEFORE,
             inputs=both + (SYNTHFX_BEFORE, SYNTHFX_CARD)),
