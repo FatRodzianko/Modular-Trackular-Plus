@@ -11,8 +11,11 @@ when it is missing there, so delete one to get the firmware's copy back.
 
 Status: the runtime (loading, the pools, the guards, the pack) and the two slots on every synth
 engine, CE's (ACD to CHIP) and WAVE and PHASE, are in the firmware. WAVE and PHASE no longer
-have effects of their own: with the Synth FX mod off they play dry, as CE's engines do. Not yet
-tested on the unit (`docs/mt/CE_PORT_PLAN.md` §3.17, phase 4).
+have effects of their own: with the Synth FX mod off they play dry, as CE's engines do. Tested
+on the unit (`docs/mt/CE_PORT_PLAN.md` §3.17, phase 4 and its Status).
+
+Plugins run only on the Modular-Trackular Plus firmware with the Synth FX mod on; stock CE
+doesn't load `.ptsfx` files.
 
 ## On the synth page
 
@@ -183,8 +186,8 @@ Instructions per block, the checker's mean and most, over its settings, mono and
 |---|---|---|---|
 | Bit Crusher | 5,000 | 8,600 | 0.5 % |
 | Chorus, Flanger, Phaser | 8,800 to 9,500 | 9,000 to 10,300 | 0.6 % |
-| Overdrive | 32,700 | 50,100 | 2.9 % |
-| Distortion (8x oversampled) | 53,600 | 78,800 | 4.5 % |
+| Overdrive (2x oversampled) | 32,700 | 50,100 | 2.9 % |
+| Distortion (4x oversampled) | 53,600 | 78,800 | 4.5 % |
 | Tremolo (example) | 1,400 | 1,600 | 0.1 % |
 | Delay (example) | 8,500 | 8,700 | 0.5 % |
 
