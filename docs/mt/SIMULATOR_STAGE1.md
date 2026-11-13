@@ -890,6 +890,16 @@ copies during play; Copy to New's 44 presses all waited). G stops from scale 9, 
 With the guard every load ran as it does in CE alone, within 0.05 ms, while the mods still used the
 card in the rest of the pattern. N's Copy to New happened to play here; at 16 steps it doesn't.
 
+**Correction (2026-11-13): the test projects were wrong.** `make_project` in `sim_songstop.py` marked only
+track 1 as used in every pattern, and wrote the MIDI-track mask 255 bytes after the sample-track mask.
+The real one is 810 bytes further on (`VALUES + 1331`). So every run above used projects whose reverb
+settings, track names, track volumes and EQ were zeroed, and whose MIDI masks were the source project's.
+The same projects went to every build, so the comparisons between R, N, F and G stand. The absolute
+margins came from a project with silent tracks and may differ with real volumes. Found on the unit:
+the Song screen showed one block on track 1 and stale blocks on tracks 9 to 12. Fixed: the masks now
+come from the pattern contents as CE computes them, and nothing else in `project.mt` changes. The
+runs weren't repeated.
+
 **What this doesn't show:**
 - That 200 ms covers a real card's slowest write. The card times are still placeholders. The guard
   needs one mod access to finish within 200 ms plus a step; an SD write that stalls longer would

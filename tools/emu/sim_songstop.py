@@ -68,8 +68,31 @@ PLAYLIST = 0x10
 VALUES = 0x110
 TEMPO = VALUES + 176
 PATTERN_BITMASK = VALUES + 521
-PATTERN_BITMASK_MIDI = PATTERN_BITMASK + 255
+# Not right after allPatternsBitmask: reverb, track names, volumes, EQ, the MIDI instruments and the
+# MIDI track names come between. Checked on a real project: midiTrackNames ends right before it.
+PATTERN_BITMASK_MIDI = VALUES + 1331
 HEADER, TRACKS, TRACK_SIZE = 28, 16, 1 + 128 * 8
+SAMPLE_TRACKS = 8
+MIDI_INSTRUMENTS_START = 48     # kSampleInstrumentsCount
+
+
+def track_masks(pattern):
+    """CE's song-screen masks for a pattern file (updatePatternBitmask): a track counts if a step up to
+    track 0's length has a note, an FX, a volume or micromove, or a MIDI instrument."""
+    last = pattern[HEADER]
+    normal = midi = 0
+    for t in range(TRACKS):
+        base = HEADER + t * TRACK_SIZE + 1
+        for s in range(last + 1):
+            note, instr, fx1, _, fx2, _, volume, micromove = pattern[base + s * 8:base + s * 8 + 8]
+            if (note != 0xFF or fx1 or fx2 or volume < 0x80 or micromove < 0x80
+                    or instr >= MIDI_INSTRUMENTS_START):
+                if t < SAMPLE_TRACKS:
+                    normal |= 1 << t
+                else:
+                    midi |= 1 << (t - SAMPLE_TRACKS)
+                break
+    return normal, midi
 
 
 def make_project(source, parent, name, patterns, length, tempo):
@@ -87,8 +110,9 @@ def make_project(source, parent, name, patterns, length, tempo):
     mt = bytearray((out / "project.mt").read_bytes())
     mt[PLAYLIST:PLAYLIST + 256] = bytes(range(1, patterns + 1)) + bytes(256 - patterns)
     struct.pack_into("<f", mt, TEMPO, float(tempo))
-    mt[PATTERN_BITMASK:PATTERN_BITMASK + 255] = b"\x01" * patterns + bytes(255 - patterns)
-    mt[PATTERN_BITMASK_MIDI:PATTERN_BITMASK_MIDI + 255] = bytes(255)
+    normal, midi = track_masks(pattern)
+    mt[PATTERN_BITMASK:PATTERN_BITMASK + 255] = bytes([normal]) * patterns + bytes(255 - patterns)
+    mt[PATTERN_BITMASK_MIDI:PATTERN_BITMASK_MIDI + 255] = bytes([midi]) * patterns + bytes(255 - patterns)
     (out / "project.mt").write_bytes(mt)
     return out
 
