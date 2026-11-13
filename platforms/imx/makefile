@@ -82,7 +82,7 @@ CC_OPTIONS=
 
 # All synth engines are loaded from SD card /Synths/*.psyn at runtime
 SYNTH_ENGINE_LIBS ?=
-LIBS:= -Wl,--start-group -lTracker -larm_cortexM4lf_math -lPolySynth $(SYNTH_ENGINE_LIBS) -lPolyDSP -Wl,--end-group -Xlinker -z -Xlinker muldefs
+LIBS:= -Wl,--start-group -lTracker -larm_cortexM4lf_math -lPolySynth $(SYNTH_ENGINE_LIBS) -Wl,--end-group -Xlinker -z -Xlinker muldefs
  
 
 
@@ -98,7 +98,7 @@ $(OBJ_DIR)/%.o: %.S config/config.h
 	$(TOOLCHAIN)gcc -c -x assembler-with-cpp -mcpu=cortex-m7 -mfpu=fpv5-sp-d16 -mfloat-abi=hard -mthumb $(DEFINES) $(INCLUDES) -g -o "$@" "$<"
  
 $(TARGET): $(OBJS_SORTED)
-	@$(TOOLCHAIN)c++ -L ./linker -L ./linker/$(TARGET) -L ./3rdparty/math -L ${POLYSYNTH_DIR}/build-IMX-TrackerPlus -L ${POLYSYNTH_DIR}/lib -L${TRACKER_DIR}/build-IMX-$(PRODUCT) -Xlinker --defsym=__rtc_localtime=0 -Xlinker -print-memory-usage -Xlinker --gc-sections -mcpu=cortex-m7 -mfpu=fpv5-sp-d16 -mfloat-abi=hard -mthumb -nostdlib -T linkerScript.ld -u _printf_float -o "$(BUILD_DIR)/$(TARGET).axf" $(OBJS_SORTED) $(LIBS)
+	@$(TOOLCHAIN)c++ -L ./linker -L ./linker/$(TARGET) -L ./3rdparty/math -L ${POLYSYNTH_DIR}/build-IMX-TrackerPlus -L${TRACKER_DIR}/build-IMX-$(PRODUCT) -Xlinker --defsym=__rtc_localtime=0 -Xlinker -print-memory-usage -Xlinker --gc-sections -mcpu=cortex-m7 -mfpu=fpv5-sp-d16 -mfloat-abi=hard -mthumb -nostdlib -T linkerScript.ld -u _printf_float -o "$(BUILD_DIR)/$(TARGET).axf" $(OBJS_SORTED) $(LIBS)
 	@$(MAKE) --no-print-directory post-build
 	
 # Main rules

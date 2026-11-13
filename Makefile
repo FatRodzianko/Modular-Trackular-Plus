@@ -30,7 +30,8 @@ all: original plus mini psyn
 psyn:
 	$(MAKE) -C "$(ROOT_DIR)/synth-plugin-sdk" all TOOLCHAIN="$(TOOLCHAIN)"
 	@mkdir -p "$(OUT_DIR)/Synths"
-	@cp $(ROOT_DIR)/synth-plugin-sdk/build/*.psyn "$(OUT_DIR)/Synths/"
+	@cp "$(SYNTH_DIR)"/prebuilt/*.psyn "$(OUT_DIR)/Synths/"
+	@cp "$(ROOT_DIR)"/synth-plugin-sdk/build/*.psyn "$(OUT_DIR)/Synths/"
 
 original:
 	@echo "=================================================================="
@@ -121,6 +122,7 @@ clean:
 	$(MAKE) -C "$(MK66_DIR)" clean PRODUCT=ORIGINAL
 	$(MAKE) -C "$(IMX_DIR)" clean PRODUCT=PLUS
 	$(MAKE) -C "$(IMX_DIR)" clean PRODUCT=MINI
+	$(MAKE) -C "$(ROOT_DIR)/synth-plugin-sdk" clean
 	rm -rf "$(OUT_DIR)" "$(ROOT_DIR)/editor-fx-sdk/build"
 
 version:

@@ -1,6 +1,6 @@
 # Polyend Custom Synth Engine & `.psyn` Plugin SDK - Developer Guide
 
-The **Polyend Community Edition Synth Plugin SDK** ([`synth-plugin-sdk/`](../synth-plugin-sdk/) + [`synth/include/PolySynth/sdk/`](../synth/include/PolySynth/sdk/)) lets developers create standalone, relocatable `.psyn` synthesizer engines loaded directly from `/Synths/*.psyn` on the microSD card — **without recompiling the firmware** and with full cross-device binary compatibility across **Polyend Tracker+**, **Polyend Tracker Mini**, **Polyend Play+ / Play (IMX)**, and **Polyend Synth** (`ARMv7E-M` Cortex-M7 @ 600 MHz, Thumb-2, VFPv5 hard-float).
+The **Polyend Community Edition Synth Plugin SDK** ([`synth-plugin-sdk/`](../synth-plugin-sdk/) + [`synth/include/PolySynth/sdk/`](../synth/include/PolySynth/sdk/)) lets developers create standalone, relocatable `.psyn` synthesizer engines loaded directly from `/Synths/*.psyn` on the microSD card, **without recompiling the firmware** and with full cross-device binary compatibility across IMX powered Polyend devices (`ARMv7E-M` Cortex-M7 @ 600 MHz, Thumb-2, VFPv5 hard-float).
 
 ---
 
@@ -22,7 +22,7 @@ The **Polyend Community Edition Synth Plugin SDK** ([`synth-plugin-sdk/`](../syn
 
 ## 1. Architecture Overview (`PsynLoader` & `/Synths/*.psyn`)
 
-All synthesizer engines in `tracker-ce` (built-in engines `ACD`, `FAT`, `VAP`, `WTFM`, `PERC`, `DIRT`, `CHIP`, `WAVS`, `GRAIN`, `DWA`, as well as any third-party community engine) are distributed and loaded dynamically as standalone **`.psyn`** plugins on the SD card:
+All synthesizer engines in `tracker-ce` (built-in factory engines `ACD`, `FAT`, `VAP`, `WTFM`, `PERC`, `DIRT`, the open-source reference engine `CHIP`, as well as any third-party community engine) are distributed and loaded dynamically as standalone **`.psyn`** plugins on the SD card:
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────────┐
@@ -53,7 +53,7 @@ All synthesizer engines in `tracker-ce` (built-in engines `ACD`, `FAT`, `VAP`, `
 * **Zero Firmware Changes Needed:** Drop any compiled `MYENGINE.psyn` onto the SD card under `/Synths/`. `PsynLoader` ([`synth/source/synths/PsynLoader.h`](../synth/source/synths/PsynLoader.h), [`PsynLoader.cpp`](../synth/source/synths/PsynLoader.cpp)) discovers `.psyn` headers automatically at boot and [`SynthEditor`](../core/interface/instrumentEditor/SynthEditor.cpp) populates the model selector dynamically from `synth->getSynthTypes()`.
 * **Dedicated `6 MB` Synth SDRAM Pool (`PSYN_RAM_POOL_SIZE`):** Defined in [`core/source/mtStructs.h`](../core/source/mtStructs.h):
   * **`1,920 KB` `.psyn` Executable & Heap Arena (`PsynLoader::kArenaSize = 3 * 640 KB`):** Holds relocated plugin code, `.rodata`, `.data`, `.bss`, `.init_array` constructors, per-engine `slot_alloc` allocations, and `load_wav_file` buffers. Boot preloading caches engines up to `kMaxPreloadBytes = 1,024 KB`; remaining `.psyn` plugins load lazily when selected, with **LRU eviction** of inactive engines when headroom is needed.
-  * **`4 MB` Synth `SamplePool` (`initSamplePool(4 * 1024 * 1024)`):** Shared reference-counted SDRAM pool for engine `SampleSlot` assets (`WAVS`, `GRAIN`, `DWA`, and custom sample-based `.psyn` engines) with content deduplication across instruments and patches.
+  * **`4 MB` Synth `SamplePool` (`initSamplePool(4 * 1024 * 1024)`):** Shared reference-counted SDRAM pool for engine `SampleSlot` assets (custom sample-based `.psyn` engines) with content deduplication across instruments and patches.
 * **Cross-Device Compatibility:** Every `.psyn` header carries both `type_id_wave` (Polyend Synth) and `type_id_play_tracker` (Play/Tracker), or `0` to auto-assign deterministic non-colliding dynamic runtime IDs (`0x100+`).
 
 ---
@@ -207,6 +207,10 @@ Compile with `arm-none-eabi-g++` targeting Cortex-M7 hard-float with relocations
 # Quick test build of the bundled reference engine (CHIP.psyn -> synth-plugin-sdk/build/CHIP.psyn):
 make -C synth-plugin-sdk
 
+# Or bundle all factory + open-source .psyn engines into build/Synths/:
+# (also downloadable ready-to-use from the `polyend-tracker-ce-synths` CI artifact / GitHub Releases)
+make psyn
+
 # Packaging a custom engine ELF:
 python3 synth-plugin-sdk/tools/psyn_builder.py \
     --elf build/MySynth.elf \
@@ -270,7 +274,7 @@ Engines can play `.wav` samples or wavetables directly from the shared **`4 MB` 
 * **Pure C**: Call `PsynSampleData sd; if (host->patch_get_sample(host_patch, slot_id, &sd) && sd.ready)` to access `sd.data` (`const int16_t*`), `sd.size`, `sd.channels`, `sd.sample_rate`, and `sd.wave_size`.
 
 ### 3. Auto-Created Sample Directories & Path Fallback
-* **On Tracker+ / Tracker Mini & Play / Play+:** Whenever `PsynLoader` discovers any built-in sample engine (`WAVS`, `GRAIN`, `DWA`) or any `.psyn` engine carrying `PSYN_FLAG_HAS_SAMPLE_SLOTS`, it automatically ensures `/SynthSamples/<CODE_NAME>/` exists on the SD card (`PsynLoader::ensurePluginSampleFolder`). Keeping synth samples under `/SynthSamples/` prevents cluttering users' `/Samples/` tracker instrument libraries.
+* **On Tracker+ / Tracker Mini & Play / Play+:** Whenever `PsynLoader` discovers any built-in sample engine or any `.psyn` engine carrying `PSYN_FLAG_HAS_SAMPLE_SLOTS`, it automatically ensures `/SynthSamples/<CODE_NAME>/` exists on the SD card (`PsynLoader::ensurePluginSampleFolder`). Keeping synth samples under `/SynthSamples/` prevents cluttering users' `/Samples/` tracker instrument libraries.
 * **On Polyend Synth:** Auto-created engine folders live under `/Samples/<CODE_NAME>/`.
 * **Path Resolution:** [`core/synth/FileSystemAdapter.cpp`](../core/synth/FileSystemAdapter.cpp) resolves sample reads starting with `/SynthSamples/` and falls back cleanly across `/Samples/`, `/`, and `/Patches/`.
 

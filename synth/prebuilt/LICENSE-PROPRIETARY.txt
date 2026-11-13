@@ -1,0 +1,58 @@
+POLYEND PRECOMPILED FACTORY SYNTHESIZER PLUGINS LICENSE
+
+Copyright (c) 2023-2026 Polyend Sp. z o.o. All rights reserved.
+
+This license governs ONLY the precompiled proprietary factory `.psyn`
+synthesizer plugin binaries located in `synth/prebuilt/`:
+  - ACD.psyn
+  - DIRT.psyn
+  - DWA.psyn
+  - FAT.psyn
+  - GRAIN.psyn
+  - PERC.psyn
+  - PHZ.psyn
+  - PMD.psyn
+  - VAP.psyn
+  - WAVS.psyn
+  - WTFM.psyn
+
+1. Grant of License (Polyend Hardware & Non-Commercial DIY Projects)
+Polyend Sp. z o.o. ("Polyend") grants you a non-exclusive, worldwide,
+royalty-free license to use, install in `/Synths/`, and redistribute these
+unmodified binary `.psyn` plugin files (including as part of unmodified CI or
+release bundle archives) for:
+  (a) running on authentic Polyend hardware devices alongside free Community
+      Edition or official Polyend firmware builds; and
+  (b) personal, educational, research, hobbyist, or open-source DIY
+      non-commercial hardware or software projects (provided that no fee is
+      charged for the software, hardware, or product incorporating these
+      proprietary binary plugins).
+
+2. Restrictions
+You may NOT:
+  (a) embed, bundle, preload, or distribute any of the proprietary factory
+      `.psyn` binaries listed above in any paid or commercial third-party
+      hardware product, commercial software application, paid plugin, or product
+      sold for profit;
+  (b) sell or charge a fee for distributions, firmware bundles, or SD-card
+      packages containing these proprietary factory `.psyn` binaries; or
+  (c) decompile, disassemble, reverse-engineer, or attempt to derive the source
+      code of the proprietary synthesizer engines contained within these `.psyn`
+      binaries, except to the extent such restriction is expressly prohibited
+      by applicable law.
+
+3. Open-Source Synth Host, PolyDSP, SDK & Custom `.psyn` Plugins (MIT License)
+All C++ source and header files in `synth/` (including `libPolySynth`,
+`PsynLoader`, `PolyDSP` `Amplifier` & `Mixer`, and the open-source `Delay`,
+`Reverb`, and `Modulation` effects), `synth/include/PolySynth/sdk/`, and
+`synth-plugin-sdk/` (including the open-source `CHIP` engine in
+`synth-plugin-sdk/engines/chip.cpp` and compiled `CHIP.psyn`) are licensed
+under the MIT License (see Part 1 of the repository's root `LICENSE`).
+Developers may freely write, share, reuse, and sell their own custom `.psyn`
+synthesizer plugins built with `synth-plugin-sdk/` in both non-commercial and
+commercial projects under the MIT License.
+
+4. Disclaimer of Warranty
+THESE PLUGINS ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
