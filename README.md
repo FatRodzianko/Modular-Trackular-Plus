@@ -47,13 +47,15 @@ This unified codebase powers all three hardware instruments in the Tracker famil
 ├── CONTRIBUTING.md         # Contribution rules & hardware testing workflow
 ├── LICENSE                 # MIT License (+ No Wholesale Commercial Clones & Precompiled Synth Terms)
 ├── NOTICE.md               # Third-party open-source attributions
-├── core/                   # Shared Tracker application, audio engine, UI & open synth engines
+├── core/                   # Shared Tracker application, audio engine, UI (GlobalFileBrowser, editors) & synth host glue
 ├── platforms/
 │   ├── mk66/               # Original Tracker (Kinetis MK66) HAL, drivers & linker scripts
 │   └── imx/                # Tracker+ & Tracker Mini (i.MX RT1051) HAL, drivers & linker scripts
 ├── synth/
 │   ├── include/PolySynth/  # PolySynth public headers & Open Synth SDK (synth/include/PolySynth/sdk/)
+│   ├── source/synths/      # Dynamic .psyn SD-card synth loader & host runtime bridge (PsynLoader)
 │   └── lib/                # Precompiled libPolySynth.a & libPolyDSP.a + LICENSE-PROPRIETARY.txt
+├── synth-plugin-sdk/       # .psyn loadable Synth Engine SDK, builder & engines/ sources
 ├── util/                   # Shared C++ utility headers & third-party header libraries (ETL, magic_enum)
 ├── editor-fx-sdk/          # .ptfx Sample Editor plugin SDK, builder & effects/ sources
 └── docs/                   # User guides, SDK tutorials & architecture documentation
@@ -106,6 +108,9 @@ make mini       # -> build/TrackerMini_CE_1.0.0.ptf
 # Build reference .ptfx Sample Editor effects into editor-fx-sdk/build/Effects/:
 make ptfx
 
+# Build reference .psyn loadable synth plugin (CHIP.psyn) into synth-plugin-sdk/build/:
+make -C synth-plugin-sdk
+
 # Clean all build directories:
 make clean
 ```
@@ -151,7 +156,8 @@ Full user and developer documentation is available in [`docs/`](docs/Home.md) an
   * [SD Card Image Viewer](docs/image_viewer.md)
 * **Developer & Architecture Guides**:
   * [Firmware Architecture, Hardware Limits & Developer Gotchas](docs/developer_guide.md)
-  * [Custom Synth Engine SDK](docs/custom_synth_sdk.md)
+  * [Global File Browser Developer Guide](docs/global_file_browser.md)
+  * [Custom Synth Engine & `.psyn` Plugin SDK](docs/custom_synth_sdk.md)
   * [Modular Sample Editor Effects & `.ptfx` Developer SDK](docs/modular_effects_system.md)
 
 ---

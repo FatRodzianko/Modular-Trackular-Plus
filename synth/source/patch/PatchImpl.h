@@ -22,6 +22,7 @@ class PatchImpl final : public Patch
   public:
     PatchImpl(std::shared_ptr<const InstrumentType> instrumentType,
               std::shared_ptr<SamplePool> samplePool);
+    ~PatchImpl() override;
 
     [[nodiscard]] optional_paramvalue_t getParamValue(int paramId) const override;
     void setParamValue(int paramId, optional_paramvalue_t value, ParamChangeSource source) override;
@@ -67,7 +68,9 @@ class PatchImpl final : public Patch
     static bool deserialize(Patch& patch,
                             ProtobufHelpers::ReaderFunc reader,
                             bool synchronizeAudio);
-    static bool deserialize(Patch& patch, const polysynth_Patch& patchData);
+    static bool deserialize(Patch& patch,
+                            const polysynth_Patch& patchData,
+                            bool loadSampleSlots = true);
     static std::optional<InstrumentTypeId> deserializeInstrumentType(
       ProtobufHelpers::ReaderFunc reader);
 
@@ -117,6 +120,11 @@ class PatchImpl final : public Patch
     [[nodiscard]] Patch::optional_paramvalue_t getParamFinalValue(int paramId, int voiceId) const;
     void setOrAddMacroModifier(int macroId, int modifierIdx, int paramId);
     void deleteMacroModifier(int macroId, int modifierIdx);
+    void notifyListenersPatchReset();
+    void unloadAllSamples();
+    static void loadSamples(Patch& patch,
+                            const polysynth_Patch& patchData,
+                            ProtobufHelpers::ReaderFunc* embeddedReader);
 
     static void testMacroValueOptional();
 };

@@ -53,6 +53,7 @@ class InstrumentImpl final
 
     [[nodiscard]] int getVoiceCount() const override;
     void setVoiceCount(int voiceCount) override;
+    void reset() override;
 
     void assignPatch(std::shared_ptr<Patch> patch) override;
     void connect(MidiSource& midiSource) override;
@@ -66,6 +67,7 @@ class InstrumentImpl final
                        Patch::optional_paramvalue_t newValue,
                        Patch::ParamChangeSource source,
                        tiny_optional<int> voiceId) override;
+    void onPatchReset() override;
     void renderAudioBuffer(std::optional<AudioBufferStereoRef> inputBuffer,
                            AudioBufferStereoRef outputBuffer,
                            std::span<AudioBufferRef> auxOutBuffer);

@@ -364,10 +364,11 @@ void WaveHeaderReader::convertWavFileData(std::span<sample_store_t> destBuffer,
                 {
                     for (auto& destSample : destBuffer)
                     {
-                        destSample = static_cast<sample_store_t>(
-                          *((float*)&*srcBufferIt) * std::numeric_limits<sample_store_t>::max());
-                        srcBufferIt += bytesPerSample;
                         assert(srcBufferIt < srcBuffer.end());
+                        const float sampleF = std::clamp(*((float*)&*srcBufferIt), -1.0f, 1.0f);
+                        destSample = static_cast<sample_store_t>(
+                          sampleF * std::numeric_limits<sample_store_t>::max());
+                        srcBufferIt += bytesPerSample;
                     }
                 }
                 break;
@@ -378,34 +379,34 @@ void WaveHeaderReader::convertWavFileData(std::span<sample_store_t> destBuffer,
                         case 8:
                             for (auto& destSample : destBuffer)
                             {
+                                assert(srcBufferIt < srcBuffer.end());
                                 destSample = static_cast<sample_store_t>(
                                   ((sample_store_t)(*srcBufferIt) - 128) << 8);
                                 srcBufferIt += bytesPerSample;
-                                assert(srcBufferIt < srcBuffer.end());
                             }
                             break;
                         case 16:
                             for (auto& destSample : destBuffer)
                             {
+                                assert(srcBufferIt < srcBuffer.end());
                                 destSample = *((sample_store_t*)&*srcBufferIt);
                                 srcBufferIt += bytesPerSample;
-                                assert(srcBufferIt < srcBuffer.end());
                             }
                             break;
                         case 24:
                             for (auto& destSample : destBuffer)
                             {
+                                assert(srcBufferIt < srcBuffer.end());
                                 destSample = *((sample_store_t*)(&*srcBufferIt + 1));
                                 srcBufferIt += bytesPerSample;
-                                assert(srcBufferIt < srcBuffer.end());
                             }
                             break;
                         case 32:
                             for (auto& destSample : destBuffer)
                             {
+                                assert(srcBufferIt < srcBuffer.end());
                                 destSample = *((sample_store_t*)(&*srcBufferIt + 2));
                                 srcBufferIt += bytesPerSample;
-                                assert(srcBufferIt < srcBuffer.end());
                             }
                             break;
                         default:
@@ -430,16 +431,14 @@ void WaveHeaderReader::convertWavFileData(std::span<sample_store_t> destBuffer,
                 {
                     for (auto& destSample : destBuffer)
                     {
-                        sample_store_long_t input =
-                          ((sample_store_t)((*((float*)&*srcBufferIt) +
-                                             *((float*)(&*srcBufferIt + bytesPerChannel))) *
-                                            std::numeric_limits<sample_store_t>::max())) >>
-                          1;
-
-                        destSample = static_cast<sample_store_t>(std::clamp<sample_store_long_t>(
-                          input,
-                          std::numeric_limits<sample_store_t>::min(),
-                          std::numeric_limits<sample_store_t>::max()));
+                        assert(srcBufferIt < srcBuffer.end());
+                        const float mixedF = std::clamp(
+                          0.5f * (*((float*)&*srcBufferIt) +
+                                  *((float*)(&*srcBufferIt + bytesPerChannel))),
+                          -1.0f,
+                          1.0f);
+                        destSample = static_cast<sample_store_t>(
+                          mixedF * std::numeric_limits<sample_store_t>::max());
 
                         srcBufferIt += bytesPerSample;
                     }
@@ -452,6 +451,7 @@ void WaveHeaderReader::convertWavFileData(std::span<sample_store_t> destBuffer,
                         case 8:
                             for (auto& destSample : destBuffer)
                             {
+                                assert(srcBufferIt < srcBuffer.end());
                                 sample_store_long_t input =
                                   ((sample_store_t)((sample_store_t)(*srcBufferIt) - 128) +
                                    static_cast<sample_store_t>(
@@ -469,6 +469,7 @@ void WaveHeaderReader::convertWavFileData(std::span<sample_store_t> destBuffer,
                         case 16:
                             for (auto& destSample : destBuffer)
                             {
+                                assert(srcBufferIt < srcBuffer.end());
                                 sample_store_long_t input =
                                   (*((sample_store_t*)&*srcBufferIt) +
                                    *((sample_store_t*)(&*srcBufferIt + bytesPerChannel))) >>
@@ -485,6 +486,7 @@ void WaveHeaderReader::convertWavFileData(std::span<sample_store_t> destBuffer,
                         case 24:
                             for (auto& destSample : destBuffer)
                             {
+                                assert(srcBufferIt < srcBuffer.end());
                                 sample_store_long_t input =
                                   (*((sample_store_t*)(&*srcBufferIt + 1)) +
                                    *((sample_store_t*)(&*srcBufferIt + 1 + bytesPerChannel))) >>
@@ -501,6 +503,7 @@ void WaveHeaderReader::convertWavFileData(std::span<sample_store_t> destBuffer,
                         case 32:
                             for (auto& destSample : destBuffer)
                             {
+                                assert(srcBufferIt < srcBuffer.end());
                                 sample_store_long_t input =
                                   (*((sample_store_t*)(&*srcBufferIt + 2)) +
                                    *((sample_store_t*)(&*srcBufferIt + 2 + bytesPerChannel))) >>

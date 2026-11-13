@@ -1,6 +1,7 @@
 #include "SamplePool.h"
 #include "PolySynth/FileSystem.h"
 
+#include "PolyUtil/AudioCS.h"
 #include "PolyUtil/Result.h"
 
 #include <algorithm>
@@ -14,16 +15,20 @@ SamplePool::SamplePool(const Synth::Allocator& allocator,
   : arena(static_cast<sample_store_t*>(allocator(arenaSize)), arenaSize / sizeof(sample_store_t))
   , sampleStore(std::move(sampleStore_))
 {
+    pool.resize(kMaxPoolItems, std::nullopt);
 }
 
 const Sample& SamplePool::getSample(int id) const
 {
-    const auto& item = pool.at(id);
-    assert(item);
-    return item->sample;
+    static const Sample kEmptySample{};
+    if (id < 0 || id >= std::ssize(pool) || !pool[id])
+    {
+        return kEmptySample;
+    }
+    return pool[id]->sample;
 }
 
-int SamplePool::getNewId()
+std::optional<int> SamplePool::getNewId()
 {
     auto it = std::ranges::find_if(pool, [](const auto& item) { return !item; });
 
@@ -32,12 +37,24 @@ int SamplePool::getNewId()
         return static_cast<int>(it - pool.begin());
     }
 
-    pool.emplace_back(std::nullopt);
-    return static_cast<int>(pool.size() - 1);
+    return std::nullopt;
 }
 
 Result<int, LoadStatus> SamplePool::loadSample(const std::string& filePath)
 {
+    if (!filePath.empty())
+    {
+        AudioCS cs;
+        for (int i = 0; i < std::ssize(pool); ++i)
+        {
+            if (pool[i] && pool[i]->sample.ready && pool[i]->sample.name == filePath)
+            {
+                pool[i]->refCount++;
+                return i;
+            }
+        }
+    }
+
     auto sampleSize = sampleStore->getSampleSize(filePath);
 
     if (!sampleSize)
@@ -59,19 +76,52 @@ Result<int, LoadStatus> SamplePool::loadSample(const std::string& filePath)
         return LoadStatus::kFileError;
     }
 
-    int id = getNewId();
+    static_assert(std::is_same<sample_store_t, int16_t>::value);
+    AudioCS cs;
+    auto id = getNewId();
+    if (!id)
+    {
+        return LoadStatus::kOutOfMemoryError;
+    }
+    pool[*id] = PoolItem{ .sample = *sample, .refCount = 1 };
+
+    return *id;
+}
+
+Result<std::pair<int, Sample*>, LoadStatus> SamplePool::createSample(int size)
+{
+    if (size <= 0)
+    {
+        return LoadStatus::kFileError;
+    }
+
+    auto freeArea = findFreeArea(size);
+
+    if (!freeArea)
+    {
+        return LoadStatus::kOutOfMemoryError;
+    }
 
     static_assert(std::is_same<sample_store_t, int16_t>::value);
-    pool.at(id) = PoolItem{ .sample = *sample };
+    AudioCS cs;
+    auto id = getNewId();
+    if (!id)
+    {
+        return LoadStatus::kOutOfMemoryError;
+    }
 
-    return id;
+    pool[*id] = PoolItem{ .sample = {}, .refCount = 1 };
+    pool[*id]->sample.data = *freeArea;
+    pool[*id]->sample.ready = false;
+
+    return { std::pair<int, Sample*>(*id, &pool[*id]->sample) };
 }
 
 std::optional<std::span<sample_store_t>> SamplePool::findFreeArea(int size)
 {
     if (pool.empty())
     {
-        return std::ssize(arena) > size ? std::optional{ arena.subspan(0, size) } : std::nullopt;
+        return std::ssize(arena) >= size ? std::optional{ arena.subspan(0, size) } : std::nullopt;
     }
 
     std::vector<const PoolItem*> poolOrdered;
@@ -86,7 +136,7 @@ std::optional<std::span<sample_store_t>> SamplePool::findFreeArea(int size)
 
     if (poolOrdered.empty())
     {
-        return std::ssize(arena) > size ? std::optional{ arena.subspan(0, size) } : std::nullopt;
+        return std::ssize(arena) >= size ? std::optional{ arena.subspan(0, size) } : std::nullopt;
     }
 
     std::ranges::sort(poolOrdered,
@@ -114,6 +164,18 @@ std::optional<std::span<sample_store_t>> SamplePool::findFreeArea(int size)
 
 void SamplePool::deleteSample(int id)
 {
-    pool.at(id) = std::nullopt;
+    if (id < 0 || id >= std::ssize(pool))
+    {
+        return;
+    }
+    AudioCS cs;
+    if (pool[id])
+    {
+        pool[id]->refCount--;
+        if (pool[id]->refCount <= 0)
+        {
+            pool[id] = std::nullopt;
+        }
+    }
 }
 }

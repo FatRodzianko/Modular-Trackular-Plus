@@ -141,6 +141,25 @@ void InstrumentImpl::executeOnAllVoices(Func func)
     std::ranges::for_each(voices, [&func](auto& voice) { func(voice); });
 }
 
+void InstrumentImpl::onPatchReset()
+{
+    for (auto& voice : voices)
+    {
+        voice.voice->reset();
+        voice.noteSourceIds.clear();
+        voice.ticksSinceNoteOn = 0;
+    }
+}
+
+void InstrumentImpl::reset()
+{
+    onPatchReset();
+    if (patchAssigned != nullptr)
+    {
+        updateAllPatchParams(Patch::ParamChangeSource::kPatchAssign);
+    }
+}
+
 void InstrumentImpl::assignPatch(std::shared_ptr<Patch> patch)
 {
     if (patchAssigned != nullptr)
@@ -421,14 +440,17 @@ void InstrumentImpl::handleMidiCC(const MidiEvent::Data::ControlChange& controlC
                   voice.voice->clearPreviousNotes();
                   auto note = voice.voice->getLastNote();
                   assert(note);
-                  auto event =
-                    MidiEvent{ .type = MidiEvent::Type::kNoteOff,
-                               .channel = static_cast<uint8_t>(midiChannel),
-                               .data = MidiEvent::Data{
-                                 .note = MidiEvent::Data::Note{ .note = static_cast<uint8_t>(*note),
-                                                                .velocity = 0 } } };
+                  if (note)
+                  {
+                      auto event = MidiEvent{ .type = MidiEvent::Type::kNoteOff,
+                                              .channel = static_cast<uint8_t>(midiChannel),
+                                              .data = MidiEvent::Data{
+                                                .note = MidiEvent::Data::Note{
+                                                  .note = static_cast<uint8_t>(*note),
+                                                  .velocity = 0 } } };
 
-                  voice.voice->onMidiEvent({ getTempo() }, event);
+                      voice.voice->onMidiEvent({ getTempo() }, event);
+                  }
                   voice.noteSourceIds.clear();
               }
           });

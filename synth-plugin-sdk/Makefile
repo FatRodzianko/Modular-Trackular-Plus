@@ -44,6 +44,8 @@ $(BUILD_DIR)/CHIP.elf: $(SDK_DIR)/engines/chip.cpp $(SDK_DIR)/include/psyn/psyn_
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) $< $(LDFLAGS) -o $@
 
+HAS_SAMPLE_SLOTS ?= 0
+
 $(BUILD_DIR)/CHIP.psyn: $(BUILD_DIR)/CHIP.elf $(SDK_DIR)/tools/psyn_builder.py
 	$(PYTHON) $(SDK_DIR)/tools/psyn_builder.py \
 		--elf $< \
@@ -56,7 +58,8 @@ $(BUILD_DIR)/CHIP.psyn: $(BUILD_DIR)/CHIP.elf $(SDK_DIR)/tools/psyn_builder.py
 		--default-voices 4 \
 		--max-voices 8 \
 		--output-channels 1 \
-		--renders-aux 0
+		--renders-aux 0 \
+		--has-sample-slots $(HAS_SAMPLE_SLOTS)
 
 clean:
 	rm -rf $(BUILD_DIR)

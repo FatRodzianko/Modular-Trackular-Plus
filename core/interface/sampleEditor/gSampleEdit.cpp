@@ -393,30 +393,43 @@ void cSampleEditor::showEffectParamsScreen()
         }
     }
     // Labels
-
-    for (uint8_t i = 0; i < kEffectPageParams; i++)
+    if (isModularPresetPage())
     {
-        int paramIdx = i + effectScreenPage * kEffectPageParams;
-
-        if (i < visibleParamsCount)
+        display.setControlText(label[0], "Load Preset");
+        display.setControlText2(label[0], "");
+        display.setControlText(label[1], "Save Preset");
+        display.setControlText2(label[1], "");
+        display.setControlText(label[2], "Reset Params");
+        display.setControlText2(label[2], "");
+        display.setControlText(label[3], "");
+        display.setControlText2(label[3], "");
+    }
+    else
+    {
+        for (uint8_t i = 0; i < kEffectPageParams; i++)
         {
-            display.setControlText(
-              label[i], getCurrentEffectDisplayParams().labelsText[paramIdx]);
-            display.setControlText2(label[i], parameterValueLabelPtr[paramIdx]);
+            int paramIdx = i + effectScreenPage * kEffectPageParams;
 
-            if (parameterValueLabelPtr[paramIdx][0] > 0)
+            if (i < visibleParamsCount)
             {
-                display.setControlValue(label[i], 1);
+                display.setControlText(
+                  label[i], getCurrentEffectDisplayParams().labelsText[paramIdx]);
+                display.setControlText2(label[i], parameterValueLabelPtr[paramIdx]);
+
+                if (parameterValueLabelPtr[paramIdx][0] > 0)
+                {
+                    display.setControlValue(label[i], 1);
+                }
+                else
+                {
+                    display.setControlValue(label[i], 1);
+                }
             }
             else
             {
-                display.setControlValue(label[i], 1);
+                display.setControlText(label[i], "");
+                display.setControlText2(label[i], "");
             }
-        }
-        else
-        {
-            display.setControlText(label[i], "");
-            display.setControlText2(label[i], "");
         }
     }
 
@@ -493,7 +506,15 @@ void cSampleEditor::showEffectParamsScreen()
 
     hidePlayhead();
     // frame
-    showFrame();
+    if (isModularPresetPage())
+    {
+        display.setControlHide(frame);
+        display.refreshControl(frame);
+    }
+    else
+    {
+        showFrame();
+    }
 
     // title label
     showTitleBar(paramsScreenLabel);

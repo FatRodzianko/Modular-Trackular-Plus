@@ -378,8 +378,13 @@ static void functSynthLoadSampleSlot()
     cfg.title = "Load Sample - " + IE->getSynth()->getSampleSlotName(syntPartIdx, slotId);
     cfg.initialDirectory = IE->getSynth()->getEngineSampleFolder(syntPartIdx);
     cfg.extensionFilter = ".wav";
+    cfg.contextKey = "synth_smp_" + IE->getSynth()->getSynthName(syntPartIdx);
     cfg.returnModule = IE;
     cfg.returnModuleOptions = 0;
+    cfg.onPadEvent = [](uint8_t pad, uint8_t state, int16_t)
+    {
+        IE->playSynthNoteByPad(pad, state);
+    };
     cfg.onConfirm = [syntPartIdx, slotId](const std::string& fullPath)
     {
         bool ok = IE->getSynth()->loadSampleByPath(syntPartIdx, slotId, fullPath);
@@ -532,16 +537,91 @@ static void functSynthSaveAs()
 {
     uint8_t syntPartIdx = mtProject.values.lastUsedInstrument - SYNTH_INSTRUMENTS_START_IDX;
 
-    char textBuffer[sizeof(SynthPartSettings::patchName) + 1];
-    polystrncpy(textBuffer, IE->getSynth()->getPatchName(syntPartIdx).c_str(), sizeof(textBuffer));
-
-    IE->keyboardManager.fillName(textBuffer);
-    IE->keyboardManager.activateKeyboard(PROJECT_NAME_SIZE - 1);
-
     sequencer.stopManualNotes();
-    IE->titleBar->setTitle("Edit Patch Name");
-    IE->setSynthPatchSaveAsKeyboardFunctions();
-    IE->showSaveAsKeyboard();
+
+    std::string engineRoot = IE->getSynth()->getEnginePatchFolder(syntPartIdx);
+    std::string curName = IE->getSynth()->getPatchName(syntPartIdx);
+    std::string initDir = engineRoot;
+    std::string defName = "Patch";
+
+    if (!curName.empty() && curName != Synth::kInitPatchName)
+    {
+        auto slash = curName.find_last_of('/');
+        if (curName.front() == '/')
+        {
+            if (slash != std::string::npos)
+            {
+                initDir = (slash == 0) ? "/" : curName.substr(0, slash);
+                defName = curName.substr(slash + 1);
+            }
+            else
+            {
+                defName = curName;
+            }
+        }
+        else if (slash != std::string::npos)
+        {
+            initDir = engineRoot + "/" + curName.substr(0, slash);
+            defName = curName.substr(slash + 1);
+        }
+        else
+        {
+            defName = curName;
+        }
+    }
+
+    GlobalFileBrowserConfig cfg;
+    cfg.mode = GlobalFileBrowserConfig::Mode::kSaveGenericFile;
+    cfg.title = "Save Patch As - " + IE->getSynth()->getSynthName(syntPartIdx);
+    cfg.initialDirectory = initDir;
+    cfg.defaultFileName = defName;
+    cfg.extensionFilter = ".patch";
+    cfg.maxNameLength = PROJECT_NAME_SIZE - 1;
+    cfg.contextKey = "synth_patch_" + IE->getSynth()->getSynthName(syntPartIdx);
+    cfg.returnModule = IE;
+    cfg.returnModuleOptions = 0;
+
+    cfg.onDescribeItem = [syntPartIdx](const std::string& fullPath, bool isFolder, bool)
+      -> std::string
+    {
+        if (isFolder)
+        {
+            return {};
+        }
+        return IE->getSynth()->describePatchFile(syntPartIdx, fullPath);
+    };
+
+    cfg.onPadEvent = [](uint8_t pad, uint8_t state, int16_t)
+    {
+        IE->playSynthNoteByPad(pad, state);
+    };
+
+    cfg.onConfirm = [syntPartIdx](const std::string& fullPath)
+    {
+        sequencer.stopManualNotes();
+        bool ok = IE->getSynth()->savePatchByPath(syntPartIdx, fullPath);
+        mtPopups.show(0, ok ? "Patch saved" : "Error saving patch");
+        if (ok)
+        {
+            std::string pName = IE->getSynth()->getPatchName(syntPartIdx);
+            if (!pName.empty() &&
+                (pName.front() == '/' || pName.size() >= sizeof(SynthPartSettings::patchName)))
+            {
+                auto slash = pName.find_last_of('/');
+                if (slash != std::string::npos)
+                {
+                    pName = pName.substr(slash + 1);
+                }
+            }
+            polystrncpy(mtProject.values.synthPart[syntPartIdx].patchName,
+                        pName.c_str(),
+                        sizeof(SynthPartSettings::patchName));
+            IE->getSynth()->savePatchToWorkspace(syntPartIdx);
+            newFileManager.setProjectStructChanged();
+        }
+    };
+
+    openGlobalFileBrowser(cfg);
 }
 
 static void functSynthInit()
@@ -567,9 +647,9 @@ static void functSynthInitCancel()
 static void functSynthBack()
 {
     sequencer.stopManualNotes();
+    IE->cleanPatchEditorResources();
     IE->mode = mtInstEditModeSynth;
     IE->start(0);
-    IE->cleanPatchEditorResources();
 }
 
 void cInstrumentEditor::changeSynthPatchEditorValue(int value, ValueChangeSource source)
@@ -854,11 +934,19 @@ void cInstrumentEditor::changeSynthPatchParamValue(int16_t value)
             int slotId = decodeSampleSlotId(paramIdx);
             if (paramValueMode == kList && modelListData.length > 0)
             {
-                int prevPos = paramValueListPos;
-                paramValueListPos = clamp(paramValueListPos + value, 0, modelListData.length - 1);
-                if (paramValueListPos != prevPos)
+                int newPos = (paramValueListPos < 0)
+                               ? 0
+                               : clamp(paramValueListPos + value, 0, modelListData.length - 1);
+                if (newPos != paramValueListPos)
                 {
-                    getSynth()->loadSampleByIndex(syntPartIdx, slotId, paramValueListPos);
+                    paramValueListPos = newPos;
+                    if (getSynth()->loadSampleByIndex(syntPartIdx, slotId, paramValueListPos))
+                    {
+                        polystrncpy(paramListValues[paramListPos],
+                                    getSynth()->getSampleName(syntPartIdx, slotId).c_str(),
+                                    kMaxSynthListStringLen);
+                        display.refreshControl(paramsListControl);
+                    }
                 }
             }
         }
@@ -1728,8 +1816,7 @@ void cInstrumentEditor::showSynthPatchSectionParamValue(bool refreshList)
                     polystrncpy(
                       paramValueListNames[idx], sName.c_str(), kMaxSynthListStringLen);
                 }
-                paramValueListPos =
-                  clamp<int>(getSynth()->getSampleIndex(syntPartIdx, slotId), 0, length - 1);
+                paramValueListPos = getSynth()->getSampleIndex(syntPartIdx, slotId);
             }
             else
             {
@@ -1737,12 +1824,12 @@ void cInstrumentEditor::showSynthPatchSectionParamValue(bool refreshList)
                 polystrncpy(paramValueListNames[0],
                             getSynth()->getSampleName(syntPartIdx, slotId).c_str(),
                             kMaxSynthListStringLen);
-                paramValueListPos = 0;
+                paramValueListPos = -1;
             }
 
             modelListData.rowHeight = 0;
             modelListData.scrollText = true;
-            modelListData.start = paramValueListPos;
+            modelListData.start = std::max(0, paramValueListPos);
             modelListData.length = length;
             modelListData.linesCount = std::min<uint16_t>(length, 14);
             modelListData.params = paramValueListNames;

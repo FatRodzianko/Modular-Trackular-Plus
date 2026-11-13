@@ -107,7 +107,12 @@ std::optional<Sample> SampleStoreImpl::loadSample(const std::string& filePath,
                    .format = Sample::Format{ .channels = 1, .sampleRate = sampleRate },
                    .waveSize = getWaveSize(filePath),
                    .ready = true,
-                   .basePitch = extractNoteFromFilename(filePath).value_or(kNoteC4) };
+                   .basePitch = getBasePitch(filePath) };
+}
+
+note_t SampleStoreImpl::getBasePitch(const std::string& filePath)
+{
+    return extractNoteFromFilename(filePath).value_or(kNoteC4);
 }
 
 tiny_optional<int> SampleStoreImpl::getSampleSize(const std::string& filePath)
@@ -119,7 +124,24 @@ std::vector<std::string_view> SampleStoreImpl::listSamples(const std::string& fo
 {
     return fileSystem->listFiles(
       folder.empty() ? "." : folder,
-      [](const std::string_view& name) { return name.ends_with(SampleFileIO::kWavExtension); },
+      [](const std::string& name)
+      {
+          constexpr std::string_view ext = SampleFileIO::kWavExtension;
+          if (name.size() <= ext.size())
+          {
+              return false;
+          }
+          const size_t offset = name.size() - ext.size();
+          for (size_t i = 0; i < ext.size(); ++i)
+          {
+              if (std::tolower(static_cast<unsigned char>(name[offset + i])) !=
+                  std::tolower(static_cast<unsigned char>(ext[i])))
+              {
+                  return false;
+              }
+          }
+          return true;
+      },
       std::nullopt);
 };
 

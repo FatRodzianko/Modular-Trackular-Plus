@@ -31,6 +31,7 @@ class Instrument : public PImpl<InstrumentImpl>
     [[nodiscard]] virtual LocalMode getLocalMode() const = 0;
     [[nodiscard]] virtual int getVoiceCount() const = 0;
     virtual void setVoiceCount(int voiceCount) = 0;
+    virtual void reset() = 0;
 
     virtual ~Instrument() = default;
 };

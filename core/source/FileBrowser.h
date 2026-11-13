@@ -27,6 +27,7 @@ struct FileBrowserData
 
     const char* defaultPath;
     const char* customExtension;
+    const char* packageMarkerFile = nullptr;
 
     // outputs
     int browserListLength;
@@ -67,6 +68,8 @@ class FileBrowser
 
     int getPathFolderLevel(char* path);
 
+    static bool checkFilenameExtension(const char* filename, const char* extension);
+
   private:
     static constexpr char kWavFileExtension[] = "wav";
     static constexpr char kModFileExtension1[] = "mod";
@@ -80,8 +83,6 @@ class FileBrowser
 
     void openFolder(int position);
     void openParentFolder();
-
-    bool checkFilenameExtension(const char* filename, const char* extension);
 
     FileSystem* fileSystem;
     FileBrowserData* data;

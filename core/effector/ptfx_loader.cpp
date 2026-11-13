@@ -140,42 +140,185 @@ bool PtfxLoader::loadSecondaryWavFile(const char* filepath)
     if (!isOpen)
         return false;
 
-    strWavFileHeader wavHdr{};
-    int32_t hdrRead = fs->readFile(&wavHdr, sizeof(strWavFileHeader), fileHandle);
-    if (hdrRead != static_cast<int32_t>(sizeof(strWavFileHeader)) ||
-        wavHdr.AudioFormat != 1 ||
-        wavHdr.bitsPerSample != 16 ||
-        (wavHdr.numChannels != 1 && wavHdr.numChannels != 2) ||
-        wavHdr.subchunk2Size == 0)
+    uint8_t riffHdr[12]{};
+    if (fs->readFile(riffHdr, 12, fileHandle) != 12 ||
+        memcmp(riffHdr, "RIFF", 4) != 0 || memcmp(riffHdr + 8, "WAVE", 4) != 0)
     {
         fs->closeFile(fileHandle);
         return false;
     }
 
-    uint32_t bytesToRead = wavHdr.subchunk2Size;
-    if (bytesToRead > kPtfxSecondarySampleBytes)
-    {
-        bytesToRead = kPtfxSecondarySampleBytes;
-    }
-    uint32_t frameBytes = static_cast<uint32_t>(wavHdr.numChannels) * sizeof(int16_t);
-    bytesToRead = (bytesToRead / frameBytes) * frameBytes;
+    uint16_t audioFormat = 0;
+    uint16_t numChannels = 0;
+    uint16_t bitsPerSample = 0;
+    uint32_t dataSize = 0;
+    bool foundFmt = false;
+    bool foundData = false;
 
-    uint8_t* dst = externalRamScratchBuff + kPtfxSecondarySampleOffset;
-    uint32_t totalRead = 0;
-    while (totalRead < bytesToRead)
+    for (int chunkIter = 0; !foundData && chunkIter < 32; ++chunkIter)
     {
-        uint32_t chunk = bytesToRead - totalRead;
-        if (chunk > 256)
-            chunk = 256;
-        int32_t n = fs->readFile(dst + totalRead, chunk, fileHandle);
+        uint8_t chunkHdr[8]{};
+        if (fs->readFile(chunkHdr, 8, fileHandle) != 8)
+            break;
+
+        uint32_t chunkSize = 0;
+        memcpy(&chunkSize, chunkHdr + 4, 4);
+
+        if (memcmp(chunkHdr, "fmt ", 4) == 0)
+        {
+            if (chunkSize < 16 || chunkSize > 0x7FFFFFFEu)
+            {
+                fs->closeFile(fileHandle);
+                return false;
+            }
+            uint8_t fmtBuf[16]{};
+            if (fs->readFile(fmtBuf, 16, fileHandle) != 16)
+            {
+                fs->closeFile(fileHandle);
+                return false;
+            }
+            memcpy(&audioFormat, fmtBuf + 0, 2);
+            memcpy(&numChannels, fmtBuf + 2, 2);
+            memcpy(&bitsPerSample, fmtBuf + 14, 2);
+            foundFmt = true;
+
+            uint32_t rem = ((chunkSize + 1u) & ~1u) - 16u;
+            if (rem > 0 && !fs->seekFileCur(static_cast<int>(rem), fileHandle))
+            {
+                fs->closeFile(fileHandle);
+                return false;
+            }
+        }
+        else if (memcmp(chunkHdr, "data", 4) == 0)
+        {
+            dataSize = chunkSize;
+            foundData = true;
+        }
+        else
+        {
+            if (chunkSize > 0x7FFFFFFEu)
+            {
+                fs->closeFile(fileHandle);
+                return false;
+            }
+            uint32_t paddedSize = (chunkSize + 1u) & ~1u;
+            if (paddedSize > 0 && !fs->seekFileCur(static_cast<int>(paddedSize), fileHandle))
+            {
+                fs->closeFile(fileHandle);
+                return false;
+            }
+        }
+    }
+
+    const bool supportedFormat =
+      (audioFormat == 1 && (bitsPerSample == 8 || bitsPerSample == 16 ||
+                            bitsPerSample == 24 || bitsPerSample == 32)) ||
+      (audioFormat == 3 && bitsPerSample == 32);
+
+    if (!foundFmt || !foundData || !supportedFormat ||
+        (numChannels != 1 && numChannels != 2) || dataSize == 0)
+    {
+        fs->closeFile(fileHandle);
+        return false;
+    }
+
+    uint32_t srcSampleBytes = bitsPerSample / 8u;
+    uint32_t frameBytes = static_cast<uint32_t>(numChannels) * srcSampleBytes;
+    if (frameBytes == 0 || frameBytes > 8)
+    {
+        fs->closeFile(fileHandle);
+        return false;
+    }
+
+    uint32_t maxFrames = kPtfxSecondarySampleBytes / (numChannels * sizeof(int16_t));
+    uint32_t frameCount = dataSize / frameBytes;
+    if (frameCount > maxFrames)
+    {
+        frameCount = maxFrames;
+    }
+    if (frameCount == 0)
+    {
+        fs->closeFile(fileHandle);
+        return false;
+    }
+
+    auto* dst = reinterpret_cast<int16_t*>(externalRamScratchBuff + kPtfxSecondarySampleOffset);
+    uint8_t tmp[256];
+    uint32_t framesPerChunk = static_cast<uint32_t>(sizeof(tmp)) / frameBytes;
+    uint32_t framesRead = 0;
+
+    while (framesRead < frameCount)
+    {
+        uint32_t toRead = frameCount - framesRead;
+        if (toRead > framesPerChunk)
+            toRead = framesPerChunk;
+
+        uint32_t chunkBytes = toRead * frameBytes;
+        int32_t n = fs->readFile(tmp, chunkBytes, fileHandle);
         if (n <= 0)
             break;
-        totalRead += static_cast<uint32_t>(n);
+
+        uint32_t gotFrames = static_cast<uint32_t>(n) / frameBytes;
+        if (gotFrames == 0)
+            break;
+
+        for (uint32_t f = 0; f < gotFrames; ++f)
+        {
+            for (uint16_t ch = 0; ch < numChannels; ++ch)
+            {
+                const uint8_t* p = tmp + f * frameBytes + ch * srcSampleBytes;
+                int32_t sample = 0;
+                if (audioFormat == 1 && bitsPerSample == 8)
+                {
+                    sample = (static_cast<int32_t>(p[0]) - 128) << 8;
+                }
+                else if (audioFormat == 1 && bitsPerSample == 16)
+                {
+                    int16_t s16 = 0;
+                    memcpy(&s16, p, 2);
+                    sample = s16;
+                }
+                else if (audioFormat == 1 && bitsPerSample == 24)
+                {
+                    int32_t s24 = (static_cast<int32_t>(p[2]) << 24) |
+                                  (static_cast<int32_t>(p[1]) << 16) |
+                                  (static_cast<int32_t>(p[0]) << 8);
+                    sample = s24 >> 16;
+                }
+                else if (audioFormat == 1 && bitsPerSample == 32)
+                {
+                    int32_t s32 = 0;
+                    memcpy(&s32, p, 4);
+                    sample = s32 >> 16;
+                }
+                else if (audioFormat == 3 && bitsPerSample == 32)
+                {
+                    float flt = 0.0f;
+                    memcpy(&flt, p, 4);
+                    if (flt < -1.0f)
+                        flt = -1.0f;
+                    else if (flt > 1.0f)
+                        flt = 1.0f;
+                    sample = static_cast<int32_t>(flt * 32767.0f);
+                }
+
+                if (sample < -32768)
+                    sample = -32768;
+                else if (sample > 32767)
+                    sample = 32767;
+
+                dst[(framesRead + f) * numChannels + ch] = static_cast<int16_t>(sample);
+            }
+        }
+        framesRead += gotFrames;
+        if (gotFrames < toRead)
+            break;
     }
+
     fs->closeFile(fileHandle);
 
-    s_secondarySampleFrames = totalRead / frameBytes;
-    s_secondarySampleChannels = static_cast<uint8_t>(wavHdr.numChannels);
+    s_secondarySampleFrames = framesRead;
+    s_secondarySampleChannels = static_cast<uint8_t>(numChannels);
     return s_secondarySampleFrames > 0;
 }
 

@@ -340,6 +340,10 @@ class cSampleEditor : public ModuleBase
     int getParamsPagesCount();
     int getCurrentPageParams();
     bool areThereMoreThanOneParamsPage();
+    bool isModularPresetPage() const;
+    void openModularPresetLoadBrowser();
+    void openModularPresetSaveBrowser();
+    void resetModularEffectParams();
 
     //*******************
     float samplePosToTime(uint32_t pos);

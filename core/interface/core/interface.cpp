@@ -510,6 +510,22 @@ void Interface::deactivateModule(hModule module)
     previousModuleOptions = lastOptions;
 }
 
+hModule Interface::getPreviousModule() const
+{
+    return previousModule;
+}
+
+uint32_t Interface::getPreviousModuleOptions() const
+{
+    return previousModuleOptions;
+}
+
+void Interface::setPreviousModule(hModule module, uint32_t options)
+{
+    previousModule = module;
+    previousModuleOptions = options;
+}
+
 void Interface::switchModuleByButton(hModule module, uint8_t button, uint32_t options)
 {
     int8_t index = getButtonIndex(button);

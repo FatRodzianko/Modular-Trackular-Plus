@@ -9,6 +9,7 @@
 
 #include "mtStructs.h"
 #include <array>
+#include <atomic>
 #include <cassert>
 #include <memory>
 #include <span>
@@ -60,7 +61,9 @@ class Synth
     void saveDirtyWorkspacePatches();
     void copyWorkspacePatches(const char* sourceProjectPath, const char* destinationProjectPath);
     void setPatchDirty(int part) { parts[part].patchDirty = true; };
+    [[nodiscard]] bool isPatchDirty(int part) const;
     bool isAnyPatchDirty();
+    void silencePart(int part);
 
     void setGain(int part, float gainDb);
     void setPanning(int part, float panning);
@@ -85,6 +88,11 @@ class Synth
     bool loadSampleByPath(int part, int slotId, const std::string& fullSdPath);
     std::string getEngineSampleFolder(int part);
 
+    std::string getEnginePatchFolder(int part);
+    [[nodiscard]] bool loadPatchByPath(int part, const std::string& fullSdPath);
+    bool savePatchByPath(int part, const std::string& fullSdPath);
+    std::string describePatchFile(int part, const std::string& fullSdPath);
+
     int getSend(int part, int sendIdx); // in percent
     float getPanning(int part);         // +- percent
 
@@ -108,6 +116,17 @@ class Synth
         std::shared_ptr<polysynth::Patch> patch = nullptr;
         std::string patchName = {};
         bool patchDirty = false;
+        std::atomic<bool> loading{ false };
+    };
+    struct PluginTypeInfo
+    {
+        polysynth::InstrumentTypeId trackerTypeId = {};
+        int32_t waveTypeId = 0;
+        int32_t playTrackerTypeId = 0;
+        std::string codeName = {};
+        std::string patchFolder = {};
+        int paramCount = 0;
+        int sampleSlotCount = 0;
     };
     std::array<Part, kSynthParts> parts;
     std::shared_ptr<polysynth::Synth> synth;
@@ -118,6 +137,7 @@ class Synth
     std::unique_ptr<MidiAdapter> midiAdapter;
     FileSystem* filesystem;
     std::vector<polysynth::InstrumentTypeId> synthTypes;
+    std::vector<PluginTypeInfo> pluginTypes;
 
     void setPatch(int part, std::shared_ptr<polysynth::Patch> patch, std::string name);
 

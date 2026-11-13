@@ -94,6 +94,7 @@ def parse_params_from_source(source_code):
     # Tokenize entries: either PTFX_PARAM_*(...) macros or { ... } brace initializers
     entry_pattern = re.compile(
         r"(PTFX_PARAM_LIST\s*\(\s*\"([^\"]*)\"\s*,\s*([^,]+),\s*\"([^\"]*)\"\s*\))"
+        r"|(PTFX_PARAM_(SAVE_FILE|FILE)\s*\(\s*\"([^\"]*)\"\s*,\s*\"([^\"]*)\"\s*\))"
         r"|(PTFX_PARAM_(FLOAT|INT)\s*\(\s*\"([^\"]*)\"\s*,\s*([^,]+),\s*([^,]+),\s*([^,]+),\s*([^,]+),\s*\"([^\"]*)\"\s*\))"
         r"|(\{\s*\"([^\"]*)\"\s*,\s*([^,]+),\s*([^,]+),\s*([^,]+),\s*([^,]+),\s*\"([^\"]*)\"\s*,\s*(\w+)\s*\})"
     )
@@ -123,10 +124,25 @@ def parse_params_from_source(source_code):
                 "options": opts
             })
         elif m.group(5):
-            # PTFX_PARAM_FLOAT / PTFX_PARAM_INT
-            kind = m.group(6)
+            # PTFX_PARAM_FILE / PTFX_PARAM_SAVE_FILE(label, ext)
+            file_kind = m.group(6)
             label = m.group(7)
-            min_val, max_val, def_val, step, unit = m.group(8), m.group(9), m.group(10), m.group(11), m.group(12)
+            ext = m.group(8)
+            params.append({
+                "label": label[:7],
+                "min": 0.0,
+                "max": 1.0,
+                "default": 0.0,
+                "step": 0.0,
+                "unit": ext[:5],
+                "type": 's' if file_kind == "SAVE_FILE" else 'w',
+                "options": []
+            })
+        elif m.group(9):
+            # PTFX_PARAM_FLOAT / PTFX_PARAM_INT
+            kind = m.group(10)
+            label = m.group(11)
+            min_val, max_val, def_val, step, unit = m.group(12), m.group(13), m.group(14), m.group(15), m.group(16)
             try:
                 p_min = float(min_val.strip().rstrip("f"))
                 p_max = float(max_val.strip().rstrip("f"))
@@ -145,10 +161,10 @@ def parse_params_from_source(source_code):
                 })
             except ValueError:
                 continue
-        elif m.group(13):
+        elif m.group(17):
             # Brace initializer: { "Label", min, max, default, step, "unit", PARAM_TYPE }
-            label = m.group(14)
-            min_val, max_val, def_val, step, unit, ptype = m.group(15), m.group(16), m.group(17), m.group(18), m.group(19), m.group(20)
+            label = m.group(18)
+            min_val, max_val, def_val, step, unit, ptype = m.group(19), m.group(20), m.group(21), m.group(22), m.group(23), m.group(24)
             try:
                 p_min = float(min_val.strip().rstrip("f"))
                 p_max = float(max_val.strip().rstrip("f"))
@@ -168,6 +184,28 @@ def parse_params_from_source(source_code):
                         "unit": "",
                         "type": 'l',
                         "options": opts
+                    })
+                elif "SAVE_FILE" in ptype:
+                    params.append({
+                        "label": label[:7],
+                        "min": 0.0,
+                        "max": 1.0,
+                        "default": 0.0,
+                        "step": 0.0,
+                        "unit": unit[:5],
+                        "type": 's',
+                        "options": []
+                    })
+                elif "FILE" in ptype:
+                    params.append({
+                        "label": label[:7],
+                        "min": 0.0,
+                        "max": 1.0,
+                        "default": 0.0,
+                        "step": 0.0,
+                        "unit": unit[:5],
+                        "type": 'w',
+                        "options": []
                     })
                 else:
                     p_type = 'd' if "INT" in ptype else 'f'

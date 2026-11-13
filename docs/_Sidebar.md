@@ -11,7 +11,8 @@
 
 #### Developer & SDK Guides
 * **[Architecture, Limits & Gotchas](developer_guide)**
-* **[Custom Synth Engine SDK](custom_synth_sdk)**
+* **[Global File Browser](global_file_browser)**
+* **[Custom Synth Engine SDK (.psyn)](custom_synth_sdk)**
 * **[Modular Effects & PTFX SDK](modular_effects_system)**
 
 #### Ecosystem

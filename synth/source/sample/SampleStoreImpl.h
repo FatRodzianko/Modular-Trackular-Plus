@@ -21,10 +21,11 @@ class SampleStoreImpl : public SampleStore
     [[nodiscard]] std::vector<std::string_view> listSamples(
       const std::string& folder = "") override;
 
+    static tiny_optional<int> getWaveSize(const std::string& filePath);
+    static note_t getBasePitch(const std::string& filePath);
+
   private:
     std::shared_ptr<FileSystem> fileSystem;
     SampleFileIO fileIO;
-
-    static tiny_optional<int> getWaveSize(const std::string& filePath);
 };
 }

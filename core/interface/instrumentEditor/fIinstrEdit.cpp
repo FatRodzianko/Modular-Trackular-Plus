@@ -80,6 +80,9 @@ void cInstrumentEditor::update()
 void cInstrumentEditor::start(uint32_t options)
 {
     moduleRefresh = 1;
+#if GUI_HANDLE_SYNTH
+    const uint8_t prevMode = mode;
+#endif
 
     if (mtProject.values.lastUsedInstrument >= SYNTH_INSTRUMENTS_START_IDX + kSynthParts)
     {
@@ -198,6 +201,13 @@ void cInstrumentEditor::start(uint32_t options)
     lightUpPadBoard();
 
     setBaseScreenFunct();
+
+#if GUI_HANDLE_SYNTH
+    if (prevMode == mtInstEditModeSynthPatchEdit && mode != mtInstEditModeSynthPatchEdit)
+    {
+        cleanPatchEditorResources();
+    }
+#endif
 
     switch (mode)
     {
@@ -1011,6 +1021,11 @@ static void functSwitchMode()
     }
     else if (IE->mode == mtInstEditModeSynthMacros)
     {
+        IE->mode = mtInstEditModeSynth;
+    }
+    else if (IE->mode == mtInstEditModeSynthPatchEdit)
+    {
+        IE->cleanPatchEditorResources();
         IE->mode = mtInstEditModeSynth;
     }
 #endif

@@ -9,6 +9,9 @@
 PB_BIND(polysynth_Param, polysynth_Param, AUTO)
 
 
+PB_BIND(polysynth_SampleFormat, polysynth_SampleFormat, AUTO)
+
+
 PB_BIND(polysynth_Sample, polysynth_Sample, 2)
 
 

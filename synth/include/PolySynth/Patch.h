@@ -254,6 +254,8 @@ class Patch : private boost::noncopyable
                                    ParamChangeSource source,
                                    tiny_optional<int> voiceId) = 0;
 
+        virtual void onPatchReset() {}
+
         [[nodiscard]] virtual int getVoiceCount() const = 0;
 
         virtual ~ParamChangeListener() = default;

@@ -24,6 +24,7 @@ class SamplePool
 
     [[nodiscard]] const Sample& getSample(int id) const;
     [[nodiscard]] Result<int, LoadStatus> loadSample(const std::string& filePath);
+    [[nodiscard]] Result<std::pair<int, Sample*>, LoadStatus> createSample(int size);
     void deleteSample(int id);
     [[nodiscard]] std::vector<std::string_view> listSamples(const std::string& folder) const
     {
@@ -37,11 +38,13 @@ class SamplePool
     struct PoolItem
     {
         Sample sample = {};
+        int refCount = 1;
     };
 
+    static constexpr size_t kMaxPoolItems = 64;
     std::vector<std::optional<PoolItem>> pool = {};
 
-    int getNewId();
+    std::optional<int> getNewId();
     std::optional<std::span<sample_store_t>> findFreeArea(int size);
 };
 }

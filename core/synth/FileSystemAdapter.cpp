@@ -41,15 +41,36 @@ std::vector<std::string_view> FileSystemAdapter::listFiles(
 
     memset(listDataName, 0, kMaxFilesListLength);
 
+    auto wrappedMatcher = [&matcher](const ::std::string& name)
+    {
+        if (name.empty() || name[0] == '.')
+        {
+            return false;
+        }
+        return matcher ? matcher(name) : true;
+    };
+
     fileCount = kMaxFilesListLength;
     platformFileSystem->listDirContents((pathPrefix + path).c_str(),
                                         ::FileSystem::DirContentType::kFiles,
-                                        matcher,
+                                        wrappedMatcher,
                                         fileNamesBuffer,
                                         kMaxFilesListLength * (kMaxFileNameLen + 1),
                                         kMaxFileNameLen,
                                         fileCount,
                                         listDataName);
+    if (fileCount == 0 && pathPrefix == "/SynthSamples/")
+    {
+        fileCount = kMaxFilesListLength;
+        platformFileSystem->listDirContents(("/Samples/" + path).c_str(),
+                                            ::FileSystem::DirContentType::kFiles,
+                                            wrappedMatcher,
+                                            fileNamesBuffer,
+                                            kMaxFilesListLength * (kMaxFileNameLen + 1),
+                                            kMaxFileNameLen,
+                                            fileCount,
+                                            listDataName);
+    }
 
     std::vector<std::string_view> fileList;
 
@@ -84,6 +105,10 @@ std::optional<polysynth::FileSystem::FileHandle> FileSystemAdapter::open(
         if (!result)
         {
             std::tie(result, file) = platformFileSystem->openFile(("/" + path).c_str(), mode);
+        }
+        if (!result)
+        {
+            std::tie(result, file) = platformFileSystem->openFile(("/Patches/" + path).c_str(), mode);
         }
     }
 

@@ -770,7 +770,23 @@ class PluginAdapter
         return copyLen;
     }
 
-    static void* createVoice(int voiceIdx) { return new VoiceHolder<VoiceClass>(voiceIdx); }
+    static void* createVoice(int voiceIdx)
+    {
+        auto* holder = new (std::nothrow) VoiceHolder<VoiceClass>(voiceIdx);
+        if (holder == nullptr)
+        {
+            return nullptr;
+        }
+        if constexpr (requires(const VoiceClass& v) { v.isValid(); })
+        {
+            if (!holder->voice.isValid())
+            {
+                delete holder;
+                return nullptr;
+            }
+        }
+        return holder;
+    }
 
     static void destroyVoice(void* v) { delete static_cast<VoiceHolder<VoiceClass>*>(v); }
 

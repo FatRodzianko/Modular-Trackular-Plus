@@ -6,6 +6,7 @@
 #include "fileManagerDefs.h"
 #include "fileTransfer.h"
 #include "mtAudioEngine.h"
+#include "util_string.h"
 
 #include "log.h"
 
@@ -246,6 +247,8 @@ bool SampleImport::importSamplesToProject(uint8_t fileFrom,
     return true;
 }
 
+static bool importedSampleFits(int slot, int lastSlot, uint16_t channelCount, uint32_t framesInRam);
+
 // importowanie dowolnego wavaprzez podanie jego sciezki na dowolny slot instrumentu
 bool SampleImport::importSampleToProject(char* filePath,
                                          char* fileName,
@@ -258,12 +261,44 @@ bool SampleImport::importSampleToProject(char* filePath,
         return false;
 
     // sprawdz czy plik istnieje
-    char test_path[255];
-    sprintf(test_path, "%s/%s.wav", filePath, fileName);
+    char test_path[PATCH_SIZE];
+    snprintf(test_path, sizeof(test_path), "%s/%s.wav", filePath, fileName);
     if (!fileSystem->exists(test_path))
         return false;
 
     if (instrumentSlot >= kSampleInstrumentsCount)
+    {
+        return false;
+    }
+
+    strWavFileHeader sampleHead{};
+    uint32_t fileWaveDataSize = newFileManager.getWaveSizeAndHederIfValid(test_path, sampleHead);
+    if (fileWaveDataSize == 0 || sampleHead.bitsPerSample < 8 || sampleHead.numChannels == 0 ||
+        sampleHead.sampleRate == 0)
+    {
+        return false;
+    }
+
+    uint32_t sourceAllChannelBytesPerSample =
+      (sampleHead.bitsPerSample / 8) * sampleHead.numChannels;
+    if (sourceAllChannelBytesPerSample == 0)
+    {
+        return false;
+    }
+
+    uint32_t sourceSizeBytes = (fileWaveDataSize <= sampleHead.subchunk2Size)
+                                 ? fileWaveDataSize
+                                 : sampleHead.subchunk2Size;
+    uint32_t sourceTotalFrames = sourceSizeBytes / sourceAllChannelBytesPerSample;
+    uint64_t framesInRam = ((uint64_t)sourceTotalFrames * targetSampleRate) / sampleHead.sampleRate;
+    if (framesInRam == 0 || framesInRam > EDIT_BUFF_SIZE / 2)
+    {
+        return false;
+    }
+
+    uint16_t destChannels =
+      ((sampleMode == FileManagerOperation::kLeftAndRight) && (sampleHead.numChannels > 1)) ? 2 : 1;
+    if (!importedSampleFits(instrumentSlot, instrumentSlot, destChannels, (uint32_t)framesInRam))
     {
         return false;
     }
@@ -274,18 +309,17 @@ bool SampleImport::importSampleToProject(char* filePath,
     // i uruchamia import jak w sample laderze
     if (newFileManager.getExplorerList()[0] != nullptr)
     {
-        delete newFileManager.getExplorerList()[0];
+        delete[] newFileManager.getExplorerList()[0];
         newFileManager.getExplorerList()[0] = nullptr;
     }
 
     uint16_t len = strlen(fileName) + 5; // + .wav + \0
     newFileManager.getExplorerList()[0] = new char[len];
-    strcpy(newFileManager.getExplorerList()[0], fileName);
-    strcat(newFileManager.getExplorerList()[0], ".wav");
+    snprintf(newFileManager.getExplorerList()[0], len, "%s.wav", fileName);
 
     // wymagane tez ustawienie aktualnego path explorera
     // na lokalizajce wczytywanego pliku
-    strcpy(newFileManager.getExplorerPath(), filePath);
+    polystrncpy(newFileManager.getExplorerPath(), filePath, PATCH_SIZE);
 
     // liczy sie tlyko 0 index w tablicy
     importCurrentFileIdx = 0;

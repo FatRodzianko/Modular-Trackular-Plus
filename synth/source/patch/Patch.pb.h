@@ -40,8 +40,17 @@ typedef struct _polysynth_ParamModifier {
     float amount; 
 } polysynth_ParamModifier;
 
+typedef struct _polysynth_SampleFormat { 
+    int32_t channels; 
+    int32_t sampleRate; 
+    int32_t samples; 
+    int32_t waveSize; 
+} polysynth_SampleFormat;
+
 typedef struct _polysynth_Sample { 
     char filePath[257]; 
+    bool has_embbeddedSample;
+    polysynth_SampleFormat embbeddedSample; 
 } polysynth_Sample;
 
 typedef struct _polysynth_SeqConfig { 
@@ -102,7 +111,8 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define polysynth_Param_init_default             {false, 0}
-#define polysynth_Sample_init_default            {""}
+#define polysynth_SampleFormat_init_default      {0, 0, 0, 0}
+#define polysynth_Sample_init_default            {"", false, polysynth_SampleFormat_init_default}
 #define polysynth_ParamModifier_init_default     {0, 0}
 #define polysynth_Macro_init_default             {"", 0, 0, {polysynth_ParamModifier_init_default, polysynth_ParamModifier_init_default, polysynth_ParamModifier_init_default, polysynth_ParamModifier_init_default, polysynth_ParamModifier_init_default, polysynth_ParamModifier_init_default}}
 #define polysynth_ArpConfig_init_default         {_polysynth_ArpStyle_MIN, 0}
@@ -111,7 +121,8 @@ extern "C" {
 #define polysynth_Sequencer_init_default         {false, polysynth_Config_init_default, false, polysynth_Sequence_init_default}
 #define polysynth_Patch_init_default             {0, 0, 0, 0, 0, 0, NULL, {polysynth_Sample_init_default, polysynth_Sample_init_default, polysynth_Sample_init_default, polysynth_Sample_init_default}, {polysynth_Macro_init_default, polysynth_Macro_init_default, polysynth_Macro_init_default, polysynth_Macro_init_default, polysynth_Macro_init_default, polysynth_Macro_init_default, polysynth_Macro_init_default, polysynth_Macro_init_default}, false, polysynth_Sequencer_init_default}
 #define polysynth_Param_init_zero                {false, 0}
-#define polysynth_Sample_init_zero               {""}
+#define polysynth_SampleFormat_init_zero         {0, 0, 0, 0}
+#define polysynth_Sample_init_zero               {"", false, polysynth_SampleFormat_init_zero}
 #define polysynth_ParamModifier_init_zero        {0, 0}
 #define polysynth_Macro_init_zero                {"", 0, 0, {polysynth_ParamModifier_init_zero, polysynth_ParamModifier_init_zero, polysynth_ParamModifier_init_zero, polysynth_ParamModifier_init_zero, polysynth_ParamModifier_init_zero, polysynth_ParamModifier_init_zero}}
 #define polysynth_ArpConfig_init_zero            {_polysynth_ArpStyle_MIN, 0}
@@ -126,7 +137,12 @@ extern "C" {
 #define polysynth_Param_value_tag                1
 #define polysynth_ParamModifier_paramId_tag      1
 #define polysynth_ParamModifier_amount_tag       2
+#define polysynth_SampleFormat_channels_tag      1
+#define polysynth_SampleFormat_sampleRate_tag    2
+#define polysynth_SampleFormat_samples_tag       3
+#define polysynth_SampleFormat_waveSize_tag      4
 #define polysynth_Sample_filePath_tag            1
+#define polysynth_Sample_embbeddedSample_tag     2
 #define polysynth_SeqConfig_rootNote_tag         1
 #define polysynth_SeqConfig_scaleScheme_tag      2
 #define polysynth_Config_mode_tag                1
@@ -154,10 +170,20 @@ X(a, STATIC,   OPTIONAL, FLOAT,    value,             1)
 #define polysynth_Param_CALLBACK NULL
 #define polysynth_Param_DEFAULT NULL
 
+#define polysynth_SampleFormat_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, INT32,    channels,          1) \
+X(a, STATIC,   SINGULAR, INT32,    sampleRate,        2) \
+X(a, STATIC,   SINGULAR, INT32,    samples,           3) \
+X(a, STATIC,   SINGULAR, INT32,    waveSize,          4)
+#define polysynth_SampleFormat_CALLBACK NULL
+#define polysynth_SampleFormat_DEFAULT NULL
+
 #define polysynth_Sample_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, STRING,   filePath,          1)
+X(a, STATIC,   SINGULAR, STRING,   filePath,          1) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  embbeddedSample,   2)
 #define polysynth_Sample_CALLBACK NULL
 #define polysynth_Sample_DEFAULT NULL
+#define polysynth_Sample_embbeddedSample_MSGTYPE polysynth_SampleFormat
 
 #define polysynth_ParamModifier_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, INT32,    paramId,           1) \
@@ -221,6 +247,7 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  sequencer,         9)
 #define polysynth_Patch_sequencer_MSGTYPE polysynth_Sequencer
 
 extern const pb_msgdesc_t polysynth_Param_msg;
+extern const pb_msgdesc_t polysynth_SampleFormat_msg;
 extern const pb_msgdesc_t polysynth_Sample_msg;
 extern const pb_msgdesc_t polysynth_ParamModifier_msg;
 extern const pb_msgdesc_t polysynth_Macro_msg;
@@ -232,6 +259,7 @@ extern const pb_msgdesc_t polysynth_Patch_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define polysynth_Param_fields &polysynth_Param_msg
+#define polysynth_SampleFormat_fields &polysynth_SampleFormat_msg
 #define polysynth_Sample_fields &polysynth_Sample_msg
 #define polysynth_ParamModifier_fields &polysynth_ParamModifier_msg
 #define polysynth_Macro_fields &polysynth_Macro_msg
@@ -248,7 +276,8 @@ extern const pb_msgdesc_t polysynth_Patch_msg;
 #define polysynth_Macro_size                     155
 #define polysynth_ParamModifier_size             16
 #define polysynth_Param_size                     5
-#define polysynth_Sample_size                    259
+#define polysynth_SampleFormat_size              44
+#define polysynth_Sample_size                    305
 #define polysynth_SeqConfig_size                 20
 #define polysynth_Sequencer_size                 2765
 

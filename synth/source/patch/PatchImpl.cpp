@@ -1,5 +1,6 @@
 #include "PatchImpl.h"
 #include "../sample/SamplePool.h"
+#include "../sample/SampleStoreImpl.h"
 #include "Patch.pb.h"
 
 #include "pb_decode.h"
@@ -13,11 +14,54 @@
 #include "enum_util.h"
 
 #include <algorithm>
+#include <array>
+#include <boost/container/static_vector.hpp>
 #include <cassert>
 #include <cmath>
+#include <cstring>
 
 namespace polysynth
 {
+static constexpr uint32_t kProtobufEndToken = 0x5423526e;
+
+static bool areCompatibleInstrumentTypes(int patchMetaTypeId, int fileTypeId)
+{
+    if (patchMetaTypeId == fileTypeId)
+    {
+        return true;
+    }
+
+    int mappedPlayTrackerId = fileTypeId;
+    switch (fileTypeId)
+    {
+        case 6: // Wave PMD -> Play/Tracker PMD (9)
+            mappedPlayTrackerId = 9;
+            break;
+        case 7: // Wave PHZ -> Play/Tracker PHZ (10)
+            mappedPlayTrackerId = 10;
+            break;
+        case 8: // Wave GRAIN -> Play/Tracker GRAIN (11)
+            mappedPlayTrackerId = 11;
+            break;
+        case 9: // Wave DWA -> Play/Tracker DWA (12)
+            mappedPlayTrackerId = 12;
+            break;
+        case 10: // Wave DIRT -> Play/Tracker DIRT (7)
+            mappedPlayTrackerId = 7;
+            break;
+        case 11: // Wave PERC -> Play/Tracker PERC (6)
+            mappedPlayTrackerId = 6;
+            break;
+        case 12: // Wave CHIP -> Play/Tracker CHIP (8)
+            mappedPlayTrackerId = 8;
+            break;
+        default:
+            break;
+    }
+
+    return mappedPlayTrackerId == patchMetaTypeId;
+}
+
 using ConfigPb = polysynth_Config;
 using PatchPb = polysynth_Patch;
 using ArpStylePb = polysynth_ArpStyle;
@@ -101,6 +145,22 @@ PatchImpl::PatchImpl(std::shared_ptr<const InstrumentType> instrumentType,
             }
         }
         sampleSlotId++;
+    }
+}
+
+PatchImpl::~PatchImpl()
+{
+    for (auto& sampleId : samplePoolIds)
+    {
+        if (sampleId.has_value() && samplePool)
+        {
+            auto id = *sampleId;
+            {
+                AudioCS cs;
+                sampleId = std::nullopt;
+            }
+            samplePool->deleteSample(id);
+        }
     }
 }
 
@@ -231,14 +291,49 @@ static void ensureEditorLayouts(Patch::Metadata& metadata)
                     metadata.layout33.sections.push_back(std::move(sec33));
                 }
                 auto& lastSec = metadata.layout33.sections[kMaxHwSections - 1];
+                if (flatSec.elements.empty() && lastSec.subsections.empty())
+                {
+                    EditorSubsection emptySub;
+                    emptySub.name = subLabel;
+                    lastSec.subsections.push_back(std::move(emptySub));
+                }
                 for (size_t i = 0; i < flatSec.elements.size(); i += kKnobsPerSubsection)
                 {
                     EditorSubsection sub;
-                    sub.name = subLabel;
+                    sub.name = (flatSec.elements.size() > kKnobsPerSubsection)
+                                 ? (subLabel + " " + std::to_string((i / kKnobsPerSubsection) + 1))
+                                 : subLabel;
                     size_t end = std::min(i + kKnobsPerSubsection, flatSec.elements.size());
                     sub.elements.assign(flatSec.elements.begin() + i, flatSec.elements.begin() + end);
                     lastSec.subsections.push_back(std::move(sub));
                 }
+            }
+        }
+    }
+
+    if (!metadata.layout33.sections.empty())
+    {
+        constexpr size_t kKnobsPerSubsection = 9;
+        for (auto& sec33 : metadata.layout33.sections)
+        {
+            if (sec33.subsections.empty() && !sec33.elements.empty())
+            {
+                for (size_t i = 0; i < sec33.elements.size(); i += kKnobsPerSubsection)
+                {
+                    EditorSubsection sub;
+                    if (sec33.elements.size() > kKnobsPerSubsection)
+                    {
+                        sub.name = std::to_string((i / kKnobsPerSubsection) + 1);
+                    }
+                    size_t end = std::min(i + kKnobsPerSubsection, sec33.elements.size());
+                    sub.elements.assign(sec33.elements.begin() + i, sec33.elements.begin() + end);
+                    sec33.subsections.push_back(std::move(sub));
+                }
+                sec33.elements.clear();
+            }
+            if (sec33.subsections.empty())
+            {
+                sec33.subsections.push_back(EditorSubsection{});
             }
         }
     }
@@ -597,13 +692,197 @@ static polysynth::Patch::Sequencer::Config deserializeSeqConfig(const ConfigPb& 
 }
 #endif
 
+void PatchImpl::notifyListenersPatchReset()
+{
+    for (auto& listenerWeakPtr : paramListeners)
+    {
+        if (auto listener = listenerWeakPtr.lock())
+        {
+            listener->onPatchReset();
+        }
+    }
+}
+
+void PatchImpl::unloadAllSamples()
+{
+    if (!samplePool)
+    {
+        for (auto& p : sampleFilePaths)
+        {
+            p.clear();
+        }
+        return;
+    }
+
+    for (int slotId = 0; slotId < std::ssize(sampleFilePaths); slotId++)
+    {
+        tiny_optional<int> oldSampleId = std::nullopt;
+        if (slotId < std::ssize(samplePoolIds))
+        {
+            AudioCS cs;
+            oldSampleId = samplePoolIds[slotId];
+            samplePoolIds[slotId] = std::nullopt;
+        }
+        if (oldSampleId)
+        {
+            samplePool->deleteSample(*oldSampleId);
+        }
+        sampleFilePaths[slotId].clear();
+    }
+}
+
+void PatchImpl::loadSamples(Patch& patch,
+                            const polysynth_Patch& patchData,
+                            ProtobufHelpers::ReaderFunc* embeddedReader)
+{
+    auto& impl = static_cast<PatchImpl&>(patch);
+    impl.unloadAllSamples();
+
+    const auto samplesCount = std::ssize(patch.getMetadata().sampleSlots);
+    for (int sampleIdx = 0; sampleIdx < samplesCount && sampleIdx < std::ssize(patchData.samples);
+         sampleIdx++)
+    {
+        const auto& samplePb = patchData.samples[sampleIdx];
+        if (embeddedReader != nullptr && samplePb.has_embbeddedSample &&
+            samplePb.embbeddedSample.samples > 0 && impl.samplePool)
+        {
+            const auto& fmt = samplePb.embbeddedSample;
+            auto created = impl.samplePool->createSample(fmt.samples);
+            if (created)
+            {
+                const auto [poolId, sample] = *created;
+                auto pcmBytes = std::span<uint8_t>(reinterpret_cast<uint8_t*>(sample->data.data()),
+                                                   sample->data.size_bytes());
+                if ((*embeddedReader)(pcmBytes))
+                {
+                    std::string sampleName = samplePb.filePath;
+                    sample->name = sampleName;
+                    sample->format.channels = fmt.channels > 0 ? fmt.channels : 1;
+                    sample->format.sampleRate = fmt.sampleRate > 0 ? fmt.sampleRate : 44100;
+                    sample->waveSize = fmt.waveSize != 0
+                                         ? tiny_optional<int>(fmt.waveSize)
+                                         : SampleStoreImpl::getWaveSize(sampleName);
+                    sample->basePitch = SampleStoreImpl::getBasePitch(sampleName);
+                    if (sampleIdx < std::ssize(impl.sampleFilePaths))
+                    {
+                        impl.sampleFilePaths[sampleIdx] = sampleName;
+                    }
+                    if (sampleIdx < std::ssize(impl.samplePoolIds))
+                    {
+                        AudioCS cs;
+                        sample->ready = true;
+                        impl.samplePoolIds[sampleIdx] = poolId;
+                    }
+                    continue;
+                }
+                impl.samplePool->deleteSample(poolId);
+            }
+            else
+            {
+                size_t bytesToSkip = static_cast<size_t>(fmt.samples) * sizeof(sample_store_t);
+                std::array<uint8_t, 64> skipBuf{};
+                while (bytesToSkip > 0)
+                {
+                    const size_t chunk = std::min(bytesToSkip, skipBuf.size());
+                    if (!(*embeddedReader)(std::span<uint8_t>(skipBuf.data(), chunk)))
+                    {
+                        break;
+                    }
+                    bytesToSkip -= chunk;
+                }
+            }
+        }
+
+        [[maybe_unused]] auto result = patch.loadSample(sampleIdx, samplePb.filePath);
+    }
+}
+
 bool PatchImpl::deserialize(Patch& patch, ProtobufHelpers::ReaderFunc reader, bool synchronizeAudio)
 {
     PatchPb patchData;
     patchData.params = nullptr;
 
+    boost::container::static_vector<uint8_t, 8> lookahead;
+    bool sawEndToken = false;
+
+    // Proxy reader that stops cleanly at kProtobufEndToken (0x5423526e) so pb_decode never
+    // reads trailing embedded PCM bytes while leaving `reader` positioned right after the token.
+    ProtobufHelpers::ReaderFunc readerProxy =
+      [&reader, &lookahead, &sawEndToken](std::span<uint8_t> outBuf) -> bool
+    {
+        if (outBuf.empty())
+        {
+            return true;
+        }
+        if (outBuf.size() == 1)
+        {
+            while (lookahead.size() < sizeof(kProtobufEndToken))
+            {
+                uint8_t b = 0;
+                if (!reader(std::span<uint8_t>(&b, 1)))
+                {
+                    break;
+                }
+                lookahead.push_back(b);
+            }
+            if (lookahead.empty())
+            {
+                return false;
+            }
+            if (lookahead.size() == sizeof(kProtobufEndToken))
+            {
+                uint32_t token = 0;
+                std::memcpy(&token, lookahead.data(), sizeof(token));
+                if (token == kProtobufEndToken)
+                {
+                    sawEndToken = true;
+                    lookahead.clear();
+                    return false;
+                }
+            }
+            if (outBuf.data() != nullptr)
+            {
+                outBuf[0] = lookahead[0];
+            }
+            lookahead.erase(lookahead.begin());
+            return true;
+        }
+
+        const size_t fromLookahead = std::min(lookahead.size(), outBuf.size());
+        if (fromLookahead > 0)
+        {
+            if (outBuf.data() != nullptr)
+            {
+                std::memcpy(outBuf.data(), lookahead.data(), fromLookahead);
+            }
+            lookahead.erase(lookahead.begin(),
+                            lookahead.begin() + static_cast<ptrdiff_t>(fromLookahead));
+        }
+
+        size_t remaining = outBuf.size() - fromLookahead;
+        if (remaining == 0)
+        {
+            return true;
+        }
+        if (outBuf.data() != nullptr)
+        {
+            return reader(outBuf.subspan(fromLookahead));
+        }
+        std::array<uint8_t, 32> scratch{};
+        while (remaining > 0)
+        {
+            const size_t chunk = std::min(remaining, scratch.size());
+            if (!reader(std::span<uint8_t>(scratch.data(), chunk)))
+            {
+                return false;
+            }
+            remaining -= chunk;
+        }
+        return true;
+    };
+
     pb_istream_t stream = {
-        &ProtobufHelpers::ReaderCallback, static_cast<void*>(&reader), SIZE_MAX, nullptr
+        &ProtobufHelpers::ReaderCallback, static_cast<void*>(&readerProxy), SIZE_MAX, nullptr
     };
 
     ScopeExit freeConfig(
@@ -622,19 +901,33 @@ bool PatchImpl::deserialize(Patch& patch, ProtobufHelpers::ReaderFunc reader, bo
         return false;
     }
 
+    bool ok = false;
     if (synchronizeAudio)
     {
         AudioCS cs;
-        return deserialize(patch, patchData);
+        ok = deserialize(patch, patchData, false);
+    }
+    else
+    {
+        ok = deserialize(patch, patchData, false);
+    }
+    if (!ok)
+    {
+        return false;
     }
 
-    return deserialize(patch, patchData);
+    // Load WAV/embedded samples OUTSIDE AudioCS so SD reads never stall audio interrupts.
+    loadSamples(patch, patchData, sawEndToken ? &reader : nullptr);
+    return true;
 }
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity) seems ok
-bool PatchImpl::deserialize(Patch& patch, const polysynth_Patch& patchData)
+bool PatchImpl::deserialize(Patch& patch,
+                            const polysynth_Patch& patchData,
+                            bool loadSampleSlots)
 {
-    if (patch.getMetadata().instrumentTypeId != patchData.instrumentTypeId &&
+    if (!areCompatibleInstrumentTypes(patch.getMetadata().instrumentTypeId,
+                                      patchData.instrumentTypeId) &&
         patchData.params_count != patch.getMetadata().params.size())
     {
         return false;
@@ -643,6 +936,7 @@ bool PatchImpl::deserialize(Patch& patch, const polysynth_Patch& patchData)
     const auto paramCount = std::min(static_cast<int>(patch.getMetadata().params.size()),
                                      static_cast<int>(patchData.params_count));
 
+    static_cast<PatchImpl&>(patch).notifyListenersPatchReset();
     patch.clearMacroModifiers();
 
     {
@@ -676,13 +970,9 @@ bool PatchImpl::deserialize(Patch& patch, const polysynth_Patch& patchData)
                                 ParamChangeSource::kPatchAssign);
         }
 
-        const auto samplesCount = std::ssize(patch.getMetadata().sampleSlots);
-        for (int sampleIdx = 0; sampleIdx < samplesCount; sampleIdx++)
+        if (loadSampleSlots)
         {
-            // ignore the error, this is temporary solution anyway,
-            // samples will be embedded in patches
-            [[maybe_unused]] auto result =
-              patch.loadSample(sampleIdx, patchData.samples[sampleIdx].filePath);
+            loadSamples(patch, patchData, nullptr);
         }
 
         static_assert(sizeof(PatchPb::macros) / sizeof(PatchPb::macros[0]) == kMacroCount);
@@ -782,27 +1072,22 @@ std::optional<InstrumentTypeId> PatchImpl::deserializeInstrumentType(
 
 LoadStatus PatchImpl::loadSample(int sampleSlotId, const std::string& filePath)
 {
+    if (sampleSlotId < 0 || sampleSlotId >= std::ssize(sampleFilePaths))
+    {
+        return LoadStatus::kFileError;
+    }
     if (!samplePool)
     {
-        if (sampleSlotId >= 0 && sampleSlotId < std::ssize(sampleFilePaths))
-        {
-            sampleFilePaths[sampleSlotId] = filePath;
-        }
+        sampleFilePaths[sampleSlotId] = filePath;
         return LoadStatus::kSuccess;
     }
-    auto newSampleId = samplePool->loadSample(filePath);
 
-    if (!newSampleId)
-    {
-        return newSampleId.status();
-    }
-
-    auto oldSampleId =
-      sampleSlotId < std::ssize(samplePoolIds) ? samplePoolIds.at(sampleSlotId) : std::nullopt;
-
+    tiny_optional<int> oldSampleId = std::nullopt;
+    if (sampleSlotId < std::ssize(samplePoolIds))
     {
         AudioCS cs;
-        samplePoolIds[sampleSlotId] = *newSampleId;
+        oldSampleId = samplePoolIds[sampleSlotId];
+        samplePoolIds[sampleSlotId] = std::nullopt;
     }
 
     if (oldSampleId)
@@ -810,7 +1095,38 @@ LoadStatus PatchImpl::loadSample(int sampleSlotId, const std::string& filePath)
         samplePool->deleteSample(*oldSampleId);
     }
 
-    sampleFilePaths[sampleSlotId] = filePath;
+    if (filePath.empty())
+    {
+        sampleFilePaths[sampleSlotId].clear();
+        return LoadStatus::kSuccess;
+    }
+
+    std::string loadedPath = filePath;
+    auto newSampleId = samplePool->loadSample(loadedPath);
+    if (!newSampleId && newSampleId.status() == LoadStatus::kFileError &&
+        loadedPath.find('/') == std::string::npos && instrumentType && !instrumentType->name.empty())
+    {
+        std::string engineRelativePath = instrumentType->name + "/" + loadedPath;
+        auto fallbackSampleId = samplePool->loadSample(engineRelativePath);
+        if (fallbackSampleId)
+        {
+            newSampleId = fallbackSampleId;
+            loadedPath = std::move(engineRelativePath);
+        }
+    }
+    if (!newSampleId)
+    {
+        sampleFilePaths[sampleSlotId].clear();
+        return newSampleId.status();
+    }
+
+    if (sampleSlotId < std::ssize(samplePoolIds))
+    {
+        AudioCS cs;
+        samplePoolIds[sampleSlotId] = *newSampleId;
+    }
+
+    sampleFilePaths[sampleSlotId] = loadedPath;
 
     return LoadStatus::kSuccess;
 }

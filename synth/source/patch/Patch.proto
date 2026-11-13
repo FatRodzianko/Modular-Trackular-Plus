@@ -9,9 +9,18 @@ message Param
     optional float value = 1;
 }
 
+message SampleFormat
+{
+  int32 channels = 1;
+  int32 sampleRate = 2;
+  int32 samples = 3;
+  int32 waveSize = 4;
+}
+
 message Sample
 {
     string filePath = 1 [(nanopb).max_length = 256];
+    optional SampleFormat embbeddedSample = 2;
 }
 
 message ParamModifier

@@ -37,7 +37,8 @@ class ArenaAllocator
         BlockHeader* prev;
         uint32_t used;
         uint32_t magic;
-        uint32_t pad[2];
+        int32_t ownerPluginIdx;
+        uint32_t pad;
     };
     static_assert(sizeof(BlockHeader) == 32, "BlockHeader must be 32 bytes");
 
@@ -62,6 +63,8 @@ class ArenaAllocator
         head_->prev = nullptr;
         head_->used = 0;
         head_->magic = kBlockMagic;
+        head_->ownerPluginIdx = -1;
+        head_->pad = 0;
 
         totalBytes_ = usableTotal;
         usedBytes_ = 0;
@@ -71,7 +74,7 @@ class ArenaAllocator
     size_t usedBytes() const { return usedBytes_; }
     size_t totalBytes() const { return totalBytes_; }
 
-    void* alloc(size_t size, size_t alignment = 32)
+    void* alloc(size_t size, size_t alignment = 32, int32_t ownerPluginIdx = -1)
     {
         if (head_ == nullptr || size == 0)
         {
@@ -93,6 +96,8 @@ class ArenaAllocator
                     split->prev = cur;
                     split->used = 0;
                     split->magic = kBlockMagic;
+                    split->ownerPluginIdx = -1;
+                    split->pad = 0;
                     if (cur->next != nullptr)
                     {
                         cur->next->prev = split;
@@ -101,6 +106,7 @@ class ArenaAllocator
                     cur->size = alignedSize;
                 }
                 cur->used = 1;
+                cur->ownerPluginIdx = ownerPluginIdx;
                 usedBytes_ += cur->size + sizeof(BlockHeader);
                 void* payload = reinterpret_cast<uint8_t*>(cur) + sizeof(BlockHeader);
                 std::memset(payload, 0, cur->size);
@@ -122,6 +128,7 @@ class ArenaAllocator
             return;
         }
         blk->used = 0;
+        blk->ownerPluginIdx = -1;
         if (usedBytes_ >= blk->size + sizeof(BlockHeader))
         {
             usedBytes_ -= blk->size + sizeof(BlockHeader);
@@ -151,6 +158,26 @@ class ArenaAllocator
         }
     }
 
+    void freeAllOwnedBy(int32_t ownerPluginIdx)
+    {
+        if (head_ == nullptr || ownerPluginIdx < 0)
+        {
+            return;
+        }
+        for (BlockHeader* cur = head_; cur != nullptr;)
+        {
+            BlockHeader* next = cur->next;
+            if (cur->used && cur->ownerPluginIdx == ownerPluginIdx)
+            {
+                free(reinterpret_cast<uint8_t*>(cur) + sizeof(BlockHeader));
+                // Coalescing may merge `cur` with `prev` or `next`; restart cleanly from head_.
+                cur = head_;
+                continue;
+            }
+            cur = next;
+        }
+    }
+
   private:
     BlockHeader* head_ = nullptr;
     size_t totalBytes_ = 0;
@@ -161,6 +188,7 @@ struct PluginRecord
 {
     bool valid = false;
     bool hasSampleSlots = false;
+    bool metadataPrimedOnce = false;
     int index = -1;
     int typeId = 0;
     char filename[48]{};
@@ -179,6 +207,17 @@ FileSystem* s_synthsFs = nullptr;
 FileSystem* s_samplesFs = nullptr;
 uint32_t s_tickCounter = 0;
 PluginRecord* s_currentPlugin = nullptr;
+
+struct ScopedPluginContext
+{
+    PluginRecord* prev = nullptr;
+    explicit ScopedPluginContext(PluginRecord* cur)
+      : prev(s_currentPlugin)
+    {
+        s_currentPlugin = cur;
+    }
+    ~ScopedPluginContext() { s_currentPlugin = prev; }
+};
 
 void ensurePluginSampleFolder(const PluginRecord& rec)
 {
@@ -264,15 +303,19 @@ bool evictOneIdlePlugin(const PluginRecord* exclude)
     victim->imageBase = nullptr;
     victim->imageSize = 0;
     victim->pluginApi = nullptr;
+    s_arena.freeAllOwnedBy(victim->index);
     return true;
 }
 
-void* allocWithEviction(size_t size, size_t alignment, const PluginRecord* exclude)
+void* allocWithEviction(size_t size,
+                        size_t alignment,
+                        const PluginRecord* exclude,
+                        int32_t ownerPluginIdx = -1)
 {
-    void* ptr = s_arena.alloc(size, alignment);
+    void* ptr = s_arena.alloc(size, alignment, ownerPluginIdx);
     while (ptr == nullptr && evictOneIdlePlugin(exclude))
     {
-        ptr = s_arena.alloc(size, alignment);
+        ptr = s_arena.alloc(size, alignment, ownerPluginIdx);
     }
     return ptr;
 }
@@ -282,7 +325,8 @@ void* allocWithEviction(size_t size, size_t alignment, const PluginRecord* exclu
 // -----------------------------------------------------------------------------
 void* hostSlotAlloc(size_t size, size_t alignment)
 {
-    return allocWithEviction(size, alignment, s_currentPlugin);
+    int32_t owner = (s_currentPlugin != nullptr) ? s_currentPlugin->index : -1;
+    return allocWithEviction(size, alignment, s_currentPlugin, owner);
 }
 
 void hostSlotFree(void* ptr)
@@ -443,11 +487,9 @@ void hostMetaSetParam(void* metaBuilder, int paramId, const PsynParamDesc* desc)
         {
             return {};
         }
-        PluginRecord* prev = s_currentPlugin;
-        s_currentPlugin = &rec;
+        ScopedPluginContext pluginScope(&rec);
         char buf[32]{};
         int len = api->format_param(&patch, paramId, value, buf, sizeof(buf));
-        s_currentPlugin = prev;
         if (len <= 0)
         {
             return {};
@@ -731,7 +773,7 @@ bool hostLoadWavFile(const char* path,
     bool foundFmt = false;
     bool foundData = false;
 
-    while (!foundData)
+    for (int chunkIter = 0; !foundData && chunkIter < 32; ++chunkIter)
     {
         uint8_t chunkHdr[8]{};
         if (static_cast<size_t>(fs->read(fh, std::span<uint8_t>(chunkHdr, 8))) != 8)
@@ -741,8 +783,12 @@ bool hostLoadWavFile(const char* path,
         uint32_t chunkSize = 0;
         std::memcpy(&chunkSize, chunkHdr + 4, 4);
 
-        if (std::memcmp(chunkHdr, "fmt ", 4) == 0 && chunkSize >= 16)
+        if (std::memcmp(chunkHdr, "fmt ", 4) == 0)
         {
+            if (chunkSize < 16 || chunkSize > 0x7FFFFFFEu)
+            {
+                return false;
+            }
             uint8_t fmtBuf[16]{};
             if (static_cast<size_t>(fs->read(fh, std::span<uint8_t>(fmtBuf, 16))) != 16)
             {
@@ -753,9 +799,10 @@ bool hostLoadWavFile(const char* path,
             std::memcpy(&sampleRate, fmtBuf + 4, 4);
             std::memcpy(&bitsPerSample, fmtBuf + 14, 2);
             foundFmt = true;
-            if (chunkSize > 16)
+            uint32_t rem = ((chunkSize + 1u) & ~1u) - 16u;
+            if (rem > 0 && !fs->seek(fh, static_cast<int>(rem)))
             {
-                fs->seek(fh, static_cast<int>(chunkSize - 16));
+                return false;
             }
         }
         else if (std::memcmp(chunkHdr, "data", 4) == 0)
@@ -765,11 +812,23 @@ bool hostLoadWavFile(const char* path,
         }
         else
         {
-            fs->seek(fh, static_cast<int>((chunkSize + 1u) & ~1u));
+            if (chunkSize > 0x7FFFFFFEu)
+            {
+                return false;
+            }
+            uint32_t paddedSize = (chunkSize + 1u) & ~1u;
+            if (paddedSize > 0 && !fs->seek(fh, static_cast<int>(paddedSize)))
+            {
+                return false;
+            }
         }
     }
 
-    if (!foundFmt || !foundData || numChannels == 0 || bitsPerSample == 0 || dataSize == 0)
+    const bool supportedFormat =
+      (audioFormat == 1 && (bitsPerSample == 8 || bitsPerSample == 16 || bitsPerSample == 24 ||
+                            bitsPerSample == 32)) ||
+      (audioFormat == 3 && bitsPerSample == 32);
+    if (!foundFmt || !foundData || !supportedFormat || numChannels == 0 || dataSize == 0)
     {
         return false;
     }
@@ -779,7 +838,8 @@ bool hostLoadWavFile(const char* path,
         return false;
     }
     uint32_t frameCount = dataSize / bytesPerSample;
-    if (frameCount == 0)
+    constexpr uint32_t kMaxWavFrames = (PsynLoader::kArenaSize / 2u) / sizeof(int16_t);
+    if (frameCount == 0 || frameCount > kMaxWavFrames)
     {
         return false;
     }
@@ -823,7 +883,11 @@ bool hostLoadWavFile(const char* path,
             {
                 const uint8_t* p = tmp + f * bytesPerSample;
                 int32_t sample = 0;
-                if (audioFormat == 1 && bitsPerSample == 16)
+                if (audioFormat == 1 && bitsPerSample == 8)
+                {
+                    sample = (static_cast<int32_t>(p[0]) - 128) << 8;
+                }
+                else if (audioFormat == 1 && bitsPerSample == 16)
                 {
                     int16_t s16 = 0;
                     std::memcpy(&s16, p, 2);
@@ -934,7 +998,7 @@ const PsynPluginApi* ensurePluginLoaded(PluginRecord& rec)
         return nullptr;
     }
 
-    auto* imageBase = static_cast<uint8_t*>(allocWithEviction(totalMemSize, 32, &rec));
+    auto* imageBase = static_cast<uint8_t*>(allocWithEviction(totalMemSize, 32, &rec, rec.index));
     if (imageBase == nullptr)
     {
         return nullptr;
@@ -1048,44 +1112,57 @@ const PsynPluginApi* ensurePluginLoaded(PluginRecord& rec)
     // Flush D-Cache and invalidate I-Cache before executing code in SDRAM
     syncInstructionCache(imageBase, totalMemSize);
 
-    PluginRecord* prev = s_currentPlugin;
-    s_currentPlugin = &rec;
-
-    // Call psyn_plugin_entry(&s_hostApi) first so psyn_bridge::g_host is initialized
-    // before any .init_array static constructors run.
-    auto entryFn = reinterpret_cast<PsynEntryFn>((baseAddr + rec.header.entry_offset) | 1u);
-    const PsynPluginApi* api = entryFn(&s_hostApi);
-    if (api == nullptr)
     {
-        s_currentPlugin = prev;
-        s_arena.free(imageBase);
-        return nullptr;
-    }
+        ScopedPluginContext pluginScope(&rec);
 
-    // Run .init_array static constructors
-    if (rec.header.init_array_count > 0 &&
-        rec.header.init_array_offset + rec.header.init_array_count * 4u <= loadedSize)
-    {
-        using InitFn = void (*)();
-        auto* initTable =
-          reinterpret_cast<const uint32_t*>(imageBase + rec.header.init_array_offset);
-        for (uint32_t i = 0; i < rec.header.init_array_count; ++i)
+        // Call psyn_plugin_entry(&s_hostApi) first so psyn_bridge::g_host is initialized
+        // before any .init_array static constructors run.
+        auto entryFn = reinterpret_cast<PsynEntryFn>((baseAddr + rec.header.entry_offset) | 1u);
+        const PsynPluginApi* api = entryFn(&s_hostApi);
+        if (api == nullptr)
         {
-            uintptr_t fnAddr = initTable[i];
-            if (fnAddr != 0)
+            s_arena.free(imageBase);
+            s_arena.freeAllOwnedBy(rec.index);
+            return nullptr;
+        }
+
+        // Run .init_array static constructors
+        if (rec.header.init_array_count > 0 &&
+            rec.header.init_array_offset + rec.header.init_array_count * 4u <= loadedSize)
+        {
+            using InitFn = void (*)();
+            auto* initTable =
+              reinterpret_cast<const uint32_t*>(imageBase + rec.header.init_array_offset);
+            for (uint32_t i = 0; i < rec.header.init_array_count; ++i)
             {
-                auto fn = reinterpret_cast<InitFn>(fnAddr | 1u);
-                fn();
+                uintptr_t fnAddr = initTable[i];
+                if (fnAddr != 0)
+                {
+                    auto fn = reinterpret_cast<InitFn>(fnAddr | 1u);
+                    fn();
+                }
             }
         }
+
+        rec.imageBase = imageBase;
+        rec.imageSize = totalMemSize;
+        rec.pluginApi = api;
+
+        // Re-prime plugin-local static lookup tables (such as paramHandlers) that plugins
+        // populate inside create_metadata() when an evicted plugin is reloaded directly
+        // for voice creation.
+        if (rec.metadataPrimedOnce && api->create_metadata != nullptr)
+        {
+            Patch::Metadata dummyMeta{};
+            MetaBuilderContext dummyCtx{
+                .metadata = &dummyMeta,
+                .pluginIdx = rec.index,
+            };
+            api->create_metadata(nullptr, &dummyCtx);
+        }
+
+        return api;
     }
-
-    s_currentPlugin = prev;
-
-    rec.imageBase = imageBase;
-    rec.imageSize = totalMemSize;
-    rec.pluginApi = api;
-    return api;
 }
 
 // -----------------------------------------------------------------------------
@@ -1104,10 +1181,8 @@ class PsynVoiceWrapper : public InstrumentVoice
             if (api != nullptr && api->create_voice != nullptr)
             {
                 rec.activeVoices++;
-                PluginRecord* prev = s_currentPlugin;
-                s_currentPlugin = &rec;
+                ScopedPluginContext pluginScope(&rec);
                 pluginVoice_ = api->create_voice(voiceIdx);
-                s_currentPlugin = prev;
                 if (pluginVoice_ == nullptr)
                 {
                     rec.activeVoices--;
@@ -1124,10 +1199,8 @@ class PsynVoiceWrapper : public InstrumentVoice
             auto& rec = s_plugins[pluginIdx_];
             if (rec.pluginApi != nullptr && rec.pluginApi->destroy_voice != nullptr)
             {
-                PluginRecord* prev = s_currentPlugin;
-                s_currentPlugin = &rec;
+                ScopedPluginContext pluginScope(&rec);
                 rec.pluginApi->destroy_voice(pluginVoice_);
-                s_currentPlugin = prev;
             }
             pluginVoice_ = nullptr;
             if (rec.activeVoices > 0)
@@ -1140,6 +1213,7 @@ class PsynVoiceWrapper : public InstrumentVoice
     void setPatch(std::shared_ptr<Patch> patch) override
     {
         InstrumentVoice::setPatch(std::move(patch));
+        ScopedPluginContext pluginScope(pluginRecord());
         syncPatchPointer();
     }
 
@@ -1150,6 +1224,7 @@ class PsynVoiceWrapper : public InstrumentVoice
         {
             return;
         }
+        ScopedPluginContext pluginScope(pluginRecord());
         syncPatchPointer();
         PsynVoiceContext pctx{
             .tempo = ctx.tempo,
@@ -1186,6 +1261,7 @@ class PsynVoiceWrapper : public InstrumentVoice
         {
             return;
         }
+        ScopedPluginContext pluginScope(pluginRecord());
         syncPatchPointer();
         api->voice_on_param_change(
           pluginVoice_, paramId, newValue.has_value(), newValue.value_or(0.0f));
@@ -1198,8 +1274,11 @@ class PsynVoiceWrapper : public InstrumentVoice
         const PsynPluginApi* api = getActiveApi();
         if (api == nullptr || api->voice_render_audio == nullptr)
         {
+            std::ranges::fill(outputBuffer[0], 0.0f);
+            std::ranges::fill(outputBuffer[1], 0.0f);
             return;
         }
+        ScopedPluginContext pluginScope(pluginRecord());
         syncPatchPointer();
         PsynVoiceContext pctx{
             .tempo = ctx.tempo,
@@ -1217,8 +1296,15 @@ class PsynVoiceWrapper : public InstrumentVoice
         const PsynPluginApi* api = getActiveApi();
         if (api == nullptr || api->voice_render_audio == nullptr)
         {
+            std::ranges::fill(outputBuffer[0], 0.0f);
+            std::ranges::fill(outputBuffer[1], 0.0f);
+            for (auto buf : auxOutBuffer)
+            {
+                std::ranges::fill(buf, 0.0f);
+            }
             return;
         }
+        ScopedPluginContext pluginScope(pluginRecord());
         syncPatchPointer();
         PsynVoiceContext pctx{
             .tempo = ctx.tempo,
@@ -1244,6 +1330,7 @@ class PsynVoiceWrapper : public InstrumentVoice
         {
             return;
         }
+        ScopedPluginContext pluginScope(pluginRecord());
         syncPatchPointer();
         PsynVoiceContext pctx{
             .tempo = ctx.tempo,
@@ -1261,31 +1348,41 @@ class PsynVoiceWrapper : public InstrumentVoice
             std::ranges::fill(points, 0.0f);
             return;
         }
+        ScopedPluginContext pluginScope(pluginRecord());
         api->voice_render_graph(pluginVoice_, points.data(), static_cast<int>(points.size()));
     }
 
     bool isActive() override
     {
         const PsynPluginApi* api = getActiveApi();
-        return (api != nullptr && api->voice_is_active != nullptr)
-                 ? api->voice_is_active(pluginVoice_)
-                 : false;
+        if (api == nullptr || api->voice_is_active == nullptr)
+        {
+            return false;
+        }
+        ScopedPluginContext pluginScope(pluginRecord());
+        return api->voice_is_active(pluginVoice_);
     }
 
     bool handlesNote(note_t note) override
     {
         const PsynPluginApi* api = getActiveApi();
-        return (api != nullptr && api->voice_handles_note != nullptr)
-                 ? api->voice_handles_note(pluginVoice_, note)
-                 : false;
+        if (api == nullptr || api->voice_handles_note == nullptr)
+        {
+            return false;
+        }
+        ScopedPluginContext pluginScope(pluginRecord());
+        return api->voice_handles_note(pluginVoice_, note);
     }
 
     bool handlesAnyNote() override
     {
         const PsynPluginApi* api = getActiveApi();
-        return (api != nullptr && api->voice_handles_any_note != nullptr)
-                 ? api->voice_handles_any_note(pluginVoice_)
-                 : false;
+        if (api == nullptr || api->voice_handles_any_note == nullptr)
+        {
+            return false;
+        }
+        ScopedPluginContext pluginScope(pluginRecord());
+        return api->voice_handles_any_note(pluginVoice_);
     }
 
     tiny_optional<note_t> getLastNote() override
@@ -1293,6 +1390,7 @@ class PsynVoiceWrapper : public InstrumentVoice
         const PsynPluginApi* api = getActiveApi();
         if (api != nullptr && api->voice_get_last_note != nullptr)
         {
+            ScopedPluginContext pluginScope(pluginRecord());
             int n = api->voice_get_last_note(pluginVoice_);
             if (n >= 0 && n <= 127)
             {
@@ -1307,6 +1405,7 @@ class PsynVoiceWrapper : public InstrumentVoice
         const PsynPluginApi* api = getActiveApi();
         if (api != nullptr && api->voice_get_current_velocity != nullptr)
         {
+            ScopedPluginContext pluginScope(pluginRecord());
             float vel = 0.0f;
             if (api->voice_get_current_velocity(pluginVoice_, &vel))
             {
@@ -1321,6 +1420,7 @@ class PsynVoiceWrapper : public InstrumentVoice
         const PsynPluginApi* api = getActiveApi();
         if (api != nullptr && api->voice_clear_previous_notes != nullptr)
         {
+            ScopedPluginContext pluginScope(pluginRecord());
             api->voice_clear_previous_notes(pluginVoice_);
         }
     }
@@ -1330,11 +1430,18 @@ class PsynVoiceWrapper : public InstrumentVoice
         const PsynPluginApi* api = getActiveApi();
         if (api != nullptr && api->voice_reset != nullptr)
         {
+            ScopedPluginContext pluginScope(pluginRecord());
             api->voice_reset(pluginVoice_);
         }
     }
 
   private:
+    PluginRecord* pluginRecord() const
+    {
+        return (pluginIdx_ >= 0 && pluginIdx_ < static_cast<int>(s_pluginCount))
+                 ? &s_plugins[pluginIdx_]
+                 : nullptr;
+    }
     const PsynPluginApi* getActiveApi() const
     {
         if (pluginVoice_ == nullptr || pluginIdx_ < 0 ||
@@ -1440,11 +1547,14 @@ std::unique_ptr<InstrumentType> createPsynInstrumentType(int pluginIdx)
                     .metadata = &metadata,
                     .pluginIdx = pluginIdx,
                 };
-                PluginRecord* prev = s_currentPlugin;
-                s_currentPlugin = &p;
-                api->create_metadata(&patch, &ctx);
-                s_currentPlugin = prev;
+                {
+                    ScopedPluginContext pluginScope(&p);
+                    api->create_metadata(&patch, &ctx);
+                    p.metadataPrimedOnce = true;
+                }
                 metadata.instrumentTypeId = p.typeId;
+                const int headerMaxVoices = p.header.max_voices > 0 ? p.header.max_voices : 8;
+                metadata.maxVoices = std::clamp<int>(metadata.maxVoices, 1, headerMaxVoices);
 
                 // Ensure every declared SampleSlot is represented in layoutFlat or layout33
                 // before synthesizing the complementary layout.
@@ -1523,91 +1633,24 @@ std::unique_ptr<InstrumentType> createPsynInstrumentType(int pluginIdx)
                             size_t secIdx = std::min<size_t>(
                               slot.section, metadata.layout33.sections.size() - 1);
                             auto& sec33 = metadata.layout33.sections[secIdx];
-                            if (!sec33.subsections.empty())
+                            if (sec33.subsections.empty())
                             {
-                                size_t subIdx = std::min<size_t>(
-                                  slot.subsection, sec33.subsections.size() - 1);
-                                auto& elems = sec33.subsections[subIdx].elements;
-                                elems.insert(elems.begin(),
-                                             Patch::Metadata::EditorLayout::EditorElement{
-                                                 .type = Patch::Metadata::EditorLayout::
-                                                   EditorElement::Type::kSampleSlot,
-                                                 .id = slotId,
-                                             });
+                                sec33.subsections.push_back(
+                                  Patch::Metadata::EditorLayout::EditorSubsection{
+                                      .name = sec33.name,
+                                      .elements = {},
+                                  });
                             }
-                            else
-                            {
-                                sec33.elements.insert(sec33.elements.begin(),
-                                                      Patch::Metadata::EditorLayout::EditorElement{
-                                                          .type = Patch::Metadata::EditorLayout::
-                                                            EditorElement::Type::kSampleSlot,
-                                                          .id = slotId,
-                                                      });
-                            }
+                            size_t subIdx = std::min<size_t>(
+                              slot.subsection, sec33.subsections.size() - 1);
+                            auto& elems = sec33.subsections[subIdx].elements;
+                            elems.insert(elems.begin(),
+                                         Patch::Metadata::EditorLayout::EditorElement{
+                                             .type = Patch::Metadata::EditorLayout::
+                                               EditorElement::Type::kSampleSlot,
+                                             .id = slotId,
+                                         });
                         }
-                    }
-                }
-
-                if (metadata.layout33.sections.empty() && !metadata.layoutFlat.sections.empty())
-                {
-                    constexpr size_t kMaxWaveSections = 5;
-                    constexpr size_t kPageSize = 9;
-                    for (size_t s = 0; s < metadata.layoutFlat.sections.size(); ++s)
-                    {
-                        const auto& flatSec = metadata.layoutFlat.sections[s];
-                        size_t targetSecIdx = std::min(s, kMaxWaveSections - 1);
-                        if (targetSecIdx >= metadata.layout33.sections.size())
-                        {
-                            Patch::Metadata::EditorLayout::EditorSection sec33{};
-                            sec33.name = flatSec.name;
-                            sec33.shortName = flatSec.shortName;
-                            metadata.layout33.sections.push_back(std::move(sec33));
-                        }
-                        auto& sec33 = metadata.layout33.sections[targetSecIdx];
-                        if (flatSec.elements.empty())
-                        {
-                            Patch::Metadata::EditorLayout::EditorSubsection sub{};
-                            sub.name = flatSec.name;
-                            sec33.subsections.push_back(std::move(sub));
-                        }
-                        else
-                        {
-                            size_t pages = (flatSec.elements.size() + kPageSize - 1) / kPageSize;
-                            for (size_t pg = 0; pg < pages; ++pg)
-                            {
-                                Patch::Metadata::EditorLayout::EditorSubsection sub{};
-                                sub.name = pages > 1
-                                             ? (flatSec.name + " " + std::to_string(pg + 1))
-                                             : flatSec.name;
-                                size_t start = pg * kPageSize;
-                                size_t end = std::min(start + kPageSize, flatSec.elements.size());
-                                sub.elements.assign(flatSec.elements.begin() + start,
-                                                    flatSec.elements.begin() + end);
-                                sec33.subsections.push_back(std::move(sub));
-                            }
-                        }
-                    }
-                }
-                else if (metadata.layoutFlat.sections.empty() &&
-                         !metadata.layout33.sections.empty())
-                {
-                    for (const auto& sec33 : metadata.layout33.sections)
-                    {
-                        Patch::Metadata::EditorLayout::EditorSection flatSec{};
-                        flatSec.name = sec33.name;
-                        flatSec.shortName = sec33.shortName;
-                        for (const auto& el : sec33.elements)
-                        {
-                            flatSec.elements.push_back(el);
-                        }
-                        for (const auto& sub : sec33.subsections)
-                        {
-                            for (const auto& el : sub.elements)
-                            {
-                                flatSec.elements.push_back(el);
-                            }
-                        }
-                        metadata.layoutFlat.sections.push_back(std::move(flatSec));
                     }
                 }
 
