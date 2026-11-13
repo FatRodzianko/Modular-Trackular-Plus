@@ -99,6 +99,10 @@ uint8_t preload(uint8_t pos, const uint8_t* playlist, uint8_t stockNext);
 // False: CE's own next position, and the caller calls noteEntered after it.
 bool atPatternEnd(uint8_t& pos);
 
+// The pattern the coming pattern end switches to, as preload() decided: the block's first
+// pattern, or `stockNext`. Changes nothing, so CE can check that this pattern was preloaded.
+uint8_t expectedNext(const uint8_t* playlist, uint8_t stockNext);
+
 // The play position is in the block: the loop follows it from now.
 void noteEntered(uint8_t pos);
 

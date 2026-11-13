@@ -150,6 +150,9 @@ class Interface
     hModule previousModule = nullptr;
     uint32_t previousModuleOptions = 0;
 
+    hModule moduleBeforeToggle = nullptr;
+    uint32_t moduleBeforeToggleOptions = 0;
+
     SpecialScreensMode specialScreenMode = specialScreenModeDisabled;
 
     // interfaceMisc.cpp -----------------------------

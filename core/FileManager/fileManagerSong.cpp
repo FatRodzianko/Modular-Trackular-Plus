@@ -18,7 +18,9 @@ AUDIO_CORE_RAM uint8_t cFileManager::getNextSongPattern()
 {
     strSong* song = &mtProject.song;
 #if MT_HAS_SONGLOOP // MT: Song Loop: at the block's end, the block's first pattern (interrupt)
-    const uint8_t next = song->playlist[song->playlistPos + 1] > 0 ? song->playlist[song->playlistPos + 1]
+    // A song that fills the whole playlist has no empty slot after its last one.
+    const uint8_t next = song->playlistPos >= SONG_MAX - 1          ? song->playlist[0]
+                         : song->playlist[song->playlistPos + 1] > 0 ? song->playlist[song->playlistPos + 1]
                                                                    : song->playlist[0];
     if (mods::on(mods::Mod::songloop))
     {
@@ -26,6 +28,11 @@ AUDIO_CORE_RAM uint8_t cFileManager::getNextSongPattern()
     }
     return next;
 #else
+    // A song that fills the whole playlist has no empty slot after its last one.
+    if (song->playlistPos >= SONG_MAX - 1)
+    {
+        return song->playlist[0];
+    }
     return song->playlist[song->playlistPos + 1] > 0 ? song->playlist[song->playlistPos + 1]
                                                      : song->playlist[0];
 #endif
@@ -62,7 +69,8 @@ void cFileManager::setSongPos(uint8_t pos)
 bool cFileManager::switchNextPatternInSong()
 {
     strSong* song = &mtProject.song;
-    if (song->playlist[++(song->playlistPos)] != PLAYLIST_EMPTY_SLOT)
+    if (song->playlistPos < SONG_MAX - 1 &&
+        song->playlist[++(song->playlistPos)] != PLAYLIST_EMPTY_SLOT)
     {
         return 1;
     }

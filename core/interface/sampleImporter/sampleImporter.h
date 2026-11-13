@@ -134,6 +134,10 @@ class cSampleImporter : public ModuleBase
     uint16_t locationExplorerCount = 0;
     char** explorerNames;
     uint8_t selectedFile = 0;
+    // Null for a row the list does not have: the list is empty, or it is being read again.
+    const char* explorerRowName(uint16_t row) const;
+    bool isFolderRow(uint16_t row) const;
+    bool isFileRow(uint16_t row) const;
     char copyingInfo[20];
     uint32_t* currentFolderMemoryFileUsage;
 
@@ -194,7 +198,7 @@ class cSampleImporter : public ModuleBase
     void rewindListToBeggining();
     void moveInstrListToEnd();
 
-    static const uint8_t maxListLength = 100;
+    static const uint8_t maxListLength = 101; // 100 files and the parent folder
     uint8_t selectionActive[2] = { 0, 0 };
     uint32_t explorerHeaderColors[4];
     uint32_t instrumentHeaderColors[4];
@@ -254,9 +258,9 @@ class cSampleImporter : public ModuleBase
 
     uint8_t selectedImportPlace;
 
-    char startPointValueText[8];
-    char endPointValueText[8];
-    char playTimeValueText[8];
+    char startPointValueText[12];
+    char endPointValueText[12];
+    char playTimeValueText[12];
     char previewVolumeText[12];
 
     void calcPlayProgressValue();

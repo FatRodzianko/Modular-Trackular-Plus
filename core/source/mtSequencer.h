@@ -1039,6 +1039,7 @@ class Sequencer
     };
     void stop(StopContext context);
     void reloadPatternAfterStop();
+    void stopForMissingNextPattern();
 
     strPattern* currentPattern;
     strPattern* bufferPattern;

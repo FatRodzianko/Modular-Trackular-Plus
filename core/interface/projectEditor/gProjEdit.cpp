@@ -567,7 +567,7 @@ void cProjectEditor::showDeleteProjectLastWindow(bool deletingProject)
     display.setControlValue(bgLabel, 255); // 0b11000000
     display.refreshControl(bgLabel);
 
-    sprintf(currentInfo, "\"%s\"?", fileBrowser.getSelectedFolderName());
+    snprintf(currentInfo, sizeof(currentInfo), "\"%s\"?", fileBrowser.getSelectedFolderName());
 
     if (deletingProject)
     {
@@ -605,7 +605,7 @@ void cProjectEditor::showDeleteModLastWindow()
     display.setControlValue(bgLabel, 255); // 0b11000000
     display.refreshControl(bgLabel);
 
-    sprintf(currentInfo, "\"%s\"?", fileBrowser.getSelectedItemName());
+    snprintf(currentInfo, sizeof(currentInfo), "\"%s\"?", fileBrowser.getSelectedItemName());
     mtPopups.showInfoPopup("Do you want to delete file:", currentInfo);
 
     display.synchronizeRefresh();

@@ -131,12 +131,18 @@ class SongRig:
         self.interrupts_off = False
         self.held: set[str] = set()
         self.last_loaded = 1
+        self.preloaded = 0
         keep = ("loadWorkspacePattern", "setSongPos", "loadWorkspacePatternNow")
         for name in QUIET:
             if not any(k + "E" in name for k in keep):
                 m.stub_function(m.addr(name), lambda mm: 0)
         m.stub_function(m.addr("_ZN12cFileManager20loadWorkspacePatternEh"), self._load)
         m.stub_function(m.addr("_ZN12cFileManager23loadWorkspacePatternNowEh"), self._load_now)
+        # CE stops at a pattern's end unless the buffer holds the pattern it switches to: the last one
+        # loadWorkspacePattern loaded (loadWorkspacePatternNow empties it), as cFileManager::preloadedPattern.
+        if "_ZN12cFileManager18isPatternPreloadedEh" in m.elf.symbols:
+            m.stub_function(m.addr("_ZN12cFileManager18isPatternPreloadedEh"),
+                            lambda mm: 1 if mm.arg(1) and mm.arg(1) == self.preloaded else 0)
         m.stub_function(m.addr("_ZN12cFileManager21getLoadedPatternIndexEv"), lambda mm: self.last_loaded)
         m.stub_function(m.addr("_ZN9Sequencer10sendNoteOnEhPNS_9strPlayer14strPlayerTrack11strSendStepE"),
                         lambda mm: self.notes.append((self.block, mm.arg(1))))
@@ -186,11 +192,13 @@ class SongRig:
     def _load(self, m: Machine) -> int:
         self.loads.append((self.block, m.arg(1), self.in_main, self.interrupts_off))
         self.last_loaded = m.arg(1)
+        self.preloaded = m.arg(1)
         return 1
 
     def _load_now(self, m: Machine) -> int:
         self.calls.append(("loadNow", m.arg(1), 0))
         self.last_loaded = m.arg(1)
+        self.preloaded = 0
         return 1
 
     def _interrupts(self, off: bool) -> int:

@@ -1131,7 +1131,7 @@ AUDIO_CORE_RAM void Sequencer::play_microStep(int row)
                     if (playerRow.roll.type == fx.rollType_noteUp)
                     {
                         playerRow.stepContRoll.note =
-                          clamp<int>(++playerRow.stepContRoll.note, 0, 127);
+                          clamp<int>(playerRow.stepContRoll.note + 1, 0, 127);
                     }
                     else if (playerRow.roll.type == fx.rollType_noteDown)
                     {
@@ -1256,7 +1256,10 @@ void Sequencer::setStepRepeater(uint8_t track, int8_t stepRepeat)
 }
 void Sequencer::setPerformancePlayMode(uint8_t track, int8_t playmode)
 {
-    player.track[track].performancePlayMode = playmode;
+    // The value indexes the custom play orders. Stored performance values are
+    // loaded from the project and the config without the range of their effect.
+    player.track[track].performancePlayMode =
+      clamp<int>(playmode, PLAYMODE_MIN, PLAYMODE_CUSTOM_20);
 }
 
 // zamienia fx val na enRollPeriod
@@ -1989,6 +1992,12 @@ void Sequencer::switchRowStep(uint8_t row) // przełączamy stepy w zależności
 
         if (player.sequencialSwitch_isArmed && player.sequencialSwitch_loaded)
         {
+            if (!newFileManager.isPatternPreloaded(player.sequencialSwitch_pattern))
+            {
+                stopForMissingNextPattern();
+                return;
+            }
+
             player.songMode = 0;
 
             reset_actual_pos();
@@ -1999,6 +2008,29 @@ void Sequencer::switchRowStep(uint8_t row) // przełączamy stepy w zależności
         }
         else if (player.songMode)
         {
+#if MT_HAS_SONGLOOP // MT: Song Loop: CE's check on the pattern the loop switches to, decided once
+            uint8_t nextInSong;
+            if (mods::on(mods::Mod::songloop))
+            {
+                const uint8_t pos = mtProject.song.playlistPos;
+                const uint8_t* playlist = mtProject.song.playlist;
+                const uint8_t stockNext =
+                  (pos >= SONG_MAX - 1 || playlist[pos + 1] == 0) ? playlist[0] : playlist[pos + 1];
+                nextInSong = mods::songloop::expectedNext(playlist, stockNext);
+            }
+            else
+            {
+                nextInSong = newFileManager.getNextSongPattern();
+            }
+            if (!newFileManager.isPatternPreloaded(nextInSong))
+#else
+            if (!newFileManager.isPatternPreloaded(newFileManager.getNextSongPattern()))
+#endif
+            {
+                stopForMissingNextPattern();
+                return;
+            }
+
 #if MT_HAS_SONGLOOP // MT: Song Loop: to the block's start, as the preload decided
             if (mods::on(mods::Mod::songloop))
             {
@@ -2042,6 +2074,21 @@ void Sequencer::switchRowStep(uint8_t row) // przełączamy stepy w zależności
             PM->refreshTrackPattern = 1;
         }
     }
+}
+
+// The next pattern is asked for one step before it is needed and loaded by the main loop.
+// When it is not in the buffer pattern by then, switching would play whatever the buffer
+// holds under the next pattern's number, and a later save would write that into its file.
+void Sequencer::stopForMissingNextPattern()
+{
+    if (player.onPatternOrSelectionEnd == cbkSetCurrentExporterOnLastStep ||
+        player.onSongEnd == cbkSetCurrentExporterOnLastStep)
+    {
+        cbkSetCurrentExporterOnLastStep();
+        return;
+    }
+
+    stop(StopContext::audioCallback);
 }
 
 AUDIO_CORE_FLASH void Sequencer::applyRowCustomFx(uint8_t tr, uint8_t stepInCustomOrder)
@@ -3339,8 +3386,11 @@ void Sequencer::setPerformancePatternLength(int length)
 void Sequencer::setPerformancePatternLengthFromFxVal(int8_t val)
 {
     int16_t performancePatternLengthValues[] = { -1, 1, 2, 4, 8, 16, 32, 64, 128 };
+    const int lastValue =
+      sizeof(performancePatternLengthValues) / sizeof(performancePatternLengthValues[0]) - 1;
 
-    setPerformancePatternLength(performancePatternLengthValues[val]);
+    // Stored performance values are loaded without the range of their effect.
+    setPerformancePatternLength(performancePatternLengthValues[clamp<int>(val, 0, lastValue)]);
 }
 // laduje track do bufora i czeka na switch
 void Sequencer::setTrackToLoadOnSwitch(uint8_t track, uint8_t sourcePattern)
@@ -3477,6 +3527,8 @@ void Sequencer::switchRamPatternsNow()
 
     int bufferPatternIdx = newFileManager.getLoadedPatternIndex();
     assert(bufferPatternIdx >= 0);
+    // The buffer pattern now holds what was playing.
+    newFileManager.forgetPreloadedPattern();
     mtProject.values.actualPattern = bufferPatternIdx;
 
     if (bufferPatternIdx != player.activePatternIdx)
@@ -3504,7 +3556,7 @@ int16_t Sequencer::findSlotWithPattern()
     uint8_t current_song_pos = mtProject.song.playlistPos;
 
     // try the last used playlist position first
-    for (slot_idx = current_song_pos;; slot_idx++)
+    for (slot_idx = current_song_pos; slot_idx < SONG_MAX; slot_idx++)
     {
         slot_value = mtProject.song.playlist[slot_idx];
         if (slot_value == current_pattern)
@@ -3517,7 +3569,7 @@ int16_t Sequencer::findSlotWithPattern()
         }
     }
 
-    for (slot_idx = 0;; slot_idx++)
+    for (slot_idx = 0; slot_idx < SONG_MAX; slot_idx++)
     {
         slot_value = mtProject.song.playlist[slot_idx];
         if (slot_value == current_pattern)
@@ -3742,7 +3794,13 @@ void Sequencer::handleMidiInStart(bool continuePlay, bool songMode)
         auto songPosToStart = newFileManager.getPatternPosInSong(currentPattern);
         if (songPosToStart.has_value())
         {
-            playSongFromPosition(songPosToStart.value());
+            // Not playSongFromPosition(): it saves the pattern to the SD card first, which
+            // the audio callback must not do. The slot holds the pattern that is loaded,
+            // so nothing is replaced yet; the pattern is saved before the song moves on,
+            // when the next one is loaded.
+            newFileManager.setSongPos(songPosToStart.value());
+            player.songMode = 1;
+            play();
             if (startStep > 0)
             {
                 player.globalPos = startStep;

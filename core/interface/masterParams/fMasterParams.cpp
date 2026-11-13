@@ -1151,7 +1151,9 @@ static void functSwitchModule(uint8_t button)
 
     if (MP->sourceModuleButton == interfaceButtonSampleRec)
     {
-        MP->eventFunct(eventSwitchModule, MP, &MP->sourceModuleButton, &button);
+        // The handler reads the options through a uint32_t pointer.
+        uint32_t option = button;
+        MP->eventFunct(eventSwitchModule, MP, &MP->sourceModuleButton, &option);
     }
     else
     {
@@ -2974,6 +2976,7 @@ void cMasterParams::lightUpPadBoard()
     padsBacklight.clearGlobalPads(0, 1, 1);
 
     bool isBeatSlice =
+      mtProject.values.lastUsedInstrument < kSampleInstrumentsCount &&
       mtProject.instrument[mtProject.values.lastUsedInstrument].playMode == playModeBeatSlice;
 
     if (isBeatSlice)
@@ -2998,6 +3001,7 @@ static void functPads(uint8_t pad, uint8_t state, int16_t velo)
     }
 
     bool isBeatSlice =
+      mtProject.values.lastUsedInstrument < kSampleInstrumentsCount &&
       mtProject.instrument[mtProject.values.lastUsedInstrument].playMode == playModeBeatSlice;
 
     if (state == buttonPress)

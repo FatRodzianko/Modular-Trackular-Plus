@@ -156,6 +156,11 @@ bool atPatternEnd(uint8_t& pos)
     return false;
 }
 
+uint8_t expectedNext(const uint8_t* playlist, uint8_t stockNext)
+{
+    return state.wrapPending ? playlist[state.first] : stockNext;
+}
+
 void noteEntered(uint8_t pos)
 {
     if (state.loop && state.sel && inBlock(pos))

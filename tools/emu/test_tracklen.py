@@ -101,6 +101,10 @@ class Rig:
         m.stub_function(m.addr("_ZN12cFileManager23switchNextPatternInSongEv"), lambda mm: 1)
         m.stub_function(m.addr("_ZN12cFileManager21getLoadedPatternIndexEv"), self._loaded)
         m.stub_function(m.addr("_ZN12cFileManager14getSongPatternEh"), lambda mm: 1)
+        # CE stops at a pattern's end when the next pattern's load hasn't finished (isPatternPreloaded).
+        # This rig has no file manager, so every load has.
+        if "_ZN12cFileManager18isPatternPreloadedEh" in m.elf.symbols:
+            m.stub_function(m.addr("_ZN12cFileManager18isPatternPreloadedEh"), lambda mm: 1)
 
         self.tick_addr = m.addr("_ZN9Sequencer4tickEf")
         self._set_tempo(TEMPO)

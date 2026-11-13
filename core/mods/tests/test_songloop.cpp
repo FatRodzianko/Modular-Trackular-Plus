@@ -241,9 +241,12 @@ void testPreload()
 
     setState(1, 0, 1, 3, 1, 3, 1);
     check(preload(3, pl.p, 5) == 2 && state.wrapPending, "loop 2-4 at its end: preload pattern 2");
+    check(expectedNext(pl.p, 5) == 2 && expectedNext(pl.p, 5) == 2 && state.wrapPending,
+          "expectedNext: the block's first, asked twice, the decision kept");
     uint8_t pos = 3;
     patternEnd(pos, 10);
     check(pos == 1 && !state.wrapPending, "pattern end: to position 2");
+    check(expectedNext(pl.p, 7) == 7, "expectedNext after the pattern end: stock again");
 
     setState(1, 5, 5, 7, 1, 7, 0);
     check(preload(2, pl.p, 4) == 4 && !state.wrapPending, "armed, block not reached: on as stock");
@@ -267,6 +270,7 @@ void testPreload()
         order.push_back(pos + 1);
         const uint8_t stock = pl.p[(pos + 1) % 8];
         const uint8_t next = preload(pos, pl.p, stock);
+        check(expectedNext(pl.p, stock) == next, "CE's check sees the preloaded pattern (" + std::to_string(i) + ")");
         patternEnd(pos, 8);
         check(pl.p[pos] == next, "the preloaded pattern is the one that plays next (" + std::to_string(i) + ")");
     }
