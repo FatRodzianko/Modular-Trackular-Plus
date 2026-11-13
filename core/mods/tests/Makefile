@@ -5,7 +5,7 @@ CXX      ?= g++
 CXXFLAGS := -std=gnu++20 -Wall -Wextra -Werror -g -fsanitize=address,undefined -DMT_HOST_TEST -I..
 COMMON   := ../modsStore.cpp ../modsSwitches.cpp ../modsProject.cpp ../humanize.cpp ../swing.cpp ../colorsong.cpp ../masterfx.cpp ../tracklen.cpp ../copypattern.cpp ../songloop.cpp ../synthfx/synthfxSettings.cpp
 BUILD    := build
-TESTS    := test_mods test_registry test_registry_partial test_humanize test_swing test_colorsong test_masterfx test_tracklen test_copypattern test_songloop test_synthfx test_synthfx_plugins
+TESTS    := test_mods test_registry test_registry_partial test_humanize test_swing test_colorsong test_masterfx test_tracklen test_copypattern test_songloop test_synthfx test_synthfx_plugins test_cardguard
 # The registry again with some mods left out of the build.
 PARTIAL  := -DMT_HAS_SWING=0 -DMT_HAS_COLORSONG=0
 
@@ -43,6 +43,10 @@ $(BUILD)/test_masterfx: $(COMMON) test_masterfx.cpp $(wildcard ../*.h)
 	$(CXX) $(CXXFLAGS) -o $@ $(filter %.cpp,$^)
 
 $(BUILD)/test_tracklen: $(COMMON) test_tracklen.cpp $(wildcard ../*.h)
+	@mkdir -p $(BUILD)
+	$(CXX) $(CXXFLAGS) -o $@ $(filter %.cpp,$^)
+
+$(BUILD)/test_cardguard: test_cardguard.cpp $(wildcard ../*.h)
 	@mkdir -p $(BUILD)
 	$(CXX) $(CXXFLAGS) -o $@ $(filter %.cpp,$^)
 

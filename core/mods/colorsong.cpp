@@ -15,6 +15,7 @@
 #ifndef MT_HOST_TEST
 #include "config.h"
 #include "fileManager.h"
+#include "modsCardGuard.h"
 #include "mtSequencer.h"
 #include "mtStructs.h"
 
@@ -893,8 +894,9 @@ class CeSong : public Song
 
     bool mayReadFile() override
     {
-        // The temp buffer and the file transfer are also the file manager's.
-        return newFileManager.getStatus() == fmIdle &&
+        // The temp buffer and the file transfer are also the file manager's, and a read
+        // near the pattern end would hold up the next pattern's load.
+        return newFileManager.getStatus() == fmIdle && cardFreeOfPatternLoad() &&
                (!sequencer.isPlay() || sinceRead >= kPlayingReadGapMs);
     }
 

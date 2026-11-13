@@ -834,10 +834,68 @@ Blank cells weren't run.
   edits. Once the colours are known it doesn't read.
 
 **What would close it:** a mod could avoid starting a card access while a pattern end is near in
-song mode (for example, not in the last steps before the end, with a margin of a pattern read or
-more). Then nothing of the mod's is under way when the request lands. The same test checks it:
-the mod's stops should move to CE's own threshold (scale 9 here). This is a design note, not
-built.
+song mode. Then nothing of the mod's is under way when the request lands. Built and tested below.
+
+### The fix: the card guard (2026-11-13)
+
+**What it does.** `core/mods/modsCardGuard.{h,cpp}`, `mods::cardFreeOfPatternLoad()`. Color Song's
+`mayReadFile` and Copy to New's `fileManagerIdle` both call it, on top of the file manager being
+idle. It returns false, so the mod waits, when:
+- a pattern load is requested or running (`isPatternLoading()`, the waiting fix, kept), or
+- playback will load a pattern at the pattern end (song mode, or a queued pattern change), and
+  track 0's request could come within `kLoadGuardMs` (200 ms). The estimate counts the whole steps
+  left before the last step at `15000 / tempo` ms each, times 0.75 for the shortest swung step. The
+  step playing now counts for nothing. So the estimate never exceeds the real time.
+- In performance mode or selection playback with a load coming, it always returns false, since
+  those ends aren't estimated. The mods then wait until playback stops.
+
+Main loop only; float with `f` literals; no heap. Cost: 152 B of flash, no RAM (`mem_budget.py` on
+the build, against N).
+
+**What it costs the user.** When a whole pattern lasts under about 200 ms plus a step, the mods
+never use the card during song playback. That's 16 steps at about 800 BPM, or 64 steps at about
+220 BPM. Color Song then builds its colours after playback stops. Copy to New shows "Busy - try
+again" after its 5 s limit. Outside song mode and queued pattern changes nothing changes.
+
+**Not covered.** A break-pattern FX asks for the next pattern at once, and a tempo FX that speeds up
+later in the pattern shortens the time left. Neither is in the estimate.
+
+**Host tests:** `core/mods/tests/test_cardguard.cpp`, 417 checks of the estimate; all 13 suites pass.
+
+**Song-stop test.** G is `c32fee7` plus the guard, built from a clean copy. Same project and settings
+as above unless noted.
+
+16-step patterns, 800 BPM, 6 virtual seconds:
+
+| Card scale | R (CE) | N, Color Song | G, Color Song | N, Copy to New | G, Copy to New |
+|---|---|---|---|---|---|
+| 6 | | stops at 1.51 s | plays | plays | |
+| 7 | | stops at 0.32 s | plays | | |
+| 8 | plays | stops at 0.32 s | plays | stops at 2.41 s | plays |
+| 9 | stops | | stops at 0.32 s | | |
+
+At this pattern length the guard keeps both mods off the card for the whole song (0 reads, 0
+copies during play; Copy to New's 44 presses all waited). G stops from scale 9, where CE alone does.
+
+64-step patterns (a pattern 1.2 s), 800 BPM, card scale 8, 10 virtual seconds:
+
+| Build | Result | Mod card use during play | Every load: start, in memory |
+|---|---|---|---|
+| R, CE | plays | none | 0.87 ms, 17.01 ms |
+| N, Color Song | stops at 1.21 s | 12 reads; one started 14.8 ms before the request | 2.15 ms, never |
+| G, Color Song | plays | 46 reads, none within 20 ms of a request | 0.87 ms, 17.01 ms |
+| N, Copy to New | plays | 72 checks, 70 copies | 0.87 ms, 17.01 ms |
+| G, Copy to New | plays | 54 checks, 54 copies | 0.87 to 0.91 ms, 17.01 to 17.06 ms |
+
+With the guard every load ran as it does in CE alone, within 0.05 ms, while the mods still used the
+card in the rest of the pattern. N's Copy to New happened to play here; at 16 steps it doesn't.
+
+**What this doesn't show:**
+- That 200 ms covers a real card's slowest write. The card times are still placeholders. The guard
+  needs one mod access to finish within 200 ms plus a step; an SD write that stalls longer would
+  still delay a load.
+- Swing, tempo FX, external clock, performance mode and selection playback weren't run.
+- The guard isn't on the unit. Nothing here was run on the device.
 
 Each run takes about 1 to 1.5 minutes of wall time. Run five at a time to stay inside the 75 % CPU
 limit. Example:

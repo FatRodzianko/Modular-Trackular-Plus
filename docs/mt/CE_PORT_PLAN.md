@@ -451,6 +451,11 @@ Built 2026-11-07, passed its hardware test 2026-11-08. Plan and its decisions:
 [COPYPATTERN_PLAN.md](COPYPATTERN_PLAN.md). Id 9,
 `MT_HAS_COPYPATTERN`. The 1.2.0 version is final (cp5).
 
+- **Card guard (2026-11-13, on `claude/simulator-b1b9ee`, not in `modular`):** during song playback
+  or a queued pattern change, the mod uses the card only when the next-pattern request is over
+  200 ms away and no load is running (`mods::cardFreeOfPatternLoad`), so it can't hold up the
+  load and stop the song. 152 B of flash, no RAM. Why and the simulator results:
+  [SIMULATOR_STAGE1.md](SIMULATOR_STAGE1.md), "The fix: the card guard".
 - **CE today:** Duplicate doubles a pattern inside itself. Copy and Paste Pattern copy steps but not the
   pattern's length. The Song screen can make a full copy (Shift + Add Slot, Copy, Paste), but the copy
   goes into the song.
@@ -690,6 +695,11 @@ free heap 76,120, max stack 7,849.
   the rest: one pattern file per call, through CE's reader, none while the file manager is
   busy and one per 100 ms while playing; the actual pattern comes from RAM if it's unsaved.
   Hashes skip the `m` and `V` columns, as 1.2.0 skips humanize's FX.
+- **Card guard (2026-11-13, on `claude/simulator-b1b9ee`, not in `modular`):** during song playback
+  or a queued pattern change, the mod uses the card only when the next-pattern request is over
+  200 ms away and no load is running (`mods::cardFreeOfPatternLoad`), so it can't hold up the
+  load and stop the song. 152 B of flash, no RAM. Why and the simulator results:
+  [SIMULATOR_STAGE1.md](SIMULATOR_STAGE1.md), "The fix: the card guard".
 - **Display list:** no bytes added. CE already sends one `API_COLOR` per block; the mod
   chooses its value. A full grid is 2,316 bytes On and Off.
 - **Themes:** the mod overrides the fill of filled blocks only. A block's lightness keeps

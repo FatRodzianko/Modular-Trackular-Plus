@@ -15,6 +15,7 @@
 #include "core/interfacePopups.h"
 #include "fileManager.h"
 #include "fileManagerDefs.h"
+#include "modsCardGuard.h"
 #include "mtSequencer.h"
 #include "mtStructs.h"
 #endif
@@ -197,8 +198,12 @@ class CeSide : public Ce
 
     bool performanceChanged() override { return sequencer.isPerformancePatternChanged(); }
 
-    // The temp buffer and the file transfer are also the file manager's.
-    bool fileManagerIdle() override { return newFileManager.getStatus() == fmIdle; }
+    // The temp buffer and the file transfer are also the file manager's, and card access
+    // near the pattern end would hold up the next pattern's load.
+    bool fileManagerIdle() override
+    {
+        return newFileManager.getStatus() == fmIdle && cardFreeOfPatternLoad();
+    }
 
     bool playing() override { return sequencer.isPlay(); }
 
