@@ -15,9 +15,10 @@ No new `double` there either. Both builds use single-precision FPU flags, so `do
 Before hooking a function, grep its callers up to an entry point above or to main-loop code.
 
 **CE breaks these rules itself, so a function can run in the interrupt even if it looks like main-loop code:**
-- MIDI Start in Song mode → `playSongFromPosition` → `saveWorkspacePatternNow`, `loadWorkspacePatternNow`. Never hook slow work onto these.
+- MIDI Start or Continue in Song mode (`handleMidiInStart`) starts the song in the interrupt with `setSongPos` and `play()`. Since CE's 98468f0 it no longer goes through `playSongFromPosition`, whose callers are now all main-loop, but hooks on `setSongPos` or `play()` still run in the interrupt there.
 - `Sequencer::stop()` from the main loop can call `loadWorkspacePatternNow`. Interrupt paths, MIDI Stop included, use `stop(StopContext::audioCallback)`, which leaves that to `update()`.
-- `Sequencer::loadNextPattern` → `loadWorkspacePattern` → `stopAutosave` → `WorkspaceProjectSave::stop`, which spins on `update()` while the step is `saveInstrumentSample`. Keep hooks out of that step. `finishStep`, where `mods::onWorkspaceSaved` runs, isn't reached this way.
+- `Sequencer::loadNextPattern` → `loadWorkspacePattern` only records the request (CE's 15c3d23). `cFileManager::update()` starts it in the main loop (`startRequestedPatternLoad`, which stops the autosave), so the interrupt no longer reaches `stopAutosave`.
+- At a pattern end in song mode, and for a queued pattern change, the sequencer swaps patterns only if `isPatternPreloaded` says the buffer holds the one it is about to play, and otherwise stops (CE's c476ce1). A mod that changes which pattern comes next must check the pattern it will switch to without deciding again: Song Loop does it with `mods::songloop::expectedNext`. Emulator rigs that stub `loadWorkspacePattern` must answer `isPatternPreloaded` too.
 - MIDI note-off on the Sample Recorder screen → `hidePreviewValue` → `display.setControlText`.
 
 ## Display limit
