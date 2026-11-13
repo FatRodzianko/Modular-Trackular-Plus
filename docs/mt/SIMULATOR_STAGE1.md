@@ -890,6 +890,22 @@ copies during play; Copy to New's 44 presses all waited). G stops from scale 9, 
 With the guard every load ran as it does in CE alone, within 0.05 ms, while the mods still used the
 card in the rest of the pattern. N's Copy to New happened to play here; at 16 steps it doesn't.
 
+**On the unit (2026-11-13).** Guard build `92ad0f4`, the corrected `CG normal` (120 BPM) and `CG fast`
+(800 BPM) projects: 16 identical 16-step patterns of `held`, so Master FX was on with Shimmer + BBD.
+- `CG normal`: the song played on. Copy to New during play gave "Copied to pattern 17" and 18,
+  with no break in the sound.
+- Color Song during play: not tested. It finishes its colours when the Song screen opens while
+  stopped, so they were done before Play. The test steps were wrong.
+- `CG fast`, MT+: the song stops at the same pattern each time (4), with Color Song, Copy to New
+  and Master FX On or Off. With those mods Off the guard isn't called, so it isn't the cause.
+- `CG fast`, stock CE (`TrackerPlus_ref_cemerge.axf`): plays until pattern A. From later song
+  positions it stops after one pattern.
+
+So at 800 BPM CE's own rule (the next pattern must be loaded within one 18.75 ms step) stops songs
+on a real card, with no mod involved, and MT+ reaches it sooner than stock (pattern 4 against A). That
+it depends on the pattern number and not on time suggests the cost of opening later files on the
+card, but nothing here measured that. Why MT+ has less margin isn't known.
+
 **Correction (2026-11-13): the test projects were wrong.** `make_project` in `sim_songstop.py` marked only
 track 1 as used in every pattern, and wrote the MIDI-track mask 255 bytes after the sample-track mask.
 The real one is 810 bytes further on (`VALUES + 1331`). So every run above used projects whose reverb
