@@ -351,40 +351,63 @@ uint32_t nowMs()
     return Tracker::getInstance()->getPlatform()->getTimer()->millis();
 }
 
-// CE's object for a slot: stop it running, then clear its buffers (which lets it run again)
-void block(uint8_t slot)
+// Nothing of ours runs in the slot from here. The reverb and delay objects are stopped (CE's clear
+// lets them run again). The limiter isn't, since the dry master goes through it: its hook passes
+// the master through untouched instead.
+void stop(uint8_t slot)
 {
     if (slot == kReverb)
     {
         engine.getMixerAndFx()->getPolyverb()->blockUpdate();
+        activeReverb = 0;
     }
     else if (slot == kDelay)
     {
         engine.getMixerAndFx()->getDelay()->blockUpdate();
+        activeDelay = 0;
+    }
+    else
+    {
+        activeDynamics = kDynamicsDry;
     }
 }
 
-void clearAndRun(uint8_t slot)
+// After stop(): the slot's installed plugin plays, in cleared memory
+void runPlugin(uint8_t slot)
 {
     if (slot == kReverb)
     {
+        activeReverb = 1;
         engine.getMixerAndFx()->getPolyverb()->reset(); // calls reverbCleared, unblocks
     }
     else if (slot == kDelay)
     {
+        activeDelay = 1;
         engine.getMixerAndFx()->getDelay()->clear(); // calls delayCleared, unblocks
+    }
+    else
+    {
+        clearDynamicsMemory();
+        pl::cleared(pl::kDynamics);
+        activeDynamics = 1;
     }
 }
 
-void setActive(uint8_t slot, uint8_t on)
+// After stop(): CE's own plays, in buffers it lays out again itself (the limiter's state was kept
+// as at power-up while the plugin played)
+void runCe(uint8_t slot)
 {
     if (slot == kReverb)
     {
-        activeReverb = on;
+        engine.getMixerAndFx()->getPolyverb()->reset();
     }
     else if (slot == kDelay)
     {
-        activeDelay = on;
+        engine.getMixerAndFx()->getDelay()->clear();
+    }
+    else
+    {
+        activeDynamics = 0;
     }
 }
 
@@ -408,17 +431,15 @@ void applySlot(uint8_t slot, bool isOn)
     }
     if (status != pl::Status::ok)
     {
-        if (pl::installed(s)) // CE's own plays: in buffers it lays out again itself
+        if (pl::installed(s))
         {
-            block(slot);
-            setActive(slot, 0);
+            stop(slot);
             pl::remove(s);
-            clearAndRun(slot);
+            runCe(slot);
         }
         return;
     }
-    block(slot);
-    setActive(slot, 0);
+    stop(slot);
     pl::install(s);
     for (uint32_t k = 0; k < kOwnKnobs; k++)
     {
@@ -432,11 +453,22 @@ void applySlot(uint8_t slot, bool isOn)
         }
         want.knob[k] = pl::knob(s, k); // on the plugin's steps, or its default
     }
-    setActive(slot, 1);
-    clearAndRun(slot);
+    runPlugin(slot);
 }
 
 } // namespace
+
+void dynamicsReset()
+{
+    if (activeDynamics != 1)
+    {
+        return;
+    }
+    activeDynamics = kDynamicsDry;
+    clearDynamicsMemory();
+    pl::cleared(pl::kDynamics);
+    activeDynamics = 1;
+}
 
 void apply()
 {
@@ -449,6 +481,7 @@ void apply()
     const bool isOn = on(Mod::masterfx);
     applySlot(kReverb, isOn);
     applySlot(kDelay, isOn);
+    applySlot(kDynamics, isOn);
     refreshChoices();
 }
 

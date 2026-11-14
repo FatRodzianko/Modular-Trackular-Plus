@@ -1,7 +1,7 @@
 # Master FX as card plugins (`.ptmfx`): feasibility and plan
 
 Status: feasibility done and the design approved, 2026-11-14 (section 9). Building. Branch `mod/masterfx-plugins`, off `modular` at
-`d9a6795`. Nothing committed yet.
+`d9a6795`. Steps 1 to 3 committed (`982c6ea`), step 4 in the commit after it.
 
 Where the build stands (section 8's steps):
 - Steps 1 to 3 are written: the shared parts, the runtime, the pack, record version 2, the built-in DSP
@@ -19,10 +19,38 @@ Where the build stands (section 8's steps):
     `d9a6795` firmware's built-in effects.
   - The firmware builds; `mem_budget` is ok: ITCM free 69,984 → 49,568, DTCM 12,516 → 9,136, SDRAM
     688,348 → 603,408.
-- Not yet: the emulator tests of the Master FX firmware (`test_masterfx.py`, `test_masterfx_rig.py`,
-  `stress_masterfx.py`) still choose effects by list index, so they don't run the plugins; they must
-  load them through the real path (the card, `apply`). Also the runtime on the emulated Cortex-M7
-  (install, the knobs, the guards) and its planted faults. Then steps 4 to 8.
+- The emulator tests now load the plugins through the real path on the plugin firmware
+  (`tools/emu/masterfx_runtime.py`: the runtime started on a fake card, the pack's file installed for
+  masterfx-1.x's index), and still choose by index on older firmware.
+- Step 4, the dynamics slot:
+  - `AudioEffectLimiter::update`: with a plugin in the slot, the left object takes its own blocks and
+    the right object's, runs the plugin once on the stereo master with both keys, sends both on and
+    sets both objects' meter values; the right object has nothing left to do. CE builds the left object
+    first and both after the mixer, so the right block is queued: checked in the emulator, one
+    `process` call a block.
+  - The limiter is never blocked, since the dry master goes through it. While the main loop puts a
+    plugin in or clears its memory, the hook passes the master through untouched (`kDynamicsDry`).
+  - CE's limiter state is kept as at power-up while a plugin plays, so Stock after a plugin plays as if
+    the plugin never had.
+  - `resetLimiter` (Sample Editor, Sample Recorder): the slot's 64 KB cleared, the plugin reset.
+  - The knobs are CE's as its setters were given them (so the file browser's preview, which sets the
+    limiter's objects and not the project, works as on CE): Attack and Release in ms, Threshold through
+    CE's curve as 0 to 1, the key On or Off.
+  - The glue compressor, `Glue.ptmfx`, the pack's ninth file: 1,216 B of code, 52 B of state, float
+    blocks, own knobs Ratio and Makeup. With a key, the key keeps its level, as CE's limiter does.
+    Nothing limits the output after the makeup: past full scale it clips (to tell users in the SDK
+    docs).
+  - What ran: host tests (all pass, `test_masterfx_plugins` 126 checks); the new `dynamics` section of
+    `test_masterfx_rig.py` on the sound rig (20 checks: Stock is the reference build sample for sample,
+    Glue with the threshold at the top is CE's master 5 samples sooner, with it down both sides turned
+    down and the meter on both objects, a silent key leaves the master alone, the reset, Stock again,
+    Off, a missing file); the quick tier on the step 4 firmware, 19 of 19 run (3 cached); the
+    `MT_NO_MODS` build's flash image the same as step 3's, byte for byte; `mem_budget` ok (ITCM free
+    49,152, DTCM 9,112).
+  - Not run: the ported emulator tests on a masterfx-1.x firmware (they keep its index path); the
+    release tier; anything on the unit.
+- Not yet: the runtime on the emulated Cortex-M7 (the guards) and its planted faults; Glue's own knobs
+  on the page (step 5). Then steps 5 to 8.
 
 Today's mod is in [MASTERFX_PORT_PLAN.md](MASTERFX_PORT_PLAN.md): eight effects built into the firmware,
 run inside CE's own reverb and delay objects. This plan turns them into plugins loaded from the card,
@@ -102,7 +130,7 @@ Moving them into `core/mods/plugins/` is a refactor of a released mod. Synth FX'
   and a compressor needs both sides together. `audioEngine` builds `mixerAndFxs` before `output`, and
   `limiter[0]` before `limiter[1]`. So when `limiter[0]` updates, the right block is already queued on
   `limiter[1]`. The left object's hook takes both blocks and runs the plugin once. The right object's hook
-  sends its processed block on. This order is read from the source, not yet checked in the emulator.
+  sends its processed block on. This order is read from the source and checked in the emulator (step 4).
   - The key comes from CE's sidechain mux.
   - The Gain Reduce meter reads a gain the plugin returns.
   - `resetLimiter` (Sample Editor, Sample Recorder) resets the plugin.
@@ -239,6 +267,25 @@ How it fits CE's graph (Tracker+, read from the source):
   track. The host decides where it runs. When the destination isn't the master, the master's limiter is
   CE's (Stock, with its sidechain off).
 
+Several destinations (the user's question, 2026-11-14: "kick ducks the bass and chord tracks"):
+- Possible, and cheaper than one compressor per track. With a key, the gain comes from the key alone:
+  CE's limiter works it out from the key's level (`effect_limiter.cpp`, `processSidechain`), and the
+  block being ducked doesn't enter into it. So one compressor works out the gain once per block, and
+  each destination track multiplies its block by it.
+- The ABI gets one more field: `PtmfxBlock.gain`, a float[128] the plugin fills with the gain it
+  applied, sample by sample. A plugin that can drive other destinations says so with a flag, because
+  a saturator or clipper has no single gain to give.
+- The master stays a choice of its own: either the master, or a set of tracks (sample tracks 1 to 8,
+  synth parts 1 to 3), saved as a mask in the dynamics slot's record. Record version 2 hasn't been
+  released, so the field goes into it before the release.
+- Each destination ducks by the same amount. A threshold per track would need an instance per track.
+- Cost: the compressor once, plus about 400 to 600 instructions per destination track for the
+  multiply (an estimate, to measure). The gain buffer is 512 bytes of DTCM.
+- The page: CE's lists choose one item, so the destinations need a list with a mark for each item that
+  a press toggles. Its display bytes are counted with the rest of the page.
+
+Decided 2026-11-14: a destination track's sends aren't ducked (taken before its volume, as CE does).
+
 Two limits to check in the emulator before it's built:
 - **Update order.** The objects run in the order they were made. If the key's track comes after the
   destination's in that order, the key reaching the destination is one block (2.9 ms) old. The attack
@@ -335,7 +382,9 @@ Answered 2026-11-14, with the go-ahead to build:
   whether to convert them.
 - 4: replaced by the sidechain destination (section 5.1). It comes after the master compressor works.
 
-Still open: whether a destination track's sends are ducked too.
+- Sends: a destination track's sends aren't ducked.
+- Several destination tracks: the user would like them if possible, and one destination is acceptable
+  (section 5.1 has the shared-gain design).
 
 The questions as they were asked:
 
@@ -353,7 +402,6 @@ The questions as they were asked:
 
 - Anything on the unit: cycles, stalls, the cache, the card's read time, the clear's length, ITCM code
   copied at runtime.
-- The limiter pair's update order in the emulator: read from the source only.
 - The pack in the firmware's own path: one probe run only, outside the test tiers, with one knob setting.
 - The display bytes of a third list.
 - The multi-key mux's cost: estimated, not measured.

@@ -54,20 +54,24 @@ struct PackWant
     const char* file;
     const char* name;
     uint8_t slot;
+    uint16_t flags;
+    uint8_t knobs;
 };
 
+// masterfx-1.x's effects (Q15, CE's knobs only), then the glue compressor (float, Ratio and Makeup)
 const PackWant kPackWant[] = {
-    { "Freeverb.ptmfx", "Freeverb", PTMFX_SLOT_REVERB }, { "Plate.ptmfx", "Plate", PTMFX_SLOT_REVERB },
-    { "Spring.ptmfx", "Spring", PTMFX_SLOT_REVERB },     { "Shimmer.ptmfx", "Shimmer", PTMFX_SLOT_REVERB },
-    { "Gated.ptmfx", "\"Gated\"", PTMFX_SLOT_REVERB },   { "Reverse.ptmfx", "Reverse", PTMFX_SLOT_REVERB },
-    { "Tape.ptmfx", "Tape", PTMFX_SLOT_DELAY },          { "BBD.ptmfx", "BBD", PTMFX_SLOT_DELAY },
+    { "Freeverb.ptmfx", "Freeverb", PTMFX_SLOT_REVERB, 0, 0 }, { "Plate.ptmfx", "Plate", PTMFX_SLOT_REVERB, 0, 0 },
+    { "Spring.ptmfx", "Spring", PTMFX_SLOT_REVERB, 0, 0 },     { "Shimmer.ptmfx", "Shimmer", PTMFX_SLOT_REVERB, 0, 0 },
+    { "Gated.ptmfx", "\"Gated\"", PTMFX_SLOT_REVERB, 0, 0 },   { "Reverse.ptmfx", "Reverse", PTMFX_SLOT_REVERB, 0, 0 },
+    { "Tape.ptmfx", "Tape", PTMFX_SLOT_DELAY, 0, 0 },          { "BBD.ptmfx", "BBD", PTMFX_SLOT_DELAY, 0, 0 },
+    { "Glue.ptmfx", "Glue", PTMFX_SLOT_DYNAMICS, PTMFX_FLAG_FLOAT, 2 },
 };
 constexpr size_t kPackSize = sizeof(kPackWant) / sizeof(kPackWant[0]);
 
 void testHeader()
 {
     using plugins::checkHeader;
-    check(plugins::packCount() == kPackSize, "pack: eight files");
+    check(plugins::packCount() == kPackSize, "pack: nine files");
     for (size_t i = 0; i < plugins::packCount() && i < kPackSize; i++)
     {
         const plugins::PackFile& f = plugins::packAt(i);
@@ -77,7 +81,8 @@ void testHeader()
         check(strcmp(f.name, kPackWant[i].file) == 0, std::string("pack: in masterfx-1.x's order: ") + f.name);
         check(strcmp(h.name, kPackWant[i].name) == 0, std::string("pack: its name: ") + f.name);
         check(h.slot == kPackWant[i].slot, std::string("pack: its slot: ") + f.name);
-        check(h.flags == 0 && h.num_params == 0, std::string("pack: Q15, CE's knobs only: ") + f.name);
+        check(h.flags == kPackWant[i].flags && h.num_params == kPackWant[i].knobs,
+              std::string("pack: its blocks and own knobs: ") + f.name);
     }
 
     // A header with one knob, to spoil
@@ -315,8 +320,8 @@ void testStart()
               "the reverb's list: the six reverbs");
         check(slotFiles(plugins::kDelay) == std::vector<std::string>({ "Tape.ptmfx", "BBD.ptmfx" }),
               "the delay's list: Tape and BBD");
-        check(plugins::slotCount(plugins::kDynamics) == 0 && plugins::slotAt(plugins::kDynamics, 0) == nullptr,
-              "the dynamics list: empty");
+        check(slotFiles(plugins::kDynamics) == std::vector<std::string>({ "Glue.ptmfx" }),
+              "the dynamics list: Glue");
         check(plugins::slotAt(plugins::kDelay, 2) == nullptr, "a list's end");
         check(!plugins::safeMode(), "start: no marker, no safe mode");
         check(plugins::catalogFind("Nope.ptmfx") == -1 && plugins::catalogFind("BBD.ptmfx") == 7,

@@ -10,6 +10,7 @@
 #if MT_HAS_MASTERFX && !defined(MT_HOST_TEST)
 
 #include "masterfx.h"
+#include "masterfxDsp.h"
 #include "masterfxPlugins.h"
 
 #include "Platform.h"
@@ -21,6 +22,7 @@
 #include <cmath>
 #include <cr_section_macros.h>
 #include <cstdio>
+#include <cstring>
 
 extern int16_t externalRamDelayBuff[];
 
@@ -129,6 +131,8 @@ void startPlugins(FileIo& io)
         return;
     }
     AudioEffectPolyverb* reverb = engine.getMixerAndFx()->getPolyverb();
+    limiters[0] = engine.getAudioOutput()->getLimiter(AudioOutput::OutputChannels::kLeft);
+    limiters[1] = engine.getAudioOutput()->getLimiter(AudioOutput::OutputChannels::kRight);
     plugins::Env env = {};
     for (size_t s = 0; s < plugins::kSlots; s++)
     {
@@ -153,6 +157,11 @@ void startPlugins(FileIo& io)
     env.host = &host;
     plugins::start(io, env);
     refreshChoices();
+}
+
+void clearDynamicsMemory()
+{
+    memset(dynamicsMemory, 0, sizeof(dynamicsMemory));
 }
 
 } // namespace masterfx

@@ -10,7 +10,8 @@ Each session, at random:
   - sends: silence, noise at random levels, full-scale noise, full-scale DC, a loud sine, impulses;
   - knobs: random, extreme, or garbage (NaN, infinities, negatives, huge, predelay out of range;
     Time 0 or huge, Feedback 255, any Filter coefficient);
-  - the effect switched, as apply() does, or the active index set out of range;
+  - the effect switched, as apply() does, or the active index set out of range (on the plugin
+    firmware the switch loads the pack's plugin through the runtime: test_masterfx.py's rigs);
   - a missing input block, or no output block to be had.
 After every block:
   - no fault, and update() returns within 400,000 instructions;
@@ -20,6 +21,9 @@ After every block:
 After garbage, with normal knobs back and the buffers cleared, each effect makes sound again.
 
 Stock's own code gets no garbage: it has no protection from it, on any firmware, and the UI can't send it.
+
+A switch is the main loop's work (apply: the card, the plugin's code copied into its ITCM area), so
+the memory guard's findings are cleared after each one; every block after it is checked in full.
 """
 import argparse
 import math
@@ -105,6 +109,16 @@ def common_ranges(rig):
     return blocks + [stack, (OBJECT, OBJECT + 0x1000)] + state_ranges(rig)
 
 
+def switches_outside_the_guard(rig, problems):
+    """rig.active as apply() runs it: in the main loop, so what it touches isn't the interrupt's"""
+    active = rig.active
+
+    def switch(kind, which):
+        active(kind, which)
+        problems.clear()
+    rig.active = switch
+
+
 def run_block(rig, rng, x, problems, name, block):
     """One block with the checks every block gets."""
     if rng.random() < 0.01:
@@ -140,6 +154,7 @@ def reverb_session(axf, seed, blocks):
         buffers.append((s.addr, s.addr + s.size))
     ranges = common_ranges(rig) + buffers
     problems = guard(rig, ranges, ranges + [(0x60000000, 0x61000000), (0, 0x20000)])
+    switches_outside_the_guard(rig, problems)
     which = 4
     rig.active("reverb", which)
     rig.reset()
@@ -204,6 +219,7 @@ def delay_session(axf, seed, blocks):
     ranges = common_ranges(rig) + [(s.addr, s.addr + s.size)]
     z = m.sym("_ZL9zeroblock")   # read in place of a missing input
     problems = guard(rig, ranges, ranges + [(0x60000000, 0x61000000), (0, 0x20000), (z.addr, z.addr + z.size)])
+    switches_outside_the_guard(rig, problems)
     which = 2
     rig.active("delay", which)
     rig.clear()

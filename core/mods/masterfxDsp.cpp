@@ -27,9 +27,14 @@ static_assert(sizeof(ReverbKnobs) == sizeof(PtmfxReverbKnobs) && offsetof(Reverb
 static_assert(sizeof(DelayKnobs) == sizeof(PtmfxDelayKnobs) && offsetof(DelayKnobs, filterPole) == offsetof(PtmfxDelayKnobs, filter_pole) &&
               offsetof(DelayKnobs, feedback) == offsetof(PtmfxDelayKnobs, feedback) &&
               offsetof(DelayKnobs, pingpong) == offsetof(PtmfxDelayKnobs, pingpong));
+static_assert(sizeof(DynamicsKnobs) == sizeof(PtmfxDynamicsKnobs) &&
+              offsetof(DynamicsKnobs, threshold) == offsetof(PtmfxDynamicsKnobs, threshold) &&
+              offsetof(DynamicsKnobs, keyOn) == offsetof(PtmfxDynamicsKnobs, key_on));
 
 uint8_t activeReverb = 0;
 uint8_t activeDelay = 0;
+uint8_t activeDynamics = 0;
+AudioEffectLimiter* limiters[2] = {};
 
 namespace
 {
@@ -92,6 +97,25 @@ MFX_ITCM bool delayProcess(const DelayKnobs& knobs,
         all |= in[i] | outLeft[i] | outRight[i];
     }
     return all == 0;
+}
+
+MFX_ITCM float dynamicsProcess(const DynamicsKnobs& knobs,
+                               int16_t* left,
+                               int16_t* right,
+                               const int16_t* keyLeft,
+                               const int16_t* keyRight)
+{
+    float gain = 1.0f;
+    if (activeDynamics != 1)
+    {
+        return gain; // the main loop is changing the slot: the master as it is
+    }
+    PtmfxBlock b;
+    blockFor(b, left, right, nullptr, &knobs);
+    b.key_left = keyLeft;
+    b.key_right = keyRight;
+    plugins::process(plugins::kDynamics, b, &gain); // bypassed: the master passes through
+    return gain;
 }
 
 void reverbCleared()

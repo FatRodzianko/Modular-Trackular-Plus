@@ -112,6 +112,8 @@ const void* menuSetup(uint8_t slot);
 // The firmware's start of the plugins (masterfx/masterfxPluginsCe.cpp): the pack onto the card,
 // the list.
 void startPlugins(FileIo& io);
+// The dynamics slot's memory to zeros (main loop, with the slot stopped)
+void clearDynamicsMemory();
 
 } // namespace masterfx
 } // namespace mods

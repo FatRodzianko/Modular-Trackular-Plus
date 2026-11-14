@@ -14,6 +14,14 @@ test_masterfx.py checks each effect against 1.2.0 on its own. This one checks wh
 - project: make_masterfx_test_project.py's output through the firmware's readers.
 - play: that project opened through CE's load steps, Play pressed, and TrackerImpl's real audio
   interrupt run, so the sequencer plays the notes. On both builds, with each effect.
+
+The mods build may be either kind of firmware, and the checks speak in masterfx-1.x's list indices
+(0 is Stock). Up to masterfx-1.x the record holds those indices and activeReverb and activeDelay say
+which effect runs. From masterfx-2.0 the record holds the pack's file for each index, the lists come
+from the card and the hook's byte only says a plugin runs: these helpers write and read the files,
+and what plays is the runtime's installed file. The card's /MasterFX is listed as the firmware lists
+it, through mods::update (the main loop's step that starts the runtime once the mod is On), with the
+mods' file access pointed at the rig's card as mods::init does.
 """
 import random
 import struct
@@ -21,6 +29,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
+from masterfx_runtime import DELAY_FILES, REVERB_FILES, START, has_plugins  # noqa: E402
 from sound_rig import PlayRig, SoundRig, find_project_path, peak, set_names  # noqa: E402
 from unicorn import UC_HOOK_MEM_WRITE  # noqa: E402
 from unicorn.arm_const import UC_ARM_REG_PC, UC_ARM_REG_S0  # noqa: E402
@@ -47,20 +56,89 @@ def check(ok, what):
         failures += 1
 
 
+SLOT_SIZE = 56                      # masterfx::SlotSetting: the file (48), two own knobs
+FILE_IO = "_ZN4mods12_GLOBAL__N_16fileIoE"
+SLOTS = "_ZN4mods8masterfx7plugins12_GLOBAL__N_15slotsE"    # the runtime's SlotState[3]
+
+
+def files_of(slot):
+    return REVERB_FILES if slot == 0 else DELAY_FILES
+
+
+def main_loop(r):
+    """mods::update, the main loop's step, on the plugin firmware: it lists the card and applies the
+    project's plugins once the mod is On. The mods' file access on the rig's card first, as
+    mods::init leaves it (a SoundRig doesn't run init)."""
+    m = r.m
+    if not has_plugins(m):
+        return
+    if m.r32(m.addr(FILE_IO) + 4) == 0:
+        m.w32(m.addr(FILE_IO) + 4, r.sd.obj)
+    m.call(m.addr("_ZN4mods6updateEv"), max_insns=400_000_000)
+
+
+def write_choice(r, slot, index):
+    """masterfx-1.x's index into settings: the index itself, or on the plugin firmware the pack's file
+    for it (an index past the list: a file the card doesn't have)"""
+    m = r.m
+    if not has_plugins(m):
+        m.write(m.addr(SETTINGS) + slot, bytes([index]))
+        return
+    files = files_of(slot)
+    name = files[index] if index < len(files) else f"Gone{index}.ptmfx"
+    m.write(m.addr(SETTINGS) + SLOT_SIZE * slot, name.encode() + b"\0" * (48 - len(name)))
+
+
+def set_choice(r, slot, index):
+    """A choice as the test wrote it into settings before an effect page opened: on the plugin
+    firmware the page's words come from the installed plugin, so the choice is applied too"""
+    write_choice(r, slot, index)
+    if has_plugins(r.m):
+        r.m.call(r.m.addr("_ZN4mods8masterfx5applyEv"), max_insns=400_000_000)
+
+
 def set_mod(r, on, reverb=None, delay=None):
     """The switch as Project Settings changes it, and the choices as Config's lines do."""
     m = r.m
     if reverb is not None:
-        m.write(m.addr(SETTINGS), bytes([reverb]))
+        write_choice(r, 0, reverb)
     if delay is not None:
-        m.write(m.addr(SETTINGS) + 1, bytes([delay]))
+        write_choice(r, 1, delay)
     m.write(m.addr(SWITCHES) + MASTERFX, bytes([1 if on else 0]))
     if "_ZN4mods28projectMasterfxSwitchChangedEv" in r.syms:
-        m.call(m.addr("_ZN4mods28projectMasterfxSwitchChangedEv"), max_insns=50_000_000)
+        m.call(m.addr("_ZN4mods28projectMasterfxSwitchChangedEv"), max_insns=400_000_000)
+    main_loop(r)
 
 
 def settings(r):
-    return tuple(r.m.read(r.m.addr(SETTINGS), 2))
+    """The record's choices as masterfx-1.x's indices (-1: a file that isn't the pack's)"""
+    m = r.m
+    if not has_plugins(m):
+        return tuple(m.read(m.addr(SETTINGS), 2))
+    out = []
+    for slot in (0, 1):
+        name = m.cstr(m.addr(SETTINGS) + SLOT_SIZE * slot, 48)
+        out.append(files_of(slot).index(name) if name in files_of(slot) else -1)
+    return tuple(out)
+
+
+def playing(r):
+    """What the reverb and delay objects' hooks run, as masterfx-1.x's indices (0: CE's own). Reads
+    memory only, so a watch can call it while the firmware runs: on the plugin firmware, the
+    runtime's slot (its active byte, then the file at the end of its SlotState, as plugins::file
+    reads it)."""
+    m = r.m
+    active = (m.r8(m.addr("_ZN4mods8masterfx12activeReverbE")), m.r8(m.addr("_ZN4mods8masterfx11activeDelayE")))
+    if not has_plugins(m):
+        return active
+    slots = r.syms[SLOTS]
+    size = slots.size // 3
+    out = []
+    for slot in (0, 1):
+        base = slots.addr + size * slot
+        name = m.cstr(base + size - 48, 48) if active[slot] and m.r8(base) else ""
+        out.append(files_of(slot).index(name) if name in files_of(slot) else -1)
+    return tuple(out)
 
 
 class MasterPage:
@@ -98,6 +176,10 @@ class MasterPage:
         self.page = m.addr(self.PAGE)
         m.call(m.addr(self.INIT), self.page, max_insns=20_000_000)
         self._watch_display_calls()
+        if has_plugins(m) and self.PAGE == "masterParams":
+            # On the unit the first screen has started masterfx before this page can open, and the
+            # plugin firmware's pages show what is installed, which waits for that
+            m.call(m.addr("_ZN4mods15masterfxStartedEv"), max_insns=50_000_000)
         self._find_controls()
 
     def _catch_display_commands(self):
@@ -324,7 +406,7 @@ def test_ui(mods, ref):
         6: ("Reverb: Reverse", "Length", "Tone", "Release"),
     }
     for choice, (title, size, damp, diffusion) in words.items():
-        p.m.write(p.m.addr(SETTINGS), bytes([choice]))
+        set_choice(p.r, 0, choice)
         p.take_log()
         p.press("reverb")
         log = p.take_log()
@@ -337,7 +419,7 @@ def test_ui(mods, ref):
         check(second.get(label0 + 1) not in REVERBS and second.get(label0 + 2) not in DELAYS,
               f"{REVERBS[choice]}: the Master page's choice isn't left in a label's second line")
         p.press("cancel")
-    p.m.write(p.m.addr(SETTINGS), bytes([0]))
+    set_choice(p.r, 0, 0)
     p.take_log()
     p.press("reverb")
     log = p.take_log()
@@ -346,7 +428,7 @@ def test_ui(mods, ref):
 
     words = {1: ("Delay: Tape", "Feedback", "Filter"), 2: ("Delay: BBD", "Feedback", "Filter")}
     for choice, (title, feedback, tone) in words.items():
-        p.m.write(p.m.addr(SETTINGS) + 1, bytes([choice]))
+        set_choice(p.r, 1, choice)
         p.take_log()
         p.press("delay")
         log = p.take_log()
@@ -367,7 +449,8 @@ def test_ui(mods, ref):
     check(stock_title == ref_title, f"Stock reverb page: CE's title ({stock_title})")
 
     # the lists are gone from every other page
-    p.m.write(p.m.addr(SETTINGS), bytes([4, 2]))
+    set_choice(p.r, 0, 4)
+    set_choice(p.r, 1, 2)
     p.take_log()
     master = set(p.shown())
     ref_page = MasterPage(ref)
@@ -478,8 +561,7 @@ def test_graph(mods, ref):
     set_mod(r, True, 4, 2)
 
     def active():
-        return (r.m.read(r.m.addr("_ZN4mods8masterfx12activeReverbE"), 1)[0],
-                r.m.read(r.m.addr("_ZN4mods8masterfx11activeDelayE"), 1)[0])
+        return playing(r)
     check(active() == (0, 0), "before the first screen: the choice waits, Stock runs")
     r.m.call(r.m.addr("_ZN4mods15masterfxStartedEv"), max_insns=50_000_000)
     check(active() == (4, 2), f"the first screen starts it {active()}")
@@ -530,6 +612,141 @@ def test_graph(mods, ref):
         late = [p - q for p, q in zip(b[0][128 * 60:], dry[1][0][128 * 60:])]
         check(peak(late) > 8, f"{DELAYS[delay]}: a send reaches it, and it repeats after the note (peak {peak(late)} over the dry sound)")
         check(b[0] != b[1], f"{DELAYS[delay]}: PingPong On, left and right differ")
+
+
+DYNAMICS = 2                        # the dynamics slot
+LIMITERS = "_ZN4mods8masterfx8limitersE"
+ACTIVE_DYNAMICS = "_ZN4mods8masterfx14activeDynamicsE"
+PROCESS = "_ZN4mods8masterfx7plugins7processENS1_4SlotER10PtmfxBlockPf"
+
+
+UNSET = struct.pack("<I", 0x7FC00000)  # masterfx.cpp's unset(): a knob at the plugin's default
+
+
+def set_dynamics(r, file, knobs=None):
+    """The dynamics slot's file in settings, as masterfx::choose leaves it (the own knobs unset, or
+    `knobs`), then applied"""
+    m = r.m
+    own = b"".join(UNSET if k is None else struct.pack("<f", k) for k in (knobs or (None, None)))
+    m.write(m.addr(SETTINGS) + SLOT_SIZE * DYNAMICS, file.encode() + b"\0" * (48 - len(file)) + own)
+    m.call(m.addr("_ZN4mods8masterfx5applyEv"), max_insns=400_000_000)
+
+
+def own_knobs(r):
+    """The dynamics slot's own knobs as the record holds them"""
+    return struct.unpack("<2f", r.m.read(r.m.addr(SETTINGS) + SLOT_SIZE * DYNAMICS + 48, 8))
+
+
+def limiter_knobs(r, threshold=32767, sidechain=0):
+    """CE's Limiter page, through the engine's setters (the same on both builds)"""
+    m = r.m
+    m.call(m.addr("_ZN11audioEngine19setLimiterThresholdEt"), r.engine, threshold, max_insns=5_000_000)
+    m.call(m.addr("_ZN11audioEngine19setLimiterSidechainEh"), r.engine, sidechain, max_insns=5_000_000)
+
+
+def meter(r):
+    """What the Limiter page's Gain Reduce meter reads from each object"""
+    m = r.m
+    out = []
+    for i in (0, 1):
+        obj = m.r32(m.addr(LIMITERS) + 4 * i)
+        m.call(m.addr("_ZN18AudioEffectLimiter20getAverageGainChangeEv"), obj)
+        out.append(struct.unpack("<f", struct.pack("<I", m.uc.reg_read(UC_ARM_REG_S0) & 0xFFFFFFFF))[0])
+    return out
+
+
+def test_dynamics(mods, ref):
+    print("-- dynamics --")
+    syms = SoundRig(mods).syms
+    if START not in syms:
+        print("SKIP the dynamics slot: firmware from before the plugins (masterfx-1.x)")
+        return
+    if LIMITERS not in syms:
+        check(False, "the plugin firmware has the dynamics slot")
+        return
+    loud = 6000                      # CE's threshold knob, well under the note's peak
+
+    def graph(axf, file=None, threshold=32767, sidechain=0):
+        g = Graph(axf)
+        if axf == mods:
+            set_mod(g, True, 0, 0)
+            if file is not None:
+                set_dynamics(g, file)
+        limiter_knobs(g, threshold, sidechain)
+        return g
+
+    # Stock: CE's limiter, untouched
+    base = phrase(graph(ref))
+    check(phrase(graph(mods, "")) == base, "Stock in the dynamics slot: the reference build, sample for sample")
+    hot = phrase(graph(ref, threshold=loud))
+    check(phrase(graph(mods, "", threshold=loud)) == hot, "Stock with the threshold down: the reference build, sample for sample")
+    note_peak = peak(base[0][0])
+    check(note_peak > 2000, f"the note plays (peak {note_peak} at the output, after CE's master volume)")
+
+    # Glue, the threshold at the top: nothing to do. CE's limiter delays the master by 5 samples
+    # (LIMITER_DELAY) and the plugin doesn't, so the plugin's master is CE's 5 samples sooner.
+    g = graph(mods, "Glue.ptmfx")
+    m = g.m
+    check(m.r8(m.addr(ACTIVE_DYNAMICS)) == 1, "Glue chosen: the dynamics hook runs the plugin")
+    check(own_knobs(g) == (4.0, 0.0), f"its own knobs at its defaults, Ratio 4 and Makeup 0 {own_knobs(g)}")
+    calls = []
+    g.watch(m.addr(PROCESS), lambda mm: calls.append(mm.arg(0)) if mm.arg(0) == DYNAMICS else None)
+    a, b = phrase(g)
+    blocks = len(a[0]) // 128 + len(b[0]) // 128
+    check(calls.count(DYNAMICS) == blocks, f"once a block, from the left object only ({calls.count(DYNAMICS)} calls in {blocks} blocks)")
+    for side in (0, 1):
+        mine = a[side] + b[side]
+        ce = base[0][side] + base[1][side]
+        check(mine[:-5] == ce[5:], f"threshold at the top, side {side}: CE's master 5 samples sooner, sample for sample")
+    check(not g.failures, "Glue: no asserts")
+
+    # Glue, the threshold down: both sides turned down, the meter shows it
+    g = graph(mods, "Glue.ptmfx", threshold=loud)
+    a, b = phrase(g, tail=40)
+    gains = meter(g)
+    for side in (0, 1):
+        check(peak(a[side][128 * 20:]) < 0.8 * peak(base[0][side][128 * 20:]),
+              f"threshold down, side {side}: the held note turned down (peak {peak(a[side][128 * 20:])} against {peak(base[0][side][128 * 20:])})")
+    check(gains[0] == gains[1] and 0.0 < gains[0] < 0.95, f"the meter: the plugin's gain on both objects {gains}")
+
+    # A key that is silent: nothing to duck, though the master is over the threshold
+    g = graph(mods, "Glue.ptmfx", threshold=loud, sidechain=1)   # sample track 1, which plays nothing
+    a, b = phrase(g)
+    for side in (0, 1):
+        mine = a[side] + b[side]
+        ce = base[0][side] + base[1][side]
+        check(mine[:-5] == ce[5:], f"a silent key, side {side}: the master untouched, CE's 5 samples sooner")
+
+    # CE's resetLimiter (Sample Editor, Sample Recorder): the slot's memory cleared with the master
+    # passed through, then the plugin starts over
+    g = graph(mods, "Glue.ptmfx", threshold=loud)
+    m = g.m
+    seen = []
+    g.watch(m.addr("_ZN4mods8masterfx19clearDynamicsMemoryEv"), lambda mm: seen.append(("clear", m.r8(m.addr(ACTIVE_DYNAMICS)))))
+    g.watch(m.addr("_ZN4mods8masterfx7plugins7clearedENS1_4SlotE"),
+            lambda mm: seen.append(("cleared", mm.arg(0), m.r8(m.addr(ACTIVE_DYNAMICS)))))
+    m.call(m.addr("_ZN11audioEngine12resetLimiterEv"), g.engine, max_insns=50_000_000)
+    check(seen == [("clear", 2), ("cleared", DYNAMICS, 2)] and m.r8(m.addr(ACTIVE_DYNAMICS)) == 1,
+          f"resetLimiter: memory cleared and the plugin reset with the master passed through, then it runs again {seen}")
+
+    # Back to Stock: CE's limiter plays again, from its power-up state
+    g = graph(mods, "Glue.ptmfx")
+    phrase(g)
+    set_dynamics(g, "")
+    check(g.m.r8(g.m.addr(ACTIVE_DYNAMICS)) == 0, "Stock again: CE's limiter")
+    again = phrase(g)
+    fresh = graph(mods, "")
+    phrase(fresh)
+    check(again == phrase(fresh), "Stock after Glue: as if Glue had never played")
+
+    # The mod Off: CE's limiter
+    g = graph(mods, "Glue.ptmfx")
+    set_mod(g, False)
+    check(g.m.r8(g.m.addr(ACTIVE_DYNAMICS)) == 0, "mod Off: CE's limiter")
+
+    # A file that isn't there: CE's limiter
+    g = graph(mods, "Gone.ptmfx")
+    check(g.m.r8(g.m.addr(ACTIVE_DYNAMICS)) == 0, "a missing file: CE's limiter")
 
 
 def buffers(g):
@@ -630,7 +847,7 @@ def test_debounce(mods, ref):
     p.press("right")
 
     def active():
-        return m.read(m.addr("_ZN4mods8masterfx12activeReverbE"), 1)[0]
+        return playing(p.r)[0]
     for step in range(3):
         p.encoder(1)
         p.r.now += 50
@@ -702,9 +919,10 @@ def test_project(mods, ref):
     set_names(r, path_at, "Projects", "MFX test")
     m.call(m.addr("_ZN4mods17onProjectOpenCopyEv"), max_insns=30_000_000)
     m.call(m.addr("_ZN4mods17onWorkspaceLoadedEv"), max_insns=50_000_000)
+    main_loop(r)                            # the plugin firmware lists the card when the project turns it On
     on = m.read(m.addr(SWITCHES) + MASTERFX, 1)[0]
     check(on == 1 and settings(r) == (4, 2), f"the project's 1.2.0 masterfx.bin imports: On, Shimmer and BBD ({on}, {settings(r)})")
-    active = tuple(m.read(m.addr("_ZN4mods8masterfx12activeReverbE"), 1)) + tuple(m.read(m.addr("_ZN4mods8masterfx11activeDelayE"), 1))
+    active = playing(r)
     check(active == (4, 2), f"and they play {active}")
 
     # 8 voices, the patches' models, through Synth's own calls
@@ -803,7 +1021,7 @@ def test_play(mods, ref):
 def main():
     mods, ref = Path(sys.argv[1]), Path(sys.argv[2])
     only = sys.argv[3] if len(sys.argv) > 3 else None
-    for name, fn in (("ui", test_ui), ("graph", test_graph), ("stress", test_stress), ("debounce", test_debounce),
+    for name, fn in (("ui", test_ui), ("graph", test_graph), ("dynamics", test_dynamics), ("stress", test_stress), ("debounce", test_debounce),
                      ("project", test_project), ("play", test_play)):
         if only in (None, name):
             fn(mods, ref)

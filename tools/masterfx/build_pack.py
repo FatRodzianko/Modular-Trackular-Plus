@@ -32,6 +32,7 @@ PACK = [
     ("Reverse.ptmfx", "pack.cpp", ["FX_REVERSE"]),
     ("Tape.ptmfx", "pack.cpp", ["FX_TAPE"]),
     ("BBD.ptmfx", "pack.cpp", ["FX_BBD"]),
+    ("Glue.ptmfx", "glue.cpp", []),
 ]
 INC = ROOT / "core" / "mods" / "masterfx" / "masterfxPack.inc"
 

@@ -412,7 +412,7 @@ def order_and_swap(mods):
         # which runs first: the plugins' process calls in a block, by the slot each plugin is in
         r = Rig(mods)
         calls = []
-        r.watch(sym_containing(r.syms, "plugins", "7process").addr, lambda mm: calls.append(mm.uc.reg_read(UC_ARM_REG_R0)))
+        r.watch(sym_containing(r.syms, "synthfx", "plugins", "7process").addr, lambda mm: calls.append(mm.uc.reg_read(UC_ARM_REG_R0)))
         r.m.uc.ctl_flush_tb()
         r.set_instrument(0, e)
         r.note(0, note_for(e), True)
@@ -620,9 +620,9 @@ def rules_and_cost(mods):
 def calls_of(r):
     """Every plugins::process call from now, as (instance, channels), and every plugins::reset's instance"""
     calls, resets = [], []
-    r.watch(sym_containing(r.syms, "plugins", "7process").addr,
+    r.watch(sym_containing(r.syms, "synthfx", "plugins", "7process").addr,
             lambda mm: calls.append((mm.arg(0), mm.arg(3))))
-    r.watch(sym_containing(r.syms, "plugins", "5reset").addr, lambda mm: resets.append(mm.arg(0)))
+    r.watch(sym_containing(r.syms, "synthfx", "plugins", "5reset").addr, lambda mm: resets.append(mm.arg(0)))
     r.m.uc.ctl_flush_tb()
     return calls, resets
 

@@ -7,6 +7,11 @@ Usage: python tools/emu/test_masterfx.py <mods.axf> <reference.axf> [120_rig.elf
 The third file is 1.2.0's patch/masterfx (mf8) linked by itself, with its reverb and delay update()
 at known addresses. With it, each effect must match 1.2.0's output bit for bit.
 
+The mods build may be either kind of firmware. Up to masterfx-1.x the effects are built in and
+activeReverb and activeDelay hold a list index. From masterfx-2.0 they are the default pack's plugins:
+the rig starts the firmware's plugin runtime on a fake card and installs the pack's file for that
+index through it (masterfx_runtime.py), and the same checks run on what comes out of CE's objects.
+
 The graph, the synths and the screens are in test_masterfx_rig.py.
 """
 import math
@@ -17,6 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from machine import Machine  # noqa: E402
+from masterfx_runtime import Runtime, choose, has_plugins  # noqa: E402
 from unicorn import UC_HOOK_CODE  # noqa: E402
 
 BLOCK = 128
@@ -76,6 +82,7 @@ class Rig:
         m.stub_function(m.addr("_ZN11AudioStream8transmitEP18audio_block_structh"), self._transmit)
         m.stub_function(m.addr("_ZN11AudioStream7releaseEP18audio_block_struct"), self._release)
         self.received = 0
+        self.runtime = None                 # the plugin firmware's, started at the first choice
 
     def _receive(self, mm):
         i = mm.arg(1)
@@ -106,8 +113,10 @@ class Rig:
         self.m.write(self.blocks[i] + 4, struct.pack(f"<{BLOCK}h", *samples))
 
     def active(self, kind, which):
-        name = "activeReverb" if kind == "reverb" else "activeDelay"
-        self.m.write(self.m.addr(f"_ZN4mods8masterfx{len(name)}{name}E"), bytes([which]))
+        """masterfx-1.x's choice `which` (0 is Stock), on either kind of firmware"""
+        if self.runtime is None and has_plugins(self.m) and which != 0:
+            self.runtime = Runtime(self.m)
+        choose(self.m, self.runtime, kind, which)
 
 
 class ReverbRig(Rig):
@@ -612,6 +621,9 @@ def switching(mods):
 def placement(mods):
     m = Machine(mods)
     names = {n: s for n, s in m.elf.symbols.items() if "masterfx" in n and not n.endswith("_veneer")}
+    if has_plugins(m):
+        placement_plugins(m, names)
+        return
 
     def find(part):
         return [s for n, s in names.items() if part in n]
@@ -633,6 +645,37 @@ def placement(mods):
               "plate_state_ram", "spring_state_ram", "gated_state_ram", "gated_cache_ram"):
         check(in_dtcm(s), f"{s} is in DTCM")
     # Spring's floats need the first buffer word-aligned
+    sym = m.elf.symbols.get("_ZL21internalRamReverbBuff")
+    check(sym is not None and sym.addr % 4 == 0, "the reverb's first buffer is word-aligned")
+
+
+def placement_plugins(m, names):
+    """The plugin firmware: the interrupt's path and the code areas in ITCM, the slots' state and the
+    float scratch in DTCM, the main loop's tables in SDRAM, and no built-in DSP left"""
+    def one(part):
+        hits = [s for n, s in names.items() if part in n]
+        return hits[0] if len(hits) == 1 else None
+
+    for f in ("13reverbProcess", "12delayProcess", "plugins7processE", "GLOBAL__N_15guardEPf",
+              "GLOBAL__N_17toFloat", "GLOBAL__N_15toQ15", "plugins7clearedE"):
+        s = one(f)
+        check(s is not None and s.addr < 0x20000, f"{f} is in ITCM")
+    s = one("9codeAreasE")
+    check(s is not None and s.addr < 0x20000 and s.addr % 32 == 0 and s.size == 3 * 8192,
+          "the three 8 KB code areas are in ITCM, 32-byte aligned")
+    for part, size in (("11reverbStateE", 1024), ("10delayStateE", 512), ("13dynamicsStateE", 512),
+                       ("7scratchE", 2048), ("12activeReverbE", 1), ("11activeDelayE", 1)):
+        s = one(f"masterfx{'' if 'active' in part else '12_GLOBAL__N_1'}{part}")
+        check(s is not None and 0x20000000 <= s.addr < 0x20070000 and s.size == size and
+              (size < 8 or s.addr % 8 == 0), f"{part} is in DTCM ({size} bytes)")
+    for part in ("GLOBAL__N_17catalogE", "GLOBAL__N_15slotsE", "GLOBAL__N_110loadBufferE",
+                 "GLOBAL__N_114dynamicsMemoryE"):
+        s = one(part)
+        check(s is not None and 0x80000000 <= s.addr < 0x84000000, f"{part} is in SDRAM")
+    gone = [n for n in names if any(f in n for f in ("fv_process", "plate_process", "spring_process",
+                                                      "shimmer_process", "tape_process", "bbd_process",
+                                                      "gated_process", "_state_ram"))]
+    check(not gone, f"no built-in DSP left in the firmware {gone[:4]}")
     sym = m.elf.symbols.get("_ZL21internalRamReverbBuff")
     check(sym is not None and sym.addr % 4 == 0, "the reverb's first buffer is word-aligned")
 
