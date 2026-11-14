@@ -245,7 +245,7 @@ void testSettingEdited()
     swing::settings.amount = 5;
 #endif
 #if MT_HAS_MASTERFX
-    masterfx::settings.reverb = 1;
+    masterfx::settings.slot[masterfx::kReverb].file[0] = 'P'; // a file name: an edit
 #endif
     registry::settingEdited(store);
 

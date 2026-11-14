@@ -1039,8 +1039,8 @@ static void functDelete()
         {
             case 0: setDefaultMasterVolume(); break;
 #if MT_HAS_MASTERFX // MT: back to Stock
-            case 1: changeMasterfxReverb(-mods::masterfx::kReverbCount); break;
-            case 2: changeMasterfxDelay(-mods::masterfx::kDelayCount); break;
+            case 1: changeMasterfxReverb(-mods::masterfx::choiceCount(mods::masterfx::kReverb)); break;
+            case 2: changeMasterfxDelay(-mods::masterfx::choiceCount(mods::masterfx::kDelay)); break;
 #endif
             case 5: setDefaultSaturationType(); break;
             case 6: setDefaultBassBoost(); break;
@@ -2356,20 +2356,24 @@ void changeSaturationType(int16_t value)
 }
 
 #if MT_HAS_MASTERFX // MT:
+// A step through the slot's list (Stock, the card's plugins, then Missing if the project's file
+// isn't there); the list can change with the choice (Missing goes), so it is shown again
+static void changeMasterfxSlot(uint8_t slot, int16_t value)
+{
+    const int to = clamp<int>(mods::masterfx::choice(slot) + value, 0, mods::masterfx::choiceCount(slot) - 1);
+    mods::masterfx::choose(slot, static_cast<uint8_t>(to));
+    mods::masterfxChosen();
+    MP->showMasterfxLists();
+}
+
 static void changeMasterfxReverb(int16_t value)
 {
-    mods::masterfx::settings.reverb =
-      clamp<int>(mods::masterfx::settings.reverb + value, 0, mods::masterfx::kReverbCount - 1);
-    mods::masterfxChosen();
-    MP->showMasterfxChoices();
+    changeMasterfxSlot(mods::masterfx::kReverb, value);
 }
 
 static void changeMasterfxDelay(int16_t value)
 {
-    mods::masterfx::settings.delay =
-      clamp<int>(mods::masterfx::settings.delay + value, 0, mods::masterfx::kDelayCount - 1);
-    mods::masterfxChosen();
-    MP->showMasterfxChoices();
+    changeMasterfxSlot(mods::masterfx::kDelay, value);
 }
 #endif
 

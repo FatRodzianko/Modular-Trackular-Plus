@@ -1,5 +1,5 @@
 /*
- * gated_dsp.h: in CE's reverb slot. Included once, by ../masterfxDsp.cpp, after freeverb_dsp.h.
+ * gated_dsp.h: in CE's reverb slot. Included by pack.cpp, inside a struct, after freeverb_dsp.h and tape_dsp.h.
  *
  * Not a reverb behind a noise gate, but what the classic digital units (the AMS RMX16's
  * "non-linear" programs) did: a dense burst of reflections that lasts exactly as long as
@@ -38,7 +38,7 @@
 #define GT_TAPS             20u
 #define GT_GROUP            5u              /* taps summed per pass */
 static_assert(GT_TAPS % GT_GROUP == 0 && GT_GROUP == 5u, "the taps go in groups of five");
-static const float gt_pos[2][GT_TAPS] = {   /* each tap's place in the gate, 0..1 */
+MFX_TABLE float gt_pos[2][GT_TAPS] = {   /* each tap's place in the gate, 0..1 */
     {0.0409f, 0.0740f, 0.1287f, 0.1665f, 0.2276f, 0.2884f, 0.3231f, 0.3902f, 0.4404f, 0.4836f,
      0.5398f, 0.5591f, 0.6100f, 0.6804f, 0.7286f, 0.7670f, 0.8111f, 0.8892f, 0.9098f, 0.9832f},
     {0.0394f, 0.0627f, 0.1383f, 0.1649f, 0.2186f, 0.2823f, 0.3225f, 0.3759f, 0.4176f, 0.4861f,
@@ -92,18 +92,18 @@ struct gated_state {
     uint32_t wp;                            /* the allpasses' ring position */
     float lp_x[2], lp_y[2];                 /* the Damping knob's lowpass */
 };
-static struct gated_state gated_state_ram;
+MFX_STATE struct gated_state gated_state_ram;
 #define GT (&gated_state_ram)
 
 #define GT_RD(off)          ((int32_t)ap[(wp + (off)) & GT_AP_MASK])
 #define GT_WR(off, v)       (ap[(wp + (off)) & GT_AP_MASK] = sat16i(v))
 
-static inline int16_t sat16i(int32_t v)
+MFX_FN inline int16_t sat16i(int32_t v)
 {
     return (int16_t)__ssat(v, 16);
 }
 
-static inline int32_t gt_diffuse(int32_t v) /* v x 0.6, Q15, rounded toward zero: the
+MFX_FN inline int32_t gt_diffuse(int32_t v) /* v x 0.6, Q15, rounded toward zero: the
                                              * allpasses quantize inside their feedback,
                                              * and magnitude truncation is what keeps a
                                              * +-1 from circling forever (a limit cycle)
@@ -126,11 +126,11 @@ struct gated_cache {
     uint32_t back[2][GT_TAPS];              /* each tap: samples back ... */
     int32_t gain[2][GT_TAPS];               /* ... and its gain, Q14 */
 };
-static struct gated_cache gated_cache_ram;
+MFX_STATE struct gated_cache gated_cache_ram;
 #define GTC (&gated_cache_ram)
 
 /* Lay out the lines in the (cleared) buffers. */
-static void gated_init(uint32_t buf_l, uint32_t buf_r)
+MFX_FN void gated_init(uint32_t buf_l, uint32_t buf_r)
 {
     GT->buf[0] = buf_l;
     GT->buf[1] = buf_r;
@@ -142,7 +142,7 @@ static void gated_init(uint32_t buf_l, uint32_t buf_r)
 }
 
 /* the gate's level at place t (0..1) of the length */
-static inline float gt_shape(float t, float attack, float release, int reverse)
+MFX_FN inline float gt_shape(float t, float attack, float release, int reverse)
 {
     float g = reverse ? t : (t < attack ? t / attack : 1.0f);
     if (release > 0.0f && t > 1.0f - release)
@@ -152,7 +152,7 @@ static inline float gt_shape(float t, float attack, float release, int reverse)
 
 /* Run the burst over one block: the stereo send in place, as the other reverbs;
  * returns the average wet level. */
-MFX_FLASH static float gated_process(const ReverbKnobs *obj, int16_t *left, int16_t *right, int reverse)
+MFX_FLASH MFX_FN float gated_process(const ReverbKnobs *obj, int16_t *left, int16_t *right, int reverse)
 {
     int16_t *line = (int16_t *)GT->buf[0], *ap = (int16_t *)GT->buf[1];
     float size = fclamp(obj->size, 0.0f, 1.0f);

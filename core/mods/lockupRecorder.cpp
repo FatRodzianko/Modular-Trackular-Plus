@@ -12,6 +12,7 @@
 #include "TrackerImpl.h"
 #include "fileManager.h"
 #include "masterfx.h"
+#include "masterfx/masterfxPlugins.h"
 #include "masterfxDsp.h"
 #include "mods.h"
 #include "mtSequencer.h"
@@ -216,14 +217,20 @@ bool lookedForRecord = false;
 Sequencer::enSeqState lastState = Sequencer::SEQ_STATE_STOP;
 uint32_t playStartedMs = 0;
 
-const char* reverbName(uint32_t index)
+// A record keeps whether a slot ran a plugin (masterfxDsp.h); which one is only known now
+const char* reverbName(uint32_t active)
 {
-    return index < mods::masterfx::kReverbCount ? mods::masterfx::kReverbNames[index] : "?";
+    return active ? "a plugin" : "Stock";
 }
 
-const char* delayName(uint32_t index)
+const char* delayName(uint32_t active)
 {
-    return index < mods::masterfx::kDelayCount ? mods::masterfx::kDelayNames[index] : "?";
+    return active ? "a plugin" : "Stock";
+}
+
+const char* slotFile(mods::masterfx::plugins::Slot slot, uint32_t active)
+{
+    return active ? mods::masterfx::plugins::file(slot) : "Stock";
 }
 
 void describeRecord()
@@ -310,8 +317,8 @@ void describePlay(uint32_t nowMs)
                               "%d.\n",
                               static_cast<unsigned long>((nowMs - playStartedMs) / 1000),
                               mods::on(mods::Mod::masterfx) ? "On" : "Off",
-                              reverbName(mods::masterfx::activeReverb),
-                              delayName(mods::masterfx::activeDelay),
+                              slotFile(mods::masterfx::plugins::kReverb, mods::masterfx::activeReverb),
+                              slotFile(mods::masterfx::plugins::kDelay, mods::masterfx::activeDelay),
                               synth.getMaxVoiceCount(0),
                               synth.getMaxVoiceCount(1),
                               synth.getMaxVoiceCount(2),

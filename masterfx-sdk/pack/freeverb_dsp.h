@@ -1,5 +1,5 @@
 /*
- * freeverb_dsp.h: Freeverb in CE's reverb slot. Included once, by ../masterfxDsp.cpp.
+ * freeverb_dsp.h: Freeverb in CE's reverb slot. Included by pack.cpp, inside a struct.
  *
  * Freeverb (Jezar at Dreampoint, public domain): the send is summed to mono and fed to
  * 8 parallel comb filters with a one-pole lowpass in their feedback, then 4 series
@@ -43,8 +43,8 @@
 #define PREDELAY_MAX        5000u           /* the stock setter's range */
 #define PRE_RING            (PREDELAY_MAX + 1u)
 
-static const uint16_t comb_len[COMBS] = {1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617};
-static const uint16_t allpass_len[ALLPASSES] = {556, 441, 341, 225};
+MFX_TABLE uint16_t comb_len[COMBS] = {1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617};
+MFX_TABLE uint16_t allpass_len[ALLPASSES] = {556, 441, 341, 225};
 
 /* ---- state ---------------------------------------------------------------------- */
 #define FV_MAGIC            0x56524654u     /* "TFRV": lines laid out for buf_l/buf_r */
@@ -61,23 +61,23 @@ struct fv_state {
     uint16_t pre_split;                     /* ring positions below this are in the left buffer */
     uint32_t pre_l, pre_r;                  /* the ring's two parts: the buffers' unused ends */
 };
-static struct fv_state fv_state_ram;
+MFX_STATE struct fv_state fv_state_ram;
 #define FV (&fv_state_ram)
 
-static inline int16_t sat16(float v)
+MFX_FN inline int16_t sat16(float v)
 {
     return (int16_t)__ssat((int32_t)v, 16);
 }
 
 /* A predelay ring position: the first part is in the left buffer's spare end, the rest
  * in the right buffer's. */
-static inline int16_t *pre_at(uint32_t i)
+MFX_FN inline int16_t *pre_at(uint32_t i)
 {
     return i < FV->pre_split ? (int16_t *)FV->pre_l + i : (int16_t *)FV->pre_r + (i - FV->pre_split);
 }
 
 /* Lay out the delay lines in the two (cleared) buffers. */
-static void fv_init(uint32_t buf_l, uint32_t buf_r)
+MFX_FN void fv_init(uint32_t buf_l, uint32_t buf_r)
 {
     for (uint32_t ch = 0; ch < 2; ch++) {
         uint32_t at = 0, spread = ch ? STEREO_SPREAD : 0;
@@ -107,7 +107,7 @@ static void fv_init(uint32_t buf_l, uint32_t buf_r)
 #define GROUP               4u              /* combs per pass */
 
 /* Samples until the first of n lines wraps, at most `left`. */
-static inline uint32_t run_length(const uint32_t *pos, const uint32_t *len, uint32_t n, uint32_t left)
+MFX_FN inline uint32_t run_length(const uint32_t *pos, const uint32_t *len, uint32_t n, uint32_t left)
 {
     for (uint32_t j = 0; j < n; j++)
         if (len[j] - pos[j] < left)
@@ -117,7 +117,7 @@ static inline uint32_t run_length(const uint32_t *pos, const uint32_t *len, uint
 
 /* Four comb filters over the block. first: acc = their sum, else acc += their sum, with
  * the outputs added in comb order as one comb per pass would. */
-static inline __attribute__((always_inline)) void comb_group(struct line *c, int16_t *buf, float *store_p,
+MFX_FN inline __attribute__((always_inline)) void comb_group(struct line *c, int16_t *buf, float *store_p,
                                                              const float *in, float *acc, int first,
                                                              float feedback, float damp1, float damp2)
 {
@@ -160,7 +160,7 @@ static inline __attribute__((always_inline)) void comb_group(struct line *c, int
 }
 
 /* The four allpasses in series over the block, in place. */
-static void allpass_chain(struct line *a, int16_t *buf, float *io, float feedback)
+MFX_FN void allpass_chain(struct line *a, int16_t *buf, float *io, float feedback)
 {
     uint32_t pos[ALLPASSES], len[ALLPASSES];
     for (uint32_t k = 0; k < ALLPASSES; k++) {
@@ -197,7 +197,7 @@ static void allpass_chain(struct line *a, int16_t *buf, float *io, float feedbac
 }
 
 /* lo..hi; NaN (from a corrupted project) counts as lo, so filter states never get NaN */
-static float fclamp(float v, float lo, float hi)
+MFX_FN float fclamp(float v, float lo, float hi)
 {
     if (!(v >= lo))
         return lo;
@@ -205,7 +205,7 @@ static float fclamp(float v, float lo, float hi)
 }
 
 /* Process one block of the stereo send in place; returns the average output level. */
-MFX_FLASH static float fv_process(const ReverbKnobs *obj, int16_t *left, int16_t *right, int muted)
+MFX_FLASH MFX_FN float fv_process(const ReverbKnobs *obj, int16_t *left, int16_t *right, int muted)
 {
     int16_t *buf[2] = {(int16_t *)FV->buf_l, (int16_t *)FV->buf_r};
     int16_t *io[2] = {left, right};

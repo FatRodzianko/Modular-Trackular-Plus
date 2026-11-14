@@ -1,13 +1,19 @@
 // Modular-Trackular mods. SPDX-License-Identifier: MIT
 //
-// Host tests for the masterfx mod's settings: the project record, the 1.2.0 side file
-// and its import. The effects and the screens are tested in tools/emu/test_masterfx.py.
+// Host tests for the masterfx mod's settings: the project record (version 2: a plugin file and
+// two own knobs per slot; version 1's indices converted), the 1.2.0 side file and its import, and
+// the lists with no card. The runtime is tested in test_masterfx_plugins.cpp, the effects and the
+// screens in tools/emu/test_masterfx.py.
+//
+// masterfx-2.0 changed the record on purpose (indices became file names), so the checks that
+// read settings.reverb and settings.delay now read the slots' files.
 // Build and run with `make -C core/mods/tests`.
 
 #include "masterfx.h"
 #include "modsProject.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -79,57 +85,173 @@ std::vector<uint8_t> sideFile(uint8_t reverb, uint8_t delay)
 
 const char kPath[] = "/Projects/Song/masterfx.bin";
 
+// The slots' files as version 1's indices: -1 if a file isn't one of version 1's
+int reverbIndex()
+{
+    for (int i = 0; i < kV1ReverbCount; i++)
+    {
+        if (strcmp(settings.slot[kReverb].file, kV1Reverbs[i]) == 0)
+        {
+            return i;
+        }
+    }
+    return -1;
+}
+
+int delayIndex()
+{
+    for (int i = 0; i < kV1DelayCount; i++)
+    {
+        if (strcmp(settings.slot[kDelay].file, kV1Delays[i]) == 0)
+        {
+            return i;
+        }
+    }
+    return -1;
+}
+
+bool is(int reverb, int delay)
+{
+    return reverbIndex() == reverb && delayIndex() == delay && settings.slot[kDynamics].file[0] == 0;
+}
+
+void setFile(uint8_t slot, const char* file)
+{
+    memset(settings.slot[slot].file, 0, kFileSize);
+    strncpy(settings.slot[slot].file, file, kFileSize - 1);
+}
+
+void setV1(int reverb, int delay)
+{
+    setFile(kReverb, kV1Reverbs[reverb]);
+    setFile(kDelay, kV1Delays[delay]);
+}
+
+bool knobsUnset(uint8_t slot)
+{
+    return std::isnan(settings.slot[slot].knob[0]) && std::isnan(settings.slot[slot].knob[1]);
+}
+
 void testNames()
 {
-    check(strcmp(kReverbNames[0], "Stock") == 0 && strcmp(kDelayNames[0], "Stock") == 0,
-          "the first choice is Stock");
-    check(strcmp(kReverbNames[4], "Shimmer") == 0 && strcmp(kReverbNames[6], "Reverse") == 0,
+    check(kV1Reverbs[0][0] == 0 && kV1Delays[0][0] == 0, "version 1's first choice is Stock");
+    check(strcmp(kV1Reverbs[4], "Shimmer.ptmfx") == 0 && strcmp(kV1Reverbs[6], "Reverse.ptmfx") == 0,
           "reverbs in 1.2.0's order");
-    check(strcmp(kDelayNames[1], "Tape") == 0 && strcmp(kDelayNames[2], "BBD") == 0,
+    check(strcmp(kV1Delays[1], "Tape.ptmfx") == 0 && strcmp(kV1Delays[2], "BBD.ptmfx") == 0,
           "delays in 1.2.0's order");
 }
 
 void testRecord()
 {
-    uint8_t buffer[256];
+    uint8_t buffer[512];
     Store store(buffer, sizeof(buffer), "TEST");
     store.clear();
 
-    settings.reverb = 3;
-    settings.delay = 2;
+    setV1(3, 2);
     load(store);
-    check(settings.reverb == kStock && settings.delay == kStock, "no record: Stock and Stock");
+    check(is(kStock, kStock), "no record: Stock everywhere");
+    check(knobsUnset(kReverb) && knobsUnset(kDelay) && knobsUnset(kDynamics), "with the knobs unset");
     check(!storeIfEdited(store), "unchanged: nothing stored");
     check(store.empty(), "and no record written");
 
-    settings.reverb = 4;
-    settings.delay = 2;
+    setV1(4, 2);
     check(storeIfEdited(store), "edited: stored");
     check(!storeIfEdited(store), "stored once");
+    uint8_t version = 0;
+    uint16_t length = 0;
+    check(store.find(kRecord, &version, &length) != nullptr && version == 2 && length == 168,
+          "as version 2, 168 bytes");
     settings = Settings{};
     load(store);
-    check(settings.reverb == 4 && settings.delay == 2, "the record comes back");
+    check(is(4, 2), "the record comes back");
+    check(knobsUnset(kReverb), "and the knobs stay unset");
 
-    settings.reverb = 0;
+    settings.slot[kDelay].knob[1] = 0.25f;
+    check(storeIfEdited(store), "an own knob is an edit");
+    settings = Settings{};
+    load(store);
+    check(settings.slot[kDelay].knob[1] == 0.25f && std::isnan(settings.slot[kDelay].knob[0]),
+          "and comes back");
+
+    setFile(kReverb, "");
     check(storeIfEdited(store), "going back to Stock is an edit");
     load(store);
-    check(settings.reverb == 0 && settings.delay == 2, "and the delay stays");
+    check(is(kStock, 2), "and the delay stays");
 
-    const auto loaded = [&](std::vector<uint8_t> record) {
+    setFile(kDynamics, "Glue.ptmfx");
+    check(storeIfEdited(store), "a dynamics plugin is kept");
+    settings = Settings{};
+    load(store);
+    check(strcmp(settings.slot[kDynamics].file, "Glue.ptmfx") == 0, "and comes back");
+    setFile(kReverb, "My reverb with a long name.ptmfx");
+    check(storeIfEdited(store), "any file name");
+    load(store);
+    check(strcmp(settings.slot[kReverb].file, "My reverb with a long name.ptmfx") == 0, "comes back");
+
+    const auto loaded = [&](std::vector<uint8_t> record, uint8_t recordVersion) {
         store.clear();
-        store.put(kRecord, kRecordVersion, record.data(), static_cast<uint16_t>(record.size()));
-        settings.reverb = 1;
-        settings.delay = 1;
+        store.put(kRecord, recordVersion, record.data(), static_cast<uint16_t>(record.size()));
+        setV1(1, 1);
         load(store);
     };
-    loaded({ kReverbCount, 2 });
-    check(settings.reverb == kStock && settings.delay == 2, "a reverb out of range: Stock");
-    loaded({ 3, kDelayCount });
-    check(settings.reverb == 3 && settings.delay == kStock, "a delay out of range: Stock");
-    loaded({ 3 });
-    check(settings.reverb == kStock && settings.delay == kStock, "a short record: Stock and Stock");
-    loaded({ 3, 1, 0 });
-    check(settings.reverb == kStock && settings.delay == kStock, "a long record: Stock and Stock");
+    // Version 1: two indices (masterfx-1.x)
+    loaded({ 4, 2 }, 1);
+    check(is(4, 2), "version 1: its indices as the pack's files");
+    check(knobsUnset(kReverb) && knobsUnset(kDelay) && knobsUnset(kDynamics), "with the knobs unset");
+    loaded({ kV1ReverbCount, 2 }, 1);
+    check(is(kStock, 2), "version 1, a reverb out of range: Stock");
+    loaded({ 3, kV1DelayCount }, 1);
+    check(is(3, kStock), "version 1, a delay out of range: Stock");
+    loaded({ 3 }, 1);
+    check(is(kStock, kStock), "a short record: Stock everywhere");
+    loaded({ 3, 1, 0 }, 1);
+    check(is(kStock, kStock), "a long version 1 record: Stock everywhere");
+
+    // Version 2, damaged
+    std::vector<uint8_t> record(168, 0);
+    memcpy(record.data(), "Plate.ptmfx", 11);
+    loaded(record, 2);
+    check(is(2, kStock), "version 2: its files");
+    check(settings.slot[kReverb].knob[0] == 0.0f, "and its knobs as stored");
+    std::fill(record.begin(), record.begin() + 48, uint8_t{ 'A' });
+    memcpy(record.data() + 56, "Tape.ptmfx", 10);
+    loaded(record, 2);
+    check(is(kStock, 1) && knobsUnset(kReverb), "a file name with no end: that slot is Stock");
+    record.push_back(0);
+    loaded(record, 2);
+    check(is(kStock, kStock), "a long record: Stock everywhere");
+    record.resize(100);
+    loaded(record, 2);
+    check(is(kStock, kStock), "a short version 2 record: Stock everywhere");
+
+    settings = Settings{};
+}
+
+// No card read (the host test's runtime has no catalog): Stock, then Missing for the project's
+// file, which can't be chosen
+void testChoices()
+{
+    uint8_t buffer[512];
+    Store store(buffer, sizeof(buffer), "TEST");
+    store.clear();
+    load(store);
+    check(choiceCount(kReverb) == 1 && strcmp(choiceNames(kReverb)[0], "Stock") == 0 && choice(kReverb) == 0,
+          "no plugins: Stock alone");
+    check(!missing(kReverb), "Stock isn't missing");
+
+    setFile(kDelay, "Tape.ptmfx");
+    refreshChoices();
+    check(choiceCount(kDelay) == 2 && choice(kDelay) == 1 && strcmp(choiceName(kDelay), "Missing: Tape.ptmfx") == 0,
+          "the project's file not on the card: Missing");
+    check(missing(kDelay) && !missing(kReverb), "only that slot is missing");
+    choose(kDelay, 1);
+    check(strcmp(settings.slot[kDelay].file, "Tape.ptmfx") == 0, "choosing Missing keeps the file");
+    choose(kDelay, 5);
+    check(strcmp(settings.slot[kDelay].file, "Tape.ptmfx") == 0, "a choice out of range does nothing");
+    settings.slot[kDelay].knob[0] = 3.0f;
+    choose(kDelay, 0);
+    check(settings.slot[kDelay].file[0] == 0 && knobsUnset(kDelay), "Stock: no file, knobs unset");
+    check(choiceCount(kDelay) == 1 && !missing(kDelay), "and Missing is gone");
 
     settings = Settings{};
 }
@@ -147,7 +269,11 @@ void testImportFile()
     io.files[kPath] = sideFile(4, 2);
     check(importSideFile(io, "/Projects/Song", store), "a choice: the project used the mod");
     load(store);
-    check(settings.reverb == 4 && settings.delay == 2, "its choices");
+    check(is(4, 2), "its choices");
+    uint8_t version = 0;
+    uint16_t length = 0;
+    check(store.find(kRecord, &version, &length) != nullptr && version == 2 && length == 168,
+          "imported as version 2");
 
     store.clear();
     io.files[kPath] = sideFile(0, 1);
@@ -160,19 +286,19 @@ void testImportFile()
     io.files[kPath] = sideFile(0, 0);
     check(!importSideFile(io, "/Projects/Song", store), "Stock and Stock: the mod stays Off");
     load(store);
-    check(settings.reverb == 0 && settings.delay == 0, "with nothing chosen");
+    check(is(kStock, kStock), "with nothing chosen");
 
     store.clear();
     io.files[kPath] = sideFile(2, 3);
     check(importSideFile(io, "/Projects/Song", store), "old Gated delay with a reverb: On");
     load(store);
-    check(settings.reverb == 2 && settings.delay == kStock, "keeps the reverb, plays Stock delay");
+    check(is(2, kStock), "keeps the reverb, plays Stock delay");
 
     store.clear();
     io.files[kPath] = sideFile(0, 3);
     check(!importSideFile(io, "/Projects/Song", store), "old Gated delay alone: stays Off");
     load(store);
-    check(settings.reverb == 0 && settings.delay == kStock, "and is Stock");
+    check(is(kStock, kStock), "and is Stock");
 
     const auto refused = [&](const std::vector<uint8_t>& file, const char* name) {
         store.clear();
@@ -212,7 +338,7 @@ void testImportThroughProject()
         project::loadFromWorkspace(io, store, "/Projects/Song", defaults, set, kModCount);
         load(store);
         check(set[index] == 1, "a 1.2.0 project with a choice: the mod starts On");
-        check(settings.reverb == 4 && settings.delay == 2, "with its choice");
+        check(is(4, 2), "with its choice");
         check(io.files.count(project::kWorkspaceFile) == 1, "written to the Workspace");
 
         // the next load finds Workspace/mods.bin and doesn't import again
@@ -221,8 +347,7 @@ void testImportThroughProject()
         settings = Settings{};
         project::loadFromWorkspace(io, store, "/Projects/Song", defaults, set, kModCount);
         load(store);
-        check(set[index] == 1 && settings.reverb == 4 && settings.delay == 2,
-              "with mods.bin there, no import");
+        check(set[index] == 1 && is(4, 2), "with mods.bin there, no import");
     }
     {
         FakeIo io;
@@ -243,7 +368,7 @@ void testImportThroughProject()
         project::setSwitches(store, set, kModCount);
         settings = Settings{};
         load(store);
-        check(settings.reverb == 4 && settings.delay == 2, "Off keeps the record");
+        check(is(4, 2), "Off keeps the record");
     }
 
     settings = Settings{};
@@ -255,6 +380,7 @@ int main()
 {
     testNames();
     testRecord();
+    testChoices();
     testImportFile();
     testImportThroughProject();
     printf("masterfx: %d checks, %d failures\n", checks, failures);

@@ -1,7 +1,8 @@
 // Modular-Trackular mods. SPDX-License-Identifier: MIT
 //
-// What CE's reverb and delay objects call to run masterfx's effects, in the audio
-// interrupt: no SD, heap, blocking or UI here. The DSP is in masterfx/*_dsp.h.
+// What CE's reverb and delay objects call to run masterfx's plugins, in the audio
+// interrupt: no SD, heap, blocking or UI here. The plugins' runtime is
+// masterfx/masterfxPlugins.h.
 
 #ifndef MODS_MASTERFXDSP_H_
 #define MODS_MASTERFXDSP_H_
@@ -37,13 +38,13 @@ struct DelayKnobs
     uint8_t pingpong;
 };
 
-// What plays: 0 is CE's own, the rest index kReverbNames and kDelayNames. Set by
-// masterfx::apply while the object is blocked.
+// What plays: 0 is CE's own, 1 the slot's plugin. Set by masterfx::apply while the object is
+// blocked.
 extern uint8_t activeReverb;
 extern uint8_t activeDelay;
 
-// One block of the stereo send, in place. Lays the effect out first if its buffers were
-// cleared since it last ran.
+// One block of the stereo send, in place, through the reverb slot's plugin. The buffers are
+// its memory (given at start); a bypassed plugin returns silence.
 void reverbProcess(const ReverbKnobs& knobs,
                    uint16_t* buffer0,
                    uint16_t* buffer1,
@@ -59,8 +60,8 @@ bool delayProcess(const DelayKnobs& knobs,
                   int16_t* outLeft,
                   int16_t* outRight);
 
-// CE's clear of the object's buffers ran, with the object blocked: whichever effect is
-// chosen now starts over in them.
+// CE's clear of the object's buffers ran, with the object blocked: the slot's plugin starts
+// over in them (its reset, before its next block).
 void reverbCleared();
 void delayCleared();
 

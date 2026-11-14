@@ -9,6 +9,7 @@
 
 #if MT_HAS_MASTERFX // MT:
 #include "masterfx.h"
+#include "masterfx/masterfxPlugins.h"
 #endif
 
 static const uint16_t framesPlaces[8][4] = {
@@ -261,36 +262,14 @@ namespace
 strList masterfxReverbList;
 strList masterfxDelayList;
 
-// What the page calls each knob and itself, per effect. Stock's row isn't used: CE's own
-// words stay.
-struct MasterfxReverbWords
-{
-    const char* title;
-    const char* size;
-    const char* damping;
-    const char* diffusion;
-};
-struct MasterfxDelayWords
-{
-    const char* title;
-    const char* feedback;
-    const char* filter;
-};
+// The page's title for a slot's plugin: "Reverb: Shimmer"
+char masterfxTitle[48];
 
-constexpr MasterfxReverbWords kMasterfxReverbWords[mods::masterfx::kReverbCount] = {
-    { "Master Reverb", "Size", "Damping", "Diffusion" },
-    { "Reverb: Freeverb", "Size", "Damping", "Diffusion" },
-    { "Reverb: Plate", "Decay", "Damping", "Diffusion" },
-    { "Reverb: Spring", "Decay", "Damping", "Drip" },
-    { "Reverb: Shimmer", "Decay", "Tone", "Shimmer" },
-    { "Reverb: \"Gated\"", "Length", "Tone", "Release" },
-    { "Reverb: Reverse", "Length", "Tone", "Release" },
-};
-constexpr MasterfxDelayWords kMasterfxDelayWords[mods::masterfx::kDelayCount] = {
-    { "Master Delay", "Feedback", "Filter" },
-    { "Delay: Tape", "Feedback", "Filter" },
-    { "Delay: BBD", "Feedback", "Filter" },
-};
+void showMasterfxTitle(TitleBar* bar, const char* slotWord, uint8_t slot)
+{
+    snprintf(masterfxTitle, sizeof(masterfxTitle), "%s: %s", slotWord, mods::masterfx::choiceName(slot));
+    bar->setTitle(masterfxTitle);
+}
 
 } // namespace
 
@@ -298,12 +277,12 @@ constexpr MasterfxDelayWords kMasterfxDelayWords[mods::masterfx::kDelayCount] = 
 // choices: those columns are empty here, and showDelayScreen gives the lists back.
 void cMasterParams::showMasterfxLists()
 {
-    masterfxReverbList.length = mods::masterfx::kReverbCount;
-    masterfxReverbList.linesCount = mods::masterfx::kReverbCount;
-    masterfxReverbList.data = (char**)mods::masterfx::kReverbNames;
-    masterfxDelayList.length = mods::masterfx::kDelayCount;
-    masterfxDelayList.linesCount = mods::masterfx::kDelayCount;
-    masterfxDelayList.data = (char**)mods::masterfx::kDelayNames;
+    masterfxReverbList.length = mods::masterfx::choiceCount(mods::masterfx::kReverb);
+    masterfxReverbList.linesCount = masterfxReverbList.length;
+    masterfxReverbList.data = (char**)mods::masterfx::choiceNames(mods::masterfx::kReverb);
+    masterfxDelayList.length = mods::masterfx::choiceCount(mods::masterfx::kDelay);
+    masterfxDelayList.linesCount = masterfxDelayList.length;
+    masterfxDelayList.data = (char**)mods::masterfx::choiceNames(mods::masterfx::kDelay);
 
     display.setControlData(delaySyncEnableList, &masterfxReverbList);
     display.setControlData(delaySyncRateList, &masterfxDelayList);
@@ -317,44 +296,55 @@ void cMasterParams::showMasterfxLists()
 
 void cMasterParams::showMasterfxChoices()
 {
-    const mods::masterfx::Settings& chosen = mods::masterfx::settings;
-
-    display.setControlValue(delaySyncEnableList, chosen.reverb);
+    display.setControlValue(delaySyncEnableList, mods::masterfx::choice(mods::masterfx::kReverb));
     display.refreshControl(delaySyncEnableList);
-    display.setControlValue(delaySyncRateList, chosen.delay);
+    display.setControlValue(delaySyncRateList, mods::masterfx::choice(mods::masterfx::kDelay));
     display.refreshControl(delaySyncRateList);
 
     display.setControlValue(label[1], 1);
-    display.setControlText2(label[1], mods::masterfx::kReverbNames[chosen.reverb]);
+    display.setControlText2(label[1], mods::masterfx::choiceName(mods::masterfx::kReverb));
     display.refreshControl(label[1]);
     display.setControlValue(label[2], 1);
-    display.setControlText2(label[2], mods::masterfx::kDelayNames[chosen.delay]);
+    display.setControlText2(label[2], mods::masterfx::choiceName(mods::masterfx::kDelay));
     display.refreshControl(label[2]);
 }
 
+// A plugin's page: its name in the title and its labels for CE's knobs (column i is label i).
+// Stock and a missing plugin keep CE's own words.
 void cMasterParams::showMasterfxReverbWords()
 {
-    if (!mods::on(mods::Mod::masterfx) || mods::masterfx::settings.reverb == mods::masterfx::kStock)
+    namespace pl = mods::masterfx::plugins;
+    if (!mods::on(mods::Mod::masterfx) || !pl::installed(pl::kReverb))
     {
         return;
     }
-    const MasterfxReverbWords& words = kMasterfxReverbWords[mods::masterfx::settings.reverb];
-    titleBar->setTitle(words.title);
-    display.setControlText(label[0], words.size);
-    display.setControlText(label[1], words.damping);
-    display.setControlText(label[3], words.diffusion);
+    showMasterfxTitle(titleBar, "Reverb", mods::masterfx::kReverb);
+    for (uint32_t i = 0; i < pl::kLabels[pl::kReverb]; i++)
+    {
+        const char* text = pl::label(pl::kReverb, i);
+        if (text != nullptr)
+        {
+            display.setControlText(label[i], text);
+        }
+    }
 }
 
 void cMasterParams::showMasterfxDelayWords()
 {
-    if (!mods::on(mods::Mod::masterfx) || mods::masterfx::settings.delay == mods::masterfx::kStock)
+    namespace pl = mods::masterfx::plugins;
+    if (!mods::on(mods::Mod::masterfx) || !pl::installed(pl::kDelay))
     {
         return;
     }
-    const MasterfxDelayWords& words = kMasterfxDelayWords[mods::masterfx::settings.delay];
-    titleBar->setTitle(words.title);
-    display.setControlText(label[4], words.feedback);
-    display.setControlText(label[5], words.filter);
+    showMasterfxTitle(titleBar, "Delay", mods::masterfx::kDelay);
+    for (uint32_t i = 0; i < pl::kLabels[pl::kDelay]; i++)
+    {
+        const char* text = pl::label(pl::kDelay, i);
+        if (text != nullptr)
+        {
+            display.setControlText(label[i], text);
+        }
+    }
 }
 #endif
 

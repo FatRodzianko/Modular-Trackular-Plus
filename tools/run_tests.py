@@ -49,6 +49,11 @@ SYNTHFX_CARD = ROOT / "build" / "device" / "synthfx_card" / "SynthFX"
 # Synth FX phase 1's firmware (commit 42a415e, built with `make plus EDITION_NAME=MT`): the built-in
 # effects a version 1 project played, which test_synthfx.py's as_before compares the plugins with
 SYNTHFX_BEFORE = ROOT / "build" / "emu" / "TrackerPlus_MT_p1.axf"
+# Master FX's default pack (tools/masterfx/build_pack.py, in WSL) and the firmware from before the
+# plugins (commit d9a6795, built with `make plus EDITION_NAME=MT`): the built-in effects that
+# tools/masterfx/test_pack.py compares the pack with
+MASTERFX_PACK = ROOT / "build" / "masterfx" / "pack"
+MASTERFX_BEFORE = ROOT / "build" / "emu" / "TrackerPlus_MT_d9a6795.axf"
 OUT = ROOT / "build" / "test_out"
 
 
@@ -128,6 +133,8 @@ def jobs_for(args, projects):
             inputs=[SYNTHFX_RIG, SYNTHFX_PACK, ROOT / "build" / "synthfx" / "rig"]),
         Job("synthfx pack", ROOT / "tools" / "synthfx" / "test_pack.py", LEVEL_A, SYNTHFX_PACK,
             inputs=[LEVEL_A, SYNTHFX_PACK]),
+        Job("masterfx pack", ROOT / "tools" / "masterfx" / "test_pack.py", MASTERFX_BEFORE, MASTERFX_PACK,
+            inputs=[MASTERFX_BEFORE, MASTERFX_PACK]),
         Job("masterfx objects", e / "test_masterfx.py", mods, ref, *([args.rig] if args.rig else []),
             inputs=both + ((args.rig,) if args.rig else ())),
     ]

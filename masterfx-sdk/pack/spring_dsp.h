@@ -1,5 +1,5 @@
 /*
- * spring_dsp.h: in CE's reverb slot. Included once, by ../masterfxDsp.cpp, after freeverb_dsp.h.
+ * spring_dsp.h: in CE's reverb slot. Included by pack.cpp, inside a struct, after freeverb_dsp.h.
  *
  * A model of a two-spring tank, after the structure in Valimaki, Parker and Abel,
  * "Parametric Spring Reverberation Effect" (J. Audio Eng. Soc., 2010), written from the
@@ -39,9 +39,9 @@
 #define SP_SPRINGS          2u
 #define SP_STAGES           32u             /* allpasses per spring */
 #define SP_LINE             512u            /* each loop's ring, samples */
-static const uint16_t sp_len[SP_SPRINGS] = {408, 474};
+MFX_TABLE uint16_t sp_len[SP_SPRINGS] = {408, 474};
 #define SP_SWING            1.1f            /* the loops' movement, samples */
-static const float sp_rot[SP_SPRINGS][2] = {    /* per block: cos, sin of 2 pi f 128 / 44100 */
+MFX_TABLE float sp_rot[SP_SPRINGS][2] = {    /* per block: cos, sin of 2 pi f 128 / 44100 */
     {0.99991852f, 0.01276549f},             /* 0.7 Hz */
     {0.99985618f, 0.01695951f},             /* 0.93 Hz */
 };
@@ -53,8 +53,8 @@ static const float sp_rot[SP_SPRINGS][2] = {    /* per block: cos, sin of 2 pi f
 #define SP_LP_DARK          0.49535f        /* ... at 1200 Hz */
 #define SP_IN_GAIN          0.35f           /* the send into the springs, at the stock input gain 0.1 */
 /* the resonance at 11025 Hz: peaking filters at 1 kHz, Q 1 (b0, b1, b2, a1, a2) */
-static const float sp_res_loop[5] = {1.01230600f, -1.33418728f, 0.57232775f, -1.33418728f, 0.58463375f};
-static const float sp_res_out[5] = {1.07631775f, -1.37239044f, 0.55369045f, -1.37239044f, 0.63000821f};
+MFX_TABLE float sp_res_loop[5] = {1.01230600f, -1.33418728f, 0.57232775f, -1.33418728f, 0.58463375f};
+MFX_TABLE float sp_res_out[5] = {1.07631775f, -1.37239044f, 0.55369045f, -1.37239044f, 0.63000821f};
 #define SP_RES_LOOP_GAIN    1.0593f         /* the loop filter's peak (+0.5 dB) */
 #define SP_OUT_TRIM         2.0f            /* the springs' return level against the stock reverb's */
 
@@ -80,11 +80,11 @@ struct spring_state {
     float osc[SP_SPRINGS][2];               /* cos, sin of each loop's movement */
     float res[SP_SPRINGS][4];               /* the resonance filters' states: loop, output */
 };
-static struct spring_state spring_state_ram;
+MFX_STATE struct spring_state spring_state_ram;
 #define SP (&spring_state_ram)
 
 /* Lay out the springs in the (cleared) first buffer. */
-static void spring_init(uint32_t buf_l, uint32_t buf_r)
+MFX_FN void spring_init(uint32_t buf_l, uint32_t buf_r)
 {
     SP->pre_pos = 0;
     SP->phase = 0;
@@ -103,7 +103,7 @@ static void spring_init(uint32_t buf_l, uint32_t buf_r)
 }
 
 /* a peaking filter (transposed direct form II): st holds its two states */
-static inline float sp_peak(const float *c, float *st, float x)
+MFX_FN inline float sp_peak(const float *c, float *st, float x)
 {
     float y = c[0] * x + st[0];
     st[0] = c[1] * x - c[3] * y + st[1];
@@ -112,7 +112,7 @@ static inline float sp_peak(const float *c, float *st, float x)
 }
 
 /* One step of spring s at 11,025 Hz: returns its output. */
-static inline float spring_step(struct sp_mem *mem, uint32_t s, float x, float fb, float a, float lp_k, float swing)
+MFX_FN inline float spring_step(struct sp_mem *mem, uint32_t s, float x, float fb, float a, float lp_k, float swing)
 {
     float *line = mem->line[s];
     uint32_t w = SP->wpos[s];
@@ -140,7 +140,7 @@ static inline float spring_step(struct sp_mem *mem, uint32_t s, float x, float f
 }
 
 /* Process one block of the stereo send in place; returns the average output level. */
-MFX_FLASH static float spring_process(const ReverbKnobs *obj, int16_t *left, int16_t *right)
+MFX_FLASH MFX_FN float spring_process(const ReverbKnobs *obj, int16_t *left, int16_t *right)
 {
     int16_t *pre = (int16_t *)SP->buf_l;
     struct sp_mem *mem = (struct sp_mem *)(SP->buf_l + SP_MEM_OFFSET);

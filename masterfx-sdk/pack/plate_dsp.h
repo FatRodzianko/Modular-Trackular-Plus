@@ -1,5 +1,5 @@
 /*
- * plate_dsp.h: in CE's reverb slot. Included once, by ../masterfxDsp.cpp, after freeverb_dsp.h.
+ * plate_dsp.h: in CE's reverb slot. Included by pack.cpp, inside a struct, after freeverb_dsp.h.
  *
  * The algorithm is the plate reverb Jon Dattorro published in "Effect Design, Part 1:
  * Reverberator and Other Filters" (J. Audio Eng. Soc., 1997), written from the paper:
@@ -98,7 +98,7 @@ struct plate_state {
     float damp[2];                          /* the tank halves' damping lowpass states */
     float osc[2];                           /* cos, sin of the modulation */
 };
-static struct plate_state plate_state_ram;
+MFX_STATE struct plate_state plate_state_ram;
 #define PL (&plate_state_ram)
 
 /* the sample at `off` past the write position, in ring 0 or ring 1 */
@@ -108,7 +108,7 @@ static struct plate_state plate_state_ram;
 #define PL_WR1(off, v)      (q1[(wp + (off)) & PL_MASK] = sat16(v))
 
 /* Lay out the rings in the two (cleared) buffers. */
-static void plate_init(uint32_t buf_l, uint32_t buf_r)
+MFX_FN void plate_init(uint32_t buf_l, uint32_t buf_r)
 {
     PL->wp = 0;
     PL->bw = 0.0f;
@@ -121,7 +121,7 @@ static void plate_init(uint32_t buf_l, uint32_t buf_r)
 }
 
 /* Process one block of the stereo send in place; returns the average output level. */
-MFX_FLASH static float plate_process(const ReverbKnobs *obj, int16_t *left, int16_t *right)
+MFX_FLASH MFX_FN float plate_process(const ReverbKnobs *obj, int16_t *left, int16_t *right)
 {
     int16_t *q0 = (int16_t *)PL->buf_l, *q1 = (int16_t *)PL->buf_r;
     float size = fclamp(obj->size, 0.0f, 1.0f);

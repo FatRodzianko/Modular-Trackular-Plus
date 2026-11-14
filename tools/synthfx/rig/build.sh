@@ -17,8 +17,10 @@ TAG="$(basename "$AXF" .axf)"
 mkdir -p "$OUT" "$ROOT/build/synthfx/rig"
 ARCH="-mcpu=cortex-m7 -mfpu=fpv5-sp-d16 -mfloat-abi=hard -mthumb"
 COMMON="$ARCH -O2 -g -ffreestanding -fno-builtin -ffunction-sections -fdata-sections -Wall -Wextra -Wdouble-promotion"
-# The shim's modsBuild.h and config.h first
-INC="-I$HERE/shim -I$SRC -I$ROOT/core/mods -I$ROOT/core/include"
+# The shim's modsBuild.h and config.h first. RIG_KIT: a folder holding a copy of
+# core/mods/plugins (pluginKit.h, pluginPool.h), for a fault planted there.
+KIT="${RIG_KIT:-$ROOT/core/mods}"
+INC="-I$HERE/shim -I$SRC -I$KIT -I$ROOT/core/mods -I$ROOT/core/include"
 CXX="${T}g++ $COMMON $INC -std=gnu++20 -fno-exceptions -fno-rtti"
 $CXX -c "$HERE/rig.cpp" -o "$OUT/${TAG}_rig.o"
 $CXX -c "$SRC/synthfxPlugins.cpp" -o "$OUT/${TAG}_plugins.o"
