@@ -3,7 +3,8 @@ name: Build Tracker CE Firmware
 on:
   push:
     branches: [ main, modular ] # MT: modular is the mods' integration branch
-    tags: [ 'v*' ]
+    # MT: release tags: CE_YYYYMMDD after a CE merge, <mod>-<version> after a mod merge
+    tags: [ 'CE_*', '*-[0-9]+.[0-9]+*' ]
   pull_request:
     branches: [ main, modular ]
   workflow_dispatch:
@@ -59,7 +60,10 @@ jobs:
         run: |
           set -o pipefail
           POSTFIX_ARGS=""
-          if [[ "${{ github.ref }}" != refs/tags/v* ]]; then
+          # MT: a release tag names the Tracker+ file after itself (TrackerPlus_MT_<tag>.ptf)
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            POSTFIX_ARGS="PLUS_POSTFIX=MT_${GITHUB_REF_NAME}"
+          else
             SHORT_SHA=$(git rev-parse --short=7 HEAD)
             POSTFIX_ARGS="ORIGINAL_POSTFIX=CE_${SHORT_SHA} PLUS_POSTFIX=CE_${SHORT_SHA} MINI_POSTFIX=CE_${SHORT_SHA}"
           fi
@@ -243,24 +247,36 @@ jobs:
             }
 
       - name: Package .ptfx Effects for GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/') # MT: our release tags
         run: |
           cd editor-fx-sdk/build
           zip -r ../../build/PolyendTracker_CE_Effects.zip Effects README.txt
 
+      # MT: CE's engines and our WAVE and PHASE (make psyn); MT+ needs the folder on the card
       - name: Package .psyn Synth Engines for GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/') # MT: our release tags
         run: |
           cd synth-plugin-sdk/build/package
           zip -r ../../../build/PolyendTracker_CE_Synths.zip Synths README.txt LICENSE-PROPRIETARY.txt
 
+      # MT: the release notes are the tag's message (checkout can leave the tag lightweight)
+      - name: Release notes from the tag
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+          git tag -l --format='%(contents)' "${GITHUB_REF_NAME}" > release_notes.md
+          test -s release_notes.md
+
+      # MT: only the Tracker+ build has the mods, so it is the only firmware attached
       - name: Publish GitHub Release on Version Tag
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          name: Polyend Tracker CE ${{ github.ref_name }}
-          generate_release_notes: true
+          name: Modular-Trackular Plus ${{ github.ref_name }}
+          body_path: release_notes.md
           files: |
-            build/*.ptf
+            build/TrackerPlus_MT_*.ptf
             build/PolyendTracker_CE_Effects.zip
             build/PolyendTracker_CE_Synths.zip
+            LICENSE
+            NOTICE.md
