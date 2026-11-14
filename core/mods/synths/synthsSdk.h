@@ -1,9 +1,10 @@
 // Modular-Trackular mods. SPDX-License-Identifier: MIT
 //
-// What WAVE's and PHASE's CE Synth SDK classes share (waveSynth.cpp, phaseSynth.cpp): the
-// type ids, a table-driven parameter builder, the value displays, the LFOs' parameters and the
-// old effects' (kept for patches saved before), and the voice base class. Their effects are
-// Synth FX's slots (synthfx/synthfxMod.h), run on the part after the voices.
+// What WAVE's and PHASE's CE Synth SDK classes share (psyn/waveSynth.cpp, psyn/phaseSynth.cpp):
+// the type ids, a table-driven parameter builder, the value displays, the LFOs' parameters and
+// the old effects' (kept for patches saved before), and the voice base class. Each engine is a
+// .psyn plugin (psyn/Makefile). Their effects are Synth FX's slots (synthfx/synthfxMod.h), run
+// on the part after the voices.
 //
 // Main loop: the metadata, the value displays (they allocate std::strings). Audio
 // interrupt: the voice's handlers, renderVoiceAudio and renderPostProcessAudio (no heap).
@@ -13,18 +14,19 @@
 
 #include "PolySynth/sdk/SynthVoiceSDK.h"
 #include "synthsFx.h"
-#include "synthsMod.h"
 
 #include <cstdint>
+#include <span>
 #include <utility>
 
 namespace mtsynth
 {
 
 /* The InstrumentTypeIds: past CE's (0-8) with room for CE's next ones. Patch files store
- * them. */
-constexpr int kWaveTypeId = mods::synths::kWaveTypeId;
-constexpr int kPhaseTypeId = mods::synths::kPhaseTypeId;
+ * them. The same numbers are in psyn/Makefile (the .psyn header, which PsynLoader goes by)
+ * and in synthsMod.h (the firmware's); tools/emu/test_synths.py checks all three agree. */
+constexpr int kWaveTypeId = 64;
+constexpr int kPhaseTypeId = 65;
 
 /* ---- the parameter table ------------------------------------------------------------- */
 
@@ -76,20 +78,30 @@ float lfoRatio(float v, bool sync);
 
 /* ---- the voice ----------------------------------------------------------------------- */
 
-/* Sets p[I] from the patch: one handler per parameter (ParamHelper takes stateless ones) */
+/* Sets p[I] from the patch: one handler per parameter, as ParamHelper::addParam makes them */
 template<class V, size_t I>
-struct SetParam
+void setParamAt(V& v, polysynth::Patch::optional_paramvalue_t x)
 {
-    void operator()(V& v, polysynth::Patch::optional_paramvalue_t x) const
-    {
-        v.setParam(static_cast<int>(I), *x);
-    }
-};
+    v.setParam(static_cast<int>(I), *x);
+}
 
+/* What ParamHelper::addParam does for each parameter, in a loop: each parameter's definition
+ * from its spec, and its handler if it has none yet. Not a fold over addParam: GCC gave each of
+ * the 72 Param temporaries its own stack slot, a 6.8 KB frame at boot (CE's host builds the
+ * metadata from Synth::init). Main loop only. */
 template<class V, size_t... I>
-void addAll(polysynth::sdk::ParamHelper<V>& h, const Spec* specs, std::index_sequence<I...>)
+void addAll(polysynth::Patch::Metadata& metadata,
+            std::span<typename polysynth::sdk::ParamHelper<V>::ParamHandlerFn> handlers, const Spec* specs,
+            std::index_sequence<I...>)
 {
-    (h.addParam(static_cast<int>(I), makeParam(specs[I]), SetParam<V, I>{}), ...);
+    using Fn = typename polysynth::sdk::ParamHelper<V>::ParamHandlerFn;
+    static constexpr Fn kHandlers[] = { &setParamAt<V, I>... };
+    for (size_t i = 0; i < sizeof...(I); i++)
+    {
+        metadata.params.at(i) = makeParam(specs[i]);
+        if (!handlers[i])
+            handlers[i] = kHandlers[i];
+    }
 }
 
 /* A voice of WAVE or PHASE: the parameters as the engine reads them (p, by parameter id).

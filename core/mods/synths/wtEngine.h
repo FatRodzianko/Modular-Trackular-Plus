@@ -27,8 +27,7 @@
 // state saturates (OB); and the clean 2-pole one (SVF). The 24 dB OB and SVF types put a
 // second, unresonant stage before it. Cutoff, envelope and key tracking are set per block.
 // Drive puts the filter's input through a soft clip first, up to +24 dB into it, with the
-// level made up; at 0 there is no such stage. Before Drive, the voice's `pre` hook runs, if set:
-// Synth FX's slots with Placement Pre, one plugin instance per voice (waveSynth.cpp, MT+).
+// level made up; at 0 there is no such stage.
 //
 // Envelopes (x3, ADSR): advanced once per block, a linear attack and exponential decay and
 // release; the amp envelope is ramped across the block. The amp envelope's end makes the
@@ -87,8 +86,6 @@ struct wt_voice {
     float lfo_hold[2];                      /* Random S&H: the value held this cycle */
     uint8_t lfo_done[2];                    /* One Shot: the cycle has run */
     uint8_t pad2[2];
-    void (*pre)(void *ctx, float *buf);     /* Placement Pre (MT+): before Drive, or null */
-    void *pre_ctx;
 };
 
 /* ---- the voice ---------------------------------------------------------------------- */
@@ -125,8 +122,6 @@ static inline void wt_voice_init(struct wt_voice *e)
         e->lfo_hold[k] = 0.0f;
         e->lfo_done[k] = 0;
     }
-    e->pre = nullptr;
-    e->pre_ctx = nullptr;
 }
 
 /* ---- the LFOs ---------------------------------------------------------------------- */
@@ -618,8 +613,6 @@ static void wt_voice_render(struct wt_voice *e, const float *p, float *out, floa
         }
         e->noise = nz;
     }
-    if (e->pre != nullptr)                  /* Placement Pre (MT+) */
-        e->pre(e->pre_ctx, out);
     float drive = clampf(p[WP_DRIVE], 0.0f, 1.0f);
     if (drive > 0.0f) {                     /* Drive: the filter's input through the soft clip */
         float dg = exp2f_fast(drive * DRIVE_OCTAVES);

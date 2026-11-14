@@ -1,9 +1,9 @@
 // Modular-Trackular mods. SPDX-License-Identifier: MIT
 //
-// Synth FX's slot settings (synthfxMod.h): the file, knobs and placement of each part's two
-// slots, and the project record, with versions 1 (the built-in effects' ten settings) and 2 (no
-// placement) converted, and WAVE's and PHASE's old patch effects. Main loop only. No heap; host
-// tests build this file (core/mods/tests/test_synthfx.cpp).
+// Synth FX's slot settings (synthfxMod.h): the file and knobs of each part's two slots, and the
+// project record, with versions 1 (the built-in effects' ten settings) and 2 (no placement)
+// converted, and WAVE's and PHASE's old patch effects. Main loop only. No heap; host tests build
+// this file (core/mods/tests/test_synthfx.cpp).
 
 #include "modsBuild.h"
 
@@ -104,7 +104,6 @@ void empty(Slot& s)
     {
         k = noKnob();
     }
-    s.pre = 0;
 }
 
 // A stepped setting's item, as the old effects picked it (fxDsp.h's list_pick); NaN gives 0
@@ -222,20 +221,9 @@ void stored(const Store& store, Slot (&out)[kParts][kSlots])
     {
         return;
     }
-    if (version == kRecordVersion && length == kRecordSize)
-    {
-        fromV2(data, out);
-        const uint8_t* placement = data + kRecordSizeV2;
-        for (int part = 0; part < kParts; part++)
-        {
-            for (int slot = 0; slot < kSlots; slot++)
-            {
-                // a placement only where there is a plugin; anything but 1 is Post
-                out[part][slot].pre = out[part][slot].file[0] != 0 && placement[part * kSlots + slot] == 1 ? 1 : 0;
-            }
-        }
-    }
-    else if (version == kRecordVersionV2 && length == kRecordSizeV2)
+    // version 3's placements are past version 2's bytes, and every slot is Post now
+    if ((version == kRecordVersion && length == kRecordSize) ||
+        (version == kRecordVersionV2 && length == kRecordSizeV2))
     {
         fromV2(data, out);
     }
@@ -260,7 +248,7 @@ void toBytes(const Slot (&in)[kParts][kSlots], uint8_t* bytes)
                 const float f = finite(s.knobs[k]) ? s.knobs[k] : noKnob();
                 memcpy(p + kFileSize + 4 * k, &f, sizeof f);
             }
-            bytes[kRecordSizeV2 + part * kSlots + slot] = s.file[0] != 0 && s.pre != 0 ? 1 : 0;
+            bytes[kRecordSizeV2 + part * kSlots + slot] = 0; // Post
         }
     }
 }
@@ -331,14 +319,6 @@ void setSlotFile(int part, int slot, const char* file)
     setFile(slots[part][slot], file);
 }
 
-void setSlotPre(int part, int slot, bool pre)
-{
-    if (validSlot(part, slot))
-    {
-        slots[part][slot].pre = pre && slots[part][slot].file[0] != 0 ? 1 : 0;
-    }
-}
-
 bool oldPatchHasEffects(const float* fx)
 {
     return fx != nullptr && (pick(fx[kOldEffect], 4) != 0 || pick(fx[kOldDist], 4) != 0);
@@ -346,7 +326,7 @@ bool oldPatchHasEffects(const float* fx)
 
 // The old effects' ten settings into the part's slots, as version 1's steps are (fromV1), but
 // from the patch's own values: the plugins snap each knob onto their steps when they are made.
-void fromOldPatch(int part, const float* fx, bool wave)
+void fromOldPatch(int part, const float* fx)
 {
     if (!validPart(part) || fx == nullptr)
     {
@@ -363,8 +343,7 @@ void fromOldPatch(int part, const float* fx, bool wave)
         setFile(fx1, kDists[dist]);
         fx1.knobs[0] = knobFrom(fx[kOldGain], 100.0f);
         fx1.knobs[1] = knobFrom(fx[kOldTone], 100.0f);
-        fx1.knobs[2] = knobFrom(fx[kOldLevel], 1.0f);
-        fx1.pre = wave && pick(fx[kOldPlacement], 2) == 0 ? 1 : 0; // Pre on WAVE only
+        fx1.knobs[2] = knobFrom(fx[kOldLevel], 1.0f); // its Placement, Pre or Post: on the part
     }
     const uint32_t effect = pick(fx[kOldEffect], 4);
     if (effect == 1)

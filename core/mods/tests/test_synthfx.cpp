@@ -1,7 +1,7 @@
 // Modular-Trackular mods. SPDX-License-Identifier: MIT
 //
 // Host tests for Synth FX's slot settings and the project record (synthfxSettings.cpp):
-// version 3 (with each slot's Placement), version 2 and version 1 converted, damaged records, the
+// version 3 (each slot's Placement read as Post), version 2 and version 1 converted, damaged records, the
 // one-use rule, and an old WAVE or PHASE patch's effects moved into the slots. The slots' plugins,
 // the audio path and the page are tested in tools/emu/test_synthfx.py and test_synthfx_page.py.
 // Build and run with `make -C core/mods/tests`.
@@ -189,9 +189,6 @@ void testRecord()
     slots[0][0].knobs[2] = -4.5f;
     setSlotFile(2, 1, "Delay.ptsfx");
     slots[2][1].knobs[11] = 1.25f;
-    setSlotPre(2, 1, true);
-    setSlotPre(1, 0, true); // empty: stays Post
-    check(slots[2][1].pre == 1 && slots[1][0].pre == 0, "Placement Pre set; an empty slot stays Post");
     check(storeIfEdited(store), "an edit is stored");
     uint8_t version = 0;
     uint16_t length = 0;
@@ -201,8 +198,8 @@ void testRecord()
     if (data != nullptr)
     {
         check(data[576] == 0 && data[577] == 0 && data[578] == 0 && data[579] == 0 && data[580] == 0 &&
-                data[581] == 1,
-              "the Placements: a byte for each slot, part by part, FX1 then FX2 (1: Pre)");
+                data[581] == 0,
+              "the Placements: a byte for each slot, every one 0 (Post)");
     }
     if (data != nullptr)
     {
@@ -229,14 +226,8 @@ void testRecord()
     load(store);
     check(strcmp(slots[0][0].file, "Overdrive.ptsfx") == 0 && slots[0][0].knobs[0] == 80.0f &&
             isNoKnob(slots[0][0].knobs[1]) && slots[0][0].knobs[2] == -4.5f && slotEmpty(0, 1) &&
-            strcmp(slots[2][1].file, "Delay.ptsfx") == 0 && slots[2][1].knobs[11] == 1.25f && slotEmpty(1, 0) &&
-            slots[2][1].pre == 1 && slots[0][0].pre == 0,
-          "it loads as it was saved, Placements too");
-    setSlotPre(2, 1, false);
-    check(storeIfEdited(store), "Placement back to Post: an edit");
-    clearAll();
-    load(store);
-    check(slots[2][1].pre == 0 && strcmp(slots[2][1].file, "Delay.ptsfx") == 0, "and loads as Post");
+            strcmp(slots[2][1].file, "Delay.ptsfx") == 0 && slots[2][1].knobs[11] == 1.25f && slotEmpty(1, 0),
+          "it loads as it was saved");
 
     clearAll();
     check(storeIfEdited(store), "all cleared after a record: stored");
@@ -267,37 +258,36 @@ void testRecord()
     putSlot(record, 1, 1, "Chorus.ptsfx", { 1, 2, 3 });
     record[kRecordSizeV2] = 1; // past version 2's end: not read
     empty.put(kRecord, kRecordVersionV2, record, kRecordSizeV2);
-    for (int part = 0; part < kParts; part++)
-    {
-        for (int slot = 0; slot < kSlots; slot++)
-        {
-            slots[part][slot].pre = 1;
-        }
-    }
     load(empty);
     check(strcmp(slots[0][0].file, "Distortion.ptsfx") == 0 && knobsAre(0, 0, { 80, 40, -3 }) &&
-            strcmp(slots[1][1].file, "Chorus.ptsfx") == 0 && slots[0][0].pre == 0 && slots[1][1].pre == 0 &&
-            slots[2][0].pre == 0,
-          "version 2: its slots, every one Post");
+            strcmp(slots[1][1].file, "Chorus.ptsfx") == 0 && slotEmpty(2, 0),
+          "version 2: its slots");
     check(!storeIfEdited(empty), "version 2 not edited: left as it is");
-    setSlotPre(0, 0, true);
+    slots[0][0].knobs[0] = 81.0f;
     check(storeIfEdited(empty), "edited: stored");
     empty.find(kRecord, &version, &length);
     check(version == kRecordVersion && length == kRecordSize, "as version 3");
 
-    // version 3's Placement bytes: Pre only as 1, and only on a slot with a plugin
+    // version 3 from a build with Placement Pre: a slot saved Pre loads as any other, on the part
     memset(record, 0, sizeof record);
     putSlot(record, 0, 0, "Distortion.ptsfx", { 1 });
-    putSlot(record, 0, 1, "Chorus.ptsfx", { 1 });
-    putSlot(record, 1, 0, "Overdrive.ptsfx", { 1 });
-    record[kRecordSizeV2 + 0] = 1;
-    record[kRecordSizeV2 + 1] = 7;   // not 1: Post
-    record[kRecordSizeV2 + 2] = 1;
-    record[kRecordSizeV2 + 3] = 1;   // an empty slot: Post
+    putSlot(record, 0, 1, "Chorus.ptsfx", { 2 });
+    record[kRecordSizeV2 + 0] = 1;   // Pre
+    record[kRecordSizeV2 + 1] = 7;
+    record[kRecordSizeV2 + 3] = 1;   // an empty slot
     empty.put(kRecord, kRecordVersion, record, kRecordSize);
     load(empty);
-    check(slots[0][0].pre == 1 && slots[0][1].pre == 0 && slots[1][0].pre == 1 && slots[1][1].pre == 0,
-          "version 3: Pre only as 1, and only on a slot with a plugin");
+    check(strcmp(slots[0][0].file, "Distortion.ptsfx") == 0 && knobsAre(0, 0, { 1 }) &&
+            strcmp(slots[0][1].file, "Chorus.ptsfx") == 0 && knobsAre(0, 1, { 2 }) && slotEmpty(1, 1),
+          "version 3 with Placement bytes set: the slots as they were");
+    check(!storeIfEdited(empty), "not edited: the record left as it is, its bytes too");
+    const uint8_t* kept = empty.find(kRecord, &version, &length);
+    check(kept != nullptr && kept[kRecordSizeV2] == 1, "(the Pre byte still there until an edit)");
+    slots[0][0].knobs[0] = 2.0f;
+    check(storeIfEdited(empty), "edited: stored");
+    kept = empty.find(kRecord, &version, &length);
+    check(kept != nullptr && kept[kRecordSizeV2] == 0 && kept[kRecordSizeV2 + 1] == 0 && kept[kRecordSizeV2 + 3] == 0,
+          "and every Placement byte written 0");
 }
 
 void testDamaged()
@@ -415,32 +405,29 @@ void testOldPatch()
     check(oldPatchHasEffects(both), "a Distortion and a Phaser: to move");
     clearAll();
     setSlotFile(0, 0, "Chorus.ptsfx");
-    fromOldPatch(0, both, true);
-    check(strcmp(slots[0][0].file, kDistortion) == 0 && knobsNear(0, 0, { 100, 30, -4.5f }) && slots[0][0].pre == 1,
-          "WAVE: the Distortion in FX1, Gain and Tone in percent, Level in dB, Placement Pre kept");
+    fromOldPatch(0, both);
+    check(strcmp(slots[0][0].file, kDistortion) == 0 && knobsNear(0, 0, { 100, 30, -4.5f }),
+          "the Distortion in FX1 (its Placement Pre: on the part), Gain and Tone in percent, Level in dB");
     check(strcmp(slots[0][1].file, kPhaser) == 0 && knobsNear(0, 1, { 20, 70, -60, 100 }),
           "the Phaser in FX2: Rate, Depth, Feedback, Mix in percent (the slot's Chorus replaced)");
-    fromOldPatch(1, both, false);
-    check(strcmp(slots[1][0].file, kDistortion) == 0 && slots[1][0].pre == 0, "PHASE: the same, Post");
     const float post[kOldCount] = { 0, 0.5f, 0.5f, 0.5f, 0.5f, 1, 0.5f, 0.5f, 1, 0 };
-    fromOldPatch(2, post, true);
-    check(strcmp(slots[2][0].file, kOverdrive) == 0 && slots[2][0].pre == 0 && slotEmpty(2, 1),
-          "WAVE, Placement Post: FX1 Post; Effect None: FX2 empty");
+    fromOldPatch(2, post);
+    check(strcmp(slots[2][0].file, kOverdrive) == 0 && slotEmpty(2, 1),
+          "Placement Post: the same; Effect None: FX2 empty");
 
     const float effectOnly[kOldCount] = { 1, 0.1f, 0.2f, 0.3f, 0.5f, 0, 0.5f, 0.5f, 0, 0 };
     clearAll();
-    fromOldPatch(0, effectOnly, true);
-    check(slotEmpty(0, 0) && slots[0][0].pre == 0 && strcmp(slots[0][1].file, kChorus) == 0 &&
-            knobsNear(0, 1, { 10, 20, 30 }),
-          "the Chorus alone: FX1 empty (and Post, though Placement was Pre), FX2 Rate, Depth, Mix");
+    fromOldPatch(0, effectOnly);
+    check(slotEmpty(0, 0) && strcmp(slots[0][1].file, kChorus) == 0 && knobsNear(0, 1, { 10, 20, 30 }),
+          "the Chorus alone: FX1 empty, FX2 Rate, Depth, Mix");
     const float odd[kOldCount] = { 2, nan, 0.5f, 0.5f, std::numeric_limits<float>::infinity(), 3, 0.5f, 0.5f, 0, 0 };
-    fromOldPatch(1, odd, true);
+    fromOldPatch(1, odd);
     check(strcmp(slots[1][0].file, kBitCrusher) == 0 && strcmp(slots[1][1].file, kFlanger) == 0 &&
             isNoKnob(slots[1][1].knobs[0]) && isNoKnob(slots[1][1].knobs[2]) && slots[1][1].knobs[1] == 50.0f,
           "a value not finite: the plugin's default");
-    fromOldPatch(kParts, both, true);
-    fromOldPatch(-1, both, true);
-    fromOldPatch(0, nullptr, true);
+    fromOldPatch(kParts, both);
+    fromOldPatch(-1, both);
+    fromOldPatch(0, nullptr);
     check(slotEmpty(0, 0) && strcmp(slots[0][1].file, kChorus) == 0 && slotEmpty(2, 0),
           "no part out of range, no values: nothing");
 }

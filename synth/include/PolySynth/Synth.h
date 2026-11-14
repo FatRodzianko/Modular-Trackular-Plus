@@ -46,6 +46,7 @@ class Synth
         kGrid,
         kPatches,
         kSamples,
+        kSynths,
     };
 
     using Allocator = std::function<void*(size_t bytes)>;

@@ -8,7 +8,7 @@
 using namespace mtfx;
 
 PTSFX_INFO = {
-    0, 0, PTSFX_FLAG_PRE, /* may run in each WAVE voice, before its filter (Placement Pre) */
+    0, 0, PTSFX_FLAG_PRE, /* changes nothing now (ptsfx.h); kept so the file is as before */
     "Distortion", "MT+", pack::DK_COUNT, { 0, 0, 0 }, sizeof(pack::DistState),
     0, 0, 0, 0, 0, 0, 0,
     { PACK_DIST_KNOBS("Gain", "Tone") },

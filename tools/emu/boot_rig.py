@@ -305,7 +305,8 @@ def second_start(axf, first, blocks):
             if quiet > 200:
                 break
         slots = m.addr("_ZN4mods7synthfx5slotsE")
-        files = [m.read(slots + 100 * i, 48).split(b"\0")[0].decode() for i in range(6)]
+        stride = m.sym("_ZN4mods7synthfx5slotsE").size // 6     # a Slot, its file name first
+        files = [m.read(slots + stride * i, 48).split(b"\0")[0].decode() for i in range(6)]
         statuses = [m.call(status, i // 2, i % 2) & 0xFF for i in range(6)]
         made = [m.call(instance, i // 2, i % 2) < 0x80000000 for i in range(6)]
         print("second start: Pattern screen up, slots", files, "statuses", statuses, "made", made,
@@ -500,8 +501,9 @@ def main():
         # made as a plugin from the card; each block runs the insert on every part sounding, so at
         # least one run a block
         slots = m.addr("_ZN4mods7synthfx5slotsE")
-        # a Slot is 100 bytes (padded), its file name first
-        files = [m.read(slots + 100 * i, 48).split(b"\0")[0].decode() for i in range(6)]
+        # a Slot, its file name first: the table's size over its 6 slots
+        stride = m.sym("_ZN4mods7synthfx5slotsE").size // 6
+        files = [m.read(slots + stride * i, 48).split(b"\0")[0].decode() for i in range(6)]
         made = [m.call(m.addr("_ZN4mods7synthfx12slotInstanceEii"), i // 2, i % 2) < 0x80000000 for i in range(6)]
         print("Synth FX slots:", files, "made", made, "insert runs", fx_runs[0],
               "allocations in the interrupt", r.interrupt_allocs, flush=True)

@@ -1,0 +1,21 @@
+syntax = "proto3";
+import "nanopb.proto";
+
+package polysynth;
+
+message PadConfig
+{
+  bool valid = 1;
+  int32 note = 2;
+  repeated fixed64 chordScheme = 3 [(nanopb).max_count = 2, (nanopb).fixed_count = true];
+  int32 instrument = 4;
+  int32 scaleRoot = 5;
+  optional fixed64 scaleScheme = 6;
+}
+
+message GridMapperConfig
+{
+  repeated PadConfig padConfigs = 1 [(nanopb).max_count = 60, (nanopb).fixed_count = true];
+  int32 scaleRoot = 2;
+  fixed64 scaleScheme = 3;
+}

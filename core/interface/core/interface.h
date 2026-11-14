@@ -47,6 +47,9 @@ class Interface
 
     void activateModule(hModule module, uint32_t options);
     void deactivateModule(hModule module);
+    hModule getPreviousModule() const;
+    uint32_t getPreviousModuleOptions() const;
+    void setPreviousModule(hModule module, uint32_t options);
     void switchModuleByButton(hModule module, uint8_t button, uint32_t options);
     void switchModuleToPrevious(hModule module, uint8_t options);
     int8_t getButtonIndex(uint8_t button);

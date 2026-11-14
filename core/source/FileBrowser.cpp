@@ -3,6 +3,7 @@
 
 #include "util_string.h"
 
+#include <algorithm>
 #include <string.h>
 
 void FileBrowser::start(FileSystem* fileSystem, FileBrowserData* fileBrowserData)
@@ -50,19 +51,31 @@ void FileBrowser::refresh()
         fileSystem->listDirContents(
           data->currentPath,
           FileSystem::DirContentType::kFolders,
-          [](const char* name) { return strcasecmp(name, "workspace") != 0; },
+          [](const char* name)
+          { return name != nullptr && name[0] != '.' && strcasecmp(name, "workspace") != 0; },
           data->fileNamesBuffer,
           data->fileNamesBufferSize,
           kMaxFileNameLen,
           folderListLength,
           folderList);
 
-        // check is projects - selection list
+        if (folderListLength > 1)
+        {
+            std::sort(folderList,
+                      folderList + folderListLength,
+                      [](const char* a, const char* b) { return strcasecmp(a, b) < 0; });
+        }
+
+        // check is projects / packages - selection list
         if (data->selectionEnabled && data->mode == kProjectBrowser)
         {
             assert(data->selectionList != nullptr);
             if (folderListLength > 0)
             {
+                const char* marker =
+                  (data->packageMarkerFile != nullptr && data->packageMarkerFile[0] != '\0')
+                    ? data->packageMarkerFile
+                    : "project.mt";
                 char path[kMaxFilePathLen + 1];
                 volatile int dstSize = sizeof(path);
                 int selectionIdx = listNamesOffset;
@@ -70,8 +83,8 @@ void FileBrowser::refresh()
                 for (int folder = 0; folder < folderListLength; folder++)
                 {
                     snprintf(
-                      path, dstSize, "%s%s/project.mt", data->currentPath, folderList[folder]);
-                    data->selectionList[selectionIdx++] = fileSystem->exists(path);
+                      path, dstSize, "%s%s/%s", data->currentPath, folderList[folder], marker);
+                    data->selectionList[selectionIdx++] = fileSystem->exists(path) ? 1 : 0;
                 }
             }
         }
@@ -103,8 +116,16 @@ void FileBrowser::refresh()
           FileSystem::DirContentType::kFiles,
           [&](const char* name) mutable
           {
+              if (name == nullptr || name[0] == '.')
+              {
+                  return false;
+              }
               if (data->mode == kSamplesBrowser)
               {
+                  if (data->customExtension != nullptr)
+                  {
+                      return checkFilenameExtension(name, data->customExtension);
+                  }
                   return checkFilenameExtension(name, kWavFileExtension);
               }
               if (data->mode == kModBrowser)
@@ -120,13 +141,20 @@ void FileBrowser::refresh()
           fileListLength,
           fileList);
 
-        if (data->selectionEnabled && data->mode == kModBrowser)
+        if (fileListLength > 1)
+        {
+            std::sort(fileList,
+                      fileList + fileListLength,
+                      [](const char* a, const char* b) { return strcasecmp(a, b) < 0; });
+        }
+
+        if (data->selectionEnabled &&
+            (data->mode == kModBrowser || data->mode == kSamplesBrowser))
         {
             assert(data->selectionList != nullptr);
 
             if (fileListLength > 0)
             {
-                data->selectionList[0] = 0;
                 for (int position = listNamesLen; position < listNamesLen + fileListLength;
                      position++)
                 {
@@ -367,7 +395,50 @@ char* FileBrowser::getCurrentPath()
 
 bool FileBrowser::checkFilenameExtension(const char* filename, const char* extension)
 {
-    return hasFileExtension(filename, extension);
+    if (extension == nullptr || extension[0] == '\0')
+    {
+        return true;
+    }
+
+    const char* p = extension;
+    while (*p != '\0')
+    {
+        while (*p == ';' || *p == ',' || *p == '|' || *p == ' ' || *p == '\t')
+        {
+            ++p;
+        }
+        if (*p == '\0')
+        {
+            break;
+        }
+
+        char token[16]{};
+        size_t len = 0;
+        while (*p != '\0' && *p != ';' && *p != ',' && *p != '|')
+        {
+            if (len + 1 < sizeof(token))
+            {
+                token[len++] = *p;
+            }
+            ++p;
+        }
+        while (len > 0 && (token[len - 1] == ' ' || token[len - 1] == '\t'))
+        {
+            token[--len] = '\0';
+        }
+
+        const char* ext = (token[0] == '.') ? (token + 1) : token;
+        if (ext[0] == '\0' || strcmp(ext, "*") == 0)
+        {
+            return true;
+        }
+        if (hasFileExtension(filename, ext))
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool FileBrowser::createFolderInCurrentPath(char* folderName)

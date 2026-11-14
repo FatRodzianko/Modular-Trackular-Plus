@@ -21,8 +21,9 @@ CPP_SRCS 	+= $(shell find ./FileManager/ -name *.cpp)
 CPP_SRCS 	+= $(shell find ./Exporter/ -name *.cpp)
 CPP_SRCS 	+= $(shell find ./AudioEngine/ -name *.cpp)
 CPP_SRCS 	+= $(shell find ./synth/ -name *.cpp)
-# MT: Modular-Trackular mods (host tests in mods/tests/ are not firmware)
-CPP_SRCS 	+= $(shell find ./mods/ -name *.cpp -not -path "./mods/tests/*")
+# MT: Modular-Trackular mods (host tests in mods/tests/ are not firmware, and nor are WAVE and
+# PHASE in mods/synths/psyn/: they are .psyn plugins, built by the root Makefile's psyn target)
+CPP_SRCS 	+= $(shell find ./mods/ -name *.cpp -not -path "./mods/tests/*" -not -path "./mods/synths/psyn/*")
 C_SRCS 	 	+= $(shell find ./libs/ -name *.c)
 
 _CPP_OBJS	= $(patsubst ./%.cpp, %.o, $(CPP_SRCS))
@@ -57,7 +58,7 @@ COMPILER_OPTIONS+=-mcpu=cortex-m4 -mfpu=fpv4-sp-d16
 else ifeq ($(PLATFORM), IMX)
 COMPILER_OPTIONS+=-mcpu=cortex-m7 -mfpu=fpv5-sp-d16 -mfp16-format=ieee
 DEFINES+=-DPLATFORM_IMX
-# MT: MT_NO_SYNTH=1 builds without the closed synth libraries (emulator test builds)
+# MT: MT_NO_SYNTH=1 builds without the synth feature (emulator test builds that need no engines)
 ifneq ($(MT_NO_SYNTH),1)
 DEFINES+=-DFEATURE_SYNTH
 endif
@@ -85,6 +86,7 @@ $(OBJ_DIR)/%.o: %.c
 	$(TOOLCHAIN)gcc $(DEFINES) $(INCLUDES) $(CC_OPTIONS) $(COMPILER_OPTIONS) -o "$@" "$<"
 
 $(TARGET): $(OBJS)
+	@rm -f "$(BUILD_DIR)/$(TARGET)"
 	$(TOOLCHAIN)ar -r "$(BUILD_DIR)/$(TARGET)" $(OBJS_SORTED)
 	$(MAKE) --no-print-directory post-build
 	

@@ -10,15 +10,16 @@ PART 1: SOURCE CODE, SDKs, OPEN SYNTH ENGINES & MODULES (MIT LICENSE)
 All source code, headers, SDKs, open-source synthesizer engines, DSP modules,
 drivers, utilities, and documentation in this repository — including:
   - `.ptfx` Sample Editor Plugin SDK (`editor-fx-sdk/`)
-  - Open Synth SDK headers (`synth/include/PolySynth/` and `synth/include/PolySynth/sdk/`)
-  - Open-source C++ synthesizer engines (`core/synth/engines/`, including `CHIP`)
+  - `.psyn` Synth Plugin SDK & open-source C++ synthesizer engines (`synth-plugin-sdk/`, including `CHIP`)
+  - Open Synth SDK & PolySynth / PolyDSP host and DSP modules (`synth/include/`, `synth/source/`)
   - Hardware abstraction layers, drivers, audio libraries, and utilities (`platforms/`, `util/`, `core/libs/`)
   - Individual classes, DSP algorithms, UI widgets, and source modules in `core/`
 
 are licensed under the standard MIT License below, subject only to the
 Wholesale Commercial Clone Restriction in Part 2 with respect to the complete
 integrated Polyend Tracker application/firmware as a whole, and Part 3 with
-respect to the precompiled binary archives in `synth/lib/`.
+respect to the precompiled proprietary factory `.psyn` synthesizer plugins in
+`synth/prebuilt/`.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -48,14 +49,16 @@ PART 2: WHOLESALE COMMERCIAL CLONE RESTRICTION & EXPRESS PERMISSIONS
        broadcast, or monetize music, albums, sample packs, paid live
        performances ("gigs"), courses, or monetized video/streaming content
        is EXPRESSLY PERMITTED without restriction.
-   (b) Selling `.ptfx` Sample Editor Plugins:
-       Building, distributing, and selling `.ptfx` Sample Editor plugins built
-       with `editor-fx-sdk/` (commercially or non-commercially) is EXPRESSLY
+   (b) Selling Custom `.ptfx` & `.psyn` Plugins:
+       Building, distributing, and selling custom `.ptfx` Sample Editor plugins
+       built with `editor-fx-sdk/` or custom `.psyn` synthesizer plugins built
+       with `synth-plugin-sdk/` (commercially or non-commercially, excluding the
+       proprietary factory `.psyn` binaries in `synth/prebuilt/`) is EXPRESSLY
        PERMITTED under the pure MIT License in Part 1.
    (c) Reusing Code, Drivers, DSP, and Open Synth Engines in Other Projects:
        Reusing, modifying, or incorporating individual components, drivers,
        DSP algorithms, UI helpers, SDKs, or open-source C++ synth engines
-       (such as `core/synth/engines/`) into your own open-source or commercial
+       (such as `synth-plugin-sdk/engines/`) into your own open-source or commercial
        software (e.g., VST/AU/CLAP plugins, iOS/desktop apps) or original
        hardware products (e.g., Eurorack modules, standalone instruments that
        are not clones of the Polyend Tracker) is EXPRESSLY PERMITTED under the
@@ -84,17 +87,21 @@ PART 2: WHOLESALE COMMERCIAL CLONE RESTRICTION & EXPRESS PERMISSIONS
        commercial product.
 
 ================================================================================
-PART 3: PRECOMPILED SYNTH & DSP BINARIES (`synth/lib/`) & THIRD-PARTY CODE
+PART 3: PRECOMPILED FACTORY SYNTH PLUGINS (`synth/prebuilt/`) & THIRD-PARTY CODE
 ================================================================================
 
-1. Precompiled Binary Libraries (`synth/lib/libPolySynth.a` & `libPolyDSP.a`):
-   The precompiled static archives `synth/lib/libPolySynth.a` and
-   `synth/lib/libPolyDSP.a` contain Polyend's proprietary factory synthesizer
-   and DSP engines (`ACD`, `FAT`, `VAP`, `WTFM`, `PERC`, and `PolyDSP`). They
-   are governed by `synth/lib/LICENSE-PROPRIETARY.txt`, which permits free use
-   in authentic Polyend hardware as well as personal, hobbyist, and DIY
-   non-commercial projects, while prohibiting embedding those precompiled
-   binaries into commercial third-party hardware or software products.
+1. Precompiled Factory Synth Plugins (`synth/prebuilt/*.psyn`):
+   No proprietary static libraries (`.a`) are linked into the firmware.
+   All open-source host, mixer, amplifier, and master FX DSP code (`libPolySynth`,
+   `PolyDSP`, `Delay`, `Reverb`, `Modulation`) is compiled from source under
+   Part 1. The precompiled factory `.psyn` plugin binaries in `synth/prebuilt/`
+   (`ACD.psyn`, `DIRT.psyn`, `DWA.psyn`, `FAT.psyn`, `GRAIN.psyn`, `PERC.psyn`,
+   `PHZ.psyn`, `PMD.psyn`, `VAP.psyn`, `WAVS.psyn`, `WTFM.psyn`) contain
+   Polyend's proprietary factory synthesizer engines. They are governed by
+   `synth/prebuilt/LICENSE-PROPRIETARY.txt`, which permits free use on
+   authentic Polyend hardware as well as personal, hobbyist, and DIY
+   non-commercial projects, while prohibiting embedding or redistributing those
+   proprietary binaries in commercial third-party products or paid bundles.
 
 2. Third-Party Components:
    Third-party libraries and components listed in `NOTICE.md` remain governed

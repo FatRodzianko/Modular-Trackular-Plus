@@ -124,6 +124,7 @@ uint32_t sumUs = 0;
 uint32_t blocks = 0;
 uint32_t overBlocks = 0;
 uint32_t backToBack = 0;
+uint32_t synthOverBudgetCount = 0; // CE's synth over its time limit: each one silences it for 32 blocks
 
 uint32_t sumOf(const Record& r)
 {
@@ -304,8 +305,9 @@ void describePlay(uint32_t nowMs)
     const int used = snprintf(text,
                               sizeof(text),
                               "play %lu s: Master FX %s, %s + %s, voices %d %d %d. Audio interrupt: average %lu%%, "
-                              "slowest %lu%%, %lu of %lu blocks over time, %lu back to back. Longest main loop gap %lu "
-                              "ms. Pool peak %d of %d. Free heap %d, max stack %d.\n",
+                              "slowest %lu%%, %lu of %lu blocks over time, %lu back to back. Synth over its limit %lu "
+                              "times. Longest main loop gap %lu ms. Pool peak %d of %d. Free heap %d, max stack "
+                              "%d.\n",
                               static_cast<unsigned long>((nowMs - playStartedMs) / 1000),
                               mods::on(mods::Mod::masterfx) ? "On" : "Off",
                               reverbName(mods::masterfx::activeReverb),
@@ -318,6 +320,7 @@ void describePlay(uint32_t nowMs)
                               static_cast<unsigned long>(overBlocks),
                               static_cast<unsigned long>(blocks),
                               static_cast<unsigned long>(backToBack),
+                              static_cast<unsigned long>(synthOverBudgetCount),
                               static_cast<unsigned long>(longestStall),
                               static_cast<int>(AudioMemoryUsageMax()),
                               80,
@@ -334,6 +337,7 @@ void startPlayStats()
     blocks = 0;
     overBlocks = 0;
     backToBack = 0;
+    synthOverBudgetCount = 0;
     longestStall = 0;
 }
 
@@ -434,6 +438,11 @@ void audioStop()
     {
         backToBack++; // the next block is already due, so the main loop gets nothing in between
     }
+}
+
+void synthOverBudget()
+{
+    synthOverBudgetCount++;
 }
 
 void arm()

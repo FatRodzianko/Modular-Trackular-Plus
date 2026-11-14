@@ -783,6 +783,13 @@ free heap 76,120, max stack 7,849.
 
 ### 3.15 synths (WAVE, PHASE)
 
+**Since CE's plugin synths (2026-11-13):** WAVE and PHASE are `.psyn` plugins
+(`core/mods/synths/psyn/`, `make psyn`), the type ids 64 and 65 in their headers, found by CE's
+`PsynLoader` in `/Synths` like CE's engines. They keep their sources and their voices; the
+effects inside them went to Synth FX before (3.17), and WAVE's Placement Pre went with this
+change, by the user's choice: a slot can't run inside a `.psyn`, and WAVE's own filter Drive
+stays. What follows is the plan as it was built into the firmware.
+
 - **CE today:** the Synth SDK: engines are source files registered in
   `core/synth/registry.cpp` (`CHIP` is the open example).
 - **Port:** WAVE and PHASE as SDK engines (`CustomSynthVoice`, `onNoteOn(ctx, note,
@@ -1201,6 +1208,11 @@ for every synth engine, CE's closed ones included.
 - **Effort:** M for phases 1 and 2, M for phase 3.
 
 ### 3.17 synthfx plugins (`.ptsfx`: every synth effect a file on the card)
+
+**Since 2026-11-13:** Placement Pre is gone (3.15's note): every slot runs on the part, one
+instance a slot. Record 16 version 3 keeps its Placement bytes, written 0 and read as Post; the
+`Slot` is 96 B; `PTSFX_FLAG_PRE` stays in the format and changes nothing. The Pre parts below
+are history.
 
 Planned 2026-11-11, from the source. Phase 1 (the runtime and the SDK) built 2026-11-11:
 "Phase 1, as built" below. Phase 2 (CE's engines on the two slots) built 2026-11-11: "Phase 2,

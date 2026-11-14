@@ -51,7 +51,7 @@ constexpr char kMarker[] = "/SynthFX/.starting";
 constexpr size_t kCatalogSize = 64;       // files listed
 constexpr size_t kFileNameSize = 48;      // a file's name with its 0 (longer ones aren't listed)
 constexpr size_t kLoadedSize = 8;         // different plugins loaded at once
-constexpr size_t kInstanceCount = 56;     // 3 parts x 2 slots, and WAVE's Pre: 2 slots x 8 voices x 3
+constexpr size_t kInstanceCount = 56;     // 3 parts x 2 slots used; sized when WAVE's Placement Pre had 8 a slot
 
 constexpr uint32_t kCodePoolSize = 96u * 1024u;
 constexpr uint32_t kStatePoolSize = 192u * 1024u;
@@ -143,8 +143,7 @@ void knobTextAt(int id, uint32_t knob, uint32_t step, char* out, uint32_t size);
 // The platform's time in ms (Env::millis), for the main loop's waits.
 uint32_t now();
 
-// Asks for a reset before the instance's next block (a new note on a Pre slot, a part
-// starting again).
+// Asks for a reset before the instance's next block (a part starting again).
 void resetSoon(int id);
 
 // An instance bypassed by the time guard since the last call, or -1.
@@ -156,6 +155,10 @@ bool bypassed(int id);
 // running (nothing was done).
 bool process(int id, float* L, float* R, uint32_t inChannels);
 void reset(int id);
+
+// Audio interrupt, when CE's synth time limit has tripped: the instance stops now, as the time
+// guard would after kOverBlocks, if its last block was over the budget. Returns whether it did.
+bool bypassIfOver(int id);
 
 // The firmware's copy of the default pack (synthfxPack.cpp)
 struct PackFile

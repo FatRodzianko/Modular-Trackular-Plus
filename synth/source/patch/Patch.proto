@@ -1,0 +1,91 @@
+syntax = "proto3";
+import "source/sequencer/Sequence.proto";
+import "nanopb.proto";
+
+package polysynth;
+
+message Param
+{
+    optional float value = 1;
+}
+
+message SampleFormat
+{
+  int32 channels = 1;
+  int32 sampleRate = 2;
+  int32 samples = 3;
+  int32 waveSize = 4;
+}
+
+message Sample
+{
+    string filePath = 1 [(nanopb).max_length = 256];
+    optional SampleFormat embbeddedSample = 2;
+}
+
+message ParamModifier
+{
+  int32 paramId = 1;
+  float amount = 2;
+}
+
+message Macro
+{
+  string name = 1 [(nanopb).max_length = 32];
+  bool bipolar = 2;
+  int32 modifiersCount = 3;
+  repeated ParamModifier modifiers = 4 [ (nanopb).max_count = 6, (nanopb).fixed_count = true ];
+}
+
+enum SeqMode
+{
+  Off = 0;
+  Arp = 1;
+  Seq = 2;
+}
+
+enum ArpStyle
+{
+  Up = 0;
+  Down = 1;
+  PlayOrder = 2;
+  Random = 3;
+}
+
+message ArpConfig
+{
+  ArpStyle style = 1;
+  int32 octaveRange = 2;
+}
+
+message SeqConfig
+{
+  int32 rootNote = 1;
+  fixed64 scaleScheme = 2;
+}
+
+message Config
+{
+  SeqMode mode = 1;
+  ArpConfig arp = 2;
+  SeqConfig seq = 3;
+}
+
+message Sequencer
+{
+  Config config = 1;
+  Sequence sequence = 2;
+}
+
+message Patch
+{
+  int32 instrumentTypeId = 1;
+  int32 instrumentTypeVersion = 2;
+  int32 patchMessageVersion = 3;
+  int32 reserved1 = 4;
+  int32 reserved2 = 5;
+  repeated Param params = 6 [ (nanopb).type = FT_POINTER ];
+  repeated Sample samples = 7 [ (nanopb).max_count = 4, (nanopb).fixed_count = true ];
+  repeated Macro macros = 8 [ (nanopb).max_count = 8, (nanopb).fixed_count = true ];
+  Sequencer sequencer = 9;
+}

@@ -1,9 +1,10 @@
 // Modular-Trackular mods. SPDX-License-Identifier: MIT
 //
 // The synth effects: a Distortion, then one modulation effect (Chorus, Flanger or Phaser),
-// on a synth's output. WAVE and PHASE use them (core/mods/synths): after their voices, and
-// WAVE's Distortion also in each voice before its filter (Placement Pre). Synth FX
-// (synthfxMod.h) runs them on a synth part's output, whatever its engine. The Chorus is sy9's (Modular-Trackular's patch/synths/wt_fx.h),
+// on a synth's output: the ones WAVE and PHASE had built in (core/mods/synths), after their
+// voices, and WAVE's Distortion also in each voice before its filter (Placement Pre). Their
+// settings stay in those engines' patches (62-71) only to be turned into Synth FX's slots
+// (synthfxMod.h), which run plugins on a synth part's output, whatever its engine. The Chorus is sy9's (Modular-Trackular's patch/synths/wt_fx.h),
 // unchanged, so with the Distortion Off it plays as sy9 did.
 //
 // The settings: ten floats in this order, passed as a pointer to the first, so they can sit

@@ -22,8 +22,8 @@ Off/On switch, so there's no separate build for each mix of mods.
 | **Variable Track Length** | Each track of a pattern can have its own length. A short track loops until the pattern ends, then every track starts again together. Hold Trk Len on page 3 of the Pattern screen's bottom bar and turn the encoder. Past its length a track shows its loop in grey, and CE's conditions on the Chance FX count its own loops. Lengths are saved with the project. | On/Off only |
 | **Copy to New** | A Copy to New button on page 3 of the Pattern screen's bottom bar copies the pattern you're on into the next empty pattern, with your unsaved edits and every track's length, playing or stopped. You stay on your pattern. A pattern counts as empty only if it isn't in the song and has nothing in any step, even past its length. With Variable Track Length on, the copy gets the Trk Len lengths too. It works in edit mode. | On/Off only |
 | **Song Loop** | Repeat a block of song positions. In the Song screen's pattern column, with Rec on, Shift + Down selects the block and Play Selection repeats it; Continue Song plays the block out and goes on. During the loop Up/Down and the jog wheel move the block. The status bar shows the loop. Designed by P-N-E-M for 1.2.0. | On/Off only |
-| **Synths** | Two more synth models in the picker: WAVE (wavetable, two oscillators, a filter, three envelopes, two LFOs and a mod matrix) and PHASE (phase distortion, after the Casio CZ). Each has an FX page: Chorus, Flanger or Phaser, and a Distortion that is Overdrive (Tube Screamer style), Distortion (DS-1 style) or Bit Crusher, with Level. Its two knobs are named for the type: Gain and Tone, or Bits and Rate. On WAVE the Distortion can go before the filter (Pre, in each voice) or after (Post); on PHASE Pre and Post are the same. Patches save as CE's do. Off hides the models; a part already playing one keeps it. 1.2.0 projects' WAVE and PHASE parts aren't converted. | Project Settings → Synths |
-| **Synth FX** | Two effect slots, FX1 then FX2, on each synth part, every engine (CE's seven, WAVE and PHASE). Each slot picks a plugin (`.ptsfx`) from `/SynthFX/` on the card; the firmware writes its default pack there (Overdrive, Distortion, Bit Crusher, Chorus, Flanger, Phaser), and anyone can build more ([docs/synthfx_plugins.md](docs/synthfx_plugins.md)). In the patch editor, button 3 shows the part's slots and the plugin's knobs. On WAVE, a Distortion-type slot can be Placement Pre, in each voice before its filter. The slots belong to the part, not the patch, so loading another patch keeps them, and they are saved with the project; an old WAVE or PHASE patch has its own effects moved into the slots. On PERC the effects reach the main output, not its sends. The Distortion and Phaser cost the most CPU: 8 DIRT voices with both on every part reach about 95 %. On WAVE, Pre runs a plugin once per voice and costs more than the old built-in Distortion: 8 WAVE voices with the Distortion Pre and the Phaser on every part read about 65 % on average and up to 92 % on the first play. | Patch editor → button 3 |
+| **Synths** | Two more synth models in the picker: WAVE (wavetable, two oscillators, a filter, three envelopes, two LFOs and a mod matrix) and PHASE (phase distortion, after the Casio CZ). They are `.psyn` plugins, `WAVE.psyn` and `PHASE.psyn`, in the card's `Synths` folder beside CE's engines (install step 3). Their effects are Synth FX's slots (below). Patches save as CE's do. Off hides the models; a part already playing one keeps it. 1.2.0 projects' WAVE and PHASE parts aren't converted. | Project Settings → Synths |
+| **Synth FX** | Two effect slots, FX1 then FX2, on each synth part, every engine (CE's eight, WAVE and PHASE). Each slot picks a plugin (`.ptsfx`) from `/SynthFX/` on the card; the firmware writes its default pack there (Overdrive, Distortion, Bit Crusher, Chorus, Flanger, Phaser), and anyone can build more ([docs/synthfx_plugins.md](docs/synthfx_plugins.md)). In the patch editor, button 3 shows the part's slots and the plugin's knobs. The slots belong to the part, not the patch, so loading another patch keeps them, and they are saved with the project; an old WAVE or PHASE patch has its own effects moved into the slots. On PERC the effects reach the main output, not its sends. The Distortion and Phaser cost the most CPU: 8 DIRT voices with both on every part reach about 95 %. A slot always runs on the part, after the engine; WAVE's old Placement Pre is gone, and a project saved with it opens with those slots on the part. | Patch editor → button 3 |
 
 Every mod is tested on hardware.
 
@@ -56,7 +56,13 @@ have no mods.
    `build/TrackerPlus_MT_1.0.0.ptf`, or sign in to GitHub and download the
    `polyend-tracker-ce-firmware` artifact from a build of this branch under
    [Actions](https://github.com/FatRodzianko/Modular-Trackular-Plus/actions).
-3. **Flash it** as in
+3. **Copy the synth engines to the card.** Every synth engine is a `.psyn` file on the card,
+   not part of the firmware: CE's (ACD, FAT, VAP, WTFM, PERC, DIRT, CHIP and GRAIN) and the
+   Synths mod's WAVE and PHASE. `make psyn` puts all ten in `build/Synths/`, and each CI build
+   has them in the `polyend-tracker-ce-synths` artifact. Copy the `Synths` folder to the card's
+   root. Without the folder, a project's synth parts can open on another engine, since the
+   project stores each part's engine by its place in the list.
+4. **Flash it** as in
    [Flashing on Hardware & Emergency Recovery](#4-flashing-on-hardware--emergency-recovery)
    below. Config then shows the version as `1.0.0 MT`.
 
@@ -97,6 +103,7 @@ Built directly from the original Polyend firmware source code, Tracker CE opens 
 Automatically built from the latest changes in `main` (for all 3 devices):
 
 * Download the latest [Beta Firmware builds (`.zip`)](https://nightly.link/polyend/tracker-ce/workflows/build.yml/main/polyend-tracker-ce-firmware.zip)
+* Download the latest [Synth Engines (`.zip`)](https://nightly.link/polyend/tracker-ce/workflows/build.yml/main/polyend-tracker-ce-synths.zip)
 * Download the latest [Sample Editor Effects (`.zip`)](https://nightly.link/polyend/tracker-ce/workflows/build.yml/main/polyend-tracker-ce-effects.zip)
 * See [`UPCOMING.md`](UPCOMING.md) to find out what's new in these Beta Builds.
 
@@ -130,13 +137,15 @@ This unified codebase powers all three hardware instruments in the Tracker famil
 ├── CONTRIBUTING.md         # Contribution rules & hardware testing workflow
 ├── LICENSE                 # MIT License (+ No Wholesale Commercial Clones & Precompiled Synth Terms)
 ├── NOTICE.md               # Third-party open-source attributions
-├── core/                   # Shared Tracker application, audio engine, UI & open synth engines
+├── core/                   # Shared Tracker application, audio engine, UI (GlobalFileBrowser, editors) & synth host glue
 ├── platforms/
 │   ├── mk66/               # Original Tracker (Kinetis MK66) HAL, drivers & linker scripts
 │   └── imx/                # Tracker+ & Tracker Mini (i.MX RT1051) HAL, drivers & linker scripts
 ├── synth/
 │   ├── include/PolySynth/  # PolySynth public headers & Open Synth SDK (synth/include/PolySynth/sdk/)
-│   └── lib/                # Precompiled libPolySynth.a & libPolyDSP.a + LICENSE-PROPRIETARY.txt
+│   ├── source/             # Open-source PolySynth host, PsynLoader, PolyDSP (Amplifier/Mixer) & Master FX
+│   └── prebuilt/           # Precompiled factory .psyn synth plugins + LICENSE-PROPRIETARY.txt
+├── synth-plugin-sdk/       # .psyn loadable Synth Engine SDK, builder & engines/ sources
 ├── util/                   # Shared C++ utility headers & third-party header libraries (ETL, magic_enum)
 ├── editor-fx-sdk/          # .ptfx Sample Editor plugin SDK, builder & effects/ sources
 └── docs/                   # User guides, SDK tutorials & architecture documentation
@@ -189,6 +198,12 @@ make mini       # -> build/TrackerMini_CE_1.0.0.ptf
 # Build reference .ptfx Sample Editor effects into editor-fx-sdk/build/Effects/:
 make ptfx
 
+# Build open-source .psyn synths (CHIP.psyn; MT+: WAVE.psyn and PHASE.psyn) and stage all factory + open-source .psyn plugins into build/Synths/:
+make psyn
+
+# Or compile only the synth-plugin-sdk reference plugin (CHIP.psyn -> synth-plugin-sdk/build/):
+make -C synth-plugin-sdk
+
 # Clean all build directories:
 make clean
 ```
@@ -213,6 +228,8 @@ make bump-minor TARGET=all        # or TARGET=original | TARGET=plus | TARGET=mi
    * *Note*: Keep `.ptf` filenames at **31 characters or fewer** so the Original Tracker's 32-byte `/Firmware/_fwinfo` bootloader buffer remains null-terminated.
 2. On the device, open **Config > Firmware > Firmware update**, select the `.ptf` file, and confirm.
 
+If you prefer a video, have a look here: https://youtu.be/1F6wx2ftFVA
+
 > **Bootloader Resilience & Emergency Firmware Recovery**:
 > * The Polyend Tracker bootloader is isolated from the application firmware:
 >   * On the **Original Tracker (`MK66`)**, the bootloader runs on a separate dedicated microcontroller (`kBootloaderTrig`).
@@ -234,7 +251,8 @@ Full user and developer documentation is available in [`docs/`](docs/Home.md) an
   * [SD Card Image Viewer](docs/image_viewer.md)
 * **Developer & Architecture Guides**:
   * [Firmware Architecture, Hardware Limits & Developer Gotchas](docs/developer_guide.md)
-  * [Custom Synth Engine SDK](docs/custom_synth_sdk.md)
+  * [Global File Browser Developer Guide](docs/global_file_browser.md)
+  * [Custom Synth Engine & `.psyn` Plugin SDK](docs/custom_synth_sdk.md)
   * [Modular Sample Editor Effects & `.ptfx` Developer SDK](docs/modular_effects_system.md)
 
 ---
@@ -252,9 +270,9 @@ This repository is part of a growing open-source ecosystem around the Polyend Tr
 
 ## License
 
-* **Source Code, SDKs, Open Synth Engines (`core/synth/engines/`), `.ptfx` Sample Editor SDK (`editor-fx-sdk/`), Drivers & Utilities**: Licensed under the **MIT License with a Wholesale Commercial Clone Restriction** (see [`LICENSE`](LICENSE)).
+* **Source Code, SDKs, Open Synth Engines (`synth-plugin-sdk/`), `.ptfx` Sample Editor SDK (`editor-fx-sdk/`), PolySynth Host & DSP (`synth/source/`), Drivers & Utilities**: Licensed under the **MIT License with a Wholesale Commercial Clone Restriction** (see [`LICENSE`](LICENSE)).
   * **Musicians & Creators**: Using the firmware for commercial music production, albums, paid live performances/gigs, sample packs, and monetized streaming/YouTube content is **expressly permitted**.
-  * **Developers & Plugin Authors**: Reusing individual source files, drivers, DSP algorithms, UI widgets, or open-source C++ synth engines (`CHIP`, etc.) in your own open-source or commercial projects—and selling `.ptfx` Sample Editor plugins—is **expressly permitted** under the MIT License.
+  * **Developers & Plugin Authors**: Reusing individual source files, drivers, DSP algorithms, UI widgets, or open-source C++ synth engines (`CHIP`, etc.) in your own open-source or commercial projects—and selling custom `.ptfx` Sample Editor or custom `.psyn` synth plugins—is **expressly permitted** under the MIT License.
   * **No Wholesale Commercial Clones**: You may **not** sell compiled `.ptf` firmware builds, manufacture/sell commercial clone hardware running the Tracker firmware, or sell a direct port/wholesale clone of the complete Tracker application as a paid software product.
-* **Precompiled Synth & DSP Libraries (`synth/lib/libPolySynth.a`, `synth/lib/libPolyDSP.a`)**: Provided under the [Polyend Precompiled Synthesizer & DSP Library License](synth/lib/LICENSE-PROPRIETARY.txt), permitting free use on authentic Polyend hardware as well as personal/DIY non-commercial projects (commercial embedding of the precompiled `.a` binaries is prohibited).
+* **Precompiled Factory Synth Plugins (`synth/prebuilt/*.psyn`)**: Provided under the [Polyend Precompiled Factory Synthesizer Plugins License](synth/prebuilt/LICENSE-PROPRIETARY.txt), permitting free use on authentic Polyend hardware as well as personal/DIY non-commercial projects (commercial embedding or paid distribution of these proprietary factory `.psyn` binaries is prohibited).
 * **Third-Party Components**: See [`NOTICE.md`](NOTICE.md).

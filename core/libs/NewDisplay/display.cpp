@@ -40,20 +40,6 @@
 #include <cr_section_macros.h>
 
 #ifdef FEATURE_SYNTH
-#include "images/acd_mini_nomark_80x29_L2.h"
-#include "images/fat_mini_nomark_80x29_L2.h"
-#include "images/perc_mini_nomark_80x29_L2.h"
-#include "images/phz_mini_nomark_80x29_L2.h"
-#include "images/vap_mini_nomark_80x29_L2.h"
-#include "images/wtfm_mini_nomark_80x29_L2.h"
-
-#include "images/acd_med_108x40_L2.h"
-#include "images/fat_med_108x40_L2.h"
-#include "images/perc_med_108x40_L2.h"
-#include "images/phz_med_108x40_L2.h"
-#include "images/vap_med_108x40_L2.h"
-#include "images/wtfm_med_108x40_L2.h"
-
 #include "images/synth_env_18x14_L4.h"
 #include "images/synth_filter_18x13_L4.h"
 #include "images/synth_gear_18x18_L4.h"
@@ -71,18 +57,7 @@
 #include "images/synth_snare_20x16_L4.h"
 #include "images/synth_tom_20x16_L4.h"
 
-#include "images/dirt_med_108x40_L2.h"
-#include "images/dirt_mini_nomark_80x28_L2.h"
 #include "images/synth_shaper_18x18_L4.h"
-#include "images/chip_med_108x40_L2.h"
-#include "images/chip_mini_nomark_80x28_L2.h"
-#if MT_HAS_SYNTHS // MT: WAVE's and PHASE's model badges (tools/synths/gen_badges.py)
-#include "synths/images/wave_mini_80x28_L2.h"
-#include "synths/images/wave_med_108x40_L2.h"
-#include "synths/images/phase_mini_80x28_L2.h"
-#include "synths/images/phase_med_108x40_L2.h"
-#endif
-
 #endif
 
 static constexpr int kMaxFontBufferSize = 22396;
@@ -179,50 +154,24 @@ const strBitmap bitmaps[displayBitmapsCount] = {
     { battery_ch_28x19_L4, 111700, 266, 28, 19, L4, 14 },
 
 #ifdef FEATURE_SYNTH
-    { acd_mini_nomark_80x29_L2, 112000, 580, 80, 29, L2, 20 },
-    { fat_mini_nomark_80x29_L2, 112600, 580, 80, 29, L2, 20 },
-    { vap_mini_nomark_80x29_L2, 113200, 580, 80, 29, L2, 20 },
-    { wtfm_mini_nomark_80x29_L2, 113800, 580, 80, 29, L2, 20 },
+    { synth_env_18x14_L4, 112000, 126, 18, 14, L4, 9 },
+    { synth_filter_18x13_L4, 112200, 117, 18, 13, L4, 9 },
+    { synth_gear_18x18_L4, 112400, 162, 18, 18, L4, 9 },
+    { synth_lfo_20x13_L4, 112600, 130, 20, 13, L4, 10 },
+    { synth_macro_14x14_L4, 112800, 98, 14, 14, L4, 7 },
+    { synth_mod_22x12_L4, 113000, 132, 22, 12, L4, 11 },
+    { synth_osc_20x12_L4, 113200, 120, 20, 12, L4, 10 },
 
-    { acd_med_108x40_L2, 114400, 1080, 108, 40, L2, 27 },
-    { fat_med_108x40_L2, 115500, 1080, 108, 40, L2, 27 },
-    { vap_med_108x40_L2, 116600, 1080, 108, 40, L2, 27 },
-    { wtfm_med_108x40_L2, 117700, 1080, 108, 40, L2, 27 },
+    { synth_FX_20x18_L4, 113400, 180, 20, 18, L4, 10 },
+    { synth_cymbal_20x16_L4, 113600, 160, 20, 16, L4, 10 },
+    { synth_hihat_20x16_L4, 113800, 160, 20, 16, L4, 10 },
+    { synth_kick_16x19_L4, 114000, 152, 16, 19, L4, 8 },
+    { synth_mixer_16x14_L4, 114200, 112, 16, 14, L4, 8 },
+    { synth_percussion_16x16_L4, 114400, 128, 16, 16, L4, 8 },
+    { synth_snare_20x16_L4, 114600, 160, 20, 16, L4, 10 },
+    { synth_tom_20x16_L4, 114800, 160, 20, 16, L4, 10 },
 
-    { synth_env_18x14_L4, 118800, 126, 18, 14, L4, 9 },
-    { synth_filter_18x13_L4, 119000, 117, 18, 13, L4, 9 },
-    { synth_gear_18x18_L4, 119200, 162, 18, 18, L4, 9 },
-    { synth_lfo_20x13_L4, 119400, 130, 20, 13, L4, 10 },
-    { synth_macro_14x14_L4, 119600, 98, 14, 14, L4, 7 },
-    { synth_mod_22x12_L4, 119800, 132, 22, 12, L4, 11 },
-    { synth_osc_20x12_L4, 120000, 120, 20, 12, L4, 10 },
-
-    { perc_mini_nomark_80x29_L2, 120200, 580, 80, 29, L2, 20 },
-    { phz_mini_nomark_80x29_L2, 120800, 580, 80, 29, L2, 20 },
-    { perc_med_108x40_L2, 121400, 1080, 108, 40, L2, 27 },
-    { phz_med_108x40_L2, 122500, 1080, 108, 40, L2, 27 },
-
-    { synth_FX_20x18_L4, 123600, 180, 20, 18, L4, 10 },
-    { synth_cymbal_20x16_L4, 123800, 160, 20, 16, L4, 10 },
-    { synth_hihat_20x16_L4, 124000, 160, 20, 16, L4, 10 },
-    { synth_kick_16x19_L4, 124200, 152, 16, 19, L4, 8 },
-    { synth_mixer_16x14_L4, 124400, 112, 16, 14, L4, 8 },
-    { synth_percussion_16x16_L4, 124600, 128, 16, 16, L4, 8 },
-    { synth_snare_20x16_L4, 124800, 160, 20, 16, L4, 10 },
-    { synth_tom_20x16_L4, 125000, 160, 20, 16, L4, 10 },
-
-    { dirt_mini_nomark_80x28_L2, 125200, 560, 80, 28, L2, 20 },
-    { dirt_med_108x40_L2, 125800, 1080, 108, 40, L2, 27 },
-    { synth_shaper_18x18_L4, 126900, 162, 18, 18, L4, 9 },
-    { chip_mini_nomark_80x28_L2, 127100, 560, 80, 28, L2, 20 },
-    { chip_med_108x40_L2, 127700, 1080, 108, 40, L2, 27 },
-#if MT_HAS_SYNTHS // MT: WAVE's and PHASE's badges, in the RAM_G past CHIP's (the controls start at 150000)
-    { wave_mini_80x28_L2, 128800, 560, 80, 28, L2, 20 },
-    { wave_med_108x40_L2, 129400, 1080, 108, 40, L2, 27 },
-    { phase_mini_80x28_L2, 130500, 560, 80, 28, L2, 20 },
-    { phase_med_108x40_L2, 131600, 1080, 108, 40, L2, 27 },
-#endif
-
+    { synth_shaper_18x18_L4, 115000, 162, 18, 18, L4, 9 },
 #endif
 };
 

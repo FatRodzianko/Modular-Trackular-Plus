@@ -33,6 +33,7 @@ namespace lockup
 
 void audioStart(); // the audio interrupt, first thing
 void audioStop();  // the audio interrupt, last thing
+void synthOverBudget(); // the audio interrupt: CE's synth went over its time limit (synth_PolySynth.cpp)
 void arm();        // once the Pattern screen is up; a main loop may stall before that
 void update();     // main loop: writes the log
 

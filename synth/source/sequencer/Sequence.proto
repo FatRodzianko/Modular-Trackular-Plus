@@ -1,0 +1,17 @@
+syntax = "proto3";
+import "nanopb.proto";
+
+package polysynth;
+
+message Step {
+  int32 note = 1;
+  repeated fixed64 chordScheme = 2 [(nanopb).max_count = 2, (nanopb).fixed_count = true];
+  int32 length = 3;
+}
+
+message Sequence {
+  int32 stepCount = 1;
+  repeated Step sequence = 2 [(nanopb).max_count = 64, (nanopb).fixed_count = true];
+  int32 rootNote = 3;
+  int32 scaleScheme = 4;
+}

@@ -71,6 +71,17 @@ void mtEffectModular::configurePlugin(const PtfxHeader& hdr,
     }
 }
 
+void mtEffectModular::unloadPlugin()
+{
+    m_initFunc         = nullptr;
+    m_setParamFunc     = nullptr;
+    m_processBlockFunc = nullptr;
+    m_state            = false;
+    operationType      = OperationType::operationTypeIdle;
+    processing.processParams.state = false;
+    processing.isApplyOnEnd        = false;
+}
+
 void mtEffectModular::setParameter(float& value, int idx)
 {
     if (idx >= 0 && idx < 12)

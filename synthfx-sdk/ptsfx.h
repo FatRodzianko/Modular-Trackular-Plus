@@ -42,8 +42,11 @@ enum
 {
     PTSFX_FLAG_WIDENS = 0x0001,             /* makes stereo from mono (a chorus): on a mono part,
                                                process() gets L in and writes L and R */
-    PTSFX_FLAG_PRE    = 0x0002,             /* may run in each voice, before the filter (WAVE's
-                                               Placement Pre): mono only, R is null */
+    PTSFX_FLAG_PRE    = 0x0002,             /* could run in each voice, before the filter (WAVE's
+                                               Placement Pre, while WAVE was built into the
+                                               firmware). No host runs a plugin in a voice now,
+                                               so it changes nothing; a plugin with it loads
+                                               and runs on the part. Not with WIDENS. */
 };
 
 /* A knob's display */

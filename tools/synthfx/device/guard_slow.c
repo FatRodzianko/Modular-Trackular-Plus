@@ -3,7 +3,9 @@
  * GuardSlow: a device test of the time guard (docs/mt/DEVICE_TEST_LADDER.md, the Synth FX
  * plugin set). It passes the sound through after a busy loop before each block:
  *   Load Light: 50,000 turns, well under a quarter of a block on the unit, so it keeps running;
- *   Load Heavy: 250,000 turns, over a quarter, so the host bypasses it after 8 blocks.
+ *   Load Heavy: 250,000 turns, over a quarter, so the host bypasses it after 8 blocks; or, if
+ *   that block also trips CE's own synth limit (2.1 ms; on the unit a turn was about 5.6 cycles,
+ *   so about 2.3 ms), in that block, after CE's one silence of 32 blocks (since 2026-11-14).
  * A turn is about 6 instructions (the emulator's count, tools/emu/test_synthfx.py's guards);
  * on the unit perhaps 2 to 6 cycles, which the Profiler reads with Light. Not for music.
  */

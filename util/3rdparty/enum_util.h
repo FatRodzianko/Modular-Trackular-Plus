@@ -4,7 +4,7 @@
  * From https://www.thecodeteacher.com/question/59748/Max-and-min-values-in-a-C++-enum
  */
 
-#include <iostream>
+#include <cstddef>
 #include <limits>
 #include <type_traits>
 

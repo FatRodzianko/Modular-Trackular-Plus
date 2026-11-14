@@ -577,8 +577,16 @@ void NewList::drawImagesList(int x1, int x2, int y, int rowH)
 
         int idx = data->imageIds[dataIdx];
 
-        if (idx >= displayBitmapsCount)
+        if (idx < 0 || idx >= displayBitmapsCount)
         {
+            if (data->params != nullptr && data->params[dataIdx] != nullptr)
+            {
+                API_CMD_TEXT(x1 + ((x2 - x1) / 2),
+                             y + (rowH * rowIdx),
+                             fonts[3].handle,
+                             OPT_CENTERX | OPT_CENTERY,
+                             data->params[dataIdx]);
+            }
             continue;
         }
 

@@ -4,8 +4,10 @@
     python tools/emu/test_bundle_cost.py <mods.axf> <reference.axf> <worst-case project folder>
 
 Carried over from 1.2.0's test of the same name, with one part left out: 1.2.0 also counted whole blocks
-through the synths, and the closed libraries' licence rules that out here. Their instructions aren't
-counted, so this says nothing about the total. That's measured on the device, with the Profiler.
+through the synths, and the closed engines' licence rules that out here. The synth host's
+instructions (libPolySynth) aren't counted, and nothing at all is counted or kept inside the .psyn pool
+where the closed engines run, so this says nothing about the total. That's measured on the device, with
+the Profiler.
 
 1. Sequencer side: Sequencer::tick on the real project, Play pressed on the real path, mods against
    reference, block for block. Limit: SEQ_LIMIT more in the worst block.
@@ -72,9 +74,11 @@ def tick_counts(axf, project):
     r.loop()
     r.release(PLAY)
 
-    # Addresses inside the closed libraries aren't counted, and nothing is kept about them.
-    closed = sorted((s.addr & ~1, (s.addr & ~1) + s.size) for n, s in r.syms.items()
-                    if s.is_func and s.size and ("polysynth" in n.lower() or "polydsp" in n.lower()))
+    # Addresses in the synth host and the .psyn pool (the closed engines) aren't counted, and nothing is
+    # kept about them.
+    closed = sorted([(s.addr & ~1, (s.addr & ~1) + s.size) for n, s in r.syms.items()
+                     if s.is_func and s.size and ("polysynth" in n.lower() or "polydsp" in n.lower())] +
+                    [(a, b) for a, b, _ in r.guard.ranges])
     starts = [a for a, _ in closed]
     count = [0]
 

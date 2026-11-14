@@ -6,9 +6,12 @@
 #include "PolySynth/Instrument.h"
 #include "PolySynth/Synth.h"
 #include "Synth.h"
+#include "Platform.h"
+#include "Tracker.h"
 #include "config.h"
 #include <span>
 #include "modsBuild.h" // MT:
+#include "lockupRecorder.h" // MT: the diagnostic build counts the time limit's silences
 #if MT_HAS_SYNTHFX
 #include "synthfx/synthfxMod.h" // MT: Synth FX
 #endif
@@ -24,6 +27,23 @@ AUDIO_CORE_RAM void PolySynth::update(void)
         return;
     }
 
+    static constexpr uint32_t kMaxSynthRealtimeBudgetUs = 2100;
+    static constexpr uint8_t kOverloadCooldownBlocks = 32;
+
+    if (!AudioStream::renderMode && overloadCooldownBlocks > 0)
+    {
+        --overloadCooldownBlocks;
+        return;
+    }
+
+    Timer* timer = (!AudioStream::renderMode && Tracker::getInstance() != nullptr &&
+                    Tracker::getInstance()->getPlatform() != nullptr)
+                     ? Tracker::getInstance()->getPlatform()->getTimer()
+                     : nullptr;
+    const uint32_t maxCycles =
+      timer != nullptr ? kMaxSynthRealtimeBudgetUs * timer->clockCyclesPerUs() : 0;
+    const uint32_t startCycles = timer != nullptr ? timer->clockCycles() : 0;
+
     static_assert(std::is_same<polysynth::sample_t, float>::value);
 
     static std::array<polysynth::sample_t, polysynth::kAudioBufferSize> tempBufSendsCommonLeft;
@@ -37,7 +57,7 @@ AUDIO_CORE_RAM void PolySynth::update(void)
     {
         auto& part = trackerSynth->parts[partIdx];
 
-        if (part.instrument->getVoiceCount() == 0)
+        if (part.loading.load(std::memory_order_acquire) || part.instrument->getVoiceCount() == 0)
         {
             if (!AudioStream::renderMode)
             {
@@ -56,6 +76,15 @@ AUDIO_CORE_RAM void PolySynth::update(void)
             transmit(blockZero, kSend2Offset + partIdx);
             release(blockZero);
             continue;
+        }
+
+        if (partIdx > 0 && timer != nullptr && (timer->clockCycles() - startCycles) > maxCycles)
+        {
+#if MT_LOCKUP_RECORDER // MT:
+            mods::lockup::synthOverBudget();
+#endif
+            overloadCooldownBlocks = kOverloadCooldownBlocks;
+            return;
         }
 
         bool isStereo =
@@ -110,10 +139,24 @@ AUDIO_CORE_RAM void PolySynth::update(void)
           std::span<polysynth::AudioBufferRef>(tempSendsBufArray),
           partIdx);
 
-#if MT_HAS_SYNTHFX // MT: Synth FX, before the sends and the fader, so both get it
+#if MT_HAS_SYNTHFX // MT: Synth FX, before the sends and the fader, so both get it, and before the
+                   // budget check, so its time counts
         mods::synthfx::run(
           mtFx, partIdx, tempBufSendsCommonLeft.data(), tempBufSendsCommonRight.data(), mtEngineStereo);
 #endif
+
+        bool budgetExceeded =
+          (timer != nullptr && (timer->clockCycles() - startCycles) > maxCycles);
+        if (budgetExceeded)
+        {
+#if MT_LOCKUP_RECORDER // MT:
+            mods::lockup::synthOverBudget();
+#endif
+#if MT_HAS_SYNTHFX // MT: a slot's plugin over its own budget in this block stops now
+            mods::synthfx::overSynthLimit(partIdx);
+#endif
+            overloadCooldownBlocks = kOverloadCooldownBlocks;
+        }
 
         const bool reuseUnmodifiedMono = (!hasSends && !isStereo && gainDB[partIdx] == 0.0f);
         if (!reuseUnmodifiedMono)
@@ -126,15 +169,6 @@ AUDIO_CORE_RAM void PolySynth::update(void)
         }
 
         polysynth::AudioBufferRef tempBufRef = tempBufSendsCommonLeft;
-
-#if MT_HAS_SYNTHFX // MT: Synth FX may send a mono part as stereo; this checks the engine's own
-        assert(hasSends == mtEngineStereo);
-#else
-        assert(hasSends ==
-               isStereo); // Assumption to simplify handling. The only one stereo and with internal
-                          // synths is PERC, the other are mono and without sends. Refactor the
-                          // handling if needed for new synth.
-#endif
 
         if (hasSends)
         {
@@ -232,6 +266,10 @@ AUDIO_CORE_RAM void PolySynth::update(void)
         if (blockPostFaderRight != NULL)
         {
             release(blockPostFaderRight);
+        }
+        if (budgetExceeded)
+        {
+            break;
         }
     }
 }

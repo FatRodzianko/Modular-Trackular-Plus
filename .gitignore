@@ -4,11 +4,15 @@ agt/
 # Build outputs
 /build/
 core/build-*/
+synth/build-*/
 platforms/mk66/build/
 platforms/imx/build-*/
 editor-fx-sdk/build/
+synth-plugin-sdk/build/
 core/mods/tests/build/
+core/mods/synths/psyn/build/
 *.axf
+*.elf
 *.lss
 *.ptf
 *.ptfx

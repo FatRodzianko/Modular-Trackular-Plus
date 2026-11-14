@@ -1,14 +1,29 @@
 #!/usr/bin/env python3
-"""CE's real start-up and audio graph under Unicorn, with the closed synth libraries in.
+"""CE's real start-up and audio graph under Unicorn, with the synth engines in.
 
 Static constructors, Synth::init and audioEngine::init run as they are, on a fake Platform built
 from core/include/Platform.h. Notes go in through Synth's public calls, and audio comes out of
 audioEngine::updateAudioBuffers, the interrupt's own entry. See docs/mt/SOUND_TEST_PLAN.md.
 
-libPolySynth.a and libPolyDSP.a are a black box (licence section 2(c)): they run, and what comes out
-can be compared between our builds, nothing more. So this rig gets the libraries' symbol names from
-nm, names only, and its helpers refuse any hook on them. If something fails inside one, stop and
+Since CE's plugin synths the synth host (libPolySynth.a, built from synth/source) is CE's open code,
+and the engines are .psyn plugins on the card: this rig puts CE's on the fake card's /Synths/
+(build/Synths from `make psyn`: the factory ones from synth/prebuilt and CHIP), and Synth::init loads
+them as the firmware does. The factory .psyn files are a black box (their licence, section 2(c)):
+they run, and what comes out can be compared between our builds, nothing more. PsynLoader relocates
+them into the synth's pool (s_psynRamPool, Synth.cpp), so the guard is that pool's range: the
+helpers refuse any hook in it, and nothing is read from it. If something fails inside one, stop and
 report. Don't dig.
+
+WAVE and PHASE are .psyn plugins too, but ours, open (core/mods/synths/psyn, built with their ELFs
+in core/mods/synths/psyn/build): the one exception. The fake card sees PsynLoader read each image
+into the pool (the read just past the 128-byte header lands on the image's base), so the rig
+knows where each of ours is, and the guard lets hooks in there, and only there, at the ELF's
+symbols (linked at 0) plus that base. An image read over one of ours (an eviction) stops the
+test: the rig doesn't follow an engine that moves.
+
+A firmware from before them (test_synthfx.py's --before) has the closed libraries linked in
+instead: the guard is then their symbols' ranges, as before, with the names from nm (names only)
+on the two libraries as git last held them (build/emu/closed_symbols.txt keeps the list).
 """
 import os
 import struct
@@ -23,7 +38,12 @@ from unicorn import UC_HOOK_CODE  # noqa: E402
 from unicorn.arm_const import UC_ARM_REG_S0  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
-LIBS = ("synth/lib/libPolySynth.a", "synth/lib/libPolyDSP.a")
+SYNTHS = REPO / "build" / "Synths"           # `make psyn`
+OWN_PSYN_BUILD = REPO / "core" / "mods" / "synths" / "psyn" / "build"
+SYNTHS_FALLBACK = (REPO / "synth" / "prebuilt", REPO / "synth-plugin-sdk" / "build", OWN_PSYN_BUILD)
+FACTORY_SYNTHS = ("ACD", "DIRT", "FAT", "GRAIN", "PERC", "VAP", "WTFM")
+OWN_SYNTHS = ("WAVE", "PHASE")                # ours, open: core/mods/synths/psyn
+PSYN_HEADER = 128
 HEAP_SIZE = 138_752                 # CE's fixed heap
 BLOCK = 128
 BLOCK_MS = 3                        # the fake clock's step per block: 128 samples at 44.1 kHz
@@ -31,12 +51,103 @@ PATCH_SIZE = 255
 
 
 class ClosedCode(Exception):
-    """A hook was asked for inside the closed libraries."""
+    """A hook was asked for inside the closed engines' memory."""
 
 
-def _nm_lines():
+def synth_files():
+    """The .psyn engines for the fake card's /Synths/: name -> bytes."""
+    folders = [SYNTHS] if SYNTHS.is_dir() and any(SYNTHS.glob("*.psyn")) else list(SYNTHS_FALLBACK)
+    files = {}
+    for folder in folders:
+        for p in sorted(folder.glob("*.psyn")):
+            files[p.name] = p.read_bytes()
+    missing = [n for n in FACTORY_SYNTHS + OWN_SYNTHS if f"{n}.psyn" not in files]
+    if missing:
+        raise RuntimeError(f"no {', '.join(missing)}.psyn for the fake card: run `make psyn`")
+    return files
+
+
+def psyn_header(data):
+    """The fields of a .psyn file's header (psyn_plugin.h's PsynHeader) that the rig uses."""
+    magic, _api, _flags, type_wave, type_tracker = struct.unpack_from("<IHHHH", data, 0)
+    code_name = data[12:20].split(b"\0")[0].decode()
+    code, rodata, init_data, bss = struct.unpack_from("<IIII", data, 64)
+    if magic != 0x4E595350:
+        raise RuntimeError("not a .psyn file")
+    return {"code_name": code_name, "type_id_wave": type_wave, "type_id_play_tracker": type_tracker,
+            "image_size": code + rodata + init_data + bss, "code_size": code}
+
+
+class OwnEngine:
+    """One of our .psyn engines: its ELF (linked at 0) and, once PsynLoader has read it into the
+    pool, its base there."""
+
+    def __init__(self, name, data):
+        from machine import Elf
+        self.name = name
+        self.header = psyn_header(data)
+        elf_path = OWN_PSYN_BUILD / f"{name}.elf"
+        if not elf_path.exists():
+            raise RuntimeError(f"no {elf_path}: build core/mods/synths/psyn (make psyn)")
+        self.elf = Elf(elf_path)
+        text = next((blob for vaddr, _p, blob, _m in self.elf.segments if vaddr == 0), b"")
+        image = data[PSYN_HEADER:PSYN_HEADER + self.header["code_size"]]
+        if not text or image != text[:len(image)]:
+            raise RuntimeError(f"{name}.psyn on the fake card isn't the one {elf_path.name} made: run make psyn")
+        self.base = None
+        self.pending = []           # (symbol, func): watches for when it is loaded
+
+    def addr(self, symbol):
+        """Where a symbol (exact, or a unique substring) is now; the engine must be loaded."""
+        if self.base is None:
+            raise RuntimeError(f"{self.name} isn't loaded yet")
+        hits = [s for n, s in self.elf.symbols.items() if n == symbol] or \
+               [s for n, s in self.elf.symbols.items() if symbol in n]
+        if len(hits) != 1:
+            raise KeyError(f"{self.name}: {symbol!r}: {len(hits)} matches")
+        return self.base + hits[0].addr
+
+
+class PsynCard(FakeSd):
+    """The fake card, telling the rig where each .psyn image is read to."""
+
+    def __init__(self, m, on_image):
+        self.on_image = on_image
+        super().__init__(m)
+
+    def read_file(self):
+        buf, n, h = self.m.arg(1), self.m.arg(2), self.m.arg(3)
+        path, _mode, pos = self.handles[h]
+        got = super().read_file()
+        if path.startswith("/Synths/") and pos == PSYN_HEADER:
+            self.on_image(path[len("/Synths/"):], buf, got)
+        return got
+
+
+OLD_LIBS = ("synth/lib/libPolySynth.a", "synth/lib/libPolyDSP.a")   # closed, before CE's plugin synths
+
+
+def _old_libs():
+    """The two closed libraries from git, as its last commit with them held them, in build/emu/."""
+    out = REPO / "build" / "emu" / "closed_libs"
+    paths = [out / Path(lib).name for lib in OLD_LIBS]
+    if all(p.exists() for p in paths):
+        return paths
+    git = lambda *a: subprocess.run(["git", "-C", str(REPO), *a], capture_output=True, check=True).stdout  # noqa: E731
+    rev = git("log", "-n1", "--format=%H", "HEAD", "--", OLD_LIBS[0]).decode().strip()
+    if not rev:
+        raise RuntimeError("git has no closed libraries: the guard can't work on this image")
+    if subprocess.run(["git", "-C", str(REPO), "cat-file", "-e", f"{rev}:{OLD_LIBS[0]}"]).returncode != 0:
+        rev += "^1"                     # the commit that deleted them: its first parent has them
+    out.mkdir(parents=True, exist_ok=True)
+    for lib, p in zip(OLD_LIBS, paths):
+        p.write_bytes(git("show", f"{rev}:{lib}"))
+    return paths
+
+
+def _nm_lines(paths):
     tool = os.environ.get("MT_NM")
-    paths = [str(REPO / lib) for lib in LIBS]
+    paths = [str(p) for p in paths]
     if tool:
         return subprocess.run([tool, "--defined-only", *paths], capture_output=True, text=True, check=True).stdout
     try:
@@ -55,14 +166,13 @@ def _nm_lines():
                           capture_output=True, text=True, check=True, env=env).stdout
 
 
-def closed_symbol_names():
-    """The names the two libraries define, and nothing else from them."""
+def old_closed_symbol_names():
+    """The names the two old libraries define, and nothing else from them."""
     cache = REPO / "build" / "emu" / "closed_symbols.txt"
-    newest = max((REPO / lib).stat().st_mtime for lib in LIBS)
-    if cache.exists() and cache.stat().st_mtime >= newest:
+    if cache.exists():
         return set(cache.read_text().split("\n"))
     names = set()
-    for line in _nm_lines().splitlines():
+    for line in _nm_lines(_old_libs()).splitlines():
         parts = line.split()
         if len(parts) >= 2 and parts[-2] in "TtWwVvDdBbRr" and len(parts[-2]) == 1:
             names.add(parts[-1])
@@ -74,22 +184,42 @@ def closed_symbol_names():
 
 
 class Guard:
-    """The closed libraries' address ranges in this image."""
+    """The closed engines' place in this image: the synth's pool, where PsynLoader puts them, or on a
+    firmware from before CE's plugin synths, the closed libraries' symbols."""
 
     def __init__(self, m):
-        closed = closed_symbol_names()
+        pools = [(n, s) for n, s in m.elf.symbols.items() if n.endswith("s_psynRamPool") and s.size]
+        if len(pools) == 1:
+            name, s = pools[0]
+            self.ranges = [(s.addr, s.addr + s.size, "the .psyn pool")]
+            return
+        closed = old_closed_symbol_names()
         self.ranges = []
         for name, s in m.elf.symbols.items():
             if name in closed and s.size:
                 a = s.addr & ~1
-                self.ranges.append((a, a + s.size, name))
+                self.ranges.append((a, a + s.size, f"a closed library's {name}"))
         if not self.ranges:
-            raise RuntimeError("the closed libraries aren't in this image: run tests on a full build")
+            raise RuntimeError("neither the .psyn pool nor the closed libraries are in this image: "
+                               "run tests on a full build")
+
+    open = ()                       # our engines' images in the pool: (begin, end, name)
+
+    def allow(self, begin, end, name):
+        self.open = tuple(o for o in self.open if o[2] != name) + ((begin, end, name),)
+
+    def _open(self, begin, end):
+        return any(a <= begin and end <= b for a, b, _ in self.open)
 
     def check(self, begin, end):
+        if self._open(begin, end):
+            return
         for a, b, name in self.ranges:
             if begin < b and a <= end:
-                raise ClosedCode(f"{begin:#x}..{end:#x} overlaps a closed library's {name}")
+                raise ClosedCode(f"{begin:#x}..{end:#x} overlaps {name}")
+
+    def inside(self, address):
+        return not self._open(address, address) and any(a <= address < b for a, b, _ in self.ranges)
 
 
 class SoundRig:
@@ -110,7 +240,13 @@ class SoundRig:
         self._stub_hardware()
         self._fake_timer()
         self._run_static_constructors()
-        self.sd = FakeSd(m)
+        self.sd = PsynCard(m, self._image_read)
+        self.sd.dirs.add("/Synths")
+        self.own = {}
+        for name, data in synth_files().items():    # CE's engines and ours, as on a card with its Synths folder
+            self.sd.files[f"/Synths/{name}"] = data
+            if name[:-len(".psyn")] in OWN_SYNTHS:
+                self.own[name[:-len(".psyn")]] = OwnEngine(name[:-len(".psyn")], data)
         self._fake_platform()
         self._init_synth()
         self._init_engine()
@@ -124,6 +260,33 @@ class SoundRig:
         if not hits:
             raise KeyError(prefix)
         return self.syms[hits[0]].addr
+
+    def _image_read(self, file, base, length):
+        """PsynLoader read a .psyn image into the pool at base (main loop, audio masked)."""
+        name = file[:-len(".psyn")] if file.endswith(".psyn") else file
+        for e in self.own.values():
+            if e.base is not None and e.name != name and base < e.base + e.header["image_size"] and \
+                    e.base < base + length:
+                raise ClosedCode(f"{file} read over {e.name}'s image (an eviction): the rig can't follow it")
+        e = self.own.get(name)
+        if e is None:
+            return
+        e.base = base
+        self.guard.allow(base, base + e.header["image_size"], f"{name}.psyn")
+        pending, e.pending = e.pending, []
+        for symbol, func in pending:
+            self.watch(e.addr(symbol), func)
+        self.m.uc.ctl_flush_tb()
+
+    def watch_own(self, engine, symbol, func):
+        """Call func(machine) on entry to one of our engine's functions (by its ELF symbol), now if
+        PsynLoader has loaded it, or as soon as it does."""
+        e = self.own[engine]
+        if e.base is None:
+            e.pending.append((symbol, func))
+        else:
+            self.watch(e.addr(symbol), func)
+            self.m.uc.ctl_flush_tb()
 
     def stub(self, addr, func):
         self.guard.check(addr & ~1, addr & ~1)
@@ -301,6 +464,9 @@ class PlayRig(SoundRig):
         self._interrupt = m.addr("_ZN11TrackerImpl18updateAudioBuffersEPvS0_i")
         self.has_mods = "_ZN4mods4initEP10FileSystem" in self.syms
         self.notes = 0
+        # Interface::begin's: cProjectEditor::loadProjectValues checks each part through it (CE's
+        # validateSynthPartSettings), and left at 0 that reads the bottom of the ITCM as a Synth
+        m.w32(m.addr("_ZN10ModuleBase5synthE"), self.synth)
 
         crc_vtable = m.alloc(64, 4)
         for i in range(16):

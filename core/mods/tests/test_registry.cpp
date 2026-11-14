@@ -278,6 +278,26 @@ void testInit()
     check(calls.empty(), "init calls no firmware-only function");
 }
 
+void testSynthsPicker()
+{
+#if MT_HAS_SYNTHS
+    // The model picker filters CE's list (its engines and plugins come before and after WAVE and PHASE)
+    using synths::pickerShows;
+    check(pickerShows(true, synths::kWaveTypeId, false) && pickerShows(true, synths::kPhaseTypeId, false),
+          "Synths On: the picker shows WAVE and PHASE");
+    check(!pickerShows(false, synths::kWaveTypeId, false) && !pickerShows(false, synths::kPhaseTypeId, false),
+          "Synths Off: the picker leaves WAVE and PHASE out");
+    check(pickerShows(false, synths::kWaveTypeId, true) && pickerShows(false, synths::kPhaseTypeId, true),
+          "Synths Off: a part's own WAVE or PHASE keeps its row");
+    bool ceShown = true;
+    for (int id : { 1, 2, 4, 5, 6, 7, 8, 11, 100, 101 }) // CE's engines, GRAIN and two plugins' ids
+    {
+        ceShown = ceShown && pickerShows(false, id, false) && pickerShows(true, id, false);
+    }
+    check(ceShown, "CE's engines and plugins are shown either way");
+#endif
+}
+
 } // namespace
 
 int main()
@@ -287,6 +307,7 @@ int main()
     testInit();
     testWorkspaceLoaded();
     testSettingEdited();
+    testSynthsPicker();
     printf("%d checks, %d failures (%zu mods built)\n", checks, failures, kBuiltModCount);
     return failures == 0 ? 0 : 1;
 }

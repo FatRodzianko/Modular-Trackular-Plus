@@ -17,6 +17,7 @@ class mtEffectModular : public mtEffect
                          PtfxInitFunc initFunc,
                          PtfxSetParamFunc setParamFunc,
                          PtfxProcessBlockFunc processBlockFunc);
+    void unloadPlugin();
 
     virtual void setParameter(float& value, int idx) override;
     virtual bool startProcess() override;

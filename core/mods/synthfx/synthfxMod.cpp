@@ -1,11 +1,10 @@
 // Modular-Trackular mods. SPDX-License-Identifier: MIT
 //
-// Synth FX's slots in the audio interrupt (synthfxMod.h): begin, run and runPre, and the per-slot
-// state the main loop publishes to them; and the firmware's main-loop side that needs CE's synth
-// (pageShown, partIsWave, convertOldPatches). Everything but those and the main loop's four
-// (publish, retire, retired, published) runs in the audio interrupt: no heap, no SD, single
-// precision. In flash: it runs once per part, or per WAVE voice for runPre; the plugins' own
-// process is in ITCM.
+// Synth FX's slots in the audio interrupt (synthfxMod.h): begin and run, and the per-slot state
+// the main loop publishes to them; and the firmware's main-loop side that needs CE's synth
+// (pageShown, convertOldPatches). Everything but those and the main loop's four (publish,
+// retire, retired, published) runs in the audio interrupt: no heap, no SD, single precision. In
+// flash: it runs once per part; the plugins' own process is in ITCM.
 
 #include "modsBuild.h"
 
@@ -38,12 +37,9 @@ static_assert(polysynth::kAudioBufferSize == PTSFX_BLOCK, "the plugins run on CE
 namespace
 {
 
-static_assert(kVoices == kSynthMaxVoices, "a Pre slot has an instance for each voice");
-
-// A slot as the interrupt runs it. The main loop writes the ids, count and widens before phase;
-// the interrupt moves phase on (fadeIn -> on, leaving -> gone). Single core: the main loop never
-// runs while the interrupt does, and each field is one byte. id[0] runs on the part; a Pre slot
-// (count kVoices) gives voice v id[v], on a WAVE part (and id[0] on the part elsewhere).
+// A slot as the interrupt runs it. The main loop writes the id and widens before phase; the
+// interrupt moves phase on (fadeIn -> on, leaving -> gone). Single core: the main loop never
+// runs while the interrupt does, and each field is one byte.
 enum Phase : uint8_t
 {
     kGone,      // nothing runs (the id may still be the last one, for the main loop to free)
@@ -54,56 +50,14 @@ enum Phase : uint8_t
 
 struct Run
 {
-    volatile int8_t id[kVoices];
+    volatile int8_t id;
     volatile uint8_t phase;
     volatile uint8_t widens;
-    volatile uint8_t count;
 
-    constexpr Run() : id{ -1, -1, -1, -1, -1, -1, -1, -1 }, phase(kGone), widens(0), count(0) {}
+    constexpr Run() : id(-1), phase(kGone), widens(0) {}
 };
 
 Run runs[kParts][kSlots];
-
-// What begin found, for runPre: the part being rendered, and whether each part plays WAVE with
-// the mod On this block (so its Pre slots run in the voices)
-volatile int8_t renderedPart = -1;
-volatile bool preInVoices[kParts] = { false, false, false };
-
-// The voices' seats (runPre): which voice holds each, and the part's block it last rendered in
-struct Seat
-{
-    const void* voice;
-    uint32_t block;
-};
-Seat seats[kParts][kVoices];
-uint32_t partBlock[kParts] = { 0, 0, 0 }; // begin counts each part's blocks
-
-// The voice's seat this block, and whether it is new to it; -1 if every seat is in use
-int seatFor(int part, const void* voice, bool* taken)
-{
-    const uint32_t now = partBlock[part];
-    Seat* s = seats[part];
-    for (int i = 0; i < kVoices; i++)
-    {
-        if (s[i].voice == voice && now - s[i].block <= 1u)
-        {
-            s[i].block = now;
-            *taken = false;
-            return i;
-        }
-    }
-    for (int i = 0; i < kVoices; i++)
-    {
-        if (s[i].voice == nullptr || now - s[i].block > 1u)
-        {
-            s[i].voice = voice;
-            s[i].block = now;
-            *taken = true;
-            return i;
-        }
-    }
-    return -1;
-}
 
 // The dry signal kept over a fading block (the interrupt only)
 __NOINIT(EXTERNAL_RAM) float dryL[PTSFX_BLOCK];
@@ -128,16 +82,6 @@ inline bool sidesAlike(const polysynth::Patch* patch)
 {
 #if MT_HAS_SYNTHS
     return synths::ownsLayout(patch->getMetadata().instrumentTypeId);
-#else
-    (void)patch;
-    return false;
-#endif
-}
-
-inline bool isWave(const polysynth::Patch* patch)
-{
-#if MT_HAS_SYNTHS
-    return patch->getMetadata().instrumentTypeId == synths::kWaveTypeId;
 #else
     (void)patch;
     return false;
@@ -176,16 +120,6 @@ bool pageShown(const polysynth::Patch& /*patch*/)
     return mods::on(Mod::synthfx);
 }
 
-bool partIsWave(int part)
-{
-    if (part < 0 || part >= kParts)
-    {
-        return false;
-    }
-    polysynth::Patch& patch = TrackerImpl::getInstance()->getSynth().getPatch(part);
-    return isWave(&patch);
-}
-
 void convertOldPatches()
 {
 #if MT_HAS_SYNTHS
@@ -213,7 +147,7 @@ void convertOldPatches()
         {
             continue;
         }
-        fromOldPatch(part, fx, type == synths::kWaveTypeId);
+        fromOldPatch(part, fx);
         // the patch's own off, so this happens once: Effect None, Distortion Off
         DISABLE_AUDIO_INTERRUPTS();
         patch.setParamValue(kOldFirstParam + kOldEffect, 0, polysynth::Patch::ParamChangeSource::kPatchAssign);
@@ -228,22 +162,17 @@ void convertOldPatches()
 
 // ---- the main loop's side -------------------------------------------------------------------
 
-void publish(int part, int slot, const int8_t* ids, int count, bool widens)
+void publish(int part, int slot, int id, bool widens)
 {
     if (!validSlot(part, slot))
     {
         return;
     }
     Run& r = runs[part][slot];
-    r.phase = kGone; // first, so the interrupt never sees the new ids with the old phase
-    count = ids == nullptr || count < 0 ? 0 : (count > kVoices ? kVoices : count);
-    for (int v = 0; v < kVoices; v++)
-    {
-        r.id[v] = v < count ? ids[v] : static_cast<int8_t>(-1);
-    }
-    r.count = static_cast<uint8_t>(count);
+    r.phase = kGone; // first, so the interrupt never sees the new id with the old phase
+    r.id = static_cast<int8_t>(id >= 0 ? id : -1);
     r.widens = widens ? 1 : 0;
-    r.phase = count > 0 && ids[0] >= 0 ? kFadeIn : kGone;
+    r.phase = id >= 0 ? kFadeIn : kGone;
 }
 
 void retire(int part, int slot)
@@ -261,7 +190,7 @@ bool retired(int part, int slot)
 
 int published(int part, int slot)
 {
-    return validSlot(part, slot) ? runs[part][slot].id[0] : -1;
+    return validSlot(part, slot) ? runs[part][slot].id : -1;
 }
 
 // ---- the audio interrupt --------------------------------------------------------------------
@@ -271,12 +200,8 @@ Insert begin(int part, const polysynth::Patch* patch, bool engineStereo)
     const Insert dry = { false, engineStereo, engineStereo };
     if (part < 0 || part >= kParts)
     {
-        renderedPart = -1;
         return dry;
     }
-    renderedPart = static_cast<int8_t>(part);
-    preInVoices[part] = false;
-    partBlock[part]++;
     const Run* r = runs[part];
     if (!running(r[0]) && !running(r[1]))
     {
@@ -293,7 +218,6 @@ Insert begin(int part, const polysynth::Patch* patch, bool engineStereo)
         }
         return dry;
     }
-    preInVoices[part] = isWave(patch);
     // A mono part goes out as stereo while a widening plugin runs in a slot, fading out too
     const bool widens = (running(r[0]) && r[0].widens) || (running(r[1]) && r[1].widens);
     return { true, engineStereo || widens, engineStereo && !sidesAlike(patch) };
@@ -314,14 +238,6 @@ void run(const Insert& insert, int part, float* left, float* right, bool engineS
         {
             continue;
         }
-        if (preInVoices[part] && r.count > 1) // the voices ran it (runPre): its fade moves on
-        {
-            if (phase == kFadeIn || phase == kLeaving)
-            {
-                r.phase = phase == kLeaving ? kGone : kOn;
-            }
-            continue;
-        }
         const bool widens = r.widens != 0;
         float* R = (stereoNow || widens) ? right : nullptr;
         const bool fading = phase == kFadeIn || phase == kLeaving;
@@ -333,7 +249,7 @@ void run(const Insert& insert, int part, float* left, float* right, bool engineS
                 copy(dryR, stereoNow ? right : left);
             }
         }
-        const bool ran = plugins::process(r.id[0], left, R, stereoNow ? 2u : 1u);
+        const bool ran = plugins::process(r.id, left, R, stereoNow ? 2u : 1u);
         if (R != nullptr && !stereoNow)
         {
             if (!ran) // bypassed or gone: the right side is still to be made
@@ -358,46 +274,18 @@ void run(const Insert& insert, int part, float* left, float* right, bool engineS
     }
 }
 
-void runPre(const void* voice, float* buf, bool fresh)
+void overSynthLimit(int part)
 {
-    const int part = renderedPart;
-    if (part < 0 || part >= kParts || !preInVoices[part] || voice == nullptr || buf == nullptr)
+    if (part < 0 || part >= kParts)
     {
         return;
     }
-    bool taken = false;
-    const int seat = seatFor(part, voice, &taken);
-    if (seat < 0)
-    {
-        return;
-    }
-    fresh = fresh || taken;
     for (int slot = 0; slot < kSlots; slot++)
     {
         const Run& r = runs[part][slot];
-        const uint8_t phase = r.phase;
-        if (phase == kGone || r.count <= 1)
+        if (r.phase != kGone)
         {
-            continue;
-        }
-        const int id = r.id[seat];
-        if (id < 0)
-        {
-            continue;
-        }
-        if (fresh)
-        {
-            plugins::reset(id);
-        }
-        const bool fading = phase == kFadeIn || phase == kLeaving;
-        if (fading)
-        {
-            copy(dryL, buf);
-        }
-        plugins::process(id, buf, nullptr, 1u);
-        if (fading)
-        {
-            fade(buf, dryL, phase == kLeaving);
+            plugins::bypassIfOver(r.id);
         }
     }
 }

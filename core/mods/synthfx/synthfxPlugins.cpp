@@ -902,6 +902,22 @@ MT_PLUGINS_ISR bool process(int id, float* L, float* R, uint32_t inChannels)
     return true;
 }
 
+MT_PLUGINS_ISR bool bypassIfOver(int id)
+{
+    if (static_cast<uint32_t>(id) >= kInstanceCount)
+    {
+        return false;
+    }
+    Instance& in = instanceTable[id];
+    if (!in.active || in.over == 0) // over: blocks over budget in a row, the last one included
+    {
+        return false;
+    }
+    in.active = 0;
+    in.bypassed = 1;
+    return true;
+}
+
 MT_PLUGINS_ISR void reset(int id)
 {
     if (static_cast<uint32_t>(id) >= kInstanceCount)

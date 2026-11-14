@@ -8,27 +8,40 @@
 
 ### Added
 
-1. **Per-Sample SD Streaming Controls & RAM Default in Sample Loader (All 3 Devices)**
+1. **Loadable `.psyn` Synth Plugin SDK (Tracker+ & Tracker Mini)**
+	* **Dynamic SD-Card Synth Plugins (`/Synths/*.psyn`)**: All synthesizer engines now load dynamically as standalone relocatable `.psyn` plugins from `/Synths/*.psyn` on the microSD card without recompiling firmware. Developers can write custom C++20 or Pure C synth engines using [`synth-plugin-sdk/`](synth-plugin-sdk/) (`psyn_cpp_bridge.h` / `psyn_plugin.h`).
+	* **Sample-Based Synth Engines (`SampleSlot` & `4 MB` `SamplePool`)**: Added shared reference-counted SDRAM sample storage for sample/wavetable-based `.psyn` engines loading `.wav` assets from `/SynthSamples/<ENGINE>/` or anywhere on the SD card, plus a `1,920 KB` executable plugin arena with boot preloading and LRU eviction.
+	* **100% Open-Source Firmware Link (`PolySynth`, `PolyDSP` & Master FX)**: Moved the `PolySynth` host/sequencer framework, `PolyDSP` (`Amplifier` & `Mixer`), and Master FX (`Delay`, `Reverb`) to source compilation under the MIT License with zero precompiled `.a` binary libraries linked into the firmware (only the prebuilt factory `.psyn` plugin binaries in `synth/prebuilt/` remain under [`synth/prebuilt/LICENSE-PROPRIETARY.txt`](synth/prebuilt/LICENSE-PROPRIETARY.txt)).
+	* See [`docs/custom_synth_sdk.md`](docs/custom_synth_sdk.md) and [`synth-plugin-sdk/README.md`](synth-plugin-sdk/README.md).
+
+2. **Unified Global File Browser (All 3 Devices)**
+	* Replaced fragmented single-level file pickers with [`GlobalFileBrowser`](docs/global_file_browser.md) across Project **`Open`** / **`Save As`**, **`.mod` / `.it` Import**, Synth Patch **`Load`** / **`Save`**, Synth **Sample Slot** `.wav` browsing, and Sample Editor **`.ptfx` Presets & File Parameters**.
+	* See [`docs/global_file_browser.md`](docs/global_file_browser.md).
+
+3. **Per-Sample SD Streaming Controls & RAM Default in Sample Loader (All 3 Devices)**
 	* **RAM by Default**: Newly imported samples now default to loading fully into **RAM** (`Mem: RAM`) rather than streaming automatically, giving you full control over when SD streaming is used.
 	* **Import Memory Mode Selector**: Added a memory mode button on the Sample Loader screen (`Mem: RAM` / `Mem: Auto` / `Mem: [S]`) to choose whether newly loaded samples go to RAM, auto-stream when `256 KB` or larger, or always stream when eligible.
 	* **Per-Instrument RAM / Stream Toggle**: Highlighting an existing instrument in the right-hand slot list changes the button to **`Mode: RAM`** or **`Mode: [S]`**, allowing you to switch individual instruments between RAM and SD streaming on the fly.
 	* **Crop & Stream**: Added an **`Import Stream`** option in the partial sample crop/import screen alongside `Import` and `Import Low quality`.
 
-2. **"Add to Empty Slot" in Sample Loader (All 3 Devices)**
+4. **"Add to Empty Slot" in Sample Loader (All 3 Devices)**
 	* Holding **`[Shift]`** while browsing files in the Sample Loader changes the `Add` action to **`Add to Empty Slot`** (or `Next Slot`), automatically selecting the first available empty instrument slot and importing the sample there.
 
-3. **38 New Chord Inversions in the `Chord` (`f`) Step FX (All 3 Devices)**
+5. **38 New Chord Inversions in the `Chord` (`f`) Step FX (All 3 Devices)**
 	* Expanded the **`Chord` (`f`)** effect from 30 to **68 chord voicings** by adding 38 inversions across major, minor, seventh, diminished, suspended, and `m7b5` chords.
 
-4. **New Sample Editor `.ptfx` Plugins & Mono-to-Stereo Support**
+6. **Sample Editor - New Plugins & Tons of Plugin Developer Goodies**
 	* **`Transient Shaper` (`transient_shaper.ptfx`) (All 3 Devices)**: New modular Sample Editor effect with bipolar `Attack` (`-100%` to `+100%`) and `Sustain` (`-100%` to `+100%`) controls for sculpting drum hits and loops.
 	* **`Haas Effect` (`haas.ptfx`) (Tracker+ & Tracker Mini)**: New psychoacoustic stereo widener plugin that delays the Left or Right channel (`1–100 ms`) with an appended tail fade-out.
+	* **Automatic `.ptp` Effect Presets (All 3 Devices)**: Added automatic preset management (**`Load`**, **`Save`**, **`Reset`** via **`More`**) stored under `/Effects/Presets/<PluginName>/*.ptp`, saving and restoring both parameter values and selected file paths without extra plugin code required by developers.
+	* **File-Picker & Secondary `.wav` Parameters (`PTFX_PARAM_FILE` / `PTFX_PARAM_SAVE_FILE`) (All 3 Devices)**: Plugins can now declare input/output file parameters backed by `GlobalFileBrowser`, automatic secondary `.wav` decoding (`get_secondary_sample()`), and direct SD file I/O (`read_file()`, `write_file()`).
 	* **Mono-to-Stereo `.ptfx` Support (Tracker+ & Tracker Mini)**: Applying a stereo `.ptfx` plugin (such as `Haas Effect` or `Stereo Delay`) to a mono sample now automatically promotes the instrument to stereo when the processed left and right channels differ.
+	* See [`docs/modular_effects_system.md`](docs/modular_effects_system.md).
 
-5. **Clearer `[m | V]` vs `[Fx1 | Fx2]` Pattern Editor View (All 3 Devices)**
+7. **Clearer `[m | V]` vs `[Fx1 | Fx2]` Pattern Editor View (All 3 Devices)**
 	* Empty step slots in the **`[m | V]`** pattern view now render dimmed **`m--`** and **`V--`** indicators instead of `---`, making it immediately clear at a glance whether you are viewing `[m | V]` or `[Fx1 | Fx2]`.
 
-6. **USB Serial Development Console & Release Logging (Tracker+ & Tracker Mini)**
+8. **USB Serial Development Console & Release Logging (Tracker+ & Tracker Mini)**
 	* Added an opt-in USB CDC-ACM serial console (`ENABLE_DEV_CONSOLE` when a `/.develop` file is present on the SD card) with commands for automated host testing (`ping`, `storage on|off`, `flash <name>`, `reboot`, `help`) and a ring-buffered `ENABLE_LOG` build flag that preserves release optimization levels.
 	* See [`docs/developer_guide.md`](docs/developer_guide.md) for usage details.
 

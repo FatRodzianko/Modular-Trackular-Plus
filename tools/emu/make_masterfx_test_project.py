@@ -29,7 +29,7 @@ resets a part whose synthType it doesn't know).
 --synthfx writes the Synth FX set (SYNTHFX_LADDER), lightest first: mods.bin has Synth FX and Master FX
 On and record 16 holds each part's effect settings, the rest of the source's mods.bin kept.
 --synthfx-plugins writes the plugin set (PLUGIN_LADDER) the same way, with record 16 version 3: each
-slot's plugin file and knobs, and WAVE's Placement.
+slot's plugin file and knobs (and a Placement byte, 0: Post).
 
 --sound writes that file's last set. `A1 Master FX sound` is one voice of ACD Init with a short note every 16
 steps, so the gaps let the reverb and delay be heard, with no masterfx.bin. `R2 Real project sends` is the source
@@ -257,7 +257,8 @@ def store_records(data: bytes) -> list:
 
 
 # Record 16 version 3 (synthfxSettings.cpp): for each part, FX1 then FX2, a slot's file name (48 B)
-# and its 12 knobs (NaN: the plugin's default); then a Placement byte for each slot, 1 for Pre.
+# and its 12 knobs (NaN: the plugin's default); then a Placement byte for each slot (1 was Pre on
+# builds with WAVE inside the firmware; read as Post now).
 SLOTS_VERSION = 3
 SLOT_FILE, SLOT_KNOBS = 48, 12
 
@@ -280,12 +281,12 @@ def slots_record(parts) -> bytes:
 # The plugin set: name, voices, (reverb, delay), engine, each part's slots; lightest first and the
 # hang last. The Delay and the two Guard plugins are files of build/device/synthfx_card
 # (tools/synthfx/device/build.sh), which go in /SynthFX/ on the card.
-DIST_PRE = ("Distortion", (100, 50, 0), True)                  # Gain 100 %, Tone 50 %, 0 dB, Pre
+DIST_WORST = ("Distortion", (100, 50, 0), False)               # Gain 100 %, Tone 50 %, 0 dB
 PHASER_WORST = ("Phaser", (50, 50, 90, 100), False)            # Rate, Depth, Feedback +90 %, Mix 100 %
 NONE = (None, None)                                             # a part with both slots empty
 PLUGIN_LADDER = (
     ("P1 1 voice ACD Delay", (1, 0, 0), None, "ACD", ((None, ("Delay", (), False)), NONE, NONE)),
-    ("P2 8 WAVE Pre worst FX", (4, 2, 2), None, "WAVE", ((DIST_PRE, PHASER_WORST),) * 3),
+    ("P2 8 WAVE worst FX", (4, 2, 2), None, "WAVE", ((DIST_WORST, PHASER_WORST),) * 3),
     ("G1 1 voice ACD GuardSlow", (1, 0, 0), None, "ACD", ((("GuardSlow", (), False), None), NONE, NONE)),
     ("G2 1 voice ACD GuardHang", (1, 0, 0), None, "ACD", ((("GuardHang", (), False), None), NONE, NONE)),
 )

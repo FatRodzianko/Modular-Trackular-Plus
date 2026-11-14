@@ -229,6 +229,18 @@ created after it.
 instruments on the heap. `core/synth/engines/ChiptuneSynthVoice.cpp` is open. Part of the
 libraries is placed in ITCM by the linker script.
 
+**Since CE's plugin synths (merged 2026-11-13, CE `9cb0964`).** The host is open now (MIT,
+`synth/source`); the factory engines are closed `.psyn` files in `/Synths` on the card (`/Synth` as
+well), loaded by `PsynLoader` into a 1,920 KB arena inside `s_psynRamPool` (6 MB of SDRAM). Their
+code runs from SDRAM, through the cache, not from ITCM. Engines register with
+`registerSynthEngine` (`InstrumentTypeRegistry.h`), `PsynLoader` for each `.psyn` it finds. WAVE and
+PHASE are `.psyn` files too (`core/mods/synths/psyn/`, built by `make psyn`), with the type ids 64 and
+65 in their headers. `synthTypes` is `kSynthTypes` filtered to what is
+available, then the other ids, so a project's model index moves when `.psyn` files are missing.
+`PolySynth::update` stops the synth for 32 blocks when its parts take more than 2,100 us in a
+block (`kMaxSynthRealtimeBudgetUs`, about 72 % of 2,902 us), and skips a part while
+`part.loading` is set. Synth FX runs inside that time.
+
 ## 14. USB
 
 Composite device (`platforms/imx/usb/composite.c`): MIDI, audio in, audio out, plus mass storage
@@ -393,6 +405,38 @@ Memory isn't the first limit. These are:
   `libPolySynth.a` already live in ITCM, by linker script. CE's open CHIP engine runs from flash.
 - **Display list.** 8,172 bytes per frame.
 - **Heap.** A hard hang on failure, though 80 KB was free in the reading above.
+
+### After CE's plugin synths (2026-11-13)
+
+`tools/mem_budget.py` on the merged mod build, against `modular` before it (`d7a853c`):
+
+| Region | Free after | Free before |
+| --- | --- | --- |
+| Flash | 14,468,772 | 14,232,540 |
+| ITCM | 70,048 | 9,768 |
+| OCRAM | 9,556 | 9,556 |
+| SDRAM unreserved | 688,204 | 688,492 |
+| DTCM unreserved | 9,676 | 14,248 |
+
+ITCM freed up because the closed libraries left it (CE now places only `Amplifier.o` and
+`Mixer.o` there). DTCM is 4.5 KB tighter. The sample pool is 55,508,992 bytes (61,800,448
+before): the 6 MB `.psyn` pool comes out of it, and the mods' 1 MiB is taken on top.
+
+**WAVE and PHASE as `.psyn` files (2026-11-13).** Out of the firmware, the same build reads:
+
+| Region | Free |
+| --- | --- |
+| Flash | 15,025,756 |
+| ITCM | 70,112 |
+| OCRAM | 9,556 |
+| SDRAM unreserved | 688,348 |
+| DTCM unreserved | 12,516 |
+
+In the `.psyn` arena (1,920 KB) WAVE takes 528,560 bytes (code 46,152, its wavetables 481,984 of
+rodata) and PHASE 53,944. CE's 1 MB boot preload goes through the files in name order and skips
+any that won't fit, so WAVE is read from the card (530,660 bytes) the first time it's picked, with
+audio masked, CE's own path. Both run from SDRAM through the cache; as built-in engines they ran
+from flash.
 
 ## 16. How much was read
 

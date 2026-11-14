@@ -7,7 +7,8 @@ is where that gets found out, one step at a time, with a firmware that explains 
 ## The diagnostic build
 
 `CUSTOM_DEFINES=-DMT_LOCKUP_RECORDER=1`. Make doesn't track `-D` flags, so touch the files that test it
-when switching (`core/source/Tracker.cpp`, `core/mods/mods.cpp`, `core/mods/lockupRecorder.cpp`, and in
+when switching (`core/source/Tracker.cpp`, `core/mods/mods.cpp`, `core/mods/lockupRecorder.cpp`,
+`core/libs/Audio/synth_PolySynth.cpp`, and in
 `platforms/imx/source`, `TimeControl.cpp`, `PlatformTrackerIMX.cpp`). Other builds
 compile none of it. `tools/emu/test_lockup_recorder.py` tests it.
 
@@ -15,7 +16,7 @@ compile none of it. `tools/emu/test_lockup_recorder.py` tests it.
 |---|---|
 | Hard, bus, MPU or usage fault | Saves the location and fault registers, then restarts. CE's handlers spin for ever |
 | Main loop stopped for 3 s while playing, or 20 s while stopped | SysTick runs above the audio interrupt, so it still fires. It saves where the code was, whether the audio interrupt was active, the share of the last second spent in it, and return addresses from the stack, then restarts |
-| Each Stop | Adds a line to `/mfx_log.txt`: average and slowest interrupt, blocks over time, blocks back to back, longest main loop gap, pool, heap and stack |
+| Each Stop | Adds a line to `/mfx_log.txt`: average and slowest interrupt, blocks over time, blocks back to back, how often CE's synth went over its 2.1 ms limit (each one silences the synth for 32 blocks), longest main loop gap, pool, heap and stack |
 | Next start, at the Pattern screen | Writes what was saved to `/mfx_log.txt` |
 
 The saved record is in SDRAM, with the essentials in SNVS as well.
@@ -111,8 +112,8 @@ problem.
 
 The heaviest case can't be written into a project (patches are the closed library's format), so it
 is set by hand on `S5`: on each of the three parts, Wave 1 and Wave 2 on Super Saw; with Synth FX
-On, button 3: FX1 the Distortion with Placement Pre, FX2 the Phaser. Instructions per block for that
-with the old built-in effects, from [CE_PORT_PLAN.md](CE_PORT_PLAN.md) 3.15: about 719,000, against
+On, button 3: FX1 the Distortion, FX2 the Phaser (Placement Pre, in each voice, is gone since WAVE
+became a `.psyn`). Instructions per block for that with the old built-in effects and Pre, from [CE_PORT_PLAN.md](CE_PORT_PLAN.md) 3.15: about 719,000, against
 528,000 for 8 voices of VAP; the slots' share through the plugins is in 3.17's phase 3. With Synth
 FX Off, WAVE and PHASE have no effects (since 3.17 phase 3).
 
@@ -140,14 +141,14 @@ them to 1 a part only when the project before had another engine, so a run's fig
 On each, the patch editor's button 3 reads "Synth FX" and shows the part's rows, so the settings can
 be checked and changed by hand there.
 
-## The Synth FX plugin set: the slots, WAVE's Pre, a user's plugin and the guards
+## The Synth FX plugin set: the slots, WAVE at the limit, a user's plugin and the guards
 
 Since 3.17 phase 2, Synth FX plays through `.ptsfx` plugins in `/SynthFX/`. The F set above still
 works: its projects hold version 1 settings, which the firmware converts into the two slots, so
 its figures compare with the built-in effects'. This set adds what only plugins have.
 
 `python tools/emu/make_masterfx_test_project.py "<project>" build/device/synthfx_plugins --synthfx-plugins`
-writes the projects, with record 16 version 3 (each slot's plugin, knobs and Placement), and
+writes the projects, with record 16 version 3 (each slot's plugin and knobs; the Placement bytes 0), and
 `tools/synthfx/device/build.sh` writes the card's extra plugins to `build/device/synthfx_card/SynthFX`:
 the SDK's Delay and Tremolo, built as a user would, and two guard tests that are not for music.
 GuardSlow passes the sound through after a busy loop: Light is well under the time guard's quarter
@@ -156,8 +157,8 @@ block, Heavy well over. GuardHang's first block never returns.
 | Project | Voices | Engine | Synth FX | What it isolates |
 |---|---|---|---|---|
 | `P1 1 voice ACD Delay` | 1 | ACD | FX2 the Delay | A user's plugin from the card, opened from a project |
-| `P2 8 WAVE Pre worst FX` | 8 | WAVE | Distortion Pre, Phaser at Feedback +90 % and Mix 100 %, every part | WAVE's Pre, 8 instances a slot, at the limit |
-| `G1 1 voice ACD GuardSlow` | 1 | ACD | FX1 GuardSlow | The time guard |
+| `P2 8 WAVE worst FX` | 8 | WAVE | Distortion, Phaser at Feedback +90 % and Mix 100 %, every part | WAVE as a `.psyn` with both slots, at the limit (before 2026-11-13: `P2 8 WAVE Pre worst FX`, the Distortion in each voice) |
+| `G1 1 voice ACD GuardSlow` | 1 | ACD | FX1 GuardSlow | The time guard. Since CE's 2.1 ms synth limit (2026-11-14), Heavy trips it in its first block on the unit (about 2.3 ms there), and the slot is bypassed in that block: one silence of 32 blocks (93 ms), then the part plays; the recorder's "Synth over its limit" reads 1 |
 | `G2 1 voice ACD GuardHang` | 1 | ACD | FX1 GuardHang | The start marker: the unit hangs, the recorder restarts it, safe mode |
 
 GuardHang goes on the card only for `G2`, after everything else: on 2026-11-12 it was there from

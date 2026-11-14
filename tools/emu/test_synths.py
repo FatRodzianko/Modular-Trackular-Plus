@@ -1,8 +1,12 @@
 # Modular-Trackular mods. SPDX-License-Identifier: MIT
-"""Level B for the Synths mod: WAVE (64) and PHASE (65) through CE's real synth host, on the full
-build with the closed libraries in (tools/emu/sound_rig.py: CE's start-up, Synth, audioEngine and
-its updateAudioBuffers, the interrupt's own entry). The libraries run as they are and nothing
-hooks inside them (sound_rig's Guard); what comes out is what is checked.
+"""Level B for the Synths mod: WAVE (64) and PHASE (65), .psyn plugins (core/mods/synths/psyn),
+through CE's real synth host on the full build (tools/emu/sound_rig.py: CE's start-up, Synth,
+audioEngine and its updateAudioBuffers, the interrupt's own entry), with CE's factory engines on the
+fake card beside them. Those run as they are and nothing hooks inside them (sound_rig's Guard); ours
+are open, so the rig finds them where PsynLoader put them and hooks their ELFs' symbols there.
+
+The plugins' headers carry the type ids 64 and 65 the firmware (synthsMod.h) and the engines
+(synthsSdk.h) have: checked first.
 
 0. The Init values: what each voice renders with is sy9's Init, with the macros as the model
    picker leaves them; the engines' loudness keeps level A's relation.
@@ -12,12 +16,16 @@ hooks inside them (sound_rig's Guard); what comes out is what is checked.
    the 8 (3 + 3 + 2): sound, no asserts, no clipping run, the heap and the block pool held. (The
    effects are Synth FX's slots now: tools/emu/test_synthfx.py runs the chords with them.)
 3. The SDK's rules: no malloc and no createMetadata in the audio interrupt (every block, notes
-   on and off, chords, effects switched); notes reach the engines from Synth's own calls.
+   on and off, chords, effects switched): the firmware's malloc, and the host's slot_alloc called
+   from WAVE's or PHASE's code; notes reach the engines from Synth's own calls.
 4. The old effect parameters (62-71, kept so old patches load): setting the Distortion through
    the patch, as an old patch does, rebuilds nothing (no createMetadata), changes no name and
    leaves the sound as it was.
-5. Engine switches: 30 rounds of WAVE, PHASE, CHIP and back on a part, notes held: no heap growth
-   after the first round.
+5. Engine switches: 30 rounds of WAVE, PHASE, CHIP and back on a part, notes held: the bytes in
+   use (newlib's mallinfo) after round 30 as after round 2, give or take the 64 bytes they move by
+   between rounds, and the heap's top (sbrk) the same over the last 15 rounds. CE's open host frees
+   and makes the voices again on each switch, so the top rises a little over the first rounds while
+   the free blocks settle (2.9 KB by round 12, then none to round 60): that isn't a leak.
 6. The switch Off: a part already on WAVE or PHASE keeps playing, sample for sample as On.
 7. Patch files: a WAVE patch saved and loaded back restores a changed value.
 8. Off = CE: the stock engines are checked mods build against reference build, sample for sample,
@@ -28,15 +36,17 @@ Usage: python tools/emu/test_synths.py build/emu/TrackerPlus_MT_full.axf
 from __future__ import annotations
 
 import math
+import re
 import struct
 import sys
 from pathlib import Path
 
 from unicorn import UC_HOOK_CODE
-from unicorn.arm_const import UC_ARM_REG_R1, UC_ARM_REG_S0
+from unicorn.arm_const import UC_ARM_REG_LR, UC_ARM_REG_R1, UC_ARM_REG_S0
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from sound_rig import SoundRig, peak  # noqa: E402
+from sound_rig import REPO, SoundRig, peak, psyn_header, synth_files  # noqa: E402
+from machine import SCRATCH  # noqa: E402
 
 WAVE, PHASE, CHIP = 64, 65, 8
 P_EFFECT, P_DIST, P_GAIN, P_TONE, P_PLACEMENT = 62, 67, 68, 69, 70
@@ -45,8 +55,12 @@ KNOB = 0                            # Patch::ParamChangeSource::kKnob
 BLOCK_BUDGET = 1_700_000            # a block at 44.1 kHz on a 600 MHz core, in cycles: an instruction count
                                     # over it would certainly drop audio while interrupts are off
 CHORD = (48, 52, 55, 59, 62, 65, 69, 72)
-RENDER = {WAVE: "_ZN7mtsynthL15wt_voice_renderEPNS_8wt_voiceEPKfPff",
+NAMES = {WAVE: "WAVE", PHASE: "PHASE"}
+RENDER = {WAVE: "_ZN7mtsynthL15wt_voice_renderEPNS_8wt_voiceEPKfPff",     # in the plugins' ELFs
           PHASE: "_ZN7mtsynthL15ph_voice_renderEPNS_8ph_voiceEPKfPff"}
+# the bridge's create_metadata (psyn_cpp_bridge.h), which runs the engine's createMetadata
+META = {WAVE: "_ZN11psyn_bridge13PluginAdapterIN9polysynth12_GLOBAL__N_114WaveSynthVoiceEE14createMetadataEPKvPv",
+        PHASE: "_ZN11psyn_bridge13PluginAdapterIN9polysynth12_GLOBAL__N_115PhaseSynthVoiceEE14createMetadataEPKvPv"}
 VELOCITY = 100 / 127                # Synth::triggerTestNote's, through the Velocity macro to Volume (39)
 # Level A (test_synths_dsp.py, sy9's engines): note 60 on the Init patches with Mix -1 (oscillator 1
 # alone: Init's two are detuned 8 cents, so a short window's level depends on their starting phases,
@@ -81,9 +95,12 @@ class Rig(SoundRig):
         for name in ("malloc", "_malloc_r", "calloc", "_calloc_r", "realloc", "_realloc_r"):
             if name in self.syms and self.syms[name].addr:
                 self.watch(self.syms[name].addr, self._on_malloc)
-        self.meta = [self._own("WaveSynthVoice14createMetadataE"), self._own("PhaseSynthVoice14createMetadataE")]
-        for a in self.meta:
-            self.watch(a, self._on_meta)
+        # the host's allocator for plugins (PsynLoader.cpp, open): counted when one of ours calls it.
+        # A build from before CE's plugin host (test_synthfx.py's --before) has none
+        if any(n.startswith("_ZN9polysynth12_GLOBAL__N_113hostSlotAlloc") for n in self.syms):
+            self.watch(self.first("_ZN9polysynth12_GLOBAL__N_113hostSlotAlloc"), self._on_slot_alloc)
+        for e in (WAVE, PHASE):
+            self.watch_own(NAMES[e], META[e], self._on_meta)
         self._get_patch = self.first("_ZN5Synth8getPatchEi")
         self._full_name = self.first("_ZN5Synth16getParamFullName")
         self._save = self.first("_ZN5Synth9savePatchEiPKc")
@@ -100,25 +117,25 @@ class Rig(SoundRig):
         self.m.call(self.first("_ZN11audioEngine28refreshSynthInstrumentParamsER17SynthPartSettingsi"),
                     self.engine, settings, part, max_insns=10_000_000)
 
-    def voice_values(self, render_fn, note=60, blocks=3):
+    def voice_values(self, engine, note=60, blocks=3):
         """The parameter values a voice renders with: p at our render function's entry (r1)."""
         seen = []
-        self.watch(self.m.addr(render_fn),
-                   lambda mm: seen.append(struct.unpack("<72f", mm.read(mm.uc.reg_read(UC_ARM_REG_R1), 4 * 72))))
-        self.m.uc.ctl_flush_tb()
+        self.watch_own(NAMES[engine], RENDER[engine],
+                       lambda mm: seen.append(struct.unpack("<72f", mm.read(mm.uc.reg_read(UC_ARM_REG_R1), 4 * 72))))
         self.blocks(2)
         self.note(0, note, True)
         self.blocks(blocks)
         return seen[-1]
 
-    def _own(self, part):
-        hits = sorted((n for n in self.syms if part in n and "lambda" not in n and "UlR" not in n), key=len)
-        if not hits:
-            raise KeyError(part)
-        return self.syms[hits[0]].addr
-
     def _on_malloc(self, mm):
         if self.in_block:
+            self.malloc_in_block += 1
+
+    def _on_slot_alloc(self, mm):
+        caller = mm.uc.reg_read(UC_ARM_REG_LR) & ~1
+        ours = any(e.base is not None and e.base <= caller < e.base + e.header["image_size"]
+                   for e in self.own.values())
+        if ours and self.in_block:
             self.malloc_in_block += 1
 
     def _on_meta(self, mm):
@@ -227,7 +244,7 @@ def init_values(axf):
     for e, name, init in ((WAVE, "WAVE", WAVE_INIT), (PHASE, "PHASE", PHASE_INIT)):
         r = Rig(axf)
         r.set_instrument(0, e)
-        got = r.voice_values(RENDER[e])
+        got = r.voice_values(e)
         want = {**init, **FX_INIT, 39: VELOCITY}
         bad = [(i, round(got[i], 4), w) for i, w in sorted(want.items())
                if abs(got[i] - w) > 1e-3 * max(1.0, abs(w))]
@@ -328,7 +345,8 @@ def switches(axf):
     r = Rig(axf)
     r.set_instrument(0, CHIP)
     r.blocks(2)
-    heap = []
+    heap, in_use = [], []
+    info = SCRATCH + 0x3F0000           # newlib's struct mallinfo, returned through r0
     for round_ in range(30):
         for e in (WAVE, PHASE, CHIP):
             r.set_instrument(0, e)
@@ -336,9 +354,13 @@ def switches(axf):
             r.note(0, 64, True)
             r.blocks(3)
         heap.append(r.heap_brk)
-    check(not r.failures and heap[-1] == heap[1], f"30 rounds of WAVE, PHASE, CHIP with notes held: heap "
-                                                  f"{heap[1] - r.heap_base:,} after round 2, "
-                                                  f"{heap[-1] - r.heap_base:,} after 30 {r.failures[:1]}")
+        r.call("mallinfo", info)
+        in_use.append(struct.unpack("<10I", r.m.read(info, 40))[7])    # uordblks
+    check(not r.failures and abs(in_use[-1] - in_use[1]) <= 64,
+          f"30 rounds of WAVE, PHASE, CHIP with notes held: {in_use[1]:,} bytes in use after round 2, "
+          f"{in_use[-1]:,} after 30 {r.failures[:1]}")
+    check(heap[-1] == heap[14], f"engine switches: the heap's top settles (rounds 15 to 30: "
+                                f"{heap[14] - r.heap_base:,} to {heap[-1] - r.heap_base:,})")
     check(r.malloc_in_block == 0, f"engine switches: no malloc in the audio interrupt ({r.malloc_in_block})")
 
 
@@ -372,11 +394,28 @@ def patch_files(axf):
           f"{r.failures[:1]} {sorted(r.sd.files)[:4]}")
 
 
+def type_ids():
+    """The plugins' headers, the firmware's ids and the engines' agree: projects and patches store them."""
+    mod = (REPO / "core/mods/synths/synthsMod.h").read_text()
+    sdk = (REPO / "core/mods/synths/synthsSdk.h").read_text()
+    files = synth_files()
+    for e, name in NAMES.items():
+        h = psyn_header(files[f"{name}.psyn"])
+        cname = "kWaveTypeId" if e == WAVE else "kPhaseTypeId"
+        in_mod = re.search(rf"constexpr int {cname} = (\d+);", mod)
+        in_sdk = re.search(rf"constexpr int {cname} = (\d+);", sdk)
+        got = (h["type_id_play_tracker"], in_mod and int(in_mod.group(1)), in_sdk and int(in_sdk.group(1)))
+        check(got == (e, e, e) and h["code_name"] == name and h["type_id_wave"] == 0,
+              f"{name}.psyn: type id {got[0]} (Tracker), {h['type_id_wave']} (the Polyend Synth: dynamic); "
+              f"synthsMod.h {got[1]}, synthsSdk.h {got[2]}")
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print(__doc__)
         return 2
     axf = Path(sys.argv[1])
+    type_ids()
     init_values(axf)
     engines(axf)
     old_params(axf)

@@ -1,8 +1,7 @@
 // Modular-Trackular mods. SPDX-License-Identifier: MIT
 //
-// Synth FX's rows on the patch editor (synthfxMod.h): FX1, its Placement, its plugin's knobs; the
-// same for FX2. A slot's row picks its plugin from the catalog (not the one in the part's other
-// slot); Placement (Pre or Post) is there on a WAVE part for a plugin that allows Pre; a knob's
+// Synth FX's rows on the patch editor (synthfxMod.h): FX1, its plugin's knobs; the same for FX2.
+// A slot's row picks its plugin from the catalog (not the one in the part's other slot); a knob's
 // row has the plugin's name, steps and texts. Main loop only.
 
 #include "modsBuild.h"
@@ -29,10 +28,8 @@ namespace
 constexpr int kNone = -1;      // a choice: no plugin
 constexpr int kOwnFile = -2;   // a choice: the slot's file, not listed now (missing, damaged)
 
-// locate's knob for a slot's own rows
+// locate's knob for a slot's own row
 constexpr int kSlotRow = -1;
-constexpr int kPlacementRow = -2;
-const char* const kPlacements[2] = { "Pre", "Post" }; // the old effects' order
 
 // a slot's choices, from the last choices() (main loop; written before it is read)
 __NOINIT(EXTERNAL_RAM) int choiceList[kMaxChoices];
@@ -52,14 +49,7 @@ int knobsOf(int part, int slot)
     return h->num_params < kKnobs ? h->num_params : static_cast<int>(kKnobs);
 }
 
-// The slot has a Placement row: its plugin allows Pre, on a WAVE part
-bool hasPlacement(int part, int slot)
-{
-    const PtsfxHeader* h = plugins::header(slotInstance(part, slot));
-    return h != nullptr && (h->flags & PTSFX_FLAG_PRE) != 0 && partIsWave(part);
-}
-
-// row -> slot and knob (kSlotRow, kPlacementRow, or the knob); false if there is no such row
+// row -> slot and knob (kSlotRow, or the knob); false if there is no such row
 bool locate(int part, int row, int* slot, int* knob)
 {
     if (!validPart(part) || row < 0)
@@ -68,12 +58,11 @@ bool locate(int part, int row, int* slot, int* knob)
     }
     for (int s = 0; s < kSlots; s++)
     {
-        const int extra = hasPlacement(part, s) ? 1 : 0;
-        const int rows = 1 + extra + knobsOf(part, s);
+        const int rows = 1 + knobsOf(part, s);
         if (row < rows)
         {
             *slot = s;
-            *knob = row == 0 ? kSlotRow : (extra != 0 && row == 1 ? kPlacementRow : row - 1 - extra);
+            *knob = row == 0 ? kSlotRow : row - 1;
             return true;
         }
         row -= rows;
@@ -199,7 +188,7 @@ int rowCount(int part)
     int rows = 0;
     for (int s = 0; s < kSlots; s++)
     {
-        rows += 1 + (hasPlacement(part, s) ? 1 : 0) + knobsOf(part, s);
+        rows += 1 + knobsOf(part, s);
     }
     return rows;
 }
@@ -222,11 +211,6 @@ void rowName(int part, int row, char* out, size_t size)
         snprintf(out, size, "FX%d", slot + 1);
         return;
     }
-    if (knob == kPlacementRow)
-    {
-        snprintf(out, size, "Placement");
-        return;
-    }
     const PtsfxParam* p = paramOf(part, slot, knob);
     snprintf(out, size, "%s", p != nullptr ? p->label : "");
 }
@@ -239,7 +223,7 @@ bool rowIsList(int part, int row)
     {
         return false;
     }
-    if (knob < 0) // a slot, or its Placement
+    if (knob < 0) // a slot
     {
         return true;
     }
@@ -268,10 +252,6 @@ int rowSteps(int part, int row)
     {
         return 1;
     }
-    if (knob == kPlacementRow)
-    {
-        return 2;
-    }
     if (knob < 0)
     {
         return choices(part, slot);
@@ -287,10 +267,6 @@ int rowStep(int part, int row)
     if (!locate(part, row, &slot, &knob))
     {
         return 0;
-    }
-    if (knob == kPlacementRow)
-    {
-        return slots[part][slot].pre != 0 ? 0 : 1;
     }
     if (knob < 0)
     {
@@ -310,11 +286,6 @@ void rowText(int part, int row, char* out, size_t size)
     out[0] = 0;
     if (!locate(part, row, &slot, &knob))
     {
-        return;
-    }
-    if (knob == kPlacementRow)
-    {
-        snprintf(out, size, "%s", kPlacements[slots[part][slot].pre != 0 ? 0 : 1]);
         return;
     }
     if (knob < 0)
@@ -342,14 +313,6 @@ void rowItemText(int part, int row, int step, char* out, size_t size)
     {
         plugins::knobTextAt(slotInstance(part, slot), static_cast<uint32_t>(knob), static_cast<uint32_t>(step), out,
                             static_cast<uint32_t>(size));
-        return;
-    }
-    if (knob == kPlacementRow)
-    {
-        if (step < 2)
-        {
-            snprintf(out, size, "%s", kPlacements[step]);
-        }
         return;
     }
     const int count = choices(part, slot);
@@ -399,20 +362,8 @@ bool setRowStep(int part, int row, int step)
         const int last = rowSteps(part, row) - 1;
         step = step < 0 ? 0 : (step > last ? last : step);
         plugins::setKnobStep(id, static_cast<uint32_t>(knob), static_cast<uint32_t>(step));
-        knobEdited(part, slot, static_cast<uint32_t>(knob));
         slots[part][slot].knobs[knob] = plugins::knob(id, static_cast<uint32_t>(knob));
         return false;
-    }
-    if (knob == kPlacementRow)
-    {
-        const bool pre = step <= 0;
-        if (pre == (slots[part][slot].pre != 0))
-        {
-            return false;
-        }
-        setSlotPre(part, slot, pre);
-        remake(part, slot, false); // a Pre plugin is one instance per voice: made again
-        return true;
     }
     const int count = choices(part, slot);
     step = step < 0 ? 0 : (step >= count ? count - 1 : step);
@@ -446,10 +397,6 @@ bool defaultRow(int part, int row)
     {
         return false;
     }
-    if (knob == kPlacementRow)
-    {
-        return setRowStep(part, row, 1); // Post
-    }
     if (knob < 0)
     {
         // None at once: Delete is a press, not a turn through the list
@@ -465,7 +412,6 @@ bool defaultRow(int part, int row)
     {
         const int id = slotInstance(part, slot);
         plugins::setKnob(id, static_cast<uint32_t>(knob), p->default_val);
-        knobEdited(part, slot, static_cast<uint32_t>(knob));
         slots[part][slot].knobs[knob] = plugins::knob(id, static_cast<uint32_t>(knob));
     }
     return false;

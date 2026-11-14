@@ -16,7 +16,8 @@ class SampleStore
     [[nodiscard]] virtual std::optional<Sample> loadSample(const std::string& filePath,
                                                            std::span<sample_store_t> destBuf) = 0;
     [[nodiscard]] virtual tiny_optional<int> getSampleSize(const std::string& filePath) = 0;
-    [[nodiscard]] virtual std::vector<std::string_view> listSamples() = 0;
+    [[nodiscard]] virtual std::vector<std::string_view> listSamples(
+      const std::string& folder = "") = 0;
 };
 
 }

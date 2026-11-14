@@ -325,6 +325,18 @@ class CustomSynthVoice : public InstrumentVoice
         }
     }
 
+#ifdef PRODUCT_WAVE
+    void renderVoiceAudio(const InstrumentVoiceContext& ctx,
+                          std::optional<AudioBufferStereoRef> /*inputBuffer*/,
+                          AudioBufferStereoRef outputBuffer) override
+    {
+        renderVoiceAudio(ctx, outputBuffer);
+    }
+
+    virtual void renderVoiceAudio(const InstrumentVoiceContext& ctx,
+                                  AudioBufferStereoRef outputBuffer) = 0;
+#endif
+
   protected:
     static constexpr float kPitchBendRangeSemitones = 2.0f;
 

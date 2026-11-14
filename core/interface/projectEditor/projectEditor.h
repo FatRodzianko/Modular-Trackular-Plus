@@ -54,6 +54,21 @@ class cProjectEditor : public ModuleBase
 
     void cleanupListsData();
 
+    enum class PendingBrowserAction : uint8_t
+    {
+        kNone = 0,
+        kOpenProject,
+        kOpenRecent,
+        kImportMod
+    };
+    PendingBrowserAction pendingBrowserAction = PendingBrowserAction::kNone;
+    char pendingBrowserDir[kMaxFilePathLen + 1]{};
+    char pendingBrowserName[kMaxFileNameLen + 1]{};
+    int pendingRecentIdx = 0;
+    bool preserveAfterSaveOnStop = false;
+
+    void executePendingBrowserOpen();
+
     //-------------------------------------------------------------
     void showClockWarning();
     void setClockWarningScreenFunct();

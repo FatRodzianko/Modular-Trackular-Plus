@@ -2,6 +2,7 @@
 #include "core/interfaceMenuPopup.h"
 #include "core/interfacePopups.h"
 #include "core/songTimer.h"
+#include "fileBrowser/GlobalFileBrowser.h"
 #include "fileManager.h"
 #include "mtAudioEngine.h"
 #include "mtPadBoard.h"
@@ -9,7 +10,9 @@
 #include "mtSequencer.h"
 #include "sampleEditor/sampleEditor.h"
 #include "ptfx_manager.h"
+#include "VoiceStreamManager.h"
 #include "util_math.h"
+#include "util_string.h"
 
 #include <cr_section_macros.h>
 
@@ -54,6 +57,9 @@ static void functMainScreenDelete();
 static void functSelectStartPoint();
 static void functSelectEndPoint();
 static void functSelectZoom();
+static void functMainScreenMore();
+static void functLoadWav();
+static void functExportWav();
 static void functListUp();
 static void functListDown();
 static void functUndo();
@@ -65,6 +71,7 @@ static void functParamsScreenUp();
 static void functParamsScreenDown();
 static void functParamsScreenEncoder(int16_t value);
 static void functParamsScreenDelete();
+static void functParamsScreenInsert();
 static void functSelectParameter(uint8_t button);
 static void functParamsScreenMore();
 static void functBack();
@@ -81,7 +88,7 @@ static void functTooLongSampleOk();
 static void functTooLongProcessedSampleOk();
 //**************************************************************************
 
-void cSampleEditor::start([[maybe_unused]] uint32_t options)
+void cSampleEditor::start(uint32_t options)
 {
     moduleRefresh = 1;
 
@@ -99,6 +106,29 @@ void cSampleEditor::start([[maybe_unused]] uint32_t options)
         setTooLongSampleFunctions();
         return;
     }
+
+    if (options == 1)
+    {
+        engine.blockDelayRefresh();
+        engine.disableLineInImpact();
+        songTimer.hide();
+        sequencer.setMidiInVoiceMode(Sequencer::midiInVoiceMode_SampleEditor);
+        setCommonFunctions();
+        if (screenType == effectScreen)
+        {
+            showEffectParamsScreen();
+            setParamsScreenFunctions();
+        }
+        else
+        {
+            prepareDisplayDataMainScreen();
+            showMainScreen();
+            setMainScreenFunctions();
+        }
+        return;
+    }
+
+    mainScreenButtonPage = 0;
 
     if (sequencer.getSeqState() != Sequencer::SEQ_STATE_STOP)
     {
@@ -190,6 +220,7 @@ void cSampleEditor::start([[maybe_unused]] uint32_t options)
             loadModularEffectUI(PtfxManager::getActiveHeader());
         }
     }
+    lastEffect = currentEffect;
     currentEffect->undoParams.isEnable = false;
 
     screenType = mainScreen;
@@ -381,6 +412,27 @@ void cSampleEditor::update()
         newFileManager.clearStatus();
         newFileManager.reloadSamplesFromWorkspace();
     }
+    else if (fileManagerStatus == fmImportSamplesEnd)
+    {
+        ip->unblockAllInputs();
+        newFileManager.clearStatus();
+        if (mtProject.values.lastUsedInstrument < kSampleInstrumentsCount)
+        {
+            strInstrument& instr = mtProject.instrument[mtProject.values.lastUsedInstrument];
+            instr.startPoint = 0;
+            instr.loopPoint1 = 1;
+            instr.loopPoint2 = MAX_16BIT - 1;
+            instr.endPoint = MAX_16BIT;
+        }
+        mtPopups.show(0, "WAV loaded");
+        start(0);
+    }
+    else if (fileManagerStatus == fmSaveRecordedSoundEnd)
+    {
+        ip->unblockAllInputs();
+        newFileManager.clearStatus();
+        mtPopups.show(0, "WAV exported");
+    }
     else if (fileManagerStatus == fmReloadSamplesEnd)
     {
         ip->unblockAllInputs();
@@ -487,13 +539,26 @@ void cSampleEditor::setMainScreenFunctions()
     ip->setButtonObj(interfaceButtonUp, buttonPress, functMainScreenUp);
     ip->setButtonObj(interfaceButtonDown, buttonPress, functMainScreenDown);
     ip->setButtonObj(interfaceButtonDelete, buttonPress, functMainScreenDelete);
+    ip->setButtonObj(interfaceButton4, buttonPress, functMainScreenMore);
 
-    if (editorInstrument->isActive)
+    if (mainScreenButtonPage == 0)
     {
-        ip->setButtonObj(interfaceButton0, buttonPress, functSelectStartPoint);
-        ip->setButtonObj(interfaceButton1, buttonPress, functSelectEndPoint);
-        ip->setButtonObj(interfaceButton2, buttonPress, functSelectZoom);
-        ip->setButtonObj(interfaceButton3, buttonPress, functUndo);
+        if (editorInstrument->isActive)
+        {
+            ip->setButtonObj(interfaceButton0, buttonPress, functSelectStartPoint);
+            ip->setButtonObj(interfaceButton1, buttonPress, functSelectEndPoint);
+            ip->setButtonObj(interfaceButton2, buttonPress, functSelectZoom);
+            ip->setButtonObj(interfaceButton3, buttonPress, functUndo);
+        }
+    }
+    else
+    {
+        ip->setButtonObj(interfaceButton0, buttonPress, functLoadWav);
+        if (editorInstrument->isActive)
+        {
+            ip->setButtonObj(interfaceButton1, buttonPress, functExportWav);
+            ip->setButtonObj(interfaceButton3, buttonPress, functUndo);
+        }
     }
     ip->setButtonObj(interfaceButton5, buttonPress, functApply);
     ip->setButtonObj(interfaceButton6, buttonPress, functListUp);
@@ -519,17 +584,29 @@ void cSampleEditor::setParamsScreenFunctions()
     ip->setButtonObj(interfaceButtonUp, buttonPress, functParamsScreenUp);
     ip->setButtonObj(interfaceButtonDown, buttonPress, functParamsScreenDown);
     ip->setButtonObj(interfaceButtonDelete, buttonPress, functParamsScreenDelete);
+    ip->setButtonObj(interfaceButtonInsert, buttonPress, functParamsScreenInsert);
     ip->setButtonObj(interfaceButton4, buttonPress, functParamsScreenMore);
 
-    for (uint8_t i = interfaceButton0; i <= interfaceButton3; i++)
+    if (isModularPresetPage())
     {
-        if (i < getCurrentEffectDisplayParams().paramsNumber)
+        for (uint8_t i = interfaceButton0; i <= interfaceButton2; i++)
         {
             ip->setButtonObj(i, buttonPress, functSelectParameter);
         }
-        else
+    }
+    else
+    {
+        int currentPageParams = getCurrentPageParams();
+        for (uint8_t i = interfaceButton0; i <= interfaceButton3; i++)
         {
-            break;
+            if (i < currentPageParams)
+            {
+                ip->setButtonObj(i, buttonPress, functSelectParameter);
+            }
+            else
+            {
+                break;
+            }
         }
     }
     ip->setButtonObj(interfaceButton5, buttonPress, functBack);
@@ -1012,6 +1089,31 @@ void cSampleEditor::reloadParameterValueText(uint8_t idx)
         return;
     }
 
+    if (params.displayType[idx] == 'w' || params.displayType[idx] == 's')
+    {
+        const char* fullPath = PtfxLoader::getSelectedFilePath(idx);
+        if (fullPath != nullptr && fullPath[0] != '\0')
+        {
+            const char* slash = strrchr(fullPath, '/');
+            const char* name = (slash != nullptr) ? (slash + 1) : fullPath;
+            char stem[16]{};
+            strncpy(stem, name, sizeof(stem) - 1);
+            char* dot = strrchr(stem, '.');
+            if (dot != nullptr)
+            {
+                *dot = '\0';
+            }
+            strncpy(parameterValueLabelPtr[idx], stem, 11);
+            parameterValueLabelPtr[idx][11] = '\0';
+        }
+        else
+        {
+            strcpy(parameterValueLabelPtr[idx],
+                   (params.displayType[idx] == 's') ? "Save..." : "Select...");
+        }
+        return;
+    }
+
     if (params.displayType[idx] == 'l')
     {
         uint8_t count = getParameterListCount(idx);
@@ -1469,18 +1571,36 @@ int cSampleEditor::getSelectedParameterIdx()
     return effectScreenPage * kEffectPageParams + selectedPlace[enScreenType::effectScreen];
 }
 
+bool cSampleEditor::isModularPresetPage() const
+{
+    if (currentEffectIdx != editorEffectModular || getCurrentEffectDisplayParams().paramsNumber == 0)
+    {
+        return false;
+    }
+    int paramPages = ((getCurrentEffectDisplayParams().paramsNumber - 1) / kEffectPageParams) + 1;
+    return effectScreenPage >= paramPages;
+}
+
 int cSampleEditor::getParamsPagesCount()
 {
     if (getCurrentEffectDisplayParams().paramsNumber == 0)
         return 0;
 
-    return ((getCurrentEffectDisplayParams().paramsNumber - 1) /
-            kEffectPageParams) +
-           1;
+    int paramPages = ((getCurrentEffectDisplayParams().paramsNumber - 1) / kEffectPageParams) + 1;
+    if (currentEffectIdx == editorEffectModular)
+    {
+        return paramPages + 1;
+    }
+    return paramPages;
 }
 
 int cSampleEditor::getCurrentPageParams()
 {
+    if (isModularPresetPage())
+    {
+        return 0;
+    }
+
     assert((int)effectScreenPage * kEffectPageParams <=
            (int)getCurrentEffectDisplayParams().paramsNumber);
 
@@ -1767,6 +1887,170 @@ static void functSelectZoom()
     SE->showFrame();
 }
 
+static void functMainScreenMore()
+{
+    SE->mainScreenButtonPage = 1 - SE->mainScreenButtonPage;
+    SE->showMainScreen();
+    SE->setMainScreenFunctions();
+}
+
+static void functLoadWav()
+{
+    if (mtProject.values.lastUsedInstrument >= kSampleInstrumentsCount)
+    {
+        return;
+    }
+
+    SE->avoidStop = true;
+
+    GlobalFileBrowserConfig cfg;
+    cfg.mode = GlobalFileBrowserConfig::Mode::kLoadWav;
+    cfg.title = "Load WAV - Sample Editor";
+    cfg.contextKey = "se_load_wav";
+    cfg.initialDirectory = "/Samples";
+    cfg.extensionFilter = ".wav";
+    cfg.returnModule = SE;
+    cfg.returnModuleOptions = 1;
+    cfg.onConfirm = [](const std::string& fullPath)
+    {
+        auto slashPos = fullPath.find_last_of('/');
+        std::string dirStr = (slashPos != std::string::npos && slashPos > 0)
+                               ? fullPath.substr(0, slashPos)
+                               : "";
+        std::string fileStr = (slashPos != std::string::npos) ? fullPath.substr(slashPos + 1)
+                                                              : fullPath;
+        auto dotPos = fileStr.find_last_of('.');
+        if (dotPos != std::string::npos)
+        {
+            fileStr = fileStr.substr(0, dotPos);
+        }
+
+        char dirBuf[kMaxFilePathLen + 1]{};
+        char nameBuf[kMaxFileNameLen + 1]{};
+        strncpy(dirBuf, dirStr.c_str(), kMaxFilePathLen);
+        strncpy(nameBuf, fileStr.c_str(), kMaxFileNameLen);
+
+        newFileManager.flushWorkspaceSave();
+        if (newFileManager.importSampleToProject(
+              dirBuf, nameBuf, mtProject.values.lastUsedInstrument))
+        {
+            SE->ip->blockAllInputs();
+        }
+        else
+        {
+            mtPopups.show(0, "Error loading WAV");
+        }
+    };
+
+    openGlobalFileBrowser(cfg);
+}
+
+static void functExportWav()
+{
+    if (!SE->editorInstrument->isActive || SE->editorInstrument->sample.length == 0)
+    {
+        return;
+    }
+
+    SE->avoidStop = true;
+
+    std::string defName = SE->editorInstrument->sample.file_name[0] != '\0'
+                            ? SE->editorInstrument->sample.file_name
+                            : "sample";
+
+    GlobalFileBrowserConfig cfg;
+    cfg.mode = GlobalFileBrowserConfig::Mode::kSaveWav;
+    cfg.title = "Export WAV - Sample Editor";
+    cfg.contextKey = "se_export_wav";
+    cfg.initialDirectory = "/Samples";
+    cfg.defaultFileName = defName;
+    cfg.extensionFilter = ".wav";
+    cfg.returnModule = SE;
+    cfg.returnModuleOptions = 1;
+    cfg.onConfirm = [](const std::string& fullPath)
+    {
+        auto slashPos = fullPath.find_last_of('/');
+        std::string dirStr = (slashPos != std::string::npos && slashPos > 0)
+                               ? fullPath.substr(0, slashPos)
+                               : "/";
+        std::string fileStr = (slashPos != std::string::npos) ? fullPath.substr(slashPos + 1)
+                                                              : fullPath;
+        auto dotPos = fileStr.find_last_of('.');
+        if (dotPos != std::string::npos)
+        {
+            fileStr = fileStr.substr(0, dotPos);
+        }
+
+        char dirBuf[kMaxFilePathLen + 1]{};
+        char nameBuf[kMaxFileNameLen + 1]{};
+        strncpy(dirBuf, dirStr.c_str(), kMaxFilePathLen);
+        strncpy(nameBuf, fileStr.c_str(), kMaxFileNameLen);
+
+        bool isStereo = SE->isCurrentSampleStereo();
+        const int16_t* leftPtr = nullptr;
+        const int16_t* rightPtr = nullptr;
+        uint32_t sampleLen = 0;
+
+        if (SE->currentEffect != nullptr && SE->currentEffect->isDataLoaded())
+        {
+            leftPtr = SE->currentEffect->getAddresToPolyphonicPlay(mtEffect::Channel::kLeft);
+            rightPtr = isStereo
+                         ? SE->currentEffect->getAddresToPolyphonicPlay(mtEffect::Channel::kRight)
+                         : leftPtr;
+            sampleLen = SE->currentEffect->getLengthToPolyphonicPlay();
+        }
+        else
+        {
+            const uint8_t instrIdx = mtProject.values.lastUsedInstrument;
+            if (instrIdx < kSampleInstrumentsCount && mtProject.sampleMemory[instrIdx].isStreamed &&
+                SE->editorInstrument->sample.length > 0 &&
+                SE->editorInstrument->sample.length <= EDIT_BUFF_SIZE / 2)
+            {
+                sampleLen = SE->editorInstrument->sample.length;
+                int16_t* dstLeft = externalRamEffectsBuff;
+                int16_t* dstRight = isStereo ? (externalRamEffectsBuff + EDIT_BUFF_SIZE) : dstLeft;
+                bool ok = voiceStreamManager.readInstrumentFramesBlocking(
+                  instrIdx, mtEffect::Channel::kLeft, 0, sampleLen, dstLeft);
+                if (ok && isStereo)
+                {
+                    ok = voiceStreamManager.readInstrumentFramesBlocking(
+                      instrIdx, mtEffect::Channel::kRight, 0, sampleLen, dstRight);
+                }
+                if (ok)
+                {
+                    leftPtr = dstLeft;
+                    rightPtr = dstRight;
+                }
+            }
+            else
+            {
+                leftPtr = SE->sampleEditorSampleMemory.address[mtEffect::Channel::kLeft];
+                rightPtr = isStereo ? SE->sampleEditorSampleMemory.address[mtEffect::Channel::kRight]
+                                    : leftPtr;
+                sampleLen = SE->editorInstrument->sample.length;
+            }
+        }
+
+        newFileManager.flushWorkspaceSave();
+        if (leftPtr != nullptr && sampleLen > 0 &&
+            newFileManager.saveRecordedSound(dirBuf,
+                                             nameBuf,
+                                             std::nullopt,
+                                             const_cast<int16_t*>(leftPtr),
+                                             const_cast<int16_t*>(rightPtr),
+                                             sampleLen))
+        {
+            SE->ip->blockAllInputs();
+        }
+        else
+        {
+            mtPopups.show(0, "Error exporting WAV");
+        }
+    };
+
+    openGlobalFileBrowser(cfg);
+}
+
 static void functListUp()
 {
     if (SE->selectedPlace[cSampleEditor::mainScreen] != cSampleEditor::effectButton)
@@ -1840,6 +2124,10 @@ static void functApply()
 // Parameter screen functions
 static void functParamsScreenLeft()
 {
+    if (SE->isModularPresetPage())
+    {
+        return;
+    }
     if (SE->selectedPlace[cSampleEditor::effectScreen] > 0)
         SE->selectedPlace[cSampleEditor::effectScreen]--;
     SE->showFrame();
@@ -1847,6 +2135,10 @@ static void functParamsScreenLeft()
 
 static void functParamsScreenRight()
 {
+    if (SE->isModularPresetPage() || SE->frameData.placesCount == 0)
+    {
+        return;
+    }
     if (SE->selectedPlace[cSampleEditor::effectScreen] < (SE->frameData.placesCount - 1))
         SE->selectedPlace[cSampleEditor::effectScreen]++;
     SE->showFrame();
@@ -1854,6 +2146,10 @@ static void functParamsScreenRight()
 
 static void functParamsScreenUp()
 {
+    if (SE->isModularPresetPage())
+    {
+        return;
+    }
     int idx = SE->getSelectedParameterIdx();
     if (SE->isParameterList(idx))
         SE->modParameter(-1, idx);
@@ -1863,6 +2159,10 @@ static void functParamsScreenUp()
 
 static void functParamsScreenDown()
 {
+    if (SE->isModularPresetPage())
+    {
+        return;
+    }
     int idx = SE->getSelectedParameterIdx();
     if (SE->isParameterList(idx))
         SE->modParameter(1, idx);
@@ -1872,6 +2172,10 @@ static void functParamsScreenDown()
 
 static void functParamsScreenEncoder(int16_t value)
 {
+    if (SE->isModularPresetPage())
+    {
+        return;
+    }
     int idx = SE->getSelectedParameterIdx();
     if (SE->isParameterList(idx))
         SE->modParameter(interfaceGlobals.invertValForList ? -value : value, idx);
@@ -1881,7 +2185,207 @@ static void functParamsScreenEncoder(int16_t value)
 
 static void functParamsScreenDelete()
 {
+    if (SE->isModularPresetPage())
+    {
+        return;
+    }
     SE->setDefaultParameter(SE->getSelectedParameterIdx());
+}
+
+static std::string buildModularPresetDir(uint8_t pluginIdx)
+{
+    const PtfxEntry* entry = PtfxManager::getPlugin(pluginIdx);
+    const char* rawName =
+      (entry != nullptr && entry->displayName[0] != '\0')
+        ? entry->displayName
+        : ((entry != nullptr && entry->filename[0] != '\0') ? entry->filename : "Plugin");
+
+    std::string sanitized;
+    sanitized.reserve(32);
+    for (const char* p = rawName; *p != '\0'; ++p)
+    {
+        char c = *p;
+        if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' ||
+            c == '>' || c == '|')
+        {
+            c = '_';
+        }
+        sanitized.push_back(c);
+    }
+    while (!sanitized.empty() && (sanitized.back() == ' ' || sanitized.back() == '.'))
+    {
+        sanitized.pop_back();
+    }
+    if (sanitized.empty())
+    {
+        sanitized = "Plugin";
+    }
+    return "/Effects/Presets/" + sanitized;
+}
+
+static bool reloadModularAfterBrowser(const float savedParams[12], uint8_t savedPage)
+{
+    if (SE->currentEffectIdx != editorEffectModular)
+    {
+        return false;
+    }
+    // Reload plugin code in case SD audio preview or browser scratch used externalRamScratchBuff
+    if (!PtfxManager::loadPlugin(SE->currentModularPluginIdx, sampleEditorModular))
+    {
+        sampleEditorModular.unloadPlugin();
+        mtPopups.show(0, "Plugin reload failed");
+        return false;
+    }
+    SE->loadModularEffectUI(PtfxManager::getActiveHeader());
+    SE->effectScreenPage = savedPage;
+    for (uint8_t i = 0; i < SE->getCurrentEffectDisplayParams().paramsNumber && i < 12; i++)
+    {
+        SE->effectDisplayParamsToAdjust[editorEffectModular].parameter[i] = savedParams[i];
+        SE->currentEffect->setParameter(
+          SE->effectDisplayParamsToAdjust[editorEffectModular].parameter[i], i);
+    }
+    return true;
+}
+
+struct PtfxPresetFileHeader
+{
+    char magic[4];
+    uint16_t version;
+    char pluginFile[42];
+    uint8_t numParams;
+    uint8_t fileMask;
+    float params[12];
+};
+
+static void openModularParamFileBrowser(int paramIdx)
+{
+    const auto& params = SE->getCurrentEffectDisplayParams();
+    char dispType =
+      (params.displayType != nullptr && paramIdx >= 0 && paramIdx < params.paramsNumber)
+        ? params.displayType[paramIdx]
+        : '\0';
+    if (dispType != 'w' && dispType != 's')
+    {
+        return;
+    }
+
+    bool isSave = (dispType == 's');
+    const char* extStr = (params.afterValueText[paramIdx] != nullptr &&
+                          params.afterValueText[paramIdx][0] != '\0')
+                           ? params.afterValueText[paramIdx]
+                           : ".wav";
+    bool isWav = FileBrowser::checkFilenameExtension(extStr, ".wav");
+
+    std::string defName = "output";
+    if (isSave)
+    {
+        const char* curPath = PtfxLoader::getSelectedFilePath(static_cast<uint8_t>(paramIdx));
+        if (curPath != nullptr && curPath[0] != '\0')
+        {
+            const char* slash = strrchr(curPath, '/');
+            const char* base = (slash != nullptr) ? (slash + 1) : curPath;
+            const char* dot = strrchr(base, '.');
+            std::string stem = (dot != nullptr && dot > base) ? std::string(base, dot - base)
+                                                              : std::string(base);
+            if (!stem.empty())
+            {
+                defName = stem;
+            }
+        }
+    }
+
+    float savedParams[12]{};
+    for (uint8_t i = 0; i < 12; i++)
+    {
+        savedParams[i] = SE->effectDisplayParamsToAdjust[editorEffectModular].parameter[i];
+    }
+    uint8_t savedPage = SE->effectScreenPage;
+
+    char keyBuf[32];
+    snprintf(keyBuf,
+             sizeof(keyBuf),
+             "ptfx_%u_p%d_%c",
+             static_cast<unsigned>(SE->currentModularPluginIdx),
+             paramIdx,
+             dispType);
+
+    SE->avoidStop = true;
+
+    GlobalFileBrowserConfig cfg;
+    if (isSave)
+    {
+        cfg.mode = isWav ? GlobalFileBrowserConfig::Mode::kSaveWav
+                         : GlobalFileBrowserConfig::Mode::kSaveGenericFile;
+    }
+    else
+    {
+        cfg.mode = isWav ? GlobalFileBrowserConfig::Mode::kLoadWav
+                         : GlobalFileBrowserConfig::Mode::kLoadGenericFile;
+    }
+    cfg.title = std::string(isSave ? "Save " : "Load ") +
+                (params.labelsText[paramIdx] ? params.labelsText[paramIdx] : "File");
+    cfg.initialDirectory = isWav ? "/Samples" : "/";
+    cfg.defaultFileName = defName;
+    cfg.extensionFilter = extStr;
+    cfg.contextKey = keyBuf;
+    cfg.returnModule = SE;
+    cfg.returnModuleOptions = 1;
+    cfg.onConfirm = [paramIdx, isWav, isSave, savedParams, savedPage](const std::string& fullPath)
+    {
+        PtfxLoader::setSelectedFilePath(static_cast<uint8_t>(paramIdx), fullPath.c_str());
+        bool wavOk = true;
+        if (!isSave && isWav)
+        {
+            wavOk = PtfxLoader::loadSecondaryWavFile(fullPath.c_str());
+        }
+
+        if (reloadModularAfterBrowser(savedParams, savedPage))
+        {
+            float val = (isSave || !isWav || wavOk) ? 1.0f : 0.0f;
+            SE->effectDisplayParamsToAdjust[editorEffectModular].parameter[paramIdx] = val;
+            SE->currentEffect->setParameter(val, static_cast<uint8_t>(paramIdx));
+        }
+
+        if (isSave)
+        {
+            mtPopups.show(0, "Output file set");
+        }
+        else if (isWav)
+        {
+            mtPopups.show(0, wavOk ? "Sample loaded" : "Invalid WAV file");
+        }
+        else
+        {
+            mtPopups.show(0, "File selected");
+        }
+
+        SE->setPreviewFunction();
+        SE->currentEffect->clearProcessedData();
+        SE->reloadFrameData(cSampleEditor::effectScreen);
+        SE->showEffectParamsScreen();
+        SE->setParamsScreenFunctions();
+    };
+    cfg.onCancel = [savedParams, savedPage]()
+    {
+        if (reloadModularAfterBrowser(savedParams, savedPage))
+        {
+            SE->reloadFrameData(cSampleEditor::effectScreen);
+            SE->showEffectParamsScreen();
+            SE->setParamsScreenFunctions();
+        }
+    };
+
+    sampleEditorModular.unloadPlugin();
+    openGlobalFileBrowser(cfg);
+}
+
+static void functParamsScreenInsert()
+{
+    if (SE->isModularPresetPage())
+    {
+        return;
+    }
+    openModularParamFileBrowser(SE->getSelectedParameterIdx());
 }
 
 static void functParamsScreenMore()
@@ -1895,10 +2399,23 @@ static void functParamsScreenMore()
 
     SE->reloadFrameData(SE->enScreenType::effectScreen);
     SE->showEffectParamsScreen();
+    SE->setParamsScreenFunctions();
 }
 
 static void functSelectParameter(uint8_t button)
 {
+    if (SE->isModularPresetPage())
+    {
+        switch (button)
+        {
+            case 0: SE->openModularPresetLoadBrowser(); break;
+            case 1: SE->openModularPresetSaveBrowser(); break;
+            case 2: SE->resetModularEffectParams(); break;
+            default: break;
+        }
+        return;
+    }
+
     if (button >= SE->getCurrentPageParams())
     {
         return;
@@ -1907,6 +2424,16 @@ static void functSelectParameter(uint8_t button)
     if (SE->selectedPlace[cSampleEditor::effectScreen] == button)
     {
         int paramIdx = SE->getSelectedParameterIdx();
+        const auto& params = SE->getCurrentEffectDisplayParams();
+        char dt =
+          (params.displayType != nullptr && paramIdx >= 0 && paramIdx < params.paramsNumber)
+            ? params.displayType[paramIdx]
+            : '\0';
+        if (dt == 'w' || dt == 's')
+        {
+            openModularParamFileBrowser(paramIdx);
+            return;
+        }
         if (SE->isParameterList(paramIdx))
         {
             uint8_t count = SE->getParameterListCount(paramIdx);
@@ -1924,6 +2451,300 @@ static void functSelectParameter(uint8_t button)
 
     SE->selectedPlace[cSampleEditor::effectScreen] = button;
     SE->showFrame();
+}
+
+void cSampleEditor::openModularPresetLoadBrowser()
+{
+    if (currentEffectIdx != editorEffectModular)
+    {
+        return;
+    }
+
+    float savedParams[12]{};
+    for (uint8_t i = 0; i < 12; i++)
+    {
+        savedParams[i] = effectDisplayParamsToAdjust[editorEffectModular].parameter[i];
+    }
+    uint8_t savedPage = effectScreenPage;
+    uint8_t pluginIdx = currentModularPluginIdx;
+
+    char keyBuf[32];
+    snprintf(keyBuf, sizeof(keyBuf), "ptfx_preset_%u", static_cast<unsigned>(pluginIdx));
+
+    avoidStop = true;
+
+    GlobalFileBrowserConfig cfg;
+    cfg.mode = GlobalFileBrowserConfig::Mode::kLoadGenericFile;
+    cfg.title = "Load Plugin Preset";
+    cfg.initialDirectory = buildModularPresetDir(pluginIdx);
+    cfg.extensionFilter = ".ptp";
+    cfg.confirmButtonLabel = "Load";
+    cfg.contextKey = keyBuf;
+    cfg.returnModule = this;
+    cfg.returnModuleOptions = 1;
+    cfg.onConfirm = [savedParams, savedPage, pluginIdx](const std::string& fullPath)
+    {
+        FileSystem* fs = newFileManager.getFileSystem();
+        const char* relPath =
+          (!fullPath.empty() && fullPath[0] == '/') ? (fullPath.c_str() + 1) : fullPath.c_str();
+
+        PtfxPresetFileHeader hdr{};
+        bool readOk = false;
+        FileSystem::FileHandle fh{};
+        if (fs != nullptr)
+        {
+            auto [isOpen, openedFh] = fs->openFile(relPath, FileSystem::FileOpenMode::kRead);
+            if (isOpen)
+            {
+                fh = openedFh;
+                if (fs->readFile(&hdr, sizeof(hdr), fh) == static_cast<int32_t>(sizeof(hdr)) &&
+                    memcmp(hdr.magic, "PTFP", 4) == 0 && hdr.version == 1)
+                {
+                    readOk = true;
+                }
+                else
+                {
+                    fs->closeFile(fh);
+                }
+            }
+        }
+
+        const PtfxEntry* entry = PtfxManager::getPlugin(pluginIdx);
+        bool pluginMatch =
+          readOk && (entry != nullptr) && (strcasecmp(hdr.pluginFile, entry->filename) == 0);
+
+        if (!readOk || !pluginMatch)
+        {
+            if (readOk && fs != nullptr)
+            {
+                fs->closeFile(fh);
+            }
+            reloadModularAfterBrowser(savedParams, savedPage);
+            mtPopups.show(0, readOk ? "Wrong plugin preset" : "Invalid preset file");
+            SE->reloadFrameData(cSampleEditor::effectScreen);
+            SE->showEffectParamsScreen();
+            SE->setParamsScreenFunctions();
+            return;
+        }
+
+        PtfxLoader::clearSelectedFiles();
+        for (uint8_t i = 0; i < 12; i++)
+        {
+            if ((hdr.fileMask & (1u << i)) != 0)
+            {
+                uint16_t pathLen = 0;
+                if (fs->readFile(&pathLen, sizeof(pathLen), fh) !=
+                      static_cast<int32_t>(sizeof(pathLen)) ||
+                    pathLen > kMaxFilePathLen)
+                {
+                    break;
+                }
+                char pathBuf[kMaxFilePathLen + 1]{};
+                if (pathLen > 0 &&
+                    fs->readFile(pathBuf, pathLen, fh) != static_cast<int32_t>(pathLen))
+                {
+                    break;
+                }
+                pathBuf[pathLen] = '\0';
+                PtfxLoader::setSelectedFilePath(i, pathBuf);
+            }
+        }
+        fs->closeFile(fh);
+
+        if (reloadModularAfterBrowser(savedParams, savedPage))
+        {
+            const auto& curParams = SE->getCurrentEffectDisplayParams();
+            uint8_t applyCount = std::min<uint8_t>(hdr.numParams, curParams.paramsNumber);
+            applyCount = std::min<uint8_t>(applyCount, 12);
+            for (uint8_t i = 0; i < applyCount; i++)
+            {
+                float val = hdr.params[i];
+                char dt = curParams.displayType ? curParams.displayType[i] : '\0';
+                if (dt == 'w')
+                {
+                    const char* fp = PtfxLoader::getSelectedFilePath(i);
+                    const char* extStr =
+                      (curParams.afterValueText[i] != nullptr &&
+                       curParams.afterValueText[i][0] != '\0')
+                        ? curParams.afterValueText[i]
+                        : ".wav";
+                    bool isWav = FileBrowser::checkFilenameExtension(extStr, ".wav");
+                    if (fp != nullptr && fp[0] != '\0')
+                    {
+                        val = isWav ? (PtfxLoader::loadSecondaryWavFile(fp) ? 1.0f : 0.0f) : 1.0f;
+                    }
+                    else
+                    {
+                        val = 0.0f;
+                    }
+                }
+                else if (dt == 's')
+                {
+                    const char* fp = PtfxLoader::getSelectedFilePath(i);
+                    val = (fp != nullptr && fp[0] != '\0') ? 1.0f : 0.0f;
+                }
+                SE->effectDisplayParamsToAdjust[editorEffectModular].parameter[i] = val;
+                SE->currentEffect->setParameter(val, i);
+            }
+        }
+
+        SE->setPreviewFunction();
+        SE->currentEffect->clearProcessedData();
+        mtPopups.show(0, "Preset loaded");
+        SE->reloadFrameData(cSampleEditor::effectScreen);
+        SE->showEffectParamsScreen();
+        SE->setParamsScreenFunctions();
+    };
+    cfg.onCancel = [savedParams, savedPage]()
+    {
+        if (reloadModularAfterBrowser(savedParams, savedPage))
+        {
+            SE->reloadFrameData(cSampleEditor::effectScreen);
+            SE->showEffectParamsScreen();
+            SE->setParamsScreenFunctions();
+        }
+    };
+
+    sampleEditorModular.unloadPlugin();
+    openGlobalFileBrowser(cfg);
+}
+
+void cSampleEditor::openModularPresetSaveBrowser()
+{
+    if (currentEffectIdx != editorEffectModular)
+    {
+        return;
+    }
+
+    float savedParams[12]{};
+    for (uint8_t i = 0; i < 12; i++)
+    {
+        savedParams[i] = effectDisplayParamsToAdjust[editorEffectModular].parameter[i];
+    }
+    uint8_t savedPage = effectScreenPage;
+    uint8_t pluginIdx = currentModularPluginIdx;
+
+    char keyBuf[32];
+    snprintf(keyBuf, sizeof(keyBuf), "ptfx_preset_%u", static_cast<unsigned>(pluginIdx));
+
+    avoidStop = true;
+
+    GlobalFileBrowserConfig cfg;
+    cfg.mode = GlobalFileBrowserConfig::Mode::kSaveGenericFile;
+    cfg.title = "Save Plugin Preset";
+    cfg.initialDirectory = buildModularPresetDir(pluginIdx);
+    cfg.defaultFileName = "preset";
+    cfg.extensionFilter = ".ptp";
+    cfg.contextKey = keyBuf;
+    cfg.returnModule = this;
+    cfg.returnModuleOptions = 1;
+    cfg.onConfirm = [savedParams, savedPage, pluginIdx](const std::string& fullPath)
+    {
+        bool reloaded = reloadModularAfterBrowser(savedParams, savedPage);
+
+        FileSystem* fs = newFileManager.getFileSystem();
+        const char* relPath =
+          (!fullPath.empty() && fullPath[0] == '/') ? (fullPath.c_str() + 1) : fullPath.c_str();
+        const PtfxEntry* entry = PtfxManager::getPlugin(pluginIdx);
+        const auto& curParams = SE->getCurrentEffectDisplayParams();
+
+        PtfxPresetFileHeader hdr{};
+        memcpy(hdr.magic, "PTFP", 4);
+        hdr.version = 1;
+        if (entry != nullptr)
+        {
+            polystrncpy(hdr.pluginFile, entry->filename, sizeof(hdr.pluginFile));
+        }
+        hdr.numParams = std::min<uint8_t>(curParams.paramsNumber, 12);
+        hdr.fileMask = 0;
+        for (uint8_t i = 0; i < 12; i++)
+        {
+            hdr.params[i] = savedParams[i];
+            if (i < hdr.numParams && curParams.displayType != nullptr &&
+                (curParams.displayType[i] == 'w' || curParams.displayType[i] == 's'))
+            {
+                const char* fp = PtfxLoader::getSelectedFilePath(i);
+                if (fp != nullptr && fp[0] != '\0')
+                {
+                    hdr.fileMask |= static_cast<uint8_t>(1u << i);
+                }
+            }
+        }
+
+        bool savedOk = false;
+        if (fs != nullptr)
+        {
+            auto [isOpen, fh] = fs->openFile(relPath, FileSystem::FileOpenMode::kWriteCreateNew);
+            if (isOpen)
+            {
+                savedOk = (fs->writeFile(&hdr, sizeof(hdr), fh) == static_cast<int32_t>(sizeof(hdr)));
+                for (uint8_t i = 0; savedOk && i < 12; i++)
+                {
+                    if ((hdr.fileMask & (1u << i)) != 0)
+                    {
+                        const char* fp = PtfxLoader::getSelectedFilePath(i);
+                        uint16_t pathLen = static_cast<uint16_t>(
+                          std::min<size_t>(strlen(fp), kMaxFilePathLen));
+                        savedOk =
+                          (fs->writeFile(&pathLen, sizeof(pathLen), fh) ==
+                           static_cast<int32_t>(sizeof(pathLen))) &&
+                          (pathLen == 0 ||
+                           fs->writeFile(fp, pathLen, fh) == static_cast<int32_t>(pathLen));
+                    }
+                }
+                fs->closeFile(fh);
+            }
+        }
+
+        mtPopups.show(0, savedOk ? "Preset saved" : "Error saving preset");
+        if (reloaded)
+        {
+            SE->reloadFrameData(cSampleEditor::effectScreen);
+            SE->showEffectParamsScreen();
+            SE->setParamsScreenFunctions();
+        }
+    };
+    cfg.onCancel = [savedParams, savedPage]()
+    {
+        if (reloadModularAfterBrowser(savedParams, savedPage))
+        {
+            SE->reloadFrameData(cSampleEditor::effectScreen);
+            SE->showEffectParamsScreen();
+            SE->setParamsScreenFunctions();
+        }
+    };
+
+    sampleEditorModular.unloadPlugin();
+    openGlobalFileBrowser(cfg);
+}
+
+void cSampleEditor::resetModularEffectParams()
+{
+    if (currentEffectIdx != editorEffectModular)
+    {
+        return;
+    }
+
+    const PtfxHeader& header = PtfxManager::getActiveHeader();
+    uint8_t count = std::min<uint8_t>(header.num_params, kMaxParametersInEffect);
+    PtfxLoader::clearSelectedFiles();
+
+    for (uint8_t i = 0; i < count; i++)
+    {
+        float defVal =
+          (header.params[i].display_type == PARAM_FILE ||
+           header.params[i].display_type == PARAM_SAVE_FILE)
+            ? 0.0f
+            : header.params[i].default_val;
+        effectDisplayParamsToAdjust[editorEffectModular].parameter[i] = defVal;
+        currentEffect->setParameter(defVal, i);
+    }
+
+    setPreviewFunction();
+    currentEffect->clearProcessedData();
+    mtPopups.show(0, "Parameters reset");
+    showEffectParamsScreen();
+    setParamsScreenFunctions();
 }
 
 static void functPreview()
@@ -2264,6 +3085,19 @@ void cSampleEditor::loadModularEffectUI(const PtfxHeader& header)
             s_modularChangeStep[i] = 1.0f;
             s_modularDisplayMult[i] = 1.0f;
             s_modularDisplayType[i] = (validItems > 0) ? 'l' : 'd';
+        }
+        else if (p.display_type == PARAM_FILE || p.display_type == PARAM_SAVE_FILE)
+        {
+            strncpy(s_modularUnitStorage[i], p.unit, sizeof(s_modularUnitStorage[i]) - 1);
+            s_modularUnitStorage[i][sizeof(s_modularUnitStorage[i]) - 1] = '\0';
+            s_modularUnits[i] =
+              (s_modularUnitStorage[i][0] != '\0') ? s_modularUnitStorage[i] : ".wav";
+
+            s_modularUpConstrain[i] = 1.0f;
+            s_modularDownConstrain[i] = 0.0f;
+            s_modularChangeStep[i] = 0.0f;
+            s_modularDisplayMult[i] = 1.0f;
+            s_modularDisplayType[i] = (p.display_type == PARAM_SAVE_FILE) ? 's' : 'w';
         }
         else
         {

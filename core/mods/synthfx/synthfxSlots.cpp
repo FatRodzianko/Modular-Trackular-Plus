@@ -6,11 +6,8 @@
 // A slot changes in steps, one main-loop pass apart, so nothing waits on the interrupt: the
 // running plugin is retired (the interrupt fades it out over its next block), then freed once
 // it has faded (or after kRetireMs, if the interrupt isn't running the part), then the new one
-// is made and published (it fades in over its first block).
-//
-// A slot with Placement Pre and a plugin that allows it (PRE) is made with kVoices instances, one
-// for each of a WAVE part's voices; the first also runs on the part when it plays another engine.
-// Its knobs are set on all of them alike.
+// is made and published (it fades in over its first block). Each slot's plugin is one instance,
+// run on the part.
 
 #include "modsBuild.h"
 
@@ -29,8 +26,7 @@ namespace
 {
 
 static_assert(kKnobs == PTSFX_MAX_PARAMS && kFileSize == plugins::kFileNameSize, "the plugins' sizes");
-static_assert(kParts * kSlots * kVoices <= static_cast<int>(plugins::kInstanceCount),
-              "every slot Pre on every part fits the instances");
+static_assert(kParts * kSlots <= static_cast<int>(plugins::kInstanceCount), "every slot fits the instances");
 
 constexpr uint32_t kRetireMs = 50; // a part not rendered (no voices) never fades its slot out
 
@@ -39,10 +35,8 @@ bool soon[kParts] = { false, false, false };
 
 struct Live
 {
-    int8_t id[kVoices];     // the instances made for this slot, published to the interrupt
-    int8_t old[kVoices];    // the ones fading out, to be freed
-    uint8_t count;          // of id: 0, 1, or kVoices (Pre)
-    uint8_t oldCount;
+    int8_t id;              // the instance made for this slot, published to the interrupt, or -1
+    int8_t old;             // the one fading out, to be freed, or -1
     bool pending;           // the slot's plugin to be made once old is freed
     bool fromProject;
     bool picked;            // the page's pick, made once the encoder rests (remakeWhenStill)
@@ -52,8 +46,8 @@ struct Live
     uint32_t pickedAt;
 
     constexpr Live()
-        : id{ -1, -1, -1, -1, -1, -1, -1, -1 }, old{ -1, -1, -1, -1, -1, -1, -1, -1 }, count(0), oldCount(0),
-          pending(false), fromProject(false), picked(false), storeWhenMade(false), status(0), oldSince(0), pickedAt(0)
+        : id(-1), old(-1), pending(false), fromProject(false), picked(false), storeWhenMade(false), status(0),
+          oldSince(0), pickedAt(0)
     {
     }
 };
@@ -74,19 +68,15 @@ bool isFinite(float f)
 bool step(int part, int slot)
 {
     Live& l = live[part][slot];
-    if (l.oldCount > 0)
+    if (l.old >= 0)
     {
         if (!retired(part, slot) && plugins::now() - l.oldSince < kRetireMs)
         {
             return false;
         }
-        publish(part, slot, nullptr, 0, false);
-        for (int v = 0; v < l.oldCount; v++)
-        {
-            plugins::destroy(l.old[v]);
-            l.old[v] = -1;
-        }
-        l.oldCount = 0;
+        publish(part, slot, -1, false);
+        plugins::destroy(l.old);
+        l.old = -1;
     }
     if (!l.pending)
     {
@@ -100,48 +90,24 @@ bool step(int part, int slot)
         return true;
     }
     plugins::Status status = plugins::Status::ok;
-    int8_t ids[kVoices];
-    const int first = plugins::create(want.file, l.fromProject, &status);
+    const int id = plugins::create(want.file, l.fromProject, &status);
     l.status = static_cast<uint8_t>(status);
-    if (first < 0)
+    if (id < 0)
     {
         return true;
     }
-    ids[0] = static_cast<int8_t>(first);
-    const PtsfxHeader* h = plugins::header(first);
-    const int count = want.pre != 0 && (h->flags & PTSFX_FLAG_PRE) != 0 ? kVoices : 1;
-    for (int v = 1; v < count; v++)
-    {
-        const int id = plugins::create(want.file, l.fromProject, &status);
-        if (id < 0) // no room for every voice's: none
-        {
-            for (int u = 0; u < v; u++)
-            {
-                plugins::destroy(ids[u]);
-            }
-            l.status = static_cast<uint8_t>(status);
-            return true;
-        }
-        ids[v] = static_cast<int8_t>(id);
-    }
+    const PtsfxHeader* h = plugins::header(id);
     const uint32_t knobs = h->num_params < kKnobs ? h->num_params : kKnobs;
     for (uint32_t k = 0; k < knobs; k++)
     {
         if (isFinite(want.knobs[k]))
         {
-            for (int v = 0; v < count; v++)
-            {
-                plugins::setKnob(ids[v], k, want.knobs[k]);
-            }
+            plugins::setKnob(id, k, want.knobs[k]);
         }
-        want.knobs[k] = plugins::knob(first, k); // on the plugin's steps, as it will be saved
+        want.knobs[k] = plugins::knob(id, k); // on the plugin's steps, as it will be saved
     }
-    for (int v = 0; v < count; v++)
-    {
-        l.id[v] = ids[v];
-    }
-    l.count = static_cast<uint8_t>(count);
-    publish(part, slot, ids, count, (h->flags & PTSFX_FLAG_WIDENS) != 0);
+    l.id = static_cast<int8_t>(id);
+    publish(part, slot, id, (h->flags & PTSFX_FLAG_WIDENS) != 0);
     return true;
 }
 
@@ -156,16 +122,11 @@ void remake(int part, int slot, bool fromProject)
     Live& l = live[part][slot];
     l.picked = false;
     l.storeWhenMade = false;
-    if (l.count > 0) // only once the last old ones are freed (step makes the new one after)
+    if (l.id >= 0) // only once the last old one is freed (step makes the new one after)
     {
         retire(part, slot);
-        for (int v = 0; v < l.count; v++)
-        {
-            l.old[v] = l.id[v];
-            l.id[v] = -1;
-        }
-        l.oldCount = l.count;
-        l.count = 0;
+        l.old = l.id;
+        l.id = -1;
         l.oldSince = plugins::now();
     }
     l.pending = true;
@@ -278,11 +239,11 @@ SlotState slotState(int part, int slot)
     {
         return SlotState::loading;
     }
-    if (l.count > 0)
+    if (l.id >= 0)
     {
-        return plugins::bypassed(l.id[0]) ? SlotState::bypassed : SlotState::running;
+        return plugins::bypassed(l.id) ? SlotState::bypassed : SlotState::running;
     }
-    if (l.pending || l.oldCount > 0)
+    if (l.pending || l.old >= 0)
     {
         return SlotState::loading;
     }
@@ -297,31 +258,7 @@ uint8_t slotStatus(int part, int slot)
 int slotInstance(int part, int slot)
 {
     // none while a pick waits: the one playing is the old plugin, not the slot's setting
-    return validSlot(part, slot) && live[part][slot].count > 0 && !live[part][slot].picked ? live[part][slot].id[0]
-                                                                                         : -1;
-}
-
-bool slotRunsPre(int part, int slot)
-{
-    return validSlot(part, slot) && live[part][slot].count > 1;
-}
-
-void knobEdited(int part, int slot, uint32_t knob)
-{
-    if (!validSlot(part, slot))
-    {
-        return;
-    }
-    const Live& l = live[part][slot];
-    if (l.count == 0)
-    {
-        return;
-    }
-    const float v = plugins::knob(l.id[0], knob);
-    for (int i = 1; i < l.count; i++)
-    {
-        plugins::setKnob(l.id[i], knob, v);
-    }
+    return validSlot(part, slot) && !live[part][slot].picked ? live[part][slot].id : -1;
 }
 
 } // namespace synthfx

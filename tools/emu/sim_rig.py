@@ -226,7 +226,7 @@ class Sim(BootRig):
 
     def _watch_writes(self):
         """The main instance's writes outside its own stack (1.10). The peripherals aren't watched: they
-        read as 0 whatever is written. Closed ranges in ITCM are left out of the watch."""
+        read as 0 whatever is written. The closed engines' pool (sound_rig.Guard) is left out of the watch."""
         lo_itcm, n_itcm = ITCM
         ranges = []
         closed = sorted((a, b) for a, b, _ in self.guard.ranges if a < lo_itcm + n_itcm)
@@ -237,8 +237,15 @@ class Sim(BootRig):
             at = max(at, b)
         if at < lo_itcm + n_itcm:
             ranges.append((at, lo_itcm + n_itcm - 1))
-        ranges += [(0x20000000, STACK_LO - 1), (0x20200000, 0x20207FFF), (0x80000000, 0x83FFFFFF),
-                   (SCRATCH, SCRATCH + 0xFFFFFF)]
+        ranges += [(0x20000000, STACK_LO - 1), (0x20200000, 0x20207FFF)]
+        at = 0x80000000                     # SDRAM, around the .psyn pool
+        for a, b in sorted((a, b) for a, b, _ in self.guard.ranges if 0x80000000 <= a < 0x84000000):
+            if a > at:
+                ranges.append((at, a - 1))
+            at = max(at, b)
+        if at < 0x84000000:
+            ranges.append((at, 0x83FFFFFF))
+        ranges.append((SCRATCH, SCRATCH + 0xFFFFFF))
         code = self._code
         dirty = self._dirty
 

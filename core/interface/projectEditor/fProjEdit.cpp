@@ -15,6 +15,7 @@
 #include "performanceMode/performanceMode.h"
 
 #include "FileBrowser.h"
+#include "fileBrowser/GlobalFileBrowser.h"
 #include "fileManager.h"
 
 #include "Platform.h"
@@ -22,6 +23,7 @@
 #include "mtPadsBacklight.h"
 #include "mtMasterEnhancer.h"
 #include "util_math.h"
+#include "util_string.h"
 
 #ifdef GUI_HANDLE_SYNTH
 #include "Synth.h"
@@ -233,9 +235,16 @@ void cProjectEditor::start([[maybe_unused]] uint32_t options)
 void cProjectEditor::stop()
 {
     cleanupListsData();
-    cleanupAfterSaveData();
-    // The path and name of a pending open are freed above; it must not run without them.
-    afterSaveOperation = noOperationAfterSave;
+    if (preserveAfterSaveOnStop)
+    {
+        preserveAfterSaveOnStop = false;
+    }
+    else
+    {
+        cleanupAfterSaveData();
+        // The path and name of a pending open are freed above; it must not run without them.
+        afterSaveOperation = noOperationAfterSave;
+    }
 
     sequencer.stopManualNotes();
     mtPopups.hideInfoPopup();
@@ -554,11 +563,11 @@ static void functStopPatternYes()
     sequencer.stop();
     switch (PE->stopAction)
     {
-        case cProjectEditor::stopActionOpenProject: functOpenProjectMod(); break;
+        case cProjectEditor::stopActionOpenProject: PE->executePendingBrowserOpen(); break;
         case cProjectEditor::stopActionNewProject: functNewProject(); break;
         case cProjectEditor::stopActionExport: functExport(); break;
         case cProjectEditor::stopActionExportIt: functExportToMOD(); break;
-        case cProjectEditor::stopActionImportMod: functOpenProjectMod(); break;
+        case cProjectEditor::stopActionImportMod: PE->executePendingBrowserOpen(); break;
         default: break;
     }
 }
@@ -571,8 +580,8 @@ static void functStopPatternNo()
     switch (PE->stopAction)
     {
         case cProjectEditor::stopActionOpenProject:
-            PE->showProjectBrowser(false);
-            PE->setProjectBrowserFunct();
+            PE->pendingBrowserAction = cProjectEditor::PendingBrowserAction::kNone;
+            PE->openBrowser(cProjectEditor::kOpenProject);
             break;
         // case cProjectEditor::stopActionExport:
         case cProjectEditor::stopActionExportIt:
@@ -580,8 +589,8 @@ static void functStopPatternNo()
             PE->setExportWindowFuncts();
             break;
         case cProjectEditor::stopActionImportMod:
-            PE->showModBrowser(false);
-            PE->setModBrowserFunct();
+            PE->pendingBrowserAction = cProjectEditor::PendingBrowserAction::kNone;
+            PE->openBrowser(cProjectEditor::kOpenMod);
             break;
         default:
             PE->setDefaultScreenFunct();
@@ -611,60 +620,290 @@ void cProjectEditor::createNewProject()
     display.processDisplayUpdateImmediate();
 }
 
+static void splitSdFullPath(const std::string& fullPath,
+                            char* outDir,
+                            size_t dirCap,
+                            char* outName,
+                            size_t nameCap)
+{
+    if (outDir != nullptr && dirCap > 0)
+    {
+        outDir[0] = '\0';
+    }
+    if (outName != nullptr && nameCap > 0)
+    {
+        outName[0] = '\0';
+    }
+
+    std::string rel = fullPath;
+    while (!rel.empty() && rel.front() == '/')
+    {
+        rel.erase(rel.begin());
+    }
+    while (!rel.empty() && rel.back() == '/')
+    {
+        rel.pop_back();
+    }
+
+    auto slash = rel.find_last_of('/');
+    if (slash == std::string::npos)
+    {
+        if (outName != nullptr && nameCap > 0)
+        {
+            polystrncpy(outName, rel.c_str(), nameCap);
+        }
+        return;
+    }
+
+    if (outDir != nullptr && dirCap > 0)
+    {
+        polystrncpy(outDir, rel.substr(0, slash).c_str(), dirCap);
+    }
+    if (outName != nullptr && nameCap > 0)
+    {
+        polystrncpy(outName, rel.substr(slash + 1).c_str(), nameCap);
+    }
+}
+
+void cProjectEditor::executePendingBrowserOpen()
+{
+    if (pendingBrowserAction == PendingBrowserAction::kNone)
+    {
+        return;
+    }
+
+    if (sequencer.isPlay())
+    {
+        stopAction = (pendingBrowserAction == PendingBrowserAction::kImportMod)
+                       ? stopActionImportMod
+                       : stopActionOpenProject;
+        showStopPatternWindow();
+        setStopPatternFunct();
+        return;
+    }
+
+    if (newFileManager.isProjectChanged() || (mtProject.values.projectNotSavedFlag & 1))
+    {
+        functShowSaveLastWindowBeforeOpen();
+        return;
+    }
+
+    PendingBrowserAction act = pendingBrowserAction;
+    pendingBrowserAction = PendingBrowserAction::kNone;
+    currentBrowserMode = kNone;
+
+    if (act == PendingBrowserAction::kOpenProject)
+    {
+        if (newFileManager.openProject(pendingBrowserDir, pendingBrowserName))
+        {
+            ip->blockAllInputs();
+            display.processDisplayUpdateImmediate();
+        }
+    }
+    else if (act == PendingBrowserAction::kOpenRecent)
+    {
+        if (newFileManager.openRecentProject(pendingRecentIdx))
+        {
+            ip->blockAllInputs();
+            display.processDisplayUpdateImmediate();
+        }
+    }
+    else if (act == PendingBrowserAction::kImportMod)
+    {
+        newFileManager.createNewProjectInWorkspace();
+        if (newFileManager.openProjectFromWorkspace())
+        {
+            newFileManager.importModAfterLoadNewProject(pendingBrowserDir, pendingBrowserName);
+            ip->blockAllInputs();
+            display.processDisplayUpdateImmediate();
+        }
+    }
+}
+
 //----------------------------------------------------------------------------------------
 void cProjectEditor::openBrowser(BrowserMode mode)
 {
-    cleanupListsData();
-
-    FileBrowserMode fileBrowserMode = kNotInitBrowser;
-    switch (mode)
+    if (mode != kOpenProject && mode != kSaveAsProject && mode != kOpenMod)
     {
-        case kOpenProject: fileBrowserMode = kProjectBrowser; break;
-        case kOpenMod: fileBrowserMode = kModBrowser; break;
-        case kSaveAsProject: fileBrowserMode = kProjectBrowser; break;
-        default: return;
+        return;
     }
+
+    cleanupListsData();
     currentBrowserMode = mode;
 
     newFileManager.createProjectsAndModFolders();
-
-    if (fileBrowserData.mode != fileBrowserMode)
-    {
-        fileBrowserData.mode = fileBrowserMode;
-        fileBrowserData.defaultPath = (fileBrowserData.mode == kProjectBrowser)
-                                        ? newFileManager.getProjectsDefaultPath()
-                                        : newFileManager.getModsDefaultPath();
-        strcpy(fileBrowserData.currentPath, fileBrowserData.defaultPath);
-
-        fileBrowserData.browserListPosition = 0;
-    }
-
     engine.getSdPlayer()->stop();
-    fileBrowserData.maxBrowserListLen = kMaxFilesListLength;
-    fileBrowserData.maxFileNameLen = kMaxFileNameLen;
-    fileBrowserData.fileNamesBufferSize = kMaxFilesListLength * kMaxFileNameLen;
-    fileBrowserData.fileNamesBuffer = reinterpret_cast<char*>(externalRamScratchBuff);
-    fileBrowserData.selectionEnabled = true;
 
-    fileBrowserData.browserList = new char*[fileBrowserData.maxBrowserListLen];
-    fileBrowserData.selectionList = new char[fileBrowserData.maxBrowserListLen];
-
-    fileBrowser.start(platform->getFileSystem(), &fileBrowserData);
+    GlobalFileBrowserConfig cfg;
+    cfg.returnModule = PE;
+    cfg.returnModuleOptions = 0;
 
     if (mode == kOpenProject || mode == kSaveAsProject)
     {
-        if (mode == kOpenProject)
+        cfg.canDelete = [](const std::string& fullPath,
+                           bool,
+                           bool isPackage,
+                           std::string& outDenyReason) -> bool
         {
-            processRecentList();
+            std::string relSelected = fullPath;
+            while (!relSelected.empty() && relSelected.front() == '/')
+            {
+                relSelected.erase(relSelected.begin());
+            }
+
+            char activeProjBuf[kMaxFilePathLen + 1]{};
+            newFileManager.getCurrentProjectPathWithName(activeProjBuf, sizeof(activeProjBuf));
+            const char* activeProj =
+              (activeProjBuf[0] == '/') ? (activeProjBuf + 1) : activeProjBuf;
+
+            if (activeProj[0] != '\0' && !relSelected.empty())
+            {
+                size_t selLen = relSelected.size();
+                if (!isPackage && strncasecmp(relSelected.c_str(), activeProj, selLen) == 0 &&
+                    activeProj[selLen] == '/')
+                {
+                    outDenyReason = "You cannot delete folder containing active project.";
+                    return false;
+                }
+                if (isPackage && strcasecmp(relSelected.c_str(), activeProj) == 0)
+                {
+                    outDenyReason = "You cannot delete active project.";
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        cfg.onDelete = [](const std::string& fullPath, bool, bool) -> bool
+        {
+            const char* relPath =
+              (!fullPath.empty() && fullPath[0] == '/') ? (fullPath.c_str() + 1) : fullPath.c_str();
+            newFileManager.deleteProjectOrFolder(const_cast<char*>(relPath));
+            return !platform->getFileSystem()->exists(relPath);
+        };
+    }
+
+    if (mode == kOpenProject)
+    {
+        cfg.mode = GlobalFileBrowserConfig::Mode::kLoadFolderPackage;
+        cfg.packageMarkerFile = "project.mt";
+        cfg.title = "Open Project";
+        cfg.confirmButtonLabel = "Open";
+        cfg.initialDirectory = std::string("/") + newFileManager.getProjectsDefaultPath();
+        cfg.contextKey = "pe_projects";
+
+        int listLen = kRecentProjectListLength;
+        newFileManager.getProjectRecentList(recentProjectNameList, listLen);
+        if (listLen > 0)
+        {
+            cfg.secondaryListTitle = "Recent";
+            for (int i = 0; i < listLen; ++i)
+            {
+                if (recentProjectNameList[i] != nullptr && recentProjectNameList[i][0] != '\0')
+                {
+                    cfg.secondaryListItems.emplace_back(recentProjectNameList[i]);
+                }
+            }
+            if (!cfg.secondaryListItems.empty())
+            {
+                cfg.initialSecondaryIndex = clamp<int>(
+                  recentProjectListPos, 0, static_cast<int>(cfg.secondaryListItems.size()) - 1);
+                cfg.onSecondaryConfirm = [](int idx, const std::string&)
+                {
+                    PE->currentBrowserMode = cProjectEditor::kOpenProject;
+                    PE->pendingBrowserAction = PendingBrowserAction::kOpenRecent;
+                    PE->pendingRecentIdx = idx;
+                    PE->recentProjectListPos = idx;
+                    PE->executePendingBrowserOpen();
+                };
+            }
         }
-        showProjectBrowser();
-        setProjectBrowserFunct();
+
+        cfg.onConfirm = [](const std::string& fullPath)
+        {
+            PE->currentBrowserMode = cProjectEditor::kOpenProject;
+            PE->pendingBrowserAction = PendingBrowserAction::kOpenProject;
+            splitSdFullPath(fullPath,
+                            PE->pendingBrowserDir,
+                            sizeof(PE->pendingBrowserDir),
+                            PE->pendingBrowserName,
+                            sizeof(PE->pendingBrowserName));
+            PE->executePendingBrowserOpen();
+        };
+        cfg.onCancel = []()
+        {
+            PE->currentBrowserMode = cProjectEditor::kNone;
+        };
+    }
+    else if (mode == kSaveAsProject)
+    {
+        cfg.mode = GlobalFileBrowserConfig::Mode::kSaveFolderPackage;
+        cfg.packageMarkerFile = "project.mt";
+        cfg.title = "Save Project As";
+        cfg.initialDirectory = std::string("/") + newFileManager.getProjectsDefaultPath();
+        cfg.defaultFileName = newFileManager.getCurrentProjectName();
+        cfg.maxNameLength = PROJECT_NAME_SIZE - 1;
+        cfg.contextKey = "pe_projects";
+
+        cfg.onConfirm = [](const std::string& fullPath)
+        {
+            PE->currentBrowserMode = cProjectEditor::kNone;
+            char dirBuf[kMaxFilePathLen + 1]{};
+            char nameBuf[kMaxFileNameLen + 1]{};
+            splitSdFullPath(fullPath, dirBuf, sizeof(dirBuf), nameBuf, sizeof(nameBuf));
+            if (newFileManager.saveProject(dirBuf, nameBuf))
+            {
+                PE->ip->blockAllInputs();
+                display.processDisplayUpdateImmediate();
+            }
+        };
+        cfg.onCancel = []()
+        {
+            PE->currentBrowserMode = cProjectEditor::kNone;
+            PE->cleanupAfterSaveData();
+            PE->afterSaveOperation = cProjectEditor::AfterSaveOperation::noOperationAfterSave;
+        };
     }
     else if (mode == kOpenMod)
     {
-        showModBrowser();
-        setModBrowserFunct();
+        cfg.mode = GlobalFileBrowserConfig::Mode::kLoadGenericFile;
+        cfg.extensionFilter = ".mod;.it";
+        cfg.title = "Import MOD / IT";
+        cfg.confirmButtonLabel = "Import";
+        cfg.initialDirectory = std::string("/") + newFileManager.getModsDefaultPath();
+        cfg.contextKey = "pe_mods";
+
+        cfg.onDelete = [](const std::string& fullPath, bool isFolder, bool) -> bool
+        {
+            const char* relPath =
+              (!fullPath.empty() && fullPath[0] == '/') ? (fullPath.c_str() + 1) : fullPath.c_str();
+            if (isFolder)
+            {
+                return platform->getFileSystem()->removeDirWithFiles(relPath);
+            }
+            newFileManager.deleteMod(const_cast<char*>(relPath));
+            return !platform->getFileSystem()->exists(relPath);
+        };
+
+        cfg.onConfirm = [](const std::string& fullPath)
+        {
+            PE->currentBrowserMode = cProjectEditor::kOpenMod;
+            PE->pendingBrowserAction = PendingBrowserAction::kImportMod;
+            splitSdFullPath(fullPath,
+                            PE->pendingBrowserDir,
+                            sizeof(PE->pendingBrowserDir),
+                            PE->pendingBrowserName,
+                            sizeof(PE->pendingBrowserName));
+            PE->executePendingBrowserOpen();
+        };
+        cfg.onCancel = []()
+        {
+            PE->currentBrowserMode = cProjectEditor::kNone;
+        };
     }
+
+    preserveAfterSaveOnStop = (mode == kSaveAsProject);
+    openGlobalFileBrowser(cfg);
 }
 
 void cProjectEditor::setProjectBrowserFunct()
@@ -1238,19 +1477,12 @@ static void functSaveChangesCancelOpen()
 
     mtPopups.hideInfoPopup();
 
-    switch (PE->currentBrowserMode)
-    {
-        case cProjectEditor::kOpenProject:
-        case cProjectEditor::kSaveAsProject:
-            PE->showProjectBrowser(false);
-            PE->setProjectBrowserFunct();
-            break;
-        case cProjectEditor::kOpenMod:
-            PE->showModBrowser(false);
-            PE->setModBrowserFunct();
-            break;
-        default: break;
-    }
+    auto mode =
+      (PE->pendingBrowserAction == cProjectEditor::PendingBrowserAction::kImportMod)
+        ? cProjectEditor::kOpenMod
+        : cProjectEditor::kOpenProject;
+    PE->pendingBrowserAction = cProjectEditor::PendingBrowserAction::kNone;
+    PE->openBrowser(mode);
 }
 
 static void functSaveChangesDontSaveOpenBrowser()
@@ -1261,44 +1493,44 @@ static void functSaveChangesDontSaveOpenBrowser()
     mtProject.values.projectNotSavedFlag = 0;
     newFileManager.clearChangeFlags();
 
+    mtPopups.hideInfoPopup();
     PE->ip->unblockAllInputs();
-    functOpenProjectMod();
+    PE->executePendingBrowserOpen();
 }
 
 static void functSaveChangesSaveOpen()
 {
     PE->cleanupAfterSaveData();
+    mtPopups.hideInfoPopup();
 
-    if (PE->currentBrowserMode == cProjectEditor::kOpenProject)
+    switch (PE->pendingBrowserAction)
     {
-        if (PE->selectedPlace == 0)
-        {
+        case cProjectEditor::PendingBrowserAction::kOpenProject:
             PE->afterSavePath = new char[PATCH_SIZE];
             PE->afterSaveName = new char[kMaxFileNameLen];
-
-            strncpy(PE->afterSavePath, PE->fileBrowser.getCurrentPath(), PATCH_SIZE);
-            strncpy(PE->afterSaveName, PE->fileBrowser.getSelectedFolderName(), kMaxFileNameLen);
-
+            polystrncpy(PE->afterSavePath, PE->pendingBrowserDir, PATCH_SIZE);
+            polystrncpy(PE->afterSaveName, PE->pendingBrowserName, kMaxFileNameLen);
             PE->afterSaveOperation = cProjectEditor::AfterSaveOperation::openProjectAfterSave;
-        }
-        else
-        {
+            break;
+        case cProjectEditor::PendingBrowserAction::kOpenRecent:
+            PE->recentProjectListPos = PE->pendingRecentIdx;
             PE->afterSaveOperation = cProjectEditor::AfterSaveOperation::openRecentAfterSave;
-        }
-    }
-    else if (PE->currentBrowserMode == cProjectEditor::kOpenMod)
-    {
-        PE->afterSavePath = new char[PATCH_SIZE];
-        PE->afterSaveName = new char[kMaxFileNameLen];
-
-        strncpy(PE->afterSavePath, PE->fileBrowser.getCurrentPath(), PATCH_SIZE);
-        strncpy(PE->afterSaveName, PE->fileBrowser.getSelectedItemName(), kMaxFileNameLen);
-
-        PE->afterSaveOperation = cProjectEditor::AfterSaveOperation::importModAfterSave;
+            break;
+        case cProjectEditor::PendingBrowserAction::kImportMod:
+            PE->afterSavePath = new char[PATCH_SIZE];
+            PE->afterSaveName = new char[kMaxFileNameLen];
+            polystrncpy(PE->afterSavePath, PE->pendingBrowserDir, PATCH_SIZE);
+            polystrncpy(PE->afterSaveName, PE->pendingBrowserName, kMaxFileNameLen);
+            PE->afterSaveOperation = cProjectEditor::AfterSaveOperation::importModAfterSave;
+            break;
+        default: break;
     }
 
+    PE->pendingBrowserAction = cProjectEditor::PendingBrowserAction::kNone;
+    PE->currentBrowserMode = cProjectEditor::kNone;
     PE->ip->unblockAllInputs();
-    functCloseBrowser();
+    PE->showDefaultScreen();
+    PE->setDefaultScreenFunct();
 
     PE->saveProject();
 }

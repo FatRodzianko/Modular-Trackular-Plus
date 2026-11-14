@@ -90,6 +90,9 @@ void cInstrumentEditor::update()
 void cInstrumentEditor::start(uint32_t options)
 {
     moduleRefresh = 1;
+#if GUI_HANDLE_SYNTH
+    const uint8_t prevMode = mode;
+#endif
 
     if (mtProject.values.lastUsedInstrument >= SYNTH_INSTRUMENTS_START_IDX + kSynthParts)
     {
@@ -169,7 +172,8 @@ void cInstrumentEditor::start(uint32_t options)
 #if GUI_HANDLE_SYNTH
             if (mtProject.values.lastUsedInstrument >= SYNTH_INSTRUMENTS_START_IDX)
             {
-                if (mode != mtInstEditModeSynth && mode != mtInstEditModeSynthMacros)
+                if (mode != mtInstEditModeSynth && mode != mtInstEditModeSynthMacros &&
+                    mode != mtInstEditModeSynthPatchEdit)
                 {
                     mode = mtInstEditModeSynth;
                 }
@@ -207,6 +211,13 @@ void cInstrumentEditor::start(uint32_t options)
     lightUpPadBoard();
 
     setBaseScreenFunct();
+
+#if GUI_HANDLE_SYNTH
+    if (prevMode == mtInstEditModeSynthPatchEdit && mode != mtInstEditModeSynthPatchEdit)
+    {
+        cleanPatchEditorResources();
+    }
+#endif
 
     switch (mode)
     {
@@ -1020,6 +1031,11 @@ static void functSwitchMode()
     }
     else if (IE->mode == mtInstEditModeSynthMacros)
     {
+        IE->mode = mtInstEditModeSynth;
+    }
+    else if (IE->mode == mtInstEditModeSynthPatchEdit)
+    {
+        IE->cleanPatchEditorResources();
         IE->mode = mtInstEditModeSynth;
     }
 #endif
@@ -2776,9 +2792,13 @@ void cInstrumentEditor::lightUpPadBoard()
         if (isSynthInstrument(mtProject.values.lastUsedInstrument))
         {
             int synthIdx = instrumentIdxToSynthIdx(mtProject.values.lastUsedInstrument);
+            const auto& synthTypes = getSynth()->getSynthTypes();
+            int synthType = std::clamp<int>(mtProject.values.synthPart[synthIdx].synthType,
+                                            0,
+                                            std::max<int>(0, static_cast<int>(synthTypes.size()) - 1));
 
-            if (Synth::kSynthTypes.at(mtProject.values.synthPart[synthIdx].synthType) ==
-                polysynth::InstrumentTypeId::kDrumSynth)
+            if (!synthTypes.empty() &&
+                synthTypes.at(synthType) == polysynth::InstrumentTypeId::kDrumSynth)
             {
                 for (int padIdx = 0; padIdx < 48; padIdx++)
                 {
@@ -2823,9 +2843,14 @@ void cInstrumentEditor::lightUpPadBoard()
                 if (isSynthInstrument(mtProject.values.lastUsedInstrument))
                 {
                     int synthIdx = instrumentIdxToSynthIdx(mtProject.values.lastUsedInstrument);
+                    const auto& synthTypes = getSynth()->getSynthTypes();
+                    int synthType = std::clamp<int>(
+                      mtProject.values.synthPart[synthIdx].synthType,
+                      0,
+                      std::max<int>(0, static_cast<int>(synthTypes.size()) - 1));
 
-                    if (Synth::kSynthTypes.at(mtProject.values.synthPart[synthIdx].synthType) ==
-                        polysynth::InstrumentTypeId::kDrumSynth)
+                    if (!synthTypes.empty() &&
+                        synthTypes.at(synthType) == polysynth::InstrumentTypeId::kDrumSynth)
                     {
 
                         int playedPad = clamp<int>(IE->convertPadForEditPatchScreen(pad), 0, 47);

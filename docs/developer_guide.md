@@ -9,11 +9,12 @@ When extending the **Polyend Tracker Community Edition (CE)** firmware, adding n
 1. [Memory Budget & Free Headroom](#1-memory-budget--free-headroom)
 2. [Shared `768 KB` Scratch Buffer Layout (`externalRamScratchBuff`)](#2-shared-768-kb-scratch-buffer-layout-externalramscratchbuff)
 3. [Copy-on-Write `/Workspace/instruments/`, Incremental Project Saver & Hybrid SD Streaming](#3-copy-on-write-workspaceinstruments-incremental-project-saver--hybrid-sd-streaming)
-4. [Synthesizer Engine Architecture & Guidelines (Tracker+ & Tracker Mini)](#4-synthesizer-engine-architecture--guidelines-tracker--tracker-mini)
+4. [Synthesizer Engine Architecture & Guidelines (`.psyn` Plugins)](#4-synthesizer-engine-architecture--guidelines-psyn-plugins)
 5. [Sample Editor & `.ptfx` Plugin Constraints](#5-sample-editor--ptfx-plugin-constraints)
 6. [UI, FT812 Display, Config & Bootloader Gotchas](#6-ui-ft812-display-config--bootloader-gotchas)
 7. [Conditional Compilation: Targeting Specific Platforms or Devices](#7-conditional-compilation-targeting-specific-platforms-or-devices)
 8. [Development Console & Logging over USB (Tracker+ & Tracker Mini)](#8-development-console--logging-over-usb-tracker--tracker-mini)
+9. [Global File Browser (`GlobalFileBrowser`)](#9-global-file-browser-globalfilebrowser)
 
 ---
 
@@ -28,17 +29,17 @@ When extending the **Polyend Tracker Community Edition (CE)** firmware, adding n
 | **Plus / Mini (IMX) - `SRAM_ITC` (`RAM2`)** | `128 KB` | `~105.4 KB` (`82.4%`) | **`~22.5 KB`** | — | Zero-wait-state instruction TCM (`.ramfunc.$RAM2` / `.audio_ram_functions` hot DSP loops). |
 | **Plus / Mini (IMX) - `SRAM_DTC` (`RAM`)** | `352 KB` | `~330–331 KB` (`93.9–94.0%`) | **`~21–22 KB`** | — | Main stack, heap, `.data`, and real-time `.bss`. Keep large or non-realtime buffers in `EXTERNAL_RAM`. |
 | **Plus / Mini (IMX) - `SRAM_OC` (`RAM3`)** | `32 KB` | `~22.7 KB` (`70.8%`) | **`~9.3 KB`** | — | Non-cacheable OCRAM used for USB/SDMA buffers and `audioRecBuff`. |
-| **Plus / Mini (IMX) - `EXTERNAL_RAM` (`RAM4`)** | `65,536 KB` | `~65,528 KB` (`99.99%`) | **`~8 KB`** | **`+29.0 MB`** *(up to `~29.0 MB` total)* | `60 MB` `SAMPLE_MEMORY_SIZE` (`45 MB` stereo sample pool + `15 MB` FX edit buffer) + `1.5 MB` delay + `768 KB` shared `externalRamScratchBuff` + `VoiceStreamManager` ring buffers + `64 KB` `g_wtEnvelopeBank`. |
+| **Plus / Mini (IMX) - `EXTERNAL_RAM` (`RAM4`)** | `65,536 KB` | `~65,528 KB` (`99.99%`) | **`~8 KB`** | **`+23.0 MB`** *(up to `~23.0 MB` total)* | `~54 MB` `SAMPLE_MEMORY_SIZE` (`~39 MB` stereo sample pool + `15 MB` FX edit buffer) + `6 MB` `PSYN_RAM_POOL_SIZE` (`1.92 MB` `.psyn` arena + `4 MB` synth `SamplePool`) + `1.5 MB` delay + `768 KB` `externalRamScratchBuff` + `VoiceStreamManager` ring buffers + `64 KB` `g_wtEnvelopeBank`. |
 
 ### Theoretically Available `EXTERNAL_RAM` via `SAMPLE_MEMORY_SIZE` (Hybrid SD Streaming)
 
-By default, `SAMPLE_MEMORY_SIZE` in [`core/source/mtStructs.h`](../core/source/mtStructs.h) is left at its **full initial factory allocation** so nothing is restricted out of the box:
+By default, `SAMPLE_MEMORY_SIZE` in [`core/source/mtStructs.h`](../core/source/mtStructs.h) maximizes sample RAM after accounting for `PSYN_RAM_POOL_SIZE` on IMX:
 * **Original Tracker (`MK66`)**: `SAMPLE_MEMORY_SIZE = 45 * 256 * 1024` (`11.25 MB`, comprising a `7.5 MB` resident mono sample pool plus `3.75 MB` `EDIT_BUFF_SIZE` reserved at the top for offline Sample Editor effects).
-* **Tracker+ & Tracker Mini (`IMX`)**: `SAMPLE_MEMORY_SIZE = 60 * 1024 * 1024` (`60 MB`, comprising a `45 MB` resident stereo sample pool plus `15 MB` `2 * SAMPLE_CHANNELS * EDIT_BUFF_SIZE` reserved at the top for offline Sample Editor effects).
+* **Tracker+ & Tracker Mini (`IMX`)**: `PSYN_RAM_POOL_SIZE = 6 MB` (`6 * 1024 * 1024`) is dedicated to loadable `.psyn` synth engines (`1.92 MB` executable arena) and the synth `SamplePool` (`4 MB`). `SAMPLE_MEMORY_SIZE = ((60 * 1024 - 64) * 1024) - PSYN_RAM_POOL_SIZE` (`~54 MB`, comprising a `~39 MB` resident stereo sample pool plus `15 MB` `2 * SAMPLE_CHANNELS * EDIT_BUFF_SIZE` reserved at the top for offline Sample Editor effects).
 
 However, because **Hybrid SD Card Sample Streaming** ([`core/AudioEngine/VoiceStreamManager.cpp`](../core/AudioEngine/VoiceStreamManager.cpp)) streams samples `>= 256 KB` (`kStreamThresholdBytes`) directly from the SD card while only allocating a **`32,768`-frame (`64 KB` per channel) pre-cache** in `externalRamSampleMemory`:
 * **Future developers can chip away at `SAMPLE_MEMORY_SIZE` whenever a new feature requires additional `EXTERNAL_RAM`**, simply by lowering `SAMPLE_MEMORY_SIZE` in [`core/source/mtStructs.h`](../core/source/mtStructs.h):
-  * On **Tracker+ / Tracker Mini (`IMX`)**, reducing `SAMPLE_MEMORY_SIZE` from `60 MB` down to `31 MB` (`31 * 1024 * 1024`, keeping the `15 MB` FX edit buffer + a `16 MB` resident sample pool for short samples, pre-caches, and Wavetable/Granular instruments) immediately frees **`~29 MB` of `EXTERNAL_RAM`**.
+  * On **Tracker+ / Tracker Mini (`IMX`)**, reducing `SAMPLE_MEMORY_SIZE` from `~54 MB` down to `31 MB` (`31 * 1024 * 1024`, keeping the `15 MB` FX edit buffer + a `16 MB` resident sample pool for short samples, pre-caches, and Wavetable/Granular instruments) immediately frees **`~23 MB` of `EXTERNAL_RAM`**.
   * On **Original Tracker (`MK66`)**, reducing `SAMPLE_MEMORY_SIZE` from `11.25 MB` (`45 * 256 * 1024`) down to `7.75 MB` (`31 * 256 * 1024`, keeping the `3.75 MB` FX edit buffer + a `4.0 MB` resident sample pool) frees **`3.5 MB` of additional `EXTERNAL_RAM`** on top of the **`1.13 MB`** already unassigned (**`~4.63 MB` total free `EXTERNAL_RAM`**).
 * **Important when adjusting `SAMPLE_MEMORY_SIZE`**: Always keep `SAMPLE_MEMORY_SIZE > 2 * SAMPLE_CHANNELS * EDIT_BUFF_SIZE` (`> 3.75 MB` on `MK66`, `> 15 MB` on `IMX`) because `EDIT_BUFF_OFFSET` (`externalRamEffectsBuff`) is carved out of the top of `externalRamSampleMemory`.
 
@@ -51,19 +52,19 @@ However, because **Hybrid SD Card Sample Streaming** ([`core/AudioEngine/VoiceSt
 
 ## 2. Shared `768 KB` Scratch Buffer Layout (`externalRamScratchBuff`)
 
-Defined in [`core/source/Tracker.cpp`](../core/source/Tracker.cpp) (`SHARED_SCRATCH_MEMORY_SIZE = 768 * 1024` in [`core/source/mtStructs.h`](../core/source/mtStructs.h)), the `768 KB` `externalRamScratchBuff` array in `EXTERNAL_RAM` (`.scratch_memory`) is shared across mutually-exclusive subsystems (`PtfxLoader` / `PtfxManager`, `mtAudioExport` `renderBuffer`, `mtAudioEngine` `sdStream`, `cProjectEditor` file browser, and `cInstrumentEditor` synth patch browser).
+Defined in [`core/source/Tracker.cpp`](../core/source/Tracker.cpp) (`SHARED_SCRATCH_MEMORY_SIZE = 768 * 1024` in [`core/source/mtStructs.h`](../core/source/mtStructs.h)), the `768 KB` `externalRamScratchBuff` array in `EXTERNAL_RAM` (`.scratch_memory`) is shared cleanly across subsystems (`PtfxLoader` / `PtfxManager`, `mtAudioExport` `renderBuffer`, `mtAudioEngine` `sdStream`, and `GlobalFileBrowser`).
 
-When `.ptfx` Modular Sample Editor plugins are active, the `768 KB` region is partitioned as:
+When `.ptfx` Modular Sample Editor plugins and [`GlobalFileBrowser`](global_file_browser.md) run concurrently, the `768 KB` region is partitioned into four non-overlapping ranges:
 
 ```text
-Offset 0 KB               128 KB                        768 KB
-├─────────────────────────┼─────────────────────────────┤
-│ .ptfx Code              │ .ptfx Scratch Working RAM   │
-│ (128KB IMX / 32KB MK66) │ (640KB)                     │
-└─────────────────────────┴─────────────────────────────┘
+Offset 0 KB               128 KB                  512 KB                 744 KB          768 KB
+├─────────────────────────┼───────────────────────┼──────────────────────┼───────────────┤
+│ .ptfx Code              │ .ptfx Working Scratch │ .ptfx Secondary WAV  │ Global File   │
+│ (128KB IMX / 32KB MK66) │ (384 KB)              │ Buffer (232 KB)      │ Browser (24KB)│
+└─────────────────────────┴───────────────────────┴──────────────────────┴───────────────┘
 ```
 
-* `kPtfxScratchTopOffset` in [`core/effector/ptfx_loader.h`](../core/effector/ptfx_loader.h) caps `.ptfx` plugin scratch usage at `768 KB` (`SHARED_SCRATCH_MEMORY_SIZE`), while `g_wtEnvelopeBank` (`64 KB`) resides in its own dedicated `EXTERNAL_RAM` array in [`core/source/mtWavetableEnvelopes.cpp`](../core/source/mtWavetableEnvelopes.cpp).
+* `kPtfxScratchTopOffset` (`512 KB` in [`core/effector/ptfx_loader.h`](../core/effector/ptfx_loader.h)) caps `.ptfx` plugin `scratch_mem` at `384 KB` (`[128 KB .. 512 KB]`), leaving `[512 KB .. 744 KB]` (`232 KB`) for pre-decoded secondary WAV files (`PTFX_PARAM_FILE`) and `[744 KB .. 768 KB]` (`24 KB`) reserved for `cGlobalFileBrowser`. Opening `GlobalFileBrowser` from inside the Sample Editor or an effect parameter never overwrites active plugin code, working scratch RAM, or loaded secondary audio, while `g_wtEnvelopeBank` (`64 KB`) resides in its own dedicated `EXTERNAL_RAM` array in [`core/source/mtWavetableEnvelopes.cpp`](../core/source/mtWavetableEnvelopes.cpp).
 
 ---
 
@@ -101,25 +102,19 @@ To avoid copying 13–45 MB of PCM sample payloads from `/Projects/<Path>/<Name>
 
 ---
 
-## 4. Synthesizer Engine Architecture & Guidelines (Tracker+ & Tracker Mini)
+## 4. Synthesizer Engine Architecture & Guidelines (`.psyn` Plugins)
 
-Full details in [`docs/custom_synth_sdk.md`](custom_synth_sdk.md).
+Full details in [`docs/custom_synth_sdk.md`](custom_synth_sdk.md) and [`synth-plugin-sdk/README.md`](../synth-plugin-sdk/README.md).
 
-* **No Hard Limit on Number of Registered Synth Engines**:
-  * `InstrumentTypeRegistry` ([`synth/include/PolySynth/sdk/InstrumentTypeRegistry.h`](../synth/include/PolySynth/sdk/InstrumentTypeRegistry.h)) stores engines dynamically in a `std::unordered_map<int, std::shared_ptr<InstrumentType>>`, and `InstrumentType::createVoice` ([`synth/include/PolySynth/sdk/InstrumentType.h`](../synth/include/PolySynth/sdk/InstrumentType.h)) instantiates voices on demand via `std::unique_ptr<InstrumentVoice>` only for the 3 active synth slots (`Synth 1`–`Synth 3`).
-  * This means the community can register **any number of new open-source synth engines** in [`core/synth/registry.cpp`](../core/synth/registry.cpp) **without ever needing to recompile `libPolySynth.a` or `libPolyDSP.a`**.
-* **Keep Inactive Engine RAM Footprint Near Zero (`CustomSynthVoice` / `ParamHelper`)**:
-  * Because all registered synth engines exist in `InstrumentTypeRegistry` at boot, avoid storing per-parameter `std::function` objects (`32 bytes` each in `SRAM_DTC`) on your voice class.
-  * Inherit from `polysynth::sdk::CustomSynthVoice<VoiceClass, ParamIdEnum>` ([`synth/include/PolySynth/sdk/SynthVoiceSDK.h`](../synth/include/PolySynth/sdk/SynthVoiceSDK.h)), which uses a static table of stateless function pointers (`4 bytes` per parameter) and handles MIDI note stacks (`Always` / `Overlap` / `Legato`) automatically.
-  * Place any large shared wavetables or lookup tables in `QSPI_FLASH` (`constexpr`) or in `EXTERNAL_RAM`.
-* **FT812 `RAM_G` Bitmap Budget When Adding Synth Icons**:
-  * Each synth engine uses an `80×28` (`560 B` `L2`, or `80×29` `580 B` `L2`) mini icon and a `108×40` (`1,080 B` `L2`) medium icon in [`core/libs/NewDisplay/display.cpp`](../core/libs/NewDisplay/display.cpp), stored in FT812 `RAM_G` below `controlsRamStartAddress` (`150,000` in [`core/libs/NewDisplay/displayStructs.h`](../core/libs/NewDisplay/displayStructs.h)).
-  * Currently `RAM_G` bitmaps are allocated up to address `128,780`, leaving `~21,220` bytes of `RAM_G` (`~12` additional pairs of mini + medium synth pill icons) before `controlsRamStartAddress` (`150,000`) is reached.
-* **Checklist When Adding a New Synth Engine**:
-  1. Add a new enumerator to `InstrumentTypeId` (before `kLastSynth`, and update `kLastSynth`) in [`synth/include/PolySynth/config.h`](../synth/include/PolySynth/config.h), and register its factory in `InstrumentTypeRegistry::registerInstrumentTypes()` in [`core/synth/registry.cpp`](../core/synth/registry.cpp).
-  2. Add the engine's `InstrumentTypeId` entry to `Synth::kSynthTypes` in [`core/synth/Synth.h`](../core/synth/Synth.h).
-  3. Add the display name and `enDisplayBitmaps` mini icon ID to `synthModelNames[]` and `synthModelListImages[]` in [`core/interface/instrumentEditor/SynthEditor.cpp`](../core/interface/instrumentEditor/SynthEditor.cpp), and add the medium icon ID to `synthModelListImages[]` in [`core/interface/instrumentEditor/SynthPatchEditor.cpp`](../core/interface/instrumentEditor/SynthPatchEditor.cpp).
-  4. Register the enum IDs in `enDisplayBitmaps` in [`core/libs/NewDisplay/displayStructs.h`](../core/libs/NewDisplay/displayStructs.h) and add the `80×28` (`L2`) mini and `108×40` (`L2`) medium pill bitmaps to `bitmaps[]` in [`core/libs/NewDisplay/display.cpp`](../core/libs/NewDisplay/display.cpp).
+* **Loadable SD-Card `.psyn` Architecture (`PsynLoader`)**:
+  * All synth engines (built-in and community) are distributed as standalone ARMv7E-M Thumb-2 relocatable `.psyn` plugins in `/Synths/*.psyn` on the microSD card and loaded dynamically by [`PsynLoader`](../synth/source/synths/PsynLoader.cpp) (`PSYN_RAM_POOL_SIZE = 6 MB` in [`core/source/mtStructs.h`](../core/source/mtStructs.h)).
+  * `PsynLoader` reserves **`1,920 KB` (`kArenaSize`)** for relocated `.psyn` code/heap (`kMaxPreloadBytes = 1,024 KB` preloaded at boot, lazy load on demand, LRU eviction of inactive engines when full) alongside a shared **`4 MB` `SamplePool`** for sample-based engines (`WAVS`, `GRAIN`, `DWA`, and third-party `PSYN_FLAG_HAS_SAMPLE_SLOTS` plugins).
+  * **Zero firmware recompilation or bitmap edits required:** `SynthEditor` populates the Synth model list dynamically from `synth->getSynthTypes()`, and third-party engines receive deterministic non-colliding IDs (`0x100+`) when packed with `--type-id-wave 0 --type-id-play-tracker 0`.
+* **Auto-Created Sample Folders & Read Fallback Chain**:
+  * On boot, `PsynLoader` creates `/SynthSamples/<CODE_NAME>/` for every sample-based engine (avoiding clutter in user `/Samples/` folders), while [`core/synth/FileSystemAdapter.cpp`](../core/synth/FileSystemAdapter.cpp) resolves sample reads across `/SynthSamples/`, `/Samples/`, `/`, and `/Patches/`.
+* **Keep Voice State & Arena Usage Compact (`CustomSynthVoice` / `ParamHelper`)**:
+  * Inherit from `polysynth::sdk::CustomSynthVoice<VoiceClass, ParamIdEnum>` ([`synth/include/PolySynth/sdk/SynthVoiceSDK.h`](../synth/include/PolySynth/sdk/SynthVoiceSDK.h)) bridged via `PSYN_REGISTER_CPP_VOICE` ([`synth-plugin-sdk/include/psyn/psyn_cpp_bridge.h`](../synth-plugin-sdk/include/psyn/psyn_cpp_bridge.h)) or write a Pure C `psyn_plugin_entry` plugin ([`synth-plugin-sdk/include/psyn/psyn_plugin.h`](../synth-plugin-sdk/include/psyn/psyn_plugin.h)).
+  * Never perform blocking `PsynHostApi` SD/WAV calls (`read_file`, `write_file`, `load_wav_file`, `free_wav_file`) or heap allocations inside real-time audio callbacks (`renderVoiceAudio` / `voice_render_audio`).
 
 ---
 
@@ -127,16 +122,17 @@ Full details in [`docs/custom_synth_sdk.md`](custom_synth_sdk.md).
 
 Full details in [`docs/modular_effects_system.md`](modular_effects_system.md).
 
-* **Plugin & Parameter Limits**:
+* **Plugin, Parameter, File & Preset Limits**:
   * Up to **128 `.ptfx` plugins** (`kMaxModularPlugins = 128` in [`core/effector/ptfx_manager.h`](../core/effector/ptfx_manager.h)) are indexed from `/Effects/` alongside the **17 built-in** Sample Editor effects (`kBuiltInEffectsCount = 17`, `145` total list items in `s_effectDisplayNames`).
-  * Each `.ptfx` plugin supports up to **12 parameters** (`PtfxHeader::params[12]` in [`core/effector/tracker_plugin.h`](../core/effector/tracker_plugin.h) and [`editor-fx-sdk/tracker_plugin.h`](../editor-fx-sdk/tracker_plugin.h)), displayed in the Sample Editor across up to 3 pages of 4 parameters via the `More` screen button.
-* **`.ptfx` Code+BSS Limits (`32 KB` on MK66 vs `128 KB` on IMX)**:
+  * Each `.ptfx` plugin supports up to **12 parameters** (`PtfxHeader::params[12]` in [`core/effector/tracker_plugin.h`](../core/effector/tracker_plugin.h) and [`editor-fx-sdk/tracker_plugin.h`](../editor-fx-sdk/tracker_plugin.h)), including continuous float, stepped integer, pipe-separated string lists, and SD file pickers/savers (`PTFX_PARAM_FILE` / `PTFX_PARAM_SAVE_FILE`).
+  * Any `.ptfx` plugin with `>= 1` parameter automatically gains a **Presets** page via the `More` screen button (`Load` / `Save` `.ptp` presets in `/Effects/Presets/<SanitizedPluginName>/` via [`GlobalFileBrowser`](global_file_browser.md), plus `Reset`).
+* **`.ptfx` Code, Scratch & Secondary WAV Regions (`externalRamScratchBuff`)**:
   * Both platforms execute `.ptfx` plugin code from the base of `externalRamScratchBuff` (`[0 .. 32 KB]` on Original Tracker `MK66` with the Kinetis System MPU disabled via `MPU_CESR = 0`, and `[0 .. 128 KB]` on Tracker+ / Tracker Mini `IMX` after cleaning L1 D-Cache and invalidating I-Cache in `PtfxLoader::syncInstructionCache()`).
-  * Working scratch memory (`scratch_mem`, `640 KB`) occupies `externalRamScratchBuff + 128 KB` (`[128 KB .. 768 KB]`) on both platforms.
+  * Working scratch memory (`scratch_mem`, up to **`384 KB`**) occupies `[128 KB .. 512 KB]`, leaving **`232 KB`** at `[512 KB .. 744 KB]` for pre-decoded secondary `.wav` inputs (`get_secondary_sample()`, up to ~`118k` `int16_t` samples) and **`24 KB`** at `[744 KB .. 768 KB]` for `GlobalFileBrowser`. Plugins can also read/write non-WAV assets via `host->read_file()` and `host->write_file()`.
   * Plugins with `code_size + bss_size > 32 KB` (or requiring 600 MHz Cortex-M7 speeds) should declare `PTFX_FLAG_IMX_ONLY`.
 * **SD Card DMA Alignment Pitfall on IMX (`FatFs` + `USDHC`)**:
   * On IMX (`platforms/imx/`), `FatFs` (`f_read`) bypasses its internal aligned DTCM sector buffer whenever a read request is `>= 512` bytes (`cc = btr / 512 > 0`) and passes the caller's destination pointer directly to the USDHC DMA controller.
-  * If the destination buffer is not 4-byte aligned or lies in a non-DMA-accessible TCM region, `f_read` fails with `FR_DISK_ERR`. Always use 4-byte aligned buffers in `SRAM_DTC`/`EXTERNAL_RAM`, or read in `<= 256`-byte chunks to force `FatFs` through its internal bounce buffer.
+  * If the destination buffer is not 4-byte aligned or lies in a non-DMA-accessible TCM region, `f_read` fails with `FR_DISK_ERR`. Always use 4-byte aligned buffers in `SRAM_DTC`/`EXTERNAL_RAM`, or read in `<= 256`-byte chunks to force `FatFs` through its internal bounce buffer (`hostReadFile` and `hostWriteFile` use `256`-byte chunking automatically).
 
 ---
 
@@ -249,3 +245,13 @@ A scripted deployment is therefore:
 > **Keep the port closed when using USB storage mode from the device's own menu.** While a host holds the serial port open (for example to follow the log), the device postpones the USB re-enumeration that entering or leaving storage mode needs.
 
 > **Recovery**: a build that fails to boot has no console. Keep a known-good `.ptf` in `/Firmware/` and use the recessed reset button as described in the [README](../README.md#4-flashing-on-hardware--emergency-recovery).
+
+---
+
+## 9. Global File Browser (`GlobalFileBrowser`)
+
+Full developer reference and C++ examples live in [`docs/global_file_browser.md`](global_file_browser.md) ([`core/interface/fileBrowser/GlobalFileBrowser.h`](../core/interface/fileBrowser/GlobalFileBrowser.h), [`GlobalFileBrowser.cpp`](../core/interface/fileBrowser/GlobalFileBrowser.cpp)).
+
+* **One Shared Module Across Subsystems:** Covers 6 modes (`kLoadWav`, `kSaveWav`, `kLoadGenericFile`, `kSaveGenericFile`, `kLoadFolderPackage`, `kSaveFolderPackage`), used by Project Open / Save As / MOD & IT import, Synth Patch Load / Save As & Sample Slots, Sample Editor `.ptfx` file parameters, and `.ptp` effect presets. The multi-selection **Sample Loader** intentionally remains separate.
+* **Non-Overlapping `24 KB` Scratch Allocation (`[744 KB .. 768 KB]`):** Shares the top slice of `externalRamScratchBuff` above `.ptfx` code, working scratch, and secondary WAV buffers, preserving up to `10` LRU directory/cursor contexts (`kMaxSavedContexts = 10`) keyed by `contextKey`.
+* **Navigation & FatFs Hygiene:** Supports `Left`-arrow jump-to-top in the Explorer pane, protected system folders (`kProtectedFolders`), inline metadata (`onDescribeItem`), and pad auditioning (`onPadEvent`). Callbacks inspecting files on cursor highlight must close FatFs handles immediately (`closeFile(fh)` with `deleteOnClose = true`) and silence preview voices (`silencePart` / `onPreviewStop`) before loading the next asset.
