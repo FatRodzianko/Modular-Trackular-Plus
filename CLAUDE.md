@@ -47,13 +47,35 @@ Heap and stack can only be read on the device: an empty `/.develop` file makes C
 
 Many `core/` files are CRLF in the blob and a few are mixed; keep each file's style. Check with `git ls-files --eol`, and check `git diff --stat` after edits. Don't test with `grep $'\r$'` in Git Bash: it has returned 0 on CRLF files here.
 
-## Tests and the closed synth libraries
+## Tests and the closed synth engines
 
 Tests stay under 75 % of the CPU unless the user says otherwise. `tools/emu/cpu_limit.py` enforces it for anything that imports `machine.py` and for `tools/run_tests.py`; anything else long-running has to hold to it too.
 
 Before planning a mod's tests, read `docs/mt/PAST_FAILURES.md`. Before any device test, `tools/run_tests.py --tier release`, then the steps in `docs/mt/DEVICE_TEST_LADDER.md`. A pass doesn't mean safe on the unit: say what ran, what didn't, and the risk.
 
-Run mod tests on a full build, with `libPolySynth.a` and `libPolyDSP.a` in. Their licence allows it, but section 2(c) bans reverse engineering, so they're a black box: no disassembly, no tracing, no hooks inside them, no reading their objects by offset, and no measuring an engine to work out how it works. Sound test plan, including when each part gets built: `docs/mt/SOUND_TEST_PLAN.md`. CPU cost is measured on the device with the Profiler, with all 8 synth voices sounding.
+Run mod tests on a full build, with CE's factory `.psyn` engines on the fake card (`build/Synths` or `synth/prebuilt`). Their licence (`synth/prebuilt/LICENSE-PROPRIETARY.txt`) allows it, but section 2(c) bans reverse engineering, so they're a black box: no disassembly, no tracing, no hooks inside them or in the `.psyn` pool they load into, no reading them by offset, and no measuring an engine to work out how it works. CE's host (`synth/`) is open, and so are our WAVE and PHASE: the rigs may hook those (`watch_own` in `sound_rig.py`). Sound test plan, including when each part gets built: `docs/mt/SOUND_TEST_PLAN.md`. CPU cost is measured on the device with the Profiler, with all 8 synth voices sounding.
+
+## Merging into modular
+
+Every merge into `modular`, from CE's `main` or from a mod branch, goes through all of these before it is committed. Conflicts and passing tests are not enough: git merges a change silently when it touches different lines, and the emulator fakes the SD card, the file manager and real timing.
+
+1. List every incoming commit (`git log --no-merges <base>..<incoming>`).
+2. For each one, write down the behaviour it changes: functions, shared state (file manager status, buffers, `requestedPattern`/`preloadedPattern`, sequencer state), what runs in the interrupt or the main loop, timing and SD access.
+3. Check each change against every mod: `// MT:` hooks inside changed functions, mod calls to changed functions, and mods using the same state, buffers, SD card or timing (grep `core/mods/`). A mod merge is checked against the other mods the same way.
+4. A test or rig that fails or needs changing after the merge: first find out what the real firmware does. Never change a stub to make it pass without that answer written down.
+5. List what the emulator can't show for this merge (SD timing, interrupt races, USB, sound) and decide the hardware checks. For each check, make the test project it needs: the user doesn't build projects.
+6. The merge report and the commit message say, in plain words: what changed, what each mod interaction is, what was fixed, what ran, and the hardware checks with their projects. Not one line in passing.
+   They also list what was not checked, analysis included. A merge is not called done or tested while anything important is on that list, and "tested" covers only what ran.
+7. Then tag and release as below.
+
+## Releases
+
+Every merge into `modular` of a mod, a mod fix or CE's `main` gets an annotated tag on the merge, pushed with it. CI (`build.yml`) builds the Tracker+ firmware from the tag and publishes a public GitHub release named after it, with the tag's message as the notes and `TrackerPlus_MT_<tag>.ptf` and the `Synths` zip attached.
+
+- A mod merge: `<mod>-<version>`, e.g. `resample-1.0`; a fix to it later: `resample-1.1`.
+- A CE merge: `CE_YYYYMMDD`, with `-2` for a second one that day.
+- Anything else: `modular-<version>`.
+- The message says what's new, lists every mod with its version, names the CE commit it's based on, and gives the install steps and the 1.2.0 warning. No `#` at line starts: git strips them.
 
 ## PRs to polyend/tracker-ce
 

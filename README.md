@@ -51,17 +51,18 @@ have no mods.
 1. **Back up your SD card's `Projects` folder.** CE saves patterns in a newer format that
    1.2.0 can't read. `tools/ce_to_120.py` makes a copy of a project that 1.2.0 can open,
    without the things only CE has.
-2. **Get the firmware.** There are no releases yet. Either build it with `make plus` (see
+2. **Get the firmware.** Download `TrackerPlus_MT_<release>.ptf` from the
+   [latest release](https://github.com/FatRodzianko/Modular-Trackular-Plus/releases/latest).
+   Each release is tagged for what it adds: a mod and its version (`resample-1.0`), or a
+   merge of CE's updates (`CE_YYYYMMDD`). You can also build it with `make plus` (see
    [Building Firmware](#building-firmware) below), which makes
-   `build/TrackerPlus_MT_1.0.0.ptf`, or sign in to GitHub and download the
-   `polyend-tracker-ce-firmware` artifact from a build of this branch under
-   [Actions](https://github.com/FatRodzianko/Modular-Trackular-Plus/actions).
+   `build/TrackerPlus_MT_1.0.0.ptf`.
 3. **Copy the synth engines to the card.** Every synth engine is a `.psyn` file on the card,
    not part of the firmware: CE's (ACD, FAT, VAP, WTFM, PERC, DIRT, CHIP and GRAIN) and the
-   Synths mod's WAVE and PHASE. `make psyn` puts all ten in `build/Synths/`, and each CI build
-   has them in the `polyend-tracker-ce-synths` artifact. Copy the `Synths` folder to the card's
-   root. Without the folder, a project's synth parts can open on another engine, since the
-   project stores each part's engine by its place in the list.
+   Synths mod's WAVE and PHASE. Each release has all ten in `PolyendTracker_CE_Synths.zip`, and
+   `make psyn` puts them in `build/Synths/`. Copy the `Synths` folder to the card's root.
+   Without the folder, a project's synth parts can open on another engine, since the project
+   stores each part's engine by its place in the list.
 4. **Flash it** as in
    [Flashing on Hardware & Emergency Recovery](#4-flashing-on-hardware--emergency-recovery)
    below. Config then shows the version as `1.0.0 MT`.
