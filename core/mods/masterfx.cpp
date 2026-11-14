@@ -292,6 +292,111 @@ void choose(uint8_t slot, uint8_t index)
     refreshChoices();
 }
 
+// ---- the slot's own page --------------------------------------------------------------
+
+namespace
+{
+
+MFX_SDRAM char titleText[16 + sizeof(kMissing) + kFileSize]; // main loop; written before use
+
+bool ours(uint8_t slot)
+{
+    return slot < kSlots && on(Mod::masterfx) && pl::installed(static_cast<pl::Slot>(slot));
+}
+
+} // namespace
+
+const char* pageTitle(uint8_t slot, const char* word)
+{
+    if (slot >= kSlots || !on(Mod::masterfx))
+    {
+        return nullptr;
+    }
+    if (ours(slot))
+    {
+        snprintf(titleText, sizeof(titleText), "%s: %s%s", word, choiceName(slot),
+                 bypassed(slot) ? " (bypassed)" : "");
+        return titleText;
+    }
+    if (missing(slot))
+    {
+        snprintf(titleText, sizeof(titleText), "%s: %s", word, choiceName(slot));
+        return titleText;
+    }
+    return nullptr;
+}
+
+bool bypassed(uint8_t slot)
+{
+    return slot < kSlots && pl::bypassed(static_cast<pl::Slot>(slot));
+}
+
+int takeBypassed()
+{
+    return pl::takeBypassed();
+}
+
+uint8_t ownKnobs(uint8_t slot)
+{
+    if (!ours(slot))
+    {
+        return 0;
+    }
+    const uint32_t n = pl::knobs(static_cast<pl::Slot>(slot));
+    return static_cast<uint8_t>(n < kOwnKnobs ? n : kOwnKnobs);
+}
+
+const char* ownKnobLabel(uint8_t slot, uint8_t knob)
+{
+    return knob < ownKnobs(slot) ? pl::knobLabel(static_cast<pl::Slot>(slot), knob) : "";
+}
+
+void ownKnobText(uint8_t slot, uint8_t knob, char* out, size_t size)
+{
+    if (size == 0)
+    {
+        return;
+    }
+    out[0] = 0;
+    if (knob < ownKnobs(slot))
+    {
+        pl::knobText(static_cast<pl::Slot>(slot), knob, out, static_cast<uint32_t>(size));
+    }
+}
+
+uint8_t ownKnobPercent(uint8_t slot, uint8_t knob)
+{
+    if (knob >= ownKnobs(slot))
+    {
+        return 0;
+    }
+    const pl::Slot s = static_cast<pl::Slot>(slot);
+    const uint32_t steps = pl::knobSteps(s, knob);
+    return steps > 1 ? static_cast<uint8_t>(pl::knobStep(s, knob) * 100u / (steps - 1u)) : 0;
+}
+
+void stepOwnKnob(uint8_t slot, uint8_t knob, int steps)
+{
+    if (knob >= ownKnobs(slot))
+    {
+        return;
+    }
+    const pl::Slot s = static_cast<pl::Slot>(slot);
+    pl::stepKnob(s, knob, steps);
+    settings.slot[slot].knob[knob] = pl::knob(s, knob);
+}
+
+void defaultOwnKnob(uint8_t slot, uint8_t knob)
+{
+    if (knob >= ownKnobs(slot))
+    {
+        return;
+    }
+    const pl::Slot s = static_cast<pl::Slot>(slot);
+    pl::resetKnob(s, knob);
+    settings.slot[slot].knob[knob] = pl::knob(s, knob);
+}
+
 #ifdef MT_HOST_TEST
 
 namespace
@@ -307,20 +412,24 @@ namespace
 // The Config menu's two lists: the choice in the list and the lists themselves. Until the first
 // refreshChoices (names is SDRAM, not zeroed) they show Stock alone.
 const char* const kStockOnly[] = { "Stock" };
-uint8_t menuChoice[2] = {};
+uint8_t menuChoice[kSlots] = {};
 void reverbMenuEdited();
 void delayMenuEdited();
-strItemTypeListTextWithAction reverbMenu{ &menuChoice[0], 1, kStockOnly, reverbMenuEdited };
-strItemTypeListTextWithAction delayMenu{ &menuChoice[1], 1, kStockOnly, delayMenuEdited };
+void dynamicsMenuEdited();
+strItemTypeListTextWithAction slotMenus[kSlots] = {
+    { &menuChoice[kReverb], 1, kStockOnly, reverbMenuEdited },
+    { &menuChoice[kDelay], 1, kStockOnly, delayMenuEdited },
+    { &menuChoice[kDynamics], 1, kStockOnly, dynamicsMenuEdited },
+};
 
 void refreshMenus()
 {
-    reverbMenu.ptrText = names[kReverb];
-    delayMenu.ptrText = names[kDelay];
-    reverbMenu.count = counts[kReverb];
-    delayMenu.count = counts[kDelay];
-    menuChoice[0] = chosen[kReverb];
-    menuChoice[1] = chosen[kDelay];
+    for (uint8_t s = 0; s < kSlots; s++)
+    {
+        slotMenus[s].ptrText = names[s];
+        slotMenus[s].count = counts[s];
+        menuChoice[s] = chosen[s];
+    }
 }
 
 void menuEdited(uint8_t slot, uint8_t index)
@@ -332,12 +441,17 @@ void menuEdited(uint8_t slot, uint8_t index)
 
 void reverbMenuEdited()
 {
-    menuEdited(kReverb, menuChoice[0]);
+    menuEdited(kReverb, menuChoice[kReverb]);
 }
 
 void delayMenuEdited()
 {
-    menuEdited(kDelay, menuChoice[1]);
+    menuEdited(kDelay, menuChoice[kDelay]);
+}
+
+void dynamicsMenuEdited()
+{
+    menuEdited(kDynamics, menuChoice[kDynamics]);
 }
 
 constexpr uint32_t kApplyWaitMs = 150;
@@ -449,9 +563,8 @@ void applySlot(uint8_t slot, bool isOn)
         }
         if (pluginkit::finite(want.knob[k]))
         {
-            pl::setKnob(s, k, want.knob[k]);
+            pl::setKnob(s, k, want.knob[k]); // held on the plugin's steps; settings keep the value
         }
-        want.knob[k] = pl::knob(s, k); // on the plugin's steps, or its default
     }
     runPlugin(slot);
 }
@@ -487,7 +600,7 @@ void apply()
 
 const void* menuSetup(uint8_t slot)
 {
-    return slot == kDelay ? &delayMenu : &reverbMenu;
+    return &slotMenus[slot < kSlots ? slot : 0];
 }
 
 void started()

@@ -6,7 +6,8 @@ Usage: python tools/emu/test_masterfx_rig.py <mods.axf> <reference.axf> [only: u
 test_masterfx.py checks each effect against 1.2.0 on its own. This one checks what's around them:
 - ui: CE's real cMasterParams with display commands caught at API_*. With the mod Off the page
   makes the same display calls as the reference build. On: the lists, stops, names, and the
-  page's display bytes counted against the limit.
+  page's display bytes counted against the limit. On firmware with the Limiter list (masterfx-2.0's
+  step 5): that list, the Limiter page's title and Glue's own knobs, Missing and Bypassed.
 - graph: the switch through mods::projectMasterfxSwitchChanged, the boot gate, and synth notes
   through CE's sends to the chosen effect.
 - stress: 8 synth voices with the heaviest pair, then switches, knobs and notes while playing.
@@ -23,6 +24,7 @@ and what plays is the runtime's installed file. The card's /MasterFX is listed a
 it, through mods::update (the main loop's step that starts the runtime once the mod is On), with the
 mods' file access pointed at the rig's card as mods::init does.
 """
+import math
 import random
 import struct
 import sys
@@ -41,8 +43,10 @@ ENGINE_IDS = (1, 2, 4, 5, 6, 7, 8)  # Synth::kSynthTypes, as project.mt's models
 LIMIT = 8172                        # cDisplay::step3
 CONTROLS = 65                       # controlsCount
 
-BUTTON = {"reverb": 1, "delay": 2, "limiter": 3, "eq": 4, "cancel": 7,
+BUTTON = {"reverb": 1, "delay": 2, "limiter": 3, "eq": 4, "knob5": 5, "knob6": 6, "cancel": 7,
           "up": 26, "delete": 27, "left": 30, "down": 31, "right": 32}
+# The Master page's Limiter list and the own knobs (masterfx-2.0, step 5)
+LIMITER_WORDS = "_ZN13cMasterParams20showMasterfxOwnKnobsEhh"
 REVERBS = ("Stock", "Freeverb", "Plate", "Spring", "Shimmer", '"Gated"', "Reverse")
 DELAYS = ("Stock", "Tape", "BBD")
 
@@ -120,6 +124,17 @@ def settings(r):
         name = m.cstr(m.addr(SETTINGS) + SLOT_SIZE * slot, 48)
         out.append(files_of(slot).index(name) if name in files_of(slot) else -1)
     return tuple(out)
+
+
+def slot_file(r, slot):
+    """A slot's file in settings ("" is Stock)"""
+    return r.m.cstr(r.m.addr(SETTINGS) + SLOT_SIZE * slot, 48)
+
+
+def runtime_slot(r, slot):
+    """The runtime's SlotState for a slot: its address"""
+    slots = r.syms[SLOTS]
+    return slots.addr + slots.size // 3 * slot
 
 
 def playing(r):
@@ -364,16 +379,19 @@ def test_ui(mods, ref):
     p.start()
     log = p.take_log()
     frame = p.handle_of("_ZTV6cFrame")
+    limiter_list = LIMITER_WORDS in p.r.syms
     stops = []
     for _ in range(8):
         p.press("right")
         stops.append(p.place(frame))
-    check(stops == [1, 2, 5, 6, 7, 7, 7, 7], f"Right stops on 1, 2, 5, 6, 7 ({stops})")
+    want = [1, 2, 3, 5, 6, 7, 7, 7] if limiter_list else [1, 2, 5, 6, 7, 7, 7, 7]
+    check(stops == want, f"Right stops on {sorted(set(want))} ({stops})")
     back = []
     for _ in range(6):
         p.press("left")
         back.append(p.place(frame))
-    check(back == [6, 5, 2, 1, 0, 0], f"Left stops on 6, 5, 2, 1, 0 ({back})")
+    want = [6, 5, 3, 2, 1, 0] if limiter_list else [6, 5, 2, 1, 0, 0]
+    check(back == want, f"Left stops on {want} ({back})")
 
     p.press("right")
     p.take_log()
@@ -395,6 +413,20 @@ def test_ui(mods, ref):
     p.press("left")
     p.press("delete")
     check(settings(p.r) == (0, 0), "Delete: Reverb back to Stock")
+    if limiter_list:
+        p.press("right")
+        p.press("right")
+        p.take_log()
+        p.encoder(1)
+        check(slot_file(p.r, DYNAMICS) == "Glue.ptmfx", f"encoder on the Limiter list chooses Glue ({slot_file(p.r, DYNAMICS)!r})")
+        log = p.take_log()
+        check(any(e[0] == "text2" and e[2] == "Glue" for e in log), "the Limiter label's second line says Glue")
+        p.encoder(1)
+        check(slot_file(p.r, DYNAMICS) == "Glue.ptmfx", "and stops at the end of the list")
+        p.press("delete")
+        check(slot_file(p.r, DYNAMICS) == "", "Delete: Limiter back to Stock")
+        p.press("left")
+        p.press("left")
 
     # the effect pages' names
     words = {
@@ -437,7 +469,10 @@ def test_ui(mods, ref):
         label0 = next(h for h, t in final.items() if t == "Back") - 7
         said = [final[label0 + 4], final[label0 + 5]]
         check(titles[-1] == title and said == [feedback, tone], f"{DELAYS[choice]}: title and knob names ({titles[-1]}, {said})")
-        check(sum(1 for e in log if e[0] == "data") == 2, f"{DELAYS[choice]}: the Delay page takes its two lists back")
+        lists = 3 if limiter_list else 2
+        check(sum(1 for e in log if e[0] == "data") == lists, f"{DELAYS[choice]}: the Delay page takes its {lists} lists back")
+        if limiter_list:
+            check(any(e[0] == "position" and e[2] == 2 for e in log), f"{DELAYS[choice]}: and PingPong back in column 0")
         p.press("cancel")
 
     # the same pages, stock, have CE's own words in the reference
@@ -456,7 +491,8 @@ def test_ui(mods, ref):
     ref_page = MasterPage(ref)
     ref_page.start()
     extra = master - set(ref_page.shown())
-    check(len(extra) == 2, f"Master page: two more controls shown than CE's ({sorted(extra)})")
+    lists = 3 if limiter_list else 2
+    check(len(extra) == lists, f"Master page: {lists} more controls shown than CE's ({sorted(extra)})")
     for name in ("reverb", "limiter", "eq"):
         p.press(name)
         check(not (extra & set(p.shown())), f"{name} page: the lists aren't left on screen")
@@ -486,9 +522,14 @@ def test_ui(mods, ref):
     p.m.call(p.m.addr("_ZN13cMasterParams20activateLabelsBorderEv"), p.page, max_insns=5_000_000)
     check(p.place(p.handle_of("_ZTV6cFrame")) == 0, "mod turned Off with the frame on a list: the frame goes to Volume")
 
+    if limiter_list:
+        limiter_page(mods, ref)
+
     # display bytes, the heaviest choices
     p = MasterPage(mods)
     set_mod(p.r, True, 5, 2)
+    if limiter_list:
+        set_dynamics(p.r, "Glue.ptmfx")
     p.start()
     r_page = MasterPage(ref)
     r_page.start()
@@ -498,11 +539,113 @@ def test_ui(mods, ref):
     check(a_total < LIMIT, f"Master page fits ({a_total} of {LIMIT} B, upper bound)")
     added = {i: ours[i] - theirs.get(i, 0) for i in ours if ours[i] != theirs.get(i, 0)}
     print(f"     added per slot: {added}")
-    for name in ("reverb", "delay"):
+    for name in ("reverb", "delay") + (("limiter",) if limiter_list else ()):
         p.press(name)
         total = sum(p.page_bytes().values())
         check(total < LIMIT, f"{name} page fits ({total} of {LIMIT} B, upper bound)")
         p.press("cancel")
+
+
+def limiter_page(mods, ref):
+    """The Limiter page with Glue: its title, CE's knobs' labels (Glue has none of its own), its own
+    knobs in columns 5 and 6, then Stock, a missing file and Bypassed"""
+    p = MasterPage(mods)
+    m = p.m
+    set_mod(p.r, True, 0, 0)
+    set_dynamics(p.r, "Glue.ptmfx")
+    p.start()
+    p.take_log()
+    stored = []
+    p.r.watch(m.addr("_ZN4mods7project11markChangedEv"), lambda mm: stored.append(1))
+    p.press("limiter")
+    log = p.take_log()
+    titles = [e[1] for e in log if e[0] == "title"]
+    final, second = last(log, "text"), last(log, "text2")
+    label0 = next(h for h, t in final.items() if t == "Back") - 7
+    check(titles[-1] == "Limiter: Glue", f"Glue: the Limiter page's title ({titles[-1]})")
+    said = [final[label0 + i] for i in range(3)]
+    check(said == ["LimiterAtt", "LimiterRls", "LimiterThr"], f"Glue: CE's labels for Attack, Release, Threshold ({said})")
+    own = [(final.get(label0 + 5), second.get(label0 + 5)), (final.get(label0 + 6), second.get(label0 + 6))]
+    check(own == [("Ratio", "4.0:1"), ("Makeup", "+0.0 dB")], f"Glue: its own knobs in columns 5 and 6 at their defaults ({own})")
+    check(all(math.isnan(k) for k in own_knobs(p.r)), "and settings leave them unset")
+    cover = [e for e in log if e[0] == "position" and e[2] == (800 // 8) * 7 + 2]
+    check(bool(cover), "the cover moves to column 7, off the own knobs")
+
+    frame = p.handle_of("_ZTV6cFrame")
+    stops = []
+    for _ in range(6):
+        p.press("right")
+        stops.append(p.place(frame))
+    check(stops == [1, 2, 4, 5, 6, 6], f"Right stops on 1, 2, 4, 5, 6 ({stops})")
+    p.take_log()
+    p.encoder(1)
+    log = p.take_log()
+    check(any(e[0] == "text2" and e[2] == "+0.5 dB" for e in log), "encoder on Makeup: +0.5 dB on the page")
+    k = own_knobs(p.r)
+    check(k[1] == 0.5 and math.isnan(k[0]), f"and in settings, Ratio still unset {k}")
+    check(bool(stored), "and the project marked changed")
+    p.press("left")
+    p.encoder(2)
+    check(own_knobs(p.r) == (5.0, 0.5), f"encoder on Ratio, two steps: 5.0 {own_knobs(p.r)}")
+    value = struct.unpack("<f", m.read(runtime_slot(p.r, DYNAMICS) + 12, 4))[0]
+    check(value == 5.0, f"the plugin is given 5.0 ({value})")
+    p.press("up")
+    p.take_log()
+    p.press("delete")
+    log = p.take_log()
+    check(own_knobs(p.r) == (4.0, 0.5) and any(e[0] == "text2" and e[2] == "4.0:1" for e in log),
+          f"Delete on Ratio: its default, 4.0 {own_knobs(p.r)}")
+    p.press("knob6")
+    check(p.place(frame) == 6, "the button under column 6 selects Makeup")
+    p.press("knob5")
+    check(p.place(frame) == 5, "the button under column 5 selects Ratio")
+
+    # the time guard stops it: the page says so
+    m.write(runtime_slot(p.r, DYNAMICS) + 2, b"\x01")
+    p.take_log()
+    p.update()
+    titles = [e[1] for e in p.take_log() if e[0] == "title"]
+    check(titles == ["Limiter: Glue (bypassed)"], f"bypassed: the title says so ({titles})")
+    p.update()
+    check(not [e for e in p.take_log() if e[0] == "title"], "and only once")
+    p.press("cancel")
+    log = p.take_log()
+    check(any(e[0] == "text2" and e[2] == "Bypassed" for e in log), "the Master page's Limiter column says Bypassed")
+    check(not p.r.failures, "no asserts")
+
+    # Stock: CE's page, no own knobs
+    q = MasterPage(mods)
+    set_mod(q.r, True, 0, 0)
+    set_dynamics(q.r, "")
+    q.start()
+    q.take_log()
+    q.press("limiter")
+    log = q.take_log()
+    r_page = MasterPage(ref)
+    r_page.start()
+    r_page.take_log()
+    r_page.press("limiter")
+    ref_log = r_page.take_log()
+    title = [e[1] for e in log if e[0] == "title"]
+    check(title == [e[1] for e in ref_log if e[0] == "title"], f"Stock: CE's Limiter title ({title})")
+    check(last(log, "text") == last(ref_log, "text"), "Stock: CE's labels")
+    frame = q.handle_of("_ZTV6cFrame")
+    stops = []
+    for _ in range(4):
+        q.press("right")
+        stops.append(q.place(frame))
+    check(stops == [1, 2, 4, 4], f"Stock: Right stops on 1, 2, 4 ({stops})")
+    q.press("knob5")
+    check(q.place(frame) is None, "Stock: the button under column 5 does nothing")
+    q.press("cancel")
+
+    # a file the card doesn't have: CE's limiter, and the title says so
+    set_dynamics(q.r, "Gone.ptmfx")
+    q.take_log()
+    q.press("limiter")
+    title = [e[1] for e in q.take_log() if e[0] == "title"]
+    check(title[-1:] == ["Limiter: Missing: Gone.ptmfx"], f"missing: the title says so ({title})")
+    check(not q.r.failures, "no asserts")
 
 
 class Graph(SoundRig):
@@ -688,7 +831,7 @@ def test_dynamics(mods, ref):
     g = graph(mods, "Glue.ptmfx")
     m = g.m
     check(m.r8(m.addr(ACTIVE_DYNAMICS)) == 1, "Glue chosen: the dynamics hook runs the plugin")
-    check(own_knobs(g) == (4.0, 0.0), f"its own knobs at its defaults, Ratio 4 and Makeup 0 {own_knobs(g)}")
+    check(all(math.isnan(k) for k in own_knobs(g)), f"its own knobs left unset in settings: Glue's defaults play {own_knobs(g)}")
     calls = []
     g.watch(m.addr(PROCESS), lambda mm: calls.append(mm.arg(0)) if mm.arg(0) == DYNAMICS else None)
     a, b = phrase(g)

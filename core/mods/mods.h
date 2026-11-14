@@ -147,6 +147,9 @@ void masterfxStarted();
 
 // A choice made on the Master page: stored, and applied once the encoder has stopped.
 void masterfxChosen();
+
+// A plugin's own knob turned on its page: stored (the plugin already has it).
+void masterfxKnobEdited();
 #endif
 
 #if MT_HAS_COLORSONG

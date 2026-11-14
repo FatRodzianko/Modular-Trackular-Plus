@@ -50,11 +50,17 @@ class cMasterParams : public ModuleBase
     void showBassBoost();
     void showStereoBoost();
     void showSaturationType();
-#if MT_HAS_MASTERFX // MT: the Reverb and Delay lists on the Master page, and the effects' words
+#if MT_HAS_MASTERFX // MT: the Reverb, Delay and Limiter lists on the Master page, the effects' words
     void showMasterfxLists();
     void showMasterfxChoices();
     void showMasterfxReverbWords();
     void showMasterfxDelayWords();
+    void showMasterfxLimiterWords();
+    // A plugin's own knobs in columns 5 and 6 of its page; the places count it returns
+    uint8_t showMasterfxOwnKnobs(uint8_t slot, uint8_t places);
+    void showMasterfxOwnKnob(uint8_t slot, uint8_t knob);
+    // The time guard stopped a plugin: the page's words for it again
+    void showMasterfxBypassed(uint8_t slot);
 #endif
     // delay
     void showDelayScreen();

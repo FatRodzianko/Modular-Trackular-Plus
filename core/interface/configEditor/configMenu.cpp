@@ -211,18 +211,23 @@ cMenuItem melHumanizeSample(menuProjectHumanize, "Sample volume", humanizeSample
 #endif
 
 #if MT_HAS_MASTERFX // MT: Project Settings -> Master FX
-cMenuGroup menuProjectMasterfx(menuProject, "Master FX", 2);
+cMenuGroup menuProjectMasterfx(menuProject, "Master FX", 3);
 const char masterfxReverbDesc[] = { "The Master reverb for this project: Stock is CE's own, the rest are "
                                     "plugins in /MasterFX on the card. Used when Master FX is On in Project "
                                     "Settings > Mods. " };
 const char masterfxDelayDesc[] = { "The Master delay for this project: Stock is CE's own, the rest are "
                                    "plugins in /MasterFX on the card. Used when Master FX is On in Project "
                                    "Settings > Mods. " };
+const char masterfxLimiterDesc[] = { "The Master limiter for this project: Stock is CE's own, the rest are "
+                                     "plugins in /MasterFX on the card, such as the Glue compressor. Used "
+                                     "when Master FX is On in Project Settings > Mods. " };
 // The lists follow the card's plugins: masterfx keeps them
 cMenuItem melMasterfxReverb(menuProjectMasterfx, "Reverb", masterfxReverbDesc, menuTypeItemListTextWithAction,
                             mods::masterfx::menuSetup(mods::masterfx::kReverb));
 cMenuItem melMasterfxDelay(menuProjectMasterfx, "Delay", masterfxDelayDesc, menuTypeItemListTextWithAction,
                            mods::masterfx::menuSetup(mods::masterfx::kDelay));
+cMenuItem melMasterfxLimiter(menuProjectMasterfx, "Limiter", masterfxLimiterDesc, menuTypeItemListTextWithAction,
+                             mods::masterfx::menuSetup(mods::masterfx::kDynamics));
 #endif
 #endif
 

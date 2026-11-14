@@ -592,6 +592,21 @@ void setKnobStep(Slot slot, uint32_t knob, uint32_t step)
     }
 }
 
+const char* knobLabel(Slot slot, uint32_t knob)
+{
+    const PtmfxParam* p = paramOf(slot, knob);
+    return p != nullptr ? p->label : "";
+}
+
+void resetKnob(Slot slot, uint32_t knob)
+{
+    const PtmfxParam* p = paramOf(slot, knob);
+    if (p != nullptr)
+    {
+        setKnob(slot, knob, p->default_val);
+    }
+}
+
 void knobText(Slot slot, uint32_t knob, char* out, uint32_t size)
 {
     const PtmfxParam* p = paramOf(slot, knob);

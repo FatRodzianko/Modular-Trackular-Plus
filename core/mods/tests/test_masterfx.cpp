@@ -256,6 +256,44 @@ void testChoices()
     settings = Settings{};
 }
 
+// The page's words with no plugin installed (the host runtime has none): Off and Stock keep CE's
+// title, a missing file says so, and nothing of ours has own knobs
+void testPage()
+{
+    uint8_t buffer[512];
+    Store store(buffer, sizeof(buffer), "TEST");
+    store.clear();
+    load(store);
+    const size_t mod = static_cast<size_t>(Mod::masterfx);
+    const uint8_t was = switches[mod];
+
+    switches[mod] = 0;
+    setFile(kDynamics, "Glue.ptmfx");
+    refreshChoices();
+    check(pageTitle(kDynamics, "Limiter") == nullptr, "Off: CE's title");
+    switches[mod] = 1;
+    check(pageTitle(kReverb, "Reverb") == nullptr, "Stock: CE's title");
+    const char* title = pageTitle(kDynamics, "Limiter");
+    check(title != nullptr && strcmp(title, "Limiter: Missing: Glue.ptmfx") == 0, "a missing file in the title");
+    check(pageTitle(kSlots, "x") == nullptr, "no such slot: no title");
+    check(!bypassed(kDynamics) && takeBypassed() == -1, "nothing bypassed");
+
+    check(ownKnobs(kDynamics) == 0 && ownKnobs(kReverb) == 0, "nothing installed: no own knobs");
+    check(strcmp(ownKnobLabel(kDynamics, 0), "") == 0 && ownKnobPercent(kDynamics, 0) == 0,
+          "and no label or bar");
+    char text[16] = "x";
+    ownKnobText(kDynamics, 0, text, sizeof(text));
+    check(text[0] == 0, "and no text");
+    settings.slot[kDynamics].knob[0] = 2.0f;
+    stepOwnKnob(kDynamics, 0, 3);
+    defaultOwnKnob(kDynamics, 1);
+    check(settings.slot[kDynamics].knob[0] == 2.0f && std::isnan(settings.slot[kDynamics].knob[1]),
+          "turning a knob that isn't there leaves settings alone");
+
+    switches[mod] = was;
+    settings = Settings{};
+}
+
 void testImportFile()
 {
     FakeIo io;
@@ -381,6 +419,7 @@ int main()
     testNames();
     testRecord();
     testChoices();
+    testPage();
     testImportFile();
     testImportThroughProject();
     printf("masterfx: %d checks, %d failures\n", checks, failures);

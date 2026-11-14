@@ -1,7 +1,7 @@
 # Master FX as card plugins (`.ptmfx`): feasibility and plan
 
 Status: feasibility done and the design approved, 2026-11-14 (section 9). Building. Branch `mod/masterfx-plugins`, off `modular` at
-`d9a6795`. Steps 1 to 3 committed (`982c6ea`), step 4 in the commit after it.
+`d9a6795`. Steps 1 to 3 committed (`982c6ea`), step 4 in `12e2329`; step 5 written, not committed.
 
 Where the build stands (section 8's steps):
 - Steps 1 to 3 are written: the shared parts, the runtime, the pack, record version 2, the built-in DSP
@@ -49,8 +49,34 @@ Where the build stands (section 8's steps):
     49,152, DTCM 9,112).
   - Not run: the ported emulator tests on a masterfx-1.x firmware (they keep its index path); the
     release tier; anything on the unit.
-- Not yet: the runtime on the emulated Cortex-M7 (the guards) and its planted faults; Glue's own knobs
-  on the page (step 5). Then steps 5 to 8.
+- Step 5, the UI (written, not committed):
+  - The Master page has a third list, Limiter, in column 3 (the Delay page's PingPong list, moved there
+    and back as the Sync and Rate lists are borrowed for Reverb and Delay). The stops are Volume,
+    Reverb, Delay, Limiter, then CE's. A plugin stopped by the time guard reads "Bypassed" under its
+    column.
+  - Each slot's page title says what plays: "Reverb: Shimmer", "Limiter: Glue (bypassed)",
+    "Limiter: Missing: Gone.ptmfx"; Stock and the mod Off keep CE's title. The time guard's stop is
+    polled in the page's `update()`.
+  - A plugin's own knobs (up to 2) sit in columns 5 and 6 of the Reverb and Limiter pages: its label,
+    its text (the plugin's `format`, so Glue shows "4.0:1" and "+0.5 dB"), a bar, the buttons under
+    the columns, the encoder, Up/Down and Delete (its default). The delay page has no free column, so a
+    delay plugin's own knobs stay at what the project holds or the plugin's default.
+  - An own knob turned on the page is stored in the project's record (`mods::masterfxKnobEdited`). A
+    knob the project never set stays unset in settings, and the plugin plays its default: `apply` no
+    longer writes the plugin's value back.
+  - Config > Project > Master FX has a third list, Limiter.
+  - Memory: DTCM free 9,112 → 9,096; the page's text buffers are in SDRAM.
+  - Display bytes, upper bounds with the heaviest choices: Master page 5,752, Reverb 3,476, Delay
+    5,004, Limiter with Glue 5,596, against 8,172.
+  - What ran: host tests (all pass; `test_masterfx` 79 checks, 9 new for the title and own knobs with
+    nothing installed); `test_masterfx_rig.py` ui on the step 5 firmware (75 checks: mod Off makes the
+    reference build's display calls, the stops, the Limiter list, the Limiter page with Glue, Stock and
+    a missing file, Bypassed, the borrowed lists given back) and dynamics (19 checks); the quick tier on the step 5 firmware, 19 of 19 run (3 cached);
+    the `MT_NO_MODS` build the same as step 4's, all 6,696 loaded sections byte for byte.
+  - Not run: a reverb plugin with own knobs (none in the pack has any, so that page's own-knob columns
+    ran only through the Limiter page's shared code); the release tier; anything on the unit.
+- Not yet: the runtime on the emulated Cortex-M7 (the guards) and its planted faults. Then steps 6 to 8,
+  and the sidechain destination.
 
 Today's mod is in [MASTERFX_PORT_PLAN.md](MASTERFX_PORT_PLAN.md): eight effects built into the firmware,
 run inside CE's own reverb and delay objects. This plan turns them into plugins loaded from the card,
@@ -403,7 +429,8 @@ The questions as they were asked:
 - Anything on the unit: cycles, stalls, the cache, the card's read time, the clear's length, ITCM code
   copied at runtime.
 - The pack in the firmware's own path: one probe run only, outside the test tiers, with one knob setting.
-- The display bytes of a third list.
+- The display bytes on the unit: the emulator's count is an upper bound, from the display list's commands
+  as the rig catches them.
 - The multi-key mux's cost: estimated, not measured.
 - The pitch shifter's and clipper's sound: these prototypes were only costed.
 

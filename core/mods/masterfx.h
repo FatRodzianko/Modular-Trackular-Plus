@@ -91,8 +91,28 @@ void choose(uint8_t slot, uint8_t index);
 // The project's file for the slot isn't on the card (or can't be used): CE's effect plays.
 bool missing(uint8_t slot);
 
+// ---- the slot's own page (Reverb, Delay, Limiter) ----------------------------------------
+// Its title: "<word>: <plugin>", with " (bypassed)" once the time guard has stopped it, or
+// "<word>: Missing <file>" when the project's file can't play. nullptr: CE's own plays, CE's title.
+const char* pageTitle(uint8_t slot, const char* word);
+// The slot's plugin was stopped by the time guard (it plays silence, or the master untouched).
+bool bypassed(uint8_t slot);
+// A slot whose plugin the time guard has stopped since the last call, or -1.
+int takeBypassed();
+
+// The plugin's own knobs, in the page's columns 5 and 6. 0 when nothing of ours plays.
+uint8_t ownKnobs(uint8_t slot);
+const char* ownKnobLabel(uint8_t slot, uint8_t knob);
+void ownKnobText(uint8_t slot, uint8_t knob, char* out, size_t size);
+uint8_t ownKnobPercent(uint8_t slot, uint8_t knob);  // its step as 0 to 100, for the bar
+// The encoder's steps, or the plugin's default: the plugin hears it at its next block and settings
+// keep it. The caller stores the record (mods::masterfxKnobEdited).
+void stepOwnKnob(uint8_t slot, uint8_t knob, int steps);
+void defaultOwnKnob(uint8_t slot, uint8_t knob);
+
 // Main loop only. Makes the effects that play match settings and the switch. Does nothing until
-// started().
+// started(). A plugin's own knobs are set from settings; one that settings leave unset plays at
+// the plugin's default, and settings aren't changed.
 void apply();
 
 // Main loop only: the unit has started. Cheap to call again.

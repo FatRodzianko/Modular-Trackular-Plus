@@ -314,6 +314,14 @@ void masterfxChosen()
     }
     masterfx::applySoon();
 }
+
+void masterfxKnobEdited()
+{
+    if (masterfx::storeIfEdited(projectStore))
+    {
+        project::markChanged();
+    }
+}
 #endif
 
 #if MT_HAS_COLORSONG

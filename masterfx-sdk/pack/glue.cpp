@@ -180,6 +180,12 @@ PTMFX_RESET(void *st)
     s->gain = 1.0f;
 }
 
+// The page's text: "4.0:1" and "+3.5 dB"
+PTMFX_FORMAT(const PtmfxHost *host, uint32_t index, float value, char *out, uint32_t size)
+{
+    host->print(out, size, index == 0 ? "%.1f:1" : "+%.1f dB", value);
+}
+
 PTMFX_PROCESS(void *st, const PtmfxBlock *b)
 {
     State *s = static_cast<State *>(st);

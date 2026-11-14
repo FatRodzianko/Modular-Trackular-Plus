@@ -168,6 +168,9 @@ void stepKnob(Slot slot, uint32_t knob, int steps);
 uint32_t knobSteps(Slot slot, uint32_t knob);
 uint32_t knobStep(Slot slot, uint32_t knob);
 void setKnobStep(Slot slot, uint32_t knob, uint32_t step);
+// Its label ("" if there is no such knob), and back to its default
+const char* knobLabel(Slot slot, uint32_t knob);
+void resetKnob(Slot slot, uint32_t knob);
 // Its text: the plugin's format() if it has one and fills it in, else the value (one decimal
 // for 'f') and the unit. At: the text for one of its steps.
 void knobText(Slot slot, uint32_t knob, char* out, uint32_t size);
