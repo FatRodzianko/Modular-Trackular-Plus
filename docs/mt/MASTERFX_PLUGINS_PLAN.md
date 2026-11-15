@@ -1,8 +1,8 @@
 # Master FX as card plugins (`.ptmfx`): feasibility and plan
 
 Status: feasibility done and the design approved, 2026-11-14 (section 9). Building. Branch `mod/masterfx-plugins`, off `modular` at
-`d9a6795`. Steps 1 to 3 committed (`982c6ea`), step 4 in `12e2329`, step 5 in `0dd2f08`; the sidechain
-destination (section 5.1) written, not committed.
+`d9a6795`. Steps 1 to 3 committed (`982c6ea`), step 4 in `12e2329`, step 5 in `0dd2f08`, the sidechain
+destination (section 5.1) in `00211ec`; step 6 (the SDK and docs) written, not committed.
 
 Where the build stands (section 8's steps):
 - Steps 1 to 3 are written: the shared parts, the runtime, the pack, record version 2, the built-in DSP
@@ -76,7 +76,7 @@ Where the build stands (section 8's steps):
     the `MT_NO_MODS` build the same as step 4's, all 6,696 loaded sections byte for byte.
   - Not run: a reverb plugin with own knobs (none in the pack has any, so that page's own-knob columns
     ran only through the Limiter page's shared code); the release tier; anything on the unit.
-- The sidechain destination (section 5.1), written, not committed:
+- The sidechain destination (section 5.1), committed in `00211ec`:
   - The Limiter page's column 4 holds CE's Sidechain list or, with Shift + its button, the Ducks list:
     Master, Track 1 to 8, Synth 1 to 3. Its button marks or clears the item under the cursor (the
     encoder or Up/Down move it), Delete goes back to Master, and the label's second line says
@@ -113,7 +113,39 @@ Where the build stands (section 8's steps):
     track (to measure on the unit with the Profiler); the release tier; anything on the unit.
   - Glue's attack: with CE's default knobs the first changed block was 2 blocks after a Line in key
     started, 3 after a Synth 2 key (the extra block is the update order above).
-- Not yet: the runtime on the emulated Cortex-M7 (the guards) and its planted faults. Then steps 6 to 8.
+- Step 6, the SDK and docs, written, not committed:
+  - `docs/masterfx_plugins.md`, the guide, in Synth FX's 13 sections: the slots and their blocks, the
+    lifecycle, ducking chosen tracks, a tutorial, the Master page, the header, the host, the binary
+    format, the memory, loading and guards, the cost table, the checker, and the comparison with CE's
+    and Synth FX's formats. `masterfx-sdk/README.md`. A `.ptmfx` column in
+    `docs/synthfx_plugins.md`'s comparison table.
+  - Two examples: `room.c` (a float reverb in both of the reverb slot's areas, CE's four knobs, a
+    Width knob; 832 B of code) and `ducker.c` (a float dynamics plugin with the duck flag, Threshold
+    renamed, a list knob shown by `format`, the meter; 784 B). `build_pack.py` builds them with the
+    pack, into `build/masterfx/examples`.
+  - `tools/masterfx/check_ptmfx.py`: a plugin on a fake card, listed, read and installed by the
+    firmware's runtime on the emulated Cortex-M7, then run through the runtime's `process` on noise,
+    a sine and silence at several of CE's and its own knob settings (dynamics: no key, a key,
+    ducking). It checks the header as the firmware reads it, the own knobs' texts, float output and
+    the gain before the guard, writes outside the state, memory, output blocks and own stack, the
+    output after CE's clear against a fresh instance, and the instructions per block against the time
+    guard's eighth of a block. `masterfx_runtime.py` takes the files to put on the card.
+  - What ran: the checker on the two examples and the 9 pack files, all pass (the most, Shimmer, at
+    48,623 instructions a block, 22.3 % of the guard's share; Glue gets a note that its Makeup at
+    +12 dB clips); on 6 planted faults, each caught (a write past the state, output that isn't a
+    number, the gain left unfilled, a `reset` that keeps the level, a slow loop, a state size of 0);
+    the host's own cost around a float plugin, about 6,900 instructions a block (10,600 with a key),
+    a few dozen around a 16-bit one. The new quick-tier job `masterfx sdk` (the checker on the
+    examples and the pack), passes in 61 s. The pack rebuilt the same, byte for byte, and `--check`
+    matches the firmware's copy.
+  - Found while writing: a bypassed plugin is installed again, and so un-bypassed, only by picking
+    another choice and then it, or turning the mod off and on. Picking the same line again, or
+    opening a project that uses the same plugin, keeps it bypassed. The guide says so.
+  - Not checked: the firmware's guards acting, anywhere: the bypass after 8 slow blocks, the reset
+    after a NaN, the output and gain clamps. The checker catches those faults before the guard; the
+    rig's `ui` section only sets the bypassed byte to check the page. Step 7's planted faults. The
+    guide's build commands were run as the pack's build is, in WSL, not from Windows.
+- Not yet: steps 7 and 8.
 
 Today's mod is in [MASTERFX_PORT_PLAN.md](MASTERFX_PORT_PLAN.md): eight effects built into the firmware,
 run inside CE's own reverb and delay objects. This plan turns them into plugins loaded from the card,

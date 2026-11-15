@@ -43,12 +43,15 @@ def has_plugins(m) -> bool:
 
 
 class Runtime:
-    """The runtime started in m, on a fake card"""
+    """The runtime started in m, on a fake card (with `files`, path -> bytes, on it before the start)"""
 
-    def __init__(self, m):
+    def __init__(self, m, files: dict[str, bytes] | None = None):
         self.m = m
         self.syncs = 0
         self.sd = FakeSd(m)
+        if files:
+            self.sd.dirs.add("/MasterFX")
+            self.sd.files.update(files)
         sym = lambda n: m.addr(NS + n)  # noqa: E731
         code = sym("9codeAreasE")
         states = (sym("11reverbStateE"), sym("10delayStateE"), sym("13dynamicsStateE"))
@@ -73,6 +76,10 @@ class Runtime:
         assert len(env) == 124, len(env)
         self.env = m.alloc(len(env), 4)
         m.write(self.env, env)
+        self.code = tuple(code + CODE_AREA * i for i in range(3))
+        self.states = states
+        self.memories = memories
+        self.scratch = sym("7scratchE")
         self.io = m.addr(FILE_IO)
         m.w32(self.io + 4, self.sd.obj)     # CeFileIo::fileSystem, as mods::init sets it
         m.call(m.addr(START), self.io, self.env, max_insns=400_000_000)

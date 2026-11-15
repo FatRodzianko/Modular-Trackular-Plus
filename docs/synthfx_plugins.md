@@ -559,24 +559,25 @@ It loads the plugin with the firmware's own runtime and reports:
 
 CE has two plugin formats of its own: `.psyn` synth engines (`docs/custom_synth_sdk.md`) and
 `.ptfx` sample-editor effects (`docs/modular_effects_system.md`). Synth FX follows them where
-the job is the same and differs where it isn't.
+the job is the same and differs where it isn't. Master FX (`.ptmfx`, `docs/masterfx_plugins.md`)
+is in the last column; its guide says why it differs.
 
-| | `.psyn` (CE) | `.ptfx` (CE) | `.ptsfx` (Synth FX) |
-| :--- | :--- | :--- | :--- |
-| What it is | a synth engine | an offline sample-editor effect | a real-time effect on a synth part |
-| Card folder | `/Synths/` | `/Effects/` | `/SynthFX/` |
-| Header | 128 bytes, magic and API version | 472 bytes, magic and version | 476 bytes, magic and version |
-| Host table | `PsynHostApi` (versioned) | `PtfxHostApi` | `PtsfxHost` (versioned) |
-| Code | relocated ELF (ABS32, MOVW/MOVT), `.data`/`.bss` and constructors allowed | position-independent | position-independent, no `.data`/`.bss` |
-| Instances | one engine, voices as objects | one run on a buffer | one code copy, state per instance (up to 56) |
-| Memory | 1,920 KB arena in CE's 6 MB pool, LRU eviction | the sample editor's shared scratch | 96 KB code and 192 KB state pools, no eviction |
-| Cache | data clean and instruction invalidate | `syncInstructionCache` | `syncInstructionCache` |
-| Runs in | audio interrupt | main loop | audio interrupt |
-| Loads | boot preload up to 1 MB, then on selection | when applied | on selection, after the encoder rests |
-| Guards | CE's 2.1 ms synth limit | none needed (main loop) | time, output and start marker, inside CE's limit |
-| File I/O for the plugin | `read_file`, `load_wav_file` (outside the audio thread) | file parameters | none |
-| Builder | `psyn_builder.py` from an ELF | `ptfx_builder.py` | `ptsfx_builder.py` (from `ptfx_builder.py`) |
-| Shipped | CE's `polyend-tracker-ce-synths` build and `PolyendTracker_CE_Synths.zip` | CE's `polyend-tracker-ce-effects` build and `PolyendTracker_CE_Effects.zip` | the default pack is in the firmware, written when missing |
+| | `.psyn` (CE) | `.ptfx` (CE) | `.ptsfx` (Synth FX) | `.ptmfx` (Master FX) |
+| :--- | :--- | :--- | :--- | :--- |
+| What it is | a synth engine | an offline sample-editor effect | a real-time effect on a synth part | a master reverb, delay or dynamics effect |
+| Card folder | `/Synths/` | `/Effects/` | `/SynthFX/` | `/MasterFX/` |
+| Header | 128 bytes, magic and API version | 472 bytes, magic and version | 476 bytes, magic and version | 240 bytes, magic and version |
+| Host table | `PsynHostApi` (versioned) | `PtfxHostApi` | `PtsfxHost` (versioned) | `PtmfxHost` (versioned) |
+| Code | relocated ELF (ABS32, MOVW/MOVT), `.data`/`.bss` and constructors allowed | position-independent | position-independent, no `.data`/`.bss` | position-independent, no `.data`/`.bss`, up to 8 KB |
+| Instances | one engine, voices as objects | one run on a buffer | one code copy, state per instance (up to 56) | one plugin a slot, three slots |
+| Memory | 1,920 KB arena in CE's 6 MB pool, LRU eviction | the sample editor's shared scratch | 96 KB code and 192 KB state pools, no eviction | a fixed ITCM code area, DTCM state and CE's own buffers per slot |
+| Cache | data clean and instruction invalidate | `syncInstructionCache` | `syncInstructionCache` | `syncInstructionCache` |
+| Runs in | audio interrupt | main loop | audio interrupt | audio interrupt, inside CE's effect objects |
+| Loads | boot preload up to 1 MB, then on selection | when applied | on selection, after the encoder rests | on selection, or when the project opens |
+| Guards | CE's 2.1 ms synth limit | none needed (main loop) | time, output and start marker, inside CE's limit | time, output and start marker |
+| File I/O for the plugin | `read_file`, `load_wav_file` (outside the audio thread) | file parameters | none | none |
+| Builder | `psyn_builder.py` from an ELF | `ptfx_builder.py` | `ptsfx_builder.py` (from `ptfx_builder.py`) | `ptmfx_builder.py` (from `ptsfx_builder.py`) |
+| Shipped | CE's `polyend-tracker-ce-synths` build and `PolyendTracker_CE_Synths.zip` | CE's `polyend-tracker-ce-effects` build and `PolyendTracker_CE_Effects.zip` | the default pack is in the firmware, written when missing | the default pack is in the firmware, written when missing |
 
 Why the differences:
 

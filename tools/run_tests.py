@@ -54,6 +54,8 @@ SYNTHFX_BEFORE = ROOT / "build" / "emu" / "TrackerPlus_MT_p1.axf"
 # tools/masterfx/test_pack.py compares the pack with
 MASTERFX_PACK = ROOT / "build" / "masterfx" / "pack"
 MASTERFX_BEFORE = ROOT / "build" / "emu" / "TrackerPlus_MT_d9a6795.axf"
+# The Master FX SDK's examples, built by build_pack.py with the pack
+MASTERFX_EXAMPLES = ROOT / "build" / "masterfx" / "examples"
 OUT = ROOT / "build" / "test_out"
 
 
@@ -135,6 +137,8 @@ def jobs_for(args, projects):
             inputs=[LEVEL_A, SYNTHFX_PACK]),
         Job("masterfx pack", ROOT / "tools" / "masterfx" / "test_pack.py", MASTERFX_BEFORE, MASTERFX_PACK,
             inputs=[MASTERFX_BEFORE, MASTERFX_PACK]),
+        Job("masterfx sdk", ROOT / "tools" / "masterfx" / "check_ptmfx.py", MASTERFX_EXAMPLES, MASTERFX_PACK,
+            "--firmware", mods, inputs=[mods, MASTERFX_EXAMPLES, MASTERFX_PACK]),
         Job("masterfx objects", e / "test_masterfx.py", mods, ref, *([args.rig] if args.rig else []),
             inputs=both + ((args.rig,) if args.rig else ())),
     ]

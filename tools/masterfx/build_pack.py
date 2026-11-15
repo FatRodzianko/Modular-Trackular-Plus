@@ -1,7 +1,8 @@
 # Modular-Trackular mods. SPDX-License-Identifier: MIT
 """Builds the Master FX default pack (masterfx-sdk/pack/) into .ptmfx files, and with --embed
 writes core/mods/masterfx/masterfxPack.inc, the firmware's copy (written to /MasterFX/ on the
-card when a file is missing).
+card when a file is missing). It also builds the SDK's examples into build/masterfx/examples, for
+the quick tier's check_ptmfx.py job.
 
     python tools/masterfx/build_pack.py [--toolchain PREFIX] [--out DIR] [--embed] [--check]
 
@@ -35,6 +36,9 @@ PACK = [
     ("Glue.ptmfx", "glue.cpp", []),
 ]
 INC = ROOT / "core" / "mods" / "masterfx" / "masterfxPack.inc"
+# The SDK's examples: (file, source)
+EXAMPLES = [("Room.ptmfx", "room.c"), ("Ducker.ptmfx", "ducker.c")]
+EXAMPLES_OUT = ROOT / "build" / "masterfx" / "examples"
 
 
 def build(out: Path, tool: str) -> dict[str, bytes]:
@@ -82,6 +86,10 @@ def main() -> int:
                   "FAIL the firmware's pack (masterfxPack.inc) differs from masterfx-sdk/pack: rebuild it with --embed")
             return 0 if same else 1
         files = build(a.out, a.toolchain)
+        EXAMPLES_OUT.mkdir(parents=True, exist_ok=True)
+        for name, src in EXAMPLES:
+            ptmfx_builder.build([SDK / "examples" / src], EXAMPLES_OUT / name, a.toolchain, [str(SDK)], [],
+                                quiet=False)
         if a.embed:
             INC.write_text(embed_text(files), encoding="utf-8", newline="\n")
             print(f"wrote {INC.relative_to(ROOT)}: {sum(len(d) for d in files.values())} bytes in {len(files)} files")
