@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="480" viewBox="0 0 800 480" font-family="'Roboto Mono', 'DejaVu Sans Mono', Consolas, monospace">
+<title>Global Swing: Project Settings</title><desc>Config, Project Settings, Global Swing: Global swing On, Swing amount 50</desc>
+<defs><linearGradient id="shadow" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0A0A0A"/><stop offset="1" stop-color="#000000"/></linearGradient><linearGradient id="barShade" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000000"/><stop offset="1" stop-color="#080808"/></linearGradient></defs>
+<rect x="0" y="0" width="800" height="480" fill="#000000"/>
+<rect x="0" y="0" width="800" height="28" fill="#080808"/>
+<line x1="0" y1="28.5" x2="800" y2="28.5" stroke="#FFFFFF" stroke-width="1"/>
+<text class="lbl" x="9" y="13" font-size="17" font-weight="700" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Config</text>
+<rect x="1" y="29" width="197" height="394" fill="#0A0A0A"/>
+<rect x="1" y="413" width="197" height="12" fill="url(#shadow)"/>
+<rect x="4" y="33" width="191" height="27" fill="none" stroke="#FFFFFF" stroke-width="1"/>
+<clipPath id="clip7"><rect x="14" y="33" width="174" height="378"/></clipPath>
+<g clip-path="url(#clip7)">
+<text class="lbl" x="14" y="46.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Project Settings</text>
+<text class="lbl" x="14" y="73.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">General</text>
+<text class="lbl" x="14" y="100.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">MIDI</text>
+<text class="lbl" x="14" y="127.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">USB</text>
+<text class="lbl" x="14" y="154.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Metronome</text>
+<text class="lbl" x="14" y="181.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Firmware</text>
+<text class="lbl" x="14" y="208.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Mods</text>
+<text class="lbl" x="14" y="235.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Info</text>
+</g>
+<rect x="201" y="29" width="397" height="394" fill="#0A0A0A"/>
+<rect x="201" y="413" width="397" height="12" fill="url(#shadow)"/>
+<rect x="204" y="60" width="391" height="27" fill="none" stroke="#FFFFFF" stroke-width="1"/>
+<clipPath id="clip21"><rect x="214" y="33" width="374" height="378"/></clipPath>
+<g clip-path="url(#clip21)">
+<text class="lbl" x="214" y="46.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Global swing</text>
+<text class="val" x="588" y="46.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="end" dominant-baseline="central" xml:space="preserve">On</text>
+<text class="lbl" x="214" y="73.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Swing amount</text>
+<text class="val" x="588" y="73.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="end" dominant-baseline="central" xml:space="preserve">50</text>
+</g>
+<rect x="601" y="29" width="198" height="394" fill="#0A0A0A"/>
+<rect x="601" y="413" width="198" height="12" fill="url(#shadow)"/>
+<rect x="201" y="31" width="397" height="391" fill="none" stroke="#CD1818" stroke-width="1.5"/>
+<rect x="1" y="425" width="797" height="54" fill="#0A0A0A"/>
+<line x1="200.5" y1="438.5" x2="200.5" y2="479" stroke="#777777" stroke-width="1"/>
+<line x1="600.5" y1="438.5" x2="600.5" y2="479" stroke="#777777" stroke-width="1"/>
+<line x1="700.5" y1="438.5" x2="700.5" y2="479" stroke="#777777" stroke-width="1"/>
+<text class="lbl" x="100" y="451" font-size="14" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="central" xml:space="preserve">Project Settings</text>
+<polygon points="13,454 27,454 20,446" fill="#777777"/>
+<polygon points="173,446 187,446 180,454" fill="#777777"/>
+<text class="lbl" x="400" y="451" font-size="14" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="central" xml:space="preserve">Global Swing</text>
+<polygon points="243,454 257,454 250,446" fill="#777777"/>
+<polygon points="543,446 557,446 550,454" fill="#777777"/>
+<text class="lbl" x="650" y="451" font-size="14" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="central" xml:space="preserve">Back</text>
+<text class="lbl" x="750" y="451" font-size="14" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="central" xml:space="preserve">Enter</text>
+<rect x="202" y="31" width="395" height="58" rx="3" fill="none" stroke="#2F9BFF" stroke-width="2.5" stroke-dasharray="7 4"/>
+<rect x="301" y="426" width="198" height="52" rx="3" fill="none" stroke="#2F9BFF" stroke-width="2.5" stroke-dasharray="7 4"/>
+</svg>
