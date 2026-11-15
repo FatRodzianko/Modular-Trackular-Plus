@@ -6,8 +6,8 @@ Two effect slots, **FX1** then **FX2**, on each synth part, for every engine: CE
 
 - Turn it on in **Project Settings → Mods → Synth FX** (for new projects: **Config → Mods**).
 - The firmware writes its default pack to `/SynthFX/` when a file is missing: Overdrive, Distortion,
-  Bit Crusher, Chorus, Flanger and Phaser. Anyone can build more:
-  [docs/synthfx_plugins.md](../synthfx_plugins.md).
+  Bit Crusher, Chorus, Flanger and Phaser ([what each one does](#the-default-plugins)). Anyone can
+  build more: [docs/synthfx_plugins.md](../synthfx_plugins.md).
 - The slots belong to the part, not the patch. Loading another patch keeps them, and they are saved
   with the project.
 - A slot runs on the part after the engine. On PERC the effects reach the main output, not its sends.
@@ -64,6 +64,95 @@ Below each slot's row are its plugin's knobs, with the names and values the plug
 
 *FX1 Overdrive and FX2 Chorus at their default knobs, with Overdrive's Gain selected. Marked: the
 slots' rows and knobs, Gain's bar, the Synth FX button and the list's name.*
+
+## The default plugins
+
+The six plugins the firmware writes to `/SynthFX/`, in the order the list shows them. Each one works
+in either slot. Every knob goes back to its default with **Delete**.
+
+**Cost** is how much of the unit's time the plugin takes on one part: the most it used, over all its
+settings, as a share of one audio block (128 samples, 2.9 ms). The plugin checker counts it in the
+emulator ([docs/synthfx_plugins.md](../synthfx_plugins.md#cost)). It is a count of instructions, not
+a reading from the unit, where memory adds to it. Six slots can run at once, two on each of three
+parts, beside the synths' own voices. On the unit, 8 DIRT voices with the Distortion and the Phaser
+on every part reach about 95 %.
+
+### Overdrive
+
+A drive after the Tube Screamer pedal. Part of the clean sound stays under the drive.
+
+| Knob | What it changes | Range | Default |
+|---|---|---|---|
+| Gain | How hard it drives: more is fuller and fuzzier. | +6 dB to +41 dB | +24 dB |
+| Tone | Higher is brighter: the treble is cut from 700 Hz at 0 % up to 6 kHz at 100 %. | 0 % to 100 % | 50 % |
+| Level | The output level. At 0 dB and the default Gain a note is about as loud as with the plugin off. | −30.0 dB to +6.0 dB, in 0.5 dB steps | +0.0 dB |
+
+Cost: up to 2.9 % of a block. On a stereo part it runs once for each side, which is the most.
+
+### Distortion
+
+A harder distortion, after the Boss DS-1 pedal: it clips the sound flat.
+
+| Knob | What it changes | Range | Default |
+|---|---|---|---|
+| Gain | How hard it drives. | +10 dB to +50 dB | +30 dB |
+| Tone | Higher is brighter: from bass-heavy at 0 % to thin and bright at 100 %. | 0 % to 100 % | 50 % |
+| Level | The output level. At 0 dB and the default Gain a note is about as loud as with the plugin off. | −30.0 dB to +6.0 dB, in 0.5 dB steps | +0.0 dB |
+
+Cost: up to 4.5 % of a block, the most of the six. On a stereo part it runs once for each side,
+which is the most.
+
+### Bit Crusher
+
+Lo-fi grit: it rounds the sound to fewer bits and holds it at a lower sample rate. It doesn't smooth
+the result, so a low rate adds harsh, metallic tones.
+
+| Knob | What it changes | Range | Default |
+|---|---|---|---|
+| Bits | Fewer bits are crunchier and noisier; 16 is almost clean. | 4.0 bit to 16.0 bit | 10.0 bit |
+| Rate | How often it takes a new sample: lower is grainier and more metallic; 44.1 kHz leaves the rate alone. | 1.0 kHz to 44.1 kHz | 6.6 kHz |
+| Level | The output level. | −30.0 dB to +6.0 dB, in 0.5 dB steps | +0.0 dB |
+
+Cost: up to 0.5 % of a block. On a stereo part it runs once for each side, which is the most.
+
+### Chorus
+
+Thickens and widens the sound with two slowly moving copies of it, after the Roland Juno's
+chorus. It makes a mono part stereo.
+
+| Knob | What it changes | Range | Default |
+|---|---|---|---|
+| Rate | How fast the pitch wobbles. | 0.05 Hz to 5.00 Hz | 0.50 Hz |
+| Depth | How far the pitch wobbles. | 0 % to 100 % | 50 % |
+| Mix | How much of the effect: 0 % is only the dry sound, 100 % only the effect. | 0 % to 100 % | 50 % |
+
+Cost: up to 0.6 % of a block.
+
+### Flanger
+
+A sweeping, ringing sound, swept the opposite way on each side. It makes a mono part stereo.
+
+| Knob | What it changes | Range | Default |
+|---|---|---|---|
+| Rate | How fast it sweeps. | 0.05 Hz to 5.00 Hz | 0.50 Hz |
+| Depth | How far it sweeps. | 0 % to 100 % | 50 % |
+| Feedback | How strongly it rings: more is sharper and more metallic. Below 0 the feedback is turned upside down, which rings at other pitches. | −95 % to +95 % | +50 % |
+| Mix | How much of the effect: 0 % is only the dry sound, 100 % only the effect. | 0 % to 100 % | 50 % |
+
+Cost: up to 0.6 % of a block.
+
+### Phaser
+
+A sweep through the sound's tone, swept the opposite way on each side. It makes a mono part stereo.
+
+| Knob | What it changes | Range | Default |
+|---|---|---|---|
+| Rate | How fast it sweeps. | 0.05 Hz to 5.00 Hz | 0.50 Hz |
+| Depth | How wide the sweep is: from 200 Hz up to 3.2 kHz at 100 %. | 0 % to 100 % | 50 % |
+| Feedback | How strongly it rings: more is sharper. Below 0 the feedback is turned upside down, which rings at other pitches. | −95 % to +95 % | +50 % |
+| Mix | How much of the effect: 0 % is only the dry sound, 100 % only the effect. | 0 % to 100 % | 50 % |
+
+Cost: up to 0.6 % of a block.
 
 ## What a slot's row can say
 

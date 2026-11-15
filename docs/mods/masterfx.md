@@ -8,7 +8,8 @@ them as it does through CE's, synths included.
   every slot plays CE's effect, and the project keeps its choices.
 - The firmware writes its default pack to `/MasterFX/` when a file is missing: the reverbs Freeverb,
   Plate, Spring, Shimmer, "Gated" and Reverse, the delays Tape and BBD, and the Glue compressor for
-  the Limiter slot. Anyone can build more: [docs/masterfx_plugins.md](../masterfx_plugins.md).
+  the Limiter slot ([what each one does](#the-default-plugins)). Anyone can build more:
+  [docs/masterfx_plugins.md](../masterfx_plugins.md).
 - CE's knobs stay CE's. A plugin can give them its own names on the slot's page, and add up to two
   knobs of its own on the Reverb and Limiter pages.
 - The choices are saved with the project: each slot's file and its own knobs, and the Ducks list.
@@ -84,6 +85,151 @@ Marked: the Ducks list and its column.*
 
 The Ducks list is there only while a plugin that can duck plays in the Limiter slot. A track's sends
 to the reverb and delay aren't ducked.
+
+## The default plugins
+
+The nine plugins the firmware writes to `/MasterFX/`, in the order the lists show them: six reverbs
+for the Reverb slot, two delays for the Delay slot, and Glue for the Limiter slot.
+
+The pack's reverbs and delays have no knobs of their own: they use CE's knobs on the slot's page,
+with CE's ranges, and some give them other names. CE's knobs belong to the project, so the Stock
+effect and every plugin in the slot share their settings. **Line in** stays CE's. The defaults below
+are a new project's.
+
+**Cost** is how much of the unit's time the plugin takes: the most it used, over every setting it was
+tried at, as a share of one audio block (128 samples, 2.9 ms, at 600 MHz). The plugin checker counts
+it in the emulator ([docs/masterfx_plugins.md](../masterfx_plugins.md#cost)). It is a count of
+instructions, not a reading from the unit, where memory adds to it. A plugin that takes more than an
+eighth of a block is stopped (**Bypassed**). On the unit, with 8 synth voices, Shimmer and BBD
+together use most of the time.
+
+### Freeverb (Reverb)
+
+The classic Freeverb reverb, by Jezar at Dreampoint.
+
+| Knob | What it changes | Range | Default |
+|---|---|---|---|
+| Size | How long it rings: a bigger room. | 0 to 100 | 50 |
+| Damping | Higher is darker: it takes more treble out of the tail. | 0 to 100 | 50 |
+| Predelay | A gap before the reverb starts: 0 to about 113 ms. | 0 to 100 | 50 |
+| Diffusion | Higher smears the first echoes into a smoother wash; lower is grainier. | 0 to 100 | 80 |
+
+Cost: up to 2.6 % of a block.
+
+### Plate (Reverb)
+
+A plate reverb, after the design Jon Dattorro published in 1997.
+
+| Knob | What it changes | Range | Default |
+|---|---|---|---|
+| Decay (CE's Size) | How long it rings. | 0 to 100 | 50 |
+| Damping | Higher is darker: it takes more treble out of the tail. | 0 to 100 | 50 |
+| Predelay | A gap before the reverb starts: 0 to about 113 ms. | 0 to 100 | 50 |
+| Diffusion | Higher makes the start of the reverb smoother and denser. | 0 to 100 | 80 |
+
+Cost: up to 2.2 % of a block.
+
+### Spring (Reverb)
+
+A tank of two springs: a thin sound with the springs' drip and boing.
+
+| Knob | What it changes | Range | Default |
+|---|---|---|---|
+| Decay (CE's Size) | How long it rings. | 0 to 100 | 50 |
+| Damping | Higher is darker: each pass round the springs loses more treble. | 0 to 100 | 50 |
+| Predelay | A gap before the reverb starts: 0 to about 113 ms. | 0 to 100 | 50 |
+| Drip (CE's Diffusion) | More of the springs' falling, dripping chirp. | 0 to 100 | 80 |
+
+Cost: up to 2.0 % of a block.
+
+### Shimmer (Reverb)
+
+A plate whose tail is shifted up an octave and fed back in, so each pass adds a layer an octave
+higher and the tail rises into a bright, organ-like wash.
+
+| Knob | What it changes | Range | Default |
+|---|---|---|---|
+| Decay (CE's Size) | How long it rings. | 0 to 100 | 50 |
+| Tone (CE's Damping) | Higher is darker: it takes more treble out of the tail. | 0 to 100 | 50 |
+| Predelay | A gap before the reverb starts: 0 to about 113 ms. | 0 to 100 | 50 |
+| Shimmer (CE's Diffusion) | How much of the octave-up layer: at 0 it is a plain plate. | 0 to 100 | 80 |
+
+Cost: up to 2.8 % of a block, the most of the reverbs.
+
+### "Gated" (Reverb)
+
+A dense burst of echoes that lasts exactly the set length and then stops, after the non-linear
+programs of the AMS RMX16. Not a reverb behind a noise gate.
+
+| Knob | What it changes | Range | Default |
+|---|---|---|---|
+| Length (CE's Size) | How long the burst lasts: 10 ms at 0 to 368 ms at 100. | 0 to 100 | 50 |
+| Tone (CE's Damping) | Higher is darker. | 0 to 100 | 50 |
+| Predelay | A gap before the reverb starts: 0 to about 113 ms. | 0 to 100 | 50 |
+| Release (CE's Diffusion) | How the burst ends: a hard cut at 0, a fade over the whole length at 100. | 0 to 100 | 80 |
+
+With Length and Predelay both near the top, the length is shortened so the two fit together.
+
+Cost: up to 2.4 % of a block.
+
+### Reverse (Reverb)
+
+The same burst as "Gated", swelling up over its length and then cutting off, like a reverb played
+backwards. Its knobs are "Gated"'s.
+
+Cost: up to 2.4 % of a block.
+
+### Tape (Delay)
+
+A tape echo, after the Roland Space Echo. The echoes wobble a little, get darker and thinner each
+time round, and saturate warmly instead of clipping.
+
+| Knob | What it changes | Range | Default |
+|---|---|---|---|
+| PingPong | Off: the same echo on both sides. On: the echoes go right, left, right ... | Off, On | Off |
+| Sync | On: the echo time follows the tempo, set by Rate. | Off, On | Off |
+| Rate | The echo time as a note length, with Sync On. | 8 to 1/32 | 8 |
+| Time | The echo time, with Sync Off. Changing it bends the echoes' pitch, as a tape machine changing speed. | 1 ms to 3500 ms | 500 ms |
+| Feedback | How many times it repeats. Near the top the echoes build up and sustain; the saturation keeps them from growing without limit. | 0 to 99 | 50 |
+| Filter | Cuts the treble of every echo, the first included: lower is darker. | 100 Hz to 20000 Hz | 20000 Hz |
+
+Cost: up to 1.5 % of a block.
+
+### BBD (Delay)
+
+An analog delay chip, after pedals such as the Boss DM-2: the longer the time, the darker the
+echoes (about 7 kHz at 100 ms, 2.4 kHz at 300 ms, 600 Hz at the longest), with a little grit.
+
+| Knob | What it changes | Range | Default |
+|---|---|---|---|
+| PingPong | Off: the same echo on both sides. On: the echoes go right, left, right ... | Off, On | Off |
+| Sync | On: the echo time follows the tempo, set by Rate. | Off, On | Off |
+| Rate | The echo time as a note length, with Sync On. | 8 to 1/32 | 8 |
+| Time | The echo time, with Sync Off. It also sets how dark the echoes are. Changing it sweeps the pitch briefly. | 1 ms to 3500 ms | 500 ms |
+| Feedback | How many times it repeats. Near the top the echoes sustain. | 0 to 99 | 50 |
+| Filter | Cuts the treble of every echo, the first included: lower is darker. | 100 Hz to 20000 Hz | 20000 Hz |
+
+Cost: up to 2.0 % of a block.
+
+### Glue (Limiter)
+
+A bus compressor in place of CE's limiter: it turns the whole mix down when it gets loud. It follows the louder side, so the stereo picture stays put, and it pays
+little attention to the lowest bass. It can duck chosen tracks instead of the master (see
+[Duck chosen tracks](#duck-chosen-tracks)).
+
+| Knob | What it changes | Range | Default |
+|---|---|---|---|
+| LimiterAtt (CE's) | How fast it turns down when the level rises. | 0.001 s to 1.000 s | 0.100 s |
+| LimiterRls (CE's) | How fast it comes back up when the level falls. | 0.001 s to 1.000 s | 0.001 s |
+| LimiterThr (CE's) | The level it starts turning down at; the change starts gently, 3 dB below it. | up to 0.00 dB | −6.00 dB |
+| Sidechain (CE's) | Disable: it follows the mix. Anything else: it follows that (the key), and the key keeps its own level. | Disable, the eight tracks, Line in L, Line in R, Synth 1 to Synth 3 | Disable |
+| Ratio | How strongly it turns down past LimiterThr: 1.0:1 does nothing, 20.0:1 is nearly a limiter. | 1.0:1 to 20.0:1, in 0.5 steps | 4.0:1 |
+| Makeup | Lifts the result. Nothing limits it after that: past full scale the sound clips. | +0.0 dB to +12.0 dB, in 0.5 dB steps | +0.0 dB |
+
+Gain Reduce shows how far it turns down, without the Makeup.
+
+Cost: up to 0.5 % of a block, and about 0.4 % more for the firmware's handling around it (0.6 % with
+a key).
 
 ## Bypassed
 

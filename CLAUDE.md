@@ -64,6 +64,7 @@ A mod that adds or changes anything on the screen (a page, button, column, label
 - One mockup for each state the steps describe, for example a list closed and open, or Off and On.
 - Show the mod in use, with its effect visible, not just the screen it's on. How much depends on the mod: a mod with its own pages, controls or plugins (Synths, Synth FX, Master FX) shows every page and state; a mod set only in Project Settings (Global Swing) shows that settings page.
 - The page ships with the mod: a mod that changes the screen doesn't merge into `modular` without it. A later change to the mod's screens updates its mockups in the same merge.
+- A mod that ships plugins or other content (a default pack, presets, tables) lists every item on its user page: its name as the screen shows it, what it does in plain words, each control with its on-screen label, range and default, and its cost with what the figure measures. Take it all from the sources, and check that the list matches what the firmware ships.
 
 ## Merging into modular
 
