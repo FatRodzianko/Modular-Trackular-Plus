@@ -54,8 +54,10 @@ SYNTHFX_BEFORE = ROOT / "build" / "emu" / "TrackerPlus_MT_p1.axf"
 # tools/masterfx/test_pack.py compares the pack with
 MASTERFX_PACK = ROOT / "build" / "masterfx" / "pack"
 MASTERFX_BEFORE = ROOT / "build" / "emu" / "TrackerPlus_MT_d9a6795.axf"
-# The Master FX SDK's examples, built by build_pack.py with the pack
+# The Master FX SDK's examples, built by build_pack.py with the pack, and the guard tests' card
+# (tools/masterfx/device/build.sh, in WSL), which test_guards.py runs
 MASTERFX_EXAMPLES = ROOT / "build" / "masterfx" / "examples"
+MASTERFX_CARD = ROOT / "build" / "device" / "masterfx_card" / "MasterFX"
 OUT = ROOT / "build" / "test_out"
 
 
@@ -139,6 +141,8 @@ def jobs_for(args, projects):
             inputs=[MASTERFX_BEFORE, MASTERFX_PACK]),
         Job("masterfx sdk", ROOT / "tools" / "masterfx" / "check_ptmfx.py", MASTERFX_EXAMPLES, MASTERFX_PACK,
             "--firmware", mods, inputs=[mods, MASTERFX_EXAMPLES, MASTERFX_PACK]),
+        Job("masterfx guards", ROOT / "tools" / "masterfx" / "test_guards.py", mods, MASTERFX_CARD,
+            inputs=[mods, MASTERFX_CARD]),
         Job("masterfx objects", e / "test_masterfx.py", mods, ref, *([args.rig] if args.rig else []),
             inputs=both + ((args.rig,) if args.rig else ())),
     ]
@@ -155,6 +159,9 @@ def jobs_for(args, projects):
     play_gaps = "300,3000" if args.tier == "release" else "100,1500"
     worst_loops = {"held": 300, "worst": 20 if args.tier == "release" else 60}
     jobs.append(Job("masterfx play", e / "test_masterfx_rig.py", mods, ref, "play", inputs=both))
+    # Each slot's cost against today's release, in instructions (tools/masterfx/compare_cost.py)
+    jobs.append(Job("masterfx cost", ROOT / "tools" / "masterfx" / "compare_cost.py", mods, MASTERFX_BEFORE,
+                    inputs=[mods, MASTERFX_BEFORE]))
     seeds = (1,) if args.tier == "release" else (1, 2, 3, 4)
     blocks = 20000 if args.tier == "release" else 100000
     jobs.append(Job("masterfx long stress", e / "stress_masterfx.py", mods, "--blocks", blocks,

@@ -2,7 +2,8 @@
 
 Status: feasibility done and the design approved, 2026-11-14 (section 9). Building. Branch `mod/masterfx-plugins`, off `modular` at
 `d9a6795`. Steps 1 to 3 committed (`982c6ea`), step 4 in `12e2329`, step 5 in `0dd2f08`, the sidechain
-destination (section 5.1) in `00211ec`; step 6 (the SDK and docs) written, not committed.
+destination (section 5.1) in `00211ec`, step 6 (the SDK and docs) in `b1f71d8`; step 7 (tests and the
+device) written, not committed.
 
 Where the build stands (section 8's steps):
 - Steps 1 to 3 are written: the shared parts, the runtime, the pack, record version 2, the built-in DSP
@@ -113,7 +114,7 @@ Where the build stands (section 8's steps):
     track (to measure on the unit with the Profiler); the release tier; anything on the unit.
   - Glue's attack: with CE's default knobs the first changed block was 2 blocks after a Line in key
     started, 3 after a Synth 2 key (the extra block is the update order above).
-- Step 6, the SDK and docs, written, not committed:
+- Step 6, the SDK and docs (`b1f71d8`):
   - `docs/masterfx_plugins.md`, the guide, in Synth FX's 13 sections: the slots and their blocks, the
     lifecycle, ducking chosen tracks, a tutorial, the Master page, the header, the host, the binary
     format, the memory, loading and guards, the cost table, the checker, and the comparison with CE's
@@ -143,9 +144,48 @@ Where the build stands (section 8's steps):
     opening a project that uses the same plugin, keeps it bypassed. The guide says so.
   - Not checked: the firmware's guards acting, anywhere: the bypass after 8 slow blocks, the reset
     after a NaN, the output and gain clamps. The checker catches those faults before the guard; the
-    rig's `ui` section only sets the bypassed byte to check the page. Step 7's planted faults. The
+    rig's `ui` section only sets the bypassed byte to check the page. Step 7's planted faults (below). The
     guide's build commands were run as the pack's build is, in WSL, not from Windows.
-- Not yet: steps 7 and 8.
+- Step 7, tests and the device, written, not committed:
+  - `tools/masterfx/test_guards.py`, a new job in the quick and release tiers (`masterfx guards`, 50
+    checks, 19 s): the firmware's own guards acting, with planted plugins from
+    `tools/masterfx/device/` (`build.sh`, in WSL) on the fake card and an instruction count as the
+    clock. GuardSlow on Heavy is bypassed by the 8th block in a row over the budget, and the master
+    passes through untouched; on Light, and on Heavy with no budget, it never is; installing it again
+    clears the bypass. GuardOutput's NaN and Inf become 0 for that sample, with a reset before the next
+    block; its 100.0 is held at full scale, with no reset. GuardGain's NaN gain becomes 1 with a reset,
+    9 and -1 are held within 0 to 4, and the meter's NaN and 2 within 0 to 1. GuardHang leaves
+    `/MasterFX/.starting` on the card before its first block; the next start is in safe mode and
+    skips the project's plugin but takes the user's pick; the marker goes, and safe mode ends, 5 s
+    after the last install.
+  - `tools/masterfx/compare_cost.py`, a new release-tier job (`masterfx cost`, about 10 minutes):
+    CE's reverb, delay and limiter objects' and the panning amplifiers' `update`, whole, in
+    instructions a block, on the sound rig with 4 voices into both sends, against today's release
+    (`d9a6795`). Stock: reverb 34,700 and delay 12,045 on both, the limiter +0.1 %. The pack against
+    the built-in effects: Freeverb +0.3 %, Plate -0.4 %, Spring +0.3 %, Shimmer +0.2 % (49,875),
+    Gated and Reverse +0.0 %, Tape +0.4 %, BBD +2.1 % (746 more, 36,195). Glue against CE's limiter at
+    a threshold that works: +13 % without a key (16,479), -12 % with one (18,388). The amplifiers:
+    3,586 against 3,360 (+226, the ducking hook's test, nothing ducked). The pack's limit is 2 % or
+    1,000 instructions, whichever allows more: BBD's DSP is masterfx-1.x's source built as a plugin,
+    and 746 instructions are 0.04 % of a block.
+  - `test_masterfx_rig.py`: `play` now also plays 8 voices with Shimmer + BBD + Glue on a real
+    project, CE's `.psyn` engines on the fake card (Glue installed, 300 blocks, no asserts, nothing
+    written over the code, the output changed, the level within 3 dB of Stock); 49 checks pass.
+    `dynamics` now also checks the bypassed slots: Glue bypassed passes the master untouched, Shimmer
+    and BBD bypassed give the dry sound sample for sample; 25 checks pass.
+  - The device check's projects: `make_masterfx_test_project.py --masterfx-plugins` writes M1 (8
+    voices, Shimmer + BBD as record version 1, which today's release reads too), M2 (version 2 with
+    Glue) and M3 (1 voice, GuardSlow on Heavy). Opened in the emulator before the unit: the plugin
+    firmware installs M1's and M2's files, and today's release plays M1's pair. The ladder's new
+    section has them.
+  - The two lockup recorder builds, from fresh archives of `b1f71d8` and `d9a6795`.
+  - The release tier on the plugin firmware (`b1f71d8`'s build), the recorder build as `--diag`: 46
+    jobs, 0 failed of the 21 that ran, the other 25 passed before on the same firmware and tests
+    (the cache). It ran with `MT_TEST_CPUS=3` and 3 jobs, the user's 50 % limit, in 1 h 40 min.
+  - Not checked: anything on the unit (the device check, below); the time guard against real cycles,
+    since the emulator's clock is instructions; a sample track ducked, with sound; the cost of a
+    ducked track; a reverb plugin's own knobs on its page.
+- Not yet: the device check, then step 8.
 
 Today's mod is in [MASTERFX_PORT_PLAN.md](MASTERFX_PORT_PLAN.md): eight effects built into the firmware,
 run inside CE's own reverb and delay objects. This plan turns them into plugins loaded from the card,

@@ -7,8 +7,9 @@ doesn't have. Here the Env is built from the same symbols startPlugins uses: the
 areas, their DTCM state, the float scratch, the load buffer, CE's reverb buffers (internalRamReverbBuff
 and externalRamReverbBuff, which every AudioEffectPolyverb uses), CE's delay lines
 (externalRamDelayBuff) and the dynamics slot's SDRAM, and the firmware's own host table. The clock
-and the cycle counter are stubs, so the time guard never trips here; the cache sync is counted, and
-the emulator's translated code is flushed after each install.
+and the cycle counter are stubs that read 0, with no budget, so the time guard never trips here,
+unless a rig passes its own (tools/masterfx/test_guards.py); the cache sync is counted, and the
+emulator's translated code is flushed after each install.
 
 The card is test_step0's FakeSd behind the mods' own CeFileIo, so start() writes the firmware's pack
 onto it and lists it, and read() and install() load a plugin as they do on the unit.
@@ -43,9 +44,12 @@ def has_plugins(m) -> bool:
 
 
 class Runtime:
-    """The runtime started in m, on a fake card (with `files`, path -> bytes, on it before the start)"""
+    """The runtime started in m, on a fake card (with `files`, path -> bytes, on it before the start).
+    cycles and millis are the clock's two readings (callables), and budget the time guard's cycles a
+    block; by default the clock reads 0 and there is no budget."""
 
-    def __init__(self, m, files: dict[str, bytes] | None = None):
+    def __init__(self, m, files: dict[str, bytes] | None = None, cycles=None, millis=None,
+                 budget: int = 0xFFFFFFFF):
         self.m = m
         self.syncs = 0
         self.sd = FakeSd(m)
@@ -70,8 +74,10 @@ class Runtime:
         env += struct.pack("<3I", *states)
         for areas, sizes in memories:
             env += struct.pack("<3I3I", *areas, *sizes)
+        read_cycles = m.add_stub(lambda mm: (cycles() if cycles else 0) & 0xFFFFFFFF)
+        read_millis = m.add_stub(lambda mm: (millis() if millis else 0) & 0xFFFFFFFF)
         env += struct.pack("<7I", sym("10loadBufferE"), sym("7scratchE"), m.add_stub(synced),
-                           m.add_stub(lambda mm: 0), m.add_stub(lambda mm: 0), 0xFFFFFFFF,
+                           read_cycles, read_millis, budget,
                            m.addr("_ZN4mods8masterfx12_GLOBAL__N_1L4hostE"))
         assert len(env) == 124, len(env)
         self.env = m.alloc(len(env), 4)

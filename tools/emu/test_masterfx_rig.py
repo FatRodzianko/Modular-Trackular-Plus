@@ -860,6 +860,32 @@ def test_dynamics(mods, ref):
         ce = base[0][side] + base[1][side]
         check(mine[:-5] == ce[5:], f"a silent key, side {side}: the master untouched, CE's 5 samples sooner")
 
+    # Bypassed by the time guard (its byte set, as the interrupt sets it; tools/masterfx/test_guards.py
+    # makes the guard trip): the master passes through untouched, the threshold down or not
+    g = graph(mods, "Glue.ptmfx", threshold=loud)
+    g.m.write(runtime_slot(g, DYNAMICS) + 2, b"\x01")
+    a, b = phrase(g)
+    for side in (0, 1):
+        mine = a[side] + b[side]
+        ce = base[0][side] + base[1][side]
+        check(mine[:-5] == ce[5:], f"Glue bypassed, side {side}: the master untouched, CE's 5 samples sooner")
+
+    # A bypassed reverb or delay returns silence: the output is the dry sound alone, as with no send
+    for slot, reverb, delay in ((0, 4, 0), (1, 0, 2)):
+        name = "Shimmer" if slot == 0 else "BBD"
+        g = Graph(mods, 60 if slot == 0 else 0, 60 if slot == 1 else 0)
+        set_mod(g, True, reverb, delay)
+        played_on = phrase(g)
+        g = Graph(mods, 60 if slot == 0 else 0, 60 if slot == 1 else 0)
+        set_mod(g, True, reverb, delay)
+        g.m.write(runtime_slot(g, slot) + 2, b"\x01")
+        bypassed = phrase(g)
+        g = Graph(mods, 0, 0)
+        set_mod(g, True, 0, 0)
+        dry = phrase(g)
+        check(played_on != dry, f"{name} playing: it adds to the dry sound (the check below can fail)")
+        check(bypassed == dry, f"{name} bypassed: no return, the dry sound sample for sample")
+
     # CE's resetLimiter (Sample Editor, Sample Recorder): the slot's memory cleared with the master
     # passed through, then the plugin starts over
     g = graph(mods, "Glue.ptmfx", threshold=loud)
@@ -1404,12 +1430,14 @@ def rms(x):
     return (sum(v * v for v in x) / max(len(x), 1)) ** 0.5
 
 
-def played(axf, folder, choice, blocks):
-    """Open, choose, press Play: what comes out, and the rig."""
+def played(axf, folder, choice, blocks, dynamics=None):
+    """Open, choose (and the dynamics slot's file), press Play: what comes out, and the rig."""
     r = PlayRig(axf)
     loaded = r.open_project(folder)
     if choice is not None:
         set_mod(r, *choice)
+    if dynamics is not None:
+        set_dynamics(r, dynamics)
     r.count_notes()
     low = bytes(r.m.read(0, 0x20000))       # the ITCM: a write through NULL would land here
     r.press_play()
@@ -1463,6 +1491,22 @@ def test_play(mods, ref):
                 db = [20 * math.log10(max(rms(x), 1) / max(y, 1)) for x, y in zip(out, stock_level)]
                 check(max(db) < 1.5, f"{count} voices, {name}: output against Stock {db[0]:+.1f} dB, {db[1]:+.1f} dB "
                                      f"(peak {max(peak(out[0]), peak(out[1]))}, audio pool {r.pool_peak()})")
+            if count != 8 or START not in r.syms:
+                continue
+            # The device check's load: the heaviest pair and Glue in the dynamics slot, CE's knobs as
+            # the project left them
+            pair, _ = played(mods, folder, (True, 4, 2), blocks)
+            out, r = played(mods, folder, (True, 4, 2), blocks, "Glue.ptmfx")
+            glue = r.m.read(runtime_slot(r, DYNAMICS), 1)[0] == 1 and slot_file(r, DYNAMICS) == "Glue.ptmfx"
+            check(glue, "8 voices, Shimmer + BBD + Glue: Glue is installed and active")
+            check(not r.failures and r.notes == count and len(out[0]) == blocks * 128,
+                  f"8 voices, Shimmer + BBD + Glue: Play runs {blocks} blocks, no hang, no asserts {r.failures}")
+            check(r.itcm_intact, "8 voices, Shimmer + BBD + Glue: nothing written over the code")
+            check(out != pair, "8 voices, Shimmer + BBD + Glue: Glue runs on the master (the output differs)")
+            db = [20 * math.log10(max(rms(x), 1) / max(y, 1)) for x, y in zip(out, stock_level)]
+            check(max(abs(d) for d in db) < 3.0,
+                  f"8 voices, Shimmer + BBD + Glue: output against Stock {db[0]:+.1f} dB, {db[1]:+.1f} dB "
+                  f"(peak {max(peak(out[0]), peak(out[1]))}, audio pool {r.pool_peak()})")
 
 
 def main():

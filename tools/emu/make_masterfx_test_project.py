@@ -9,6 +9,7 @@
     python tools/emu/make_masterfx_test_project.py "<project>" "<out folder>" --sound
     python tools/emu/make_masterfx_test_project.py "<project>" "<out folder>" --synthfx
     python tools/emu/make_masterfx_test_project.py "<project>" "<out folder>" --synthfx-plugins
+    python tools/emu/make_masterfx_test_project.py "<project>" "<out folder>" --masterfx-plugins
 
 The project given is only read. In the copy:
 - project.mt: the new name, the voices given on the three synth parts, both sends at 60.
@@ -30,6 +31,9 @@ resets a part whose synthType it doesn't know).
 On and record 16 holds each part's effect settings, the rest of the source's mods.bin kept.
 --synthfx-plugins writes the plugin set (PLUGIN_LADDER) the same way, with record 16 version 3: each
 slot's plugin file and knobs (and a Placement byte, 0: Post).
+--masterfx-plugins writes the Master FX plugin set (MASTERFX_PLUGIN_SET): mods.bin has Master FX On
+and record 4 holds the slots, version 1 (reverb and delay numbers, which today's release reads too) or
+version 2 (each slot's file and own knobs), the rest of the source's mods.bin kept.
 
 --sound writes that file's last set. `A1 Master FX sound` is one voice of ACD Init with a short note every 16
 steps, so the gaps let the reverb and delay be heard, with no masterfx.bin. `R2 Real project sends` is the source
@@ -292,6 +296,59 @@ PLUGIN_LADDER = (
 )
 
 
+# The Master FX plugin set (docs/mt/DEVICE_TEST_LADDER.md): name, voices, engine, and record 4: a
+# (reverb, delay) pair is version 1, which today's release reads too; three file names (reverb, delay,
+# dynamics) are version 2, with the dynamics slot's own knobs (None: the plugin's default).
+MASTERFX_PLUGIN_SET = (
+    ("M1 8 ACD Shimmer BBD", (4, 2, 2), "ACD", (4, 2), ()),
+    ("M2 8 ACD Shimmer BBD Glue", (4, 2, 2), "ACD", ("Shimmer.ptmfx", "BBD.ptmfx", "Glue.ptmfx"), ()),
+    ("M3 1 voice ACD GuardSlow", (1, 0, 0), "ACD", ("", "", "GuardSlow.ptmfx"), (1.0,)),   # Load: Heavy
+)
+MASTERFX_UNSET = struct.pack("<I", 0x7FC00000)    # masterfx.cpp's unset(): the plugin's default
+
+
+def masterfx_record(files, dynamics_knobs=()) -> bytes:
+    """Record 4 version 2 (masterfx.h's Settings): each slot's file (48 B) and two own knobs, the
+    dynamics slot's from dynamics_knobs; then the Ducks mask (none) and two reserved bytes. 172 B."""
+    out = b""
+    for slot, name in enumerate(files):
+        knobs = tuple(dynamics_knobs) if slot == 2 else ()
+        knobs = knobs + (None,) * (2 - len(knobs))
+        assert len(name) < 48
+        out += name.encode("ascii").ljust(48, b"\0")
+        out += b"".join(MASTERFX_UNSET if k is None else struct.pack("<f", k) for k in knobs)
+    out += bytes(4)
+    assert len(out) == 172
+    return out
+
+
+def masterfx_mods_file(source: bytes, version: int, record: bytes) -> bytes:
+    """The source's mods.bin (or none) with Master FX On and record 4 as given"""
+    records = [r for r in store_records(source) if r[0] not in (0, MASTERFX_RECORD)]
+    old = [r for r in store_records(source) if r[0] == 0]
+    switches = bytearray(max(MOD_MASTERFX + 1, len(old[0][2]) if old else 0))
+    if old:
+        switches[:len(old[0][2])] = old[0][2]
+    switches[MOD_MASTERFX] = 1
+    records = [(0, 1, bytes(switches))] + records + [(MASTERFX_RECORD, version, record)]
+    payload = b"".join(struct.pack("<BBH", i, v, len(d)) + d for i, v, d in records)
+    return MODS_MAGIC + struct.pack("<HHI", 1, len(payload), zlib.crc32(payload)) + payload
+
+
+def make_masterfx_plugins(source: Path, parent: Path) -> list:
+    out = []
+    for name, voices, engine, slots, knobs in MASTERFX_PLUGIN_SET:
+        folder = make(source, parent, name, voices, engine=engine)
+        old = folder / "mods.bin"
+        old_bytes = old.read_bytes() if old.exists() else b""
+        if isinstance(slots[0], int):
+            old.write_bytes(masterfx_mods_file(old_bytes, 1, bytes(slots)))
+        else:
+            old.write_bytes(masterfx_mods_file(old_bytes, 2, masterfx_record(slots, knobs)))
+        out.append(folder)
+    return out
+
+
 def synthfx_mods_file(source: bytes, parts, effects=None, version=1) -> bytes:
     """The source's mods.bin (or none) with Synth FX and Master FX On and record 16 holding parts
     (version 1: each part's ten steps; 3: the bytes of slots_record). effects: (reverb, delay) for
@@ -430,12 +487,15 @@ def main() -> int:
     parser.add_argument("--sound", action="store_true")
     parser.add_argument("--synthfx", action="store_true")
     parser.add_argument("--synthfx-plugins", action="store_true")
+    parser.add_argument("--masterfx-plugins", action="store_true")
     args = parser.parse_args()
     try:
-        if args.ladder or args.engines or args.sound or args.synths or args.synthfx or args.synthfx_plugins:
+        if (args.ladder or args.engines or args.sound or args.synths or args.synthfx or args.synthfx_plugins
+                or args.masterfx_plugins):
             maker = (make_ladder if args.ladder else make_engines if args.engines else make_sound if args.sound
                      else make_synthfx_ladder if args.synthfx
                      else make_plugin_ladder if args.synthfx_plugins
+                     else make_masterfx_plugins if args.masterfx_plugins
                      else lambda source, parent: make_engines(source, parent, SYNTHS_LADDER))
             for folder in maker(args.project, args.out):
                 print(f"Copy written: {folder}")

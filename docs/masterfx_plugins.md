@@ -551,6 +551,11 @@ A plugin is someone else's code in the audio interrupt, so the firmware watches 
   loaded until you pick a plugin yourself and it runs 5 seconds.
 - A plugin that crashes or never returns can't be stopped: the start marker is for that.
 
+`tools/masterfx/test_guards.py` makes each guard act in the emulator, with the firmware's own
+runtime and test plugins built to trip them (`tools/masterfx/device/`): a slow plugin bypassed after
+exactly 8 blocks, bad output and gains fixed and the plugin reset, a hang with the marker on the card
+and the next start in safe mode.
+
 CE's 2.1 ms synth limit counts only the synth parts' rendering, so the master slots are outside
 it. Their time still comes out of the same block.
 
