@@ -57,6 +57,8 @@ enum
 enum
 {
     PTMFX_FLAG_FLOAT = 0x0001,              /* float blocks (+-1.0) instead of CE's 16-bit ones */
+    PTMFX_FLAG_DUCK  = 0x0002,              /* dynamics, with FLOAT: fills PtmfxBlock.gain, so the
+                                               host can duck chosen tracks by it (see PtmfxBlock) */
 };
 
 /* A knob's display */
@@ -177,7 +179,12 @@ typedef struct
  *   Reverb:   left and right in place: the send in, the return out.
  *   Delay:    in is the mono send; left and right are the return, to fill.
  *   Dynamics: left and right in place: the master. key_left and key_right are the sidechain
- *             key (the Sidechain list's pick), or null when it is off. */
+ *             key (the Sidechain list's pick), or null when it is off.
+ *   gain:     null, except for a PTMFX_FLAG_DUCK plugin while the project ducks tracks instead of
+ *             the master. Then left and right hold a copy of the key (as is the key), the host
+ *             throws away what the plugin leaves in them, and the plugin writes into gain[i], for
+ *             each frame, the factor it would apply to the master there (its makeup included);
+ *             the host multiplies the chosen tracks by it. */
 typedef struct
 {
     int16_t       *left;
@@ -192,6 +199,7 @@ typedef struct
     const float   *fkey_right;
     const void    *knobs;                   /* PtmfxReverbKnobs, PtmfxDelayKnobs or PtmfxDynamicsKnobs */
     uint32_t       frames;
+    float         *gain;                    /* frames floats to fill, or null (see above) */
 } PtmfxBlock;
 
 /* The entries. st: the plugin's state.

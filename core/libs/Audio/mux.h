@@ -2,6 +2,7 @@
 #define audio_mux_h_
 
 #include "AudioStream.h"
+#include "modsBuild.h" // MT:
 
 #ifdef FEATURE_SYNTH
 constexpr uint8_t MUX_SIZE = 10 + kSynthParts;
@@ -18,6 +19,10 @@ class AudioMux : public AudioStream
     }
     virtual void update(void);
     void setOut(uint8_t channel);
+#if MT_HAS_MASTERFX // MT: the chosen input's block once its source has sent it this cycle (until
+                    // update() takes it), or null. Read only, in the audio interrupt.
+    const audio_block_t* modsPeek() const { return inputQueueArray[outChannel]; }
+#endif
 
   private:
     uint8_t outChannel = 0;

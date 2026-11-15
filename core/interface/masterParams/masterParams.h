@@ -61,6 +61,12 @@ class cMasterParams : public ModuleBase
     void showMasterfxOwnKnob(uint8_t slot, uint8_t knob);
     // The time guard stopped a plugin: the page's words for it again
     void showMasterfxBypassed(uint8_t slot);
+    // The Limiter page's column 4: CE's Sidechain list, or the Ducks list (Shift + its button)
+    bool masterfxDucksShown();
+    void showMasterfxDucks(bool show);
+    void moveMasterfxDucks(int16_t by);
+    void toggleMasterfxDuck(); // the item under the cursor
+    void clearMasterfxDucks(); // back to the master
 #endif
     // delay
     void showDelayScreen();

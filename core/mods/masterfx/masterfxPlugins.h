@@ -78,6 +78,7 @@ constexpr uint32_t kOverBlocks = 8;
 constexpr float kOutputLimit = 4.0f;
 constexpr uint32_t kSettleMs = 5000;
 constexpr uint32_t kScratchFloats = 4 * PTMFX_BLOCK; // float plugins' blocks: L, R and two inputs
+constexpr float kMaxDuckGain = 4.0f;                  // a ducking gain is held within 0 to this (+12 dB)
 
 // The PTMFX_SLOT_* a plugin for this slot has
 constexpr uint8_t slotType(Slot s)
@@ -183,6 +184,8 @@ uint32_t now();
 // A slot bypassed by the time guard since the last call, or -1.
 int takeBypassed();
 bool bypassed(Slot slot);
+// The slot's plugin can duck chosen tracks (PTMFX_FLAG_DUCK)
+bool ducks(Slot slot);
 
 // Audio interrupt. One block through the slot's plugin. block has the 16-bit pointers and the
 // knobs; the host fills the float ones for a float plugin. gain: the plugin's meter value.

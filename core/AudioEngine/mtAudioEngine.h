@@ -9,6 +9,7 @@
 #include "ExportQueues.h"
 #include "MixerAndFxs.h"
 #include "Platform.h"
+#include "modsBuild.h" // MT:
 #include "SdStream.h"
 #include "SynthVoice.h"
 #include "padToBeatNoteConverter.h"
@@ -192,6 +193,9 @@ class audioEngine
     ExportQueues* getExportQueues();
     MixerAndFxs<kVoices>* getMixerAndFx();
     AudioPlaySdWav* getSdPlayer();
+#if MT_HAS_MASTERFX && defined(FEATURE_SYNTH) // MT: masterfx ducks synth parts at their amplifiers
+    SynthVoice* modsSynthVoice() { return &synthVoice; }
+#endif
 
     friend class playerEngine;
 

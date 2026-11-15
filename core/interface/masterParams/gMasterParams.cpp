@@ -267,6 +267,13 @@ strList masterfxDynamicsList;
 // The Master page has moved the PingPong list to column 3: showDelayScreen moves it back
 bool masterfxMovedPingpong = false;
 
+// The Limiter page's Ducks list, in the Sidechain list's control: its rows, the marked ones (CE's
+// list colours them, as the file browser's), the cursor, and whether it is up
+strList masterfxDucksList;
+uint8_t masterfxDuckMarks[mods::masterfx::kDuckItems];
+uint8_t masterfxDuckCursor = 0;
+bool masterfxDucksUp = false;
+
 // The own knobs' values, columns 5 and 6 (main loop; written before use)
 __NOINIT(EXTERNAL_RAM) char masterfxKnobText[2][16];
 
@@ -394,6 +401,77 @@ void cMasterParams::showMasterfxOwnKnob(uint8_t slot, uint8_t knob)
     display.refreshControl(barControl[5 + knob]);
     display.setControlText2(label[5 + knob], masterfxKnobText[knob]);
     display.refreshControl(label[5 + knob]);
+}
+
+bool cMasterParams::masterfxDucksShown()
+{
+    return masterfxDucksUp;
+}
+
+void cMasterParams::showMasterfxDucks(bool show)
+{
+    show = show && mods::masterfx::canDuck();
+    if (!show)
+    {
+        if (masterfxDucksUp) // CE's list as it was
+        {
+            masterfxDucksUp = false;
+            display.setControlData(limiterSidechainList, &limiterSidechainData);
+            display.setControlText(label[4], "Sidechain");
+            showLimiterSidechain();
+        }
+        return;
+    }
+    masterfxDucksList.start = 0;
+    masterfxDucksList.length = mods::masterfx::kDuckItems;
+    masterfxDucksList.linesCount = mods::masterfx::kDuckItems;
+    masterfxDucksList.data = (char**)mods::masterfx::duckNames();
+    masterfxDucksList.selectTab = masterfxDuckMarks;
+    masterfxDucksList.selectionActive = 0;
+    masterfxDucksUp = true;
+    display.setControlData(limiterSidechainList, &masterfxDucksList);
+    display.setControlText(label[4], "Ducks");
+    moveMasterfxDucks(0);
+}
+
+void cMasterParams::moveMasterfxDucks(int16_t by)
+{
+    if (!masterfxDucksUp)
+    {
+        return;
+    }
+    masterfxDuckCursor = static_cast<uint8_t>(
+      clamp<int>(static_cast<int>(masterfxDuckCursor) + by, 0, mods::masterfx::kDuckItems - 1));
+    for (uint8_t i = 0; i < mods::masterfx::kDuckItems; i++)
+    {
+        masterfxDuckMarks[i] = mods::masterfx::ducked(i) ? 1 : 0;
+    }
+    display.setControlValue(limiterSidechainList, masterfxDuckCursor);
+    display.refreshControl(limiterSidechainList);
+    display.setControlText2(label[4], mods::masterfx::ducksText());
+    display.refreshControl(label[4]);
+}
+
+void cMasterParams::toggleMasterfxDuck()
+{
+    if (!masterfxDucksUp)
+    {
+        return;
+    }
+    mods::masterfx::toggleDuck(masterfxDuckCursor);
+    mods::masterfxKnobEdited();
+    moveMasterfxDucks(0);
+}
+
+void cMasterParams::clearMasterfxDucks()
+{
+    if (!masterfxDucksUp)
+    {
+        return;
+    }
+    mods::masterfx::toggleDuck(0);
+    mods::masterfxKnobEdited();
+    moveMasterfxDucks(0);
 }
 
 // The time guard has stopped the slot's plugin: the words that say so, where they're up
@@ -851,6 +929,13 @@ void cMasterParams::showReverbDiffusion()
 // limiter
 void cMasterParams::showLimiterScreen()
 {
+#if MT_HAS_MASTERFX // MT: the page opens on CE's Sidechain list
+    if (masterfxDucksUp)
+    {
+        masterfxDucksUp = false;
+        display.setControlData(limiterSidechainList, &limiterSidechainData);
+    }
+#endif
     display.setControlHide(delayPingpongEnableList);
     display.setControlHide(delaySyncEnableList);
     display.setControlHide(delaySyncRateList);

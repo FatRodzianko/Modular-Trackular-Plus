@@ -11,6 +11,8 @@
 // - CE's Attack and Release are the detector's times, in ms.
 // - With a key, the key keeps its level, as with CE's limiter: out = key + gain * (master - key).
 // - Makeup lifts the result. Nothing limits it after that: past full scale the host clips.
+// - It can duck chosen tracks instead of the master (PTMFX_FLAG_DUCK): then it fills the block's
+//   gain with makeup * gain for each frame, from the key.
 //
 // The meter gets the block's mean gain, without the makeup. Float blocks; about 50 bytes of state
 // and none of the slot's memory.
@@ -132,7 +134,7 @@ inline float reduction(float over, float slope)
 } // namespace
 
 PTMFX_INFO = {
-    0, 0, PTMFX_FLAG_FLOAT,            /* magic and version (the builder's), flags */
+    0, 0, PTMFX_FLAG_FLOAT | PTMFX_FLAG_DUCK, /* magic and version (the builder's), flags */
     PTMFX_SLOT_DYNAMICS, 2, { 0, 0 },  /* slot, own knobs, reserved */
     "Glue", "MT+",
     {},                                /* CE's Attack, Release and Threshold as they are */
@@ -197,6 +199,7 @@ PTMFX_PROCESS(void *st, const PtmfxBlock *b)
     const bool keyed = b->fkey_left != nullptr && b->fkey_right != nullptr;
     const float *keyLeft = keyed ? b->fkey_left : left;
     const float *keyRight = keyed ? b->fkey_right : right;
+    float *out = b->gain;              // ducking tracks: the gain for them, frame by frame
 
     float level = s->level, hpIn = s->hpIn, hpOut = s->hpOut, gain = s->gain;
     const float attack = s->attack, release = s->release, makeup = s->makeup;
@@ -218,6 +221,10 @@ PTMFX_PROCESS(void *st, const PtmfxBlock *b)
         {
             gain += step;
             sum += gain;
+            if (out != nullptr)
+            {
+                out[i] = makeup * gain;
+            }
             if (keyed)
             {
                 left[i] = makeup * (keyLeft[i] + gain * (left[i] - keyLeft[i]));

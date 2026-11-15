@@ -202,9 +202,14 @@ bool checkHeader(const PtmfxHeader& h, uint32_t fileSize, const char** why)
     {
         w = "another format version";
     }
-    else if ((h.flags & ~static_cast<uint32_t>(PTMFX_FLAG_FLOAT)) != 0)
+    else if ((h.flags & ~static_cast<uint32_t>(PTMFX_FLAG_FLOAT | PTMFX_FLAG_DUCK)) != 0)
     {
         w = "unknown flags";
+    }
+    else if ((h.flags & PTMFX_FLAG_DUCK) != 0 &&
+             (h.slot != PTMFX_SLOT_DYNAMICS || (h.flags & PTMFX_FLAG_FLOAT) == 0))
+    {
+        w = "ducking needs a float dynamics plugin";
     }
     else if (slot < PTMFX_SLOT_REVERB || slot > PTMFX_SLOT_DYNAMICS)
     {
@@ -683,6 +688,11 @@ bool bypassed(Slot slot)
     return installed(slot) && slots[slot].bypassed;
 }
 
+bool ducks(Slot slot)
+{
+    return installed(slot) && (slots[slot].header.flags & PTMFX_FLAG_DUCK) != 0;
+}
+
 // ---- the interrupt ------------------------------------------------------------------------
 
 MT_PLUGINS_ISR Ran process(Slot slot, PtmfxBlock& b, float* gain)
@@ -728,6 +738,15 @@ MT_PLUGINS_ISR Ran process(Slot slot, PtmfxBlock& b, float* gain)
             toFloat(b.in, f + 2 * PTMFX_BLOCK);
             b.fin = f + 2 * PTMFX_BLOCK;
         }
+        else if (b.gain != nullptr) // ducking tracks: the key as the block, and as the key
+        {
+            toFloat(b.key_left, f);
+            toFloat(b.key_right, f + PTMFX_BLOCK);
+            toFloat(b.key_left, f + 2 * PTMFX_BLOCK);
+            toFloat(b.key_right, f + 3 * PTMFX_BLOCK);
+            b.fkey_left = f + 2 * PTMFX_BLOCK;
+            b.fkey_right = f + 3 * PTMFX_BLOCK;
+        }
         else
         {
             toFloat(b.left, f);
@@ -755,7 +774,37 @@ MT_PLUGINS_ISR Ran process(Slot slot, PtmfxBlock& b, float* gain)
     {
         s.over = 0;
     }
-    if (s.isFloat)
+    if (b.gain != nullptr)
+    {
+        // the gain within 0 to kMaxDuckGain, and none where it isn't a number
+        bool bad = false;
+        for (uint32_t i = 0; i < PTMFX_BLOCK; i++)
+        {
+            const float v = b.gain[i];
+            if (v >= 0.0f && v <= kMaxDuckGain)
+            {
+                continue;
+            }
+            if (v > kMaxDuckGain)
+            {
+                b.gain[i] = kMaxDuckGain;
+            }
+            else if (v < 0.0f)
+            {
+                b.gain[i] = 0.0f;
+            }
+            else // not a number
+            {
+                b.gain[i] = 1.0f;
+                bad = true;
+            }
+        }
+        if (bad)
+        {
+            s.resetWanted = 1;
+        }
+    }
+    else if (s.isFloat)
     {
         const bool bad = guard(f) | guard(f + PTMFX_BLOCK);
         if (bad)

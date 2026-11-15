@@ -56,10 +56,18 @@ struct SlotSetting
     float knob[kOwnKnobs];
 };
 
+// What the dynamics slot ducks: bit d is destination d (0 to 7 the sample tracks, 8 to 10 the
+// synth parts); 0 is the master, as CE.
+constexpr uint8_t kDuckTracks = 8;
+constexpr uint8_t kDuckSynths = 3;
+constexpr uint16_t kDuckAll = (1u << (kDuckTracks + kDuckSynths)) - 1u;
+
 // The record holds this.
 struct Settings
 {
     SlotSetting slot[kSlots];
+    uint16_t ducks;      // kDuckAll's bits
+    uint8_t reserved[2]; // 0
 };
 
 extern Settings settings; // the open project's
@@ -109,6 +117,18 @@ uint8_t ownKnobPercent(uint8_t slot, uint8_t knob);  // its step as 0 to 100, fo
 // keep it. The caller stores the record (mods::masterfxKnobEdited).
 void stepOwnKnob(uint8_t slot, uint8_t knob, int steps);
 void defaultOwnKnob(uint8_t slot, uint8_t knob);
+
+// The Limiter page's Ducks list (Shift + the Sidechain column's button): the master, or a set of
+// tracks the dynamics plugin ducks by its gain from the key. Only while a plugin that can do it
+// plays (PTMFX_FLAG_DUCK), on the Tracker+.
+constexpr uint8_t kDuckItems = 1 + kDuckTracks + kDuckSynths; // "Master", then each destination
+bool canDuck();
+const char* const* duckNames();      // kDuckItems
+bool ducked(uint8_t item);           // item 0: the master
+// The item pressed: the master clears the set; a track goes in or out of it. Takes effect at once;
+// the caller stores the record (mods::masterfxKnobEdited).
+void toggleDuck(uint8_t item);
+const char* ducksText();             // "Master", "Track 3", "Synth 1" or "3 tracks"
 
 // Main loop only. Makes the effects that play match settings and the switch. Does nothing until
 // started(). A plugin's own knobs are set from settings; one that settings leave unset plays at

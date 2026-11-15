@@ -45,7 +45,9 @@ LABEL_SIZE = 12
 NO_ENTRY = 0xFFFFFFFF
 MAX_CODE = 8 * 1024            # a slot's code area
 SLOTS = {1: ("reverb", 1024, 4), 2: ("delay", 512, 6), 3: ("dynamics", 512, 3)}  # name, most state, CE labels
-FLAGS_KNOWN = 0x0001
+FLAG_FLOAT, FLAG_DUCK = 0x0001, 0x0002
+FLAGS_KNOWN = FLAG_FLOAT | FLAG_DUCK
+DYNAMICS = 3
 ENTRIES = ("ptmfx_init", "ptmfx_set_param", "ptmfx_process", "ptmfx_reset")
 OPTIONAL = ("ptmfx_format",)
 BASES = (0x0, 0x12340)         # the two link addresses compared
@@ -133,6 +135,8 @@ def check_header(h: bytearray) -> list[str]:
     state_size, = struct.unpack_from("<I", h, O_STATE)
     if flags & ~FLAGS_KNOWN:
         errs.append(f"unknown flags {flags:#x}")
+    elif flags & FLAG_DUCK and (slot != DYNAMICS or not flags & FLAG_FLOAT):
+        errs.append("PTMFX_FLAG_DUCK needs a dynamics plugin with PTMFX_FLAG_FLOAT")
     if slot not in SLOTS:
         errs.append(f"slot {slot}: PTMFX_SLOT_REVERB, PTMFX_SLOT_DELAY or PTMFX_SLOT_DYNAMICS")
         return errs

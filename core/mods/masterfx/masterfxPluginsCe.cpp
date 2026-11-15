@@ -133,6 +133,25 @@ void startPlugins(FileIo& io)
     AudioEffectPolyverb* reverb = engine.getMixerAndFx()->getPolyverb();
     limiters[0] = engine.getAudioOutput()->getLimiter(AudioOutput::OutputChannels::kLeft);
     limiters[1] = engine.getAudioOutput()->getLimiter(AudioOutput::OutputChannels::kRight);
+#ifdef PLATFORM_IMX // the tracks' stereo amplifiers, after their faders, are the destinations
+    keyMuxes[0] = engine.getAudioOutput()->getLimiterSidechainMux(AudioOutput::OutputChannels::kLeft);
+    keyMuxes[1] = engine.getAudioOutput()->getLimiterSidechainMux(AudioOutput::OutputChannels::kRight);
+    for (uint8_t t = 0; t < 8; t++)
+    {
+        AudioVoice* voice = instrumentPlayer[t].getAudioVoice();
+        voice->getPanningAmplifier(AudioVoice::VoiceChannels::kLeft)->modsSetDuck(t);
+        voice->getPanningAmplifier(AudioVoice::VoiceChannels::kRight)->modsSetDuck(t);
+    }
+#ifdef FEATURE_SYNTH
+    static_assert(kSynthParts == kDuckDestinations - 8, "a destination for each synth part");
+    for (int p = 0; p < kSynthParts; p++)
+    {
+        SynthVoice* synth = engine.modsSynthVoice();
+        synth->getPanningAmplifier(p, SynthVoice::Channels::kLeft)->modsSetDuck(static_cast<uint8_t>(8 + p));
+        synth->getPanningAmplifier(p, SynthVoice::Channels::kRight)->modsSetDuck(static_cast<uint8_t>(8 + p));
+    }
+#endif
+#endif
     plugins::Env env = {};
     for (size_t s = 0; s < plugins::kSlots; s++)
     {

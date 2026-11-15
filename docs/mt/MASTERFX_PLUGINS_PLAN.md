@@ -1,7 +1,8 @@
 # Master FX as card plugins (`.ptmfx`): feasibility and plan
 
 Status: feasibility done and the design approved, 2026-11-14 (section 9). Building. Branch `mod/masterfx-plugins`, off `modular` at
-`d9a6795`. Steps 1 to 3 committed (`982c6ea`), step 4 in `12e2329`; step 5 written, not committed.
+`d9a6795`. Steps 1 to 3 committed (`982c6ea`), step 4 in `12e2329`, step 5 in `0dd2f08`; the sidechain
+destination (section 5.1) written, not committed.
 
 Where the build stands (section 8's steps):
 - Steps 1 to 3 are written: the shared parts, the runtime, the pack, record version 2, the built-in DSP
@@ -49,7 +50,7 @@ Where the build stands (section 8's steps):
     49,152, DTCM 9,112).
   - Not run: the ported emulator tests on a masterfx-1.x firmware (they keep its index path); the
     release tier; anything on the unit.
-- Step 5, the UI (written, not committed):
+- Step 5, the UI (`0dd2f08`):
   - The Master page has a third list, Limiter, in column 3 (the Delay page's PingPong list, moved there
     and back as the Sync and Rate lists are borrowed for Reverb and Delay). The stops are Volume,
     Reverb, Delay, Limiter, then CE's. A plugin stopped by the time guard reads "Bypassed" under its
@@ -75,8 +76,44 @@ Where the build stands (section 8's steps):
     the `MT_NO_MODS` build the same as step 4's, all 6,696 loaded sections byte for byte.
   - Not run: a reverb plugin with own knobs (none in the pack has any, so that page's own-knob columns
     ran only through the Limiter page's shared code); the release tier; anything on the unit.
-- Not yet: the runtime on the emulated Cortex-M7 (the guards) and its planted faults. Then steps 6 to 8,
-  and the sidechain destination.
+- The sidechain destination (section 5.1), written, not committed:
+  - The Limiter page's column 4 holds CE's Sidechain list or, with Shift + its button, the Ducks list:
+    Master, Track 1 to 8, Synth 1 to 3. Its button marks or clears the item under the cursor (the
+    encoder or Up/Down move it), Delete goes back to Master, and the label's second line says
+    "Master", the one track, or "3 tracks". The page opens on the Sidechain list. Only while a plugin
+    that can duck plays, on the Tracker+.
+  - The record: `Settings.ducks`, a mask of 11 destinations, after the three slots (172 bytes). The
+    unreleased 168-byte version 2 still loads, with no ducks.
+  - The ABI: `PTMFX_FLAG_DUCK`, for float dynamics plugins only, and `PtmfxBlock.gain`. While the
+    project ducks tracks the host gives the plugin the key as its block and as its key, throws its
+    output away, and takes its gain (clamped to 0 to 4, NaN as 1 and a reset). Glue has the flag.
+  - Where it runs: the panning amplifiers (`AudioAmplifier::update`, an MT: hook) of the 8 sample
+    voices and of the 3 synth parts, after the track's volume and its sends. The master passes
+    through untouched.
+  - Timing: the gain is worked out once a block, by the first ducked track that finds the key
+    already made, or else by the limiter. A track made before its key (all of them with a synth part
+    as the key, since PolySynth runs after the panning amplifiers) uses the gain of the block before:
+    2.9 ms late. Two gain buffers, 1 KB of DTCM.
+  - The meter shows the mean of the gain's turning down.
+  - The SDK's builder (`ptmfx_builder.py`) checks the flag as the firmware does; the pack rebuilt and
+    embedded (Glue: 1,288 B of code, flags 0x3).
+  - Memory: DTCM free 9,096 → 7,840 (the gain buffers and the state); ITCM free 48,256.
+  - Display bytes: the Limiter page with the Ducks list up, 5,924 of 8,172.
+  - What ran: the host tests (all pass; `test_masterfx` 92 checks, with the record's ducks, the
+    168-byte record and the Ducks list's names, marks and text; `test_masterfx_plugins` 129, with the
+    flag's rules); the new `ducks` section of `test_masterfx_rig.py`, now in the quick tier (36
+    checks: Synth 1 ducked by a Line in key and by Synth 2, the master untouched before the key and
+    with a silent destination, who works out the gain in each case, each of the 11 destinations its own
+    two amplifiers, the meter, Stock, Off, no key and a plugin without the flag duck nothing, and the
+    page: Shift + column 4, marks, the cursor, Delete, the record stored, the Sidechain list back);
+    `ui` (75) and `dynamics` (19) again; the quick tier, 19 of 19 run (3 cached); the `MT_NO_MODS`
+    build the same as step 5's, all 6,713 non-debug sections byte for byte.
+  - Not run: a sample track as the ducked destination with sound (the rig plays synth parts; the
+    sample voices' amplifiers are checked as wired, and run the same code); the cost of a ducked
+    track (to measure on the unit with the Profiler); the release tier; anything on the unit.
+  - Glue's attack: with CE's default knobs the first changed block was 2 blocks after a Line in key
+    started, 3 after a Synth 2 key (the extra block is the update order above).
+- Not yet: the runtime on the emulated Cortex-M7 (the guards) and its planted faults. Then steps 6 to 8.
 
 Today's mod is in [MASTERFX_PORT_PLAN.md](MASTERFX_PORT_PLAN.md): eight effects built into the firmware,
 run inside CE's own reverb and delay objects. This plan turns them into plugins loaded from the card,
@@ -287,8 +324,9 @@ How it fits CE's graph (Tracker+, read from the source):
 - The key is taken from the amplifier, after the volume.
 - A destination track's compressor runs on that track's stereo block, in place, between its `amplifier`
   and its `panningAmplifier`. That's an MT: hook in the panning amplifier's update for that one track.
-  Its sends are taken earlier, so they aren't ducked. Section 9 asks whether they should be.
-- A synth part as the destination runs after its Synth FX slots, in `PolySynth::update`.
+  Its sends are taken earlier, so they aren't ducked (decided below).
+- A synth part as the destination runs at its panning amplifiers, after its Synth FX slots and its
+  volume (built: section 1's status says how).
 - The plugin doesn't change: `process` gets a stereo block and a key, whether the block is the master or a
   track. The host decides where it runs. When the destination isn't the master, the master's limiter is
   CE's (Stock, with its sidechain off).
@@ -306,7 +344,7 @@ Several destinations (the user's question, 2026-11-14: "kick ducks the bass and 
   released, so the field goes into it before the release.
 - Each destination ducks by the same amount. A threshold per track would need an instance per track.
 - Cost: the compressor once, plus about 400 to 600 instructions per destination track for the
-  multiply (an estimate, to measure). The gain buffer is 512 bytes of DTCM.
+  multiply (an estimate, to measure). Built with two gain buffers, 1 KB of DTCM (the timing below).
 - The page: CE's lists choose one item, so the destinations need a list with a mark for each item that
   a press toggles. Its display bytes are counted with the rest of the page.
 
@@ -315,7 +353,11 @@ Decided 2026-11-14: a destination track's sends aren't ducked (taken before its 
 Two limits to check in the emulator before it's built:
 - **Update order.** The objects run in the order they were made. If the key's track comes after the
   destination's in that order, the key reaching the destination is one block (2.9 ms) old. The attack
-  then starts up to 2.9 ms late; the compressor itself is unchanged.
+  then starts up to 2.9 ms late; the compressor itself is unchanged. Probed on the sound rig: the 8
+  sample voices first, then the Line in, the tracks mixers, delay, reverb, the synth parts' panning
+  amplifiers, PolySynth, and last the key muxes, the limiters and the output. So a sample track or the
+  Line in as the key reaches the synth parts and the later sample tracks in the same block; a synth
+  part as the key is always a block late. Built that way (section 1's status), and checked by the rig.
 - **Cost.** One compressor instance on a track costs about the same as on the master: 6,824
   instructions measured on the master (a track's block is the same size), plus the hook's call.
 
@@ -432,6 +474,8 @@ The questions as they were asked:
 - The display bytes on the unit: the emulator's count is an upper bound, from the display list's commands
   as the rig catches them.
 - The multi-key mux's cost: estimated, not measured.
+- Ducking: what a ducked track costs (the multiply, and the gain worked out in a track's update); a
+  sample track ducked, with sound (the rig plays synth parts only).
 - The pitch shifter's and clipper's sound: these prototypes were only costed.
 
 The measurement sources (`mfx_plug.cpp`, `host_glue.cpp`, `dyn.c`, `measure*.py` and the build scripts)

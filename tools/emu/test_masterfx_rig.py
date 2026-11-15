@@ -34,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from masterfx_runtime import DELAY_FILES, REVERB_FILES, START, has_plugins  # noqa: E402
 from sound_rig import PlayRig, SoundRig, find_project_path, peak, set_names  # noqa: E402
 from unicorn import UC_HOOK_MEM_WRITE  # noqa: E402
-from unicorn.arm_const import UC_ARM_REG_PC, UC_ARM_REG_S0  # noqa: E402
+from unicorn.arm_const import UC_ARM_REG_LR, UC_ARM_REG_PC, UC_ARM_REG_S0  # noqa: E402
 
 SWITCHES = "_ZN4mods8switchesE"
 SETTINGS = "_ZN4mods8masterfx8settingsE"
@@ -892,6 +892,310 @@ def test_dynamics(mods, ref):
     check(g.m.r8(g.m.addr(ACTIVE_DYNAMICS)) == 0, "a missing file: CE's limiter")
 
 
+DUCK_MASK = "_ZN4mods8masterfx8duckMaskE"
+DUCK_LIVE = "_ZN4mods8masterfx8duckLiveE"
+DUCK_UPDATE = "_ZN14AudioAmplifier14modsDuckUpdateEv"
+DUCK_COMPUTE = "_ZN4mods8masterfx12_GLOBAL__N_111duckComputeEPKsS3_"
+DUCK_BLOCK = "_ZN4mods8masterfx9duckBlockEPs"
+INPUT = "_ZN11audioEngine23updateInputAudioBuffersEPvS0_i"
+DUCKS_AT = 3 * SLOT_SIZE            # masterfx::Settings.ducks, after the three slots
+LINE_IN_L, SYNTH_2 = 9, 12          # CE's Sidechain list: Line in L, Synth 2
+SYNTH_1_BIT = 1 << 8                # masterfx's destinations: 0 to 7 the tracks, 8 to 10 the synth parts
+
+
+def set_ducks(r, mask):
+    """The record's ducks, then applied"""
+    m = r.m
+    m.write(m.addr(SETTINGS) + DUCKS_AT, struct.pack("<H", mask))
+    m.call(m.addr("_ZN4mods8masterfx5applyEv"), max_insns=400_000_000)
+
+
+def duck_mask(r):
+    return struct.unpack("<H", r.m.read(r.m.addr(DUCK_MASK), 2))[0]
+
+
+class LineIn:
+    """The I2S input buffer, as the interrupt hands it to the engine (updateInputAudioBuffers),
+    filled before each block: interleaved left and right, a ~920 Hz sine at the given level."""
+
+    def __init__(self, r):
+        self.r = r
+        m = r.m
+        self.buf = m.alloc(4 * 128, 4)
+        m.write(self.buf, bytes(4 * 128))
+        m.call(m.addr(INPUT), r.engine, self.buf, self.buf, 128, max_insns=1_000_000)
+        self.n = 0
+
+    def blocks(self, levels, each=None):
+        left, right = [], []
+        for level in levels:
+            s = [int(level * math.sin(2 * math.pi * (self.n * 128 + i) / 48)) for i in range(128)]
+            self.r.m.write(self.buf, struct.pack("<256h", *[v for x in s for v in (x, x)]))
+            self.n += 1
+            a, b = self.r.block()
+            left += a
+            right += b
+            if each:
+                each()
+        return left, right
+
+
+def first_ducked(mine, ce):
+    """The first block where the mod's master isn't CE's (CE's limiter, threshold at the top,
+    delays it 5 samples; the plugin's hook doesn't)"""
+    for i in range(len(mine) - 5):
+        if mine[i] != ce[i + 5]:
+            return i // 128
+    return None
+
+
+def watch_gain(g):
+    """Who works out each block's gain: a ducked track's amplifier (the key made before it, this
+    block's gain) or the limiter (the key made after it: the track had the last block's)"""
+    m = g.m
+    s = g.syms[DUCK_BLOCK]
+    calls = []
+
+    def f(mm):
+        lr = mm.uc.reg_read(UC_ARM_REG_LR) & ~1
+        calls.append("track" if s.addr <= lr < s.addr + s.size else "limiter")
+    g.watch(m.addr(DUCK_COMPUTE), f)
+    return calls
+
+
+def test_ducks(mods, ref):
+    """The dynamics slot ducking tracks (Tracker+): synth part 0 holds a note, the key is the Line
+    in (made before the synth parts' amplifiers) or synth part 1 (made after them)"""
+    print("-- ducks --")
+    if DUCK_MASK not in SoundRig(mods).syms:
+        print("SKIP the ducking: firmware from before it")
+        return
+    loud = 6000
+    quiet, key, after = 30, 50, 60
+    levels = [0] * quiet + [16000] * key + [0] * after
+
+    def run(axf, file=None, ducks=0, threshold=32767, sidechain=LINE_IN_L, synth_key=False, watch=None):
+        g = Graph(axf)
+        if synth_key:
+            g.set_instrument(1, 2)
+        if axf == mods:
+            set_mod(g, True, 0, 0)
+            m = g.m
+            m.write(m.addr(SETTINGS) + DUCKS_AT, struct.pack("<H", ducks))
+            set_dynamics(g, file if file is not None else "")
+        limiter_knobs(g, threshold, sidechain)
+        line = LineIn(g)
+        g.note(0, 48, True)
+        if not synth_key:
+            out = line.blocks(levels, watch and (lambda: watch(g)))
+        else:
+            out = line.blocks([0] * quiet)
+            g.note(1, 72, True)
+            more = line.blocks([0] * key)
+            g.note(1, 72, False)
+            rest = line.blocks([0] * after)
+            out = (out[0] + more[0] + rest[0], out[1] + more[1] + rest[1])
+        return g, out
+
+    _, ce = run(ref, sidechain=LINE_IN_L)
+    held = peak(ce[0][128 * quiet:128 * (quiet + key)])
+    check(held > 2000, f"the held note plays through the key (peak {held})")
+    _, ce_quiet = run(ref, sidechain=0)
+    print(f"     (the Line in {'is' if ce[0] != ce_quiet[0] else 'is not'} heard on the master here)")
+
+    # Glue ducking Synth 1 by the Line in
+    seen = []
+    who = {}
+
+    def each(gg):
+        if "calls" not in who:
+            who["calls"] = watch_gain(gg)
+            return
+        seen.append((gg.m.r8(gg.m.addr(DUCK_LIVE)), meter(gg)[0], tuple(who["calls"])))
+        who["calls"].clear()
+    g, mine = run(mods, "Glue.ptmfx", SYNTH_1_BIT, loud, watch=each)
+    check(duck_mask(g) == SYNTH_1_BIT, f"Synth 1 in the record: the mask the interrupt reads ({duck_mask(g):#x})")
+    check(all(live == 1 for live, _, _ in seen), "a key and a ducking plugin: ducking every block")
+    callers = {c for _, _, c in seen}
+    check(callers == {("track",)}, f"a key made before the track (Line in): this block's gain, worked out once, by the track {callers}")
+    for side in (0, 1):
+        before = 128 * quiet - 5
+        check(mine[side][:before] == ce[side][5:before + 5],
+              f"side {side}, before the key: the master untouched, CE's 5 samples sooner")
+        inside = slice(128 * (quiet + 20), 128 * (quiet + key))
+        a, b = peak(mine[side][inside]), peak(ce[side][inside])
+        check(a < 0.8 * b, f"side {side}, under the key: Synth 1 ducked (peak {a} against {b})")
+    first = first_ducked(mine[0], ce[0])
+    print(f"     (the first block ducked: {first}, the key from {quiet})")
+    meters = [gain for _, gain, _ in seen]
+    check(meters[quiet - 3] == 1.0 and min(meters[quiet:quiet + key]) < 0.95,
+          f"the meter: 1 before the key, under 0.95 with it ({meters[quiet - 3]}, {min(meters[quiet:quiet + key])})")
+    tail = peak(mine[0][-128 * 10:]), peak(ce[0][-128 * 10:])
+    check(tail[0] > 0.9 * tail[1], f"the key gone: Synth 1 back (peak {tail[0]} against {tail[1]})")
+    check(not g.failures, "no asserts")
+
+    # A silent destination: the master and Synth 1 untouched though the key is loud
+    _, silent = run(mods, "Glue.ptmfx", 1 << 0, loud)
+    check(first_ducked(silent[0], ce[0]) is None and first_ducked(silent[1], ce[1]) is None,
+          "ducking Track 1, which is silent: the master untouched all through, CE's 5 samples sooner")
+
+    # The key made after the track (synth part 1: PolySynth runs after the panning amplifiers):
+    # the gain the block before kept, one block late
+    _, ce_synth = run(ref, sidechain=SYNTH_2, synth_key=True)
+    _, late = run(mods, "Glue.ptmfx", SYNTH_1_BIT, loud, SYNTH_2, synth_key=True)
+    g2 = Graph(mods)
+    g2.set_instrument(1, 2)
+    set_mod(g2, True, 0, 0)
+    set_ducks(g2, SYNTH_1_BIT)
+    set_dynamics(g2, "Glue.ptmfx")
+    limiter_knobs(g2, loud, SYNTH_2)
+    line = LineIn(g2)
+    g2.note(0, 48, True)
+    g2.note(1, 72, True)
+    line.blocks([0] * 3)
+    late_calls = watch_gain(g2)
+    per_block = []
+    for _ in range(5):
+        line.blocks([0])
+        per_block.append(tuple(late_calls))
+        late_calls.clear()
+    check(set(per_block) == {("limiter",)},
+          f"a key made after the track (Synth 2): worked out once a block, by the limiter; the track has the last block's {set(per_block)}")
+    print(f"     (the first block ducked: {first_ducked(late[0], ce_synth[0])}, the key from {quiet})")
+    inside = slice(128 * (quiet + 20), 128 * (quiet + key))
+    a, b = rms(late[0][inside]), rms(ce_synth[0][inside])
+    check(a < 0.9 * b, f"and Synth 1 ducked under it (rms {a:.0f} against {b:.0f})")
+
+    # Each destination is its own pair of amplifiers (left, right): bit by bit, the ones the hook
+    # takes over in a block
+    g = Graph(mods)
+    set_mod(g, True, 0, 0)
+    set_ducks(g, SYNTH_1_BIT)
+    set_dynamics(g, "Glue.ptmfx")
+    limiter_knobs(g, loud, LINE_IN_L)
+    line = LineIn(g)
+    m = g.m
+    taken = []
+    g.watch(m.addr(DUCK_UPDATE), lambda mm: taken.append(mm.arg(0)))
+    owners = []
+    for d in range(11):
+        m.write(m.addr(DUCK_MASK), struct.pack("<H", 1 << d))
+        line.blocks([16000])
+        taken.clear()
+        line.blocks([16000])
+        owners.append((len(taken), frozenset(taken)))
+    counts = [n for n, _ in owners]
+    check(counts == [2] * 11 and len(frozenset().union(*[o for _, o in owners])) == 22,
+          f"each of the 11 destinations: its own two amplifiers, once a block ({counts})")
+
+    # No ducking: Stock, the mod Off, no key, a plugin without the flag
+    g = Graph(mods)
+    set_mod(g, True, 0, 0)
+    set_ducks(g, SYNTH_1_BIT)
+    set_dynamics(g, "")
+    check(duck_mask(g) == 0, "Stock in the dynamics slot: nothing ducked, though the record says Synth 1")
+    set_dynamics(g, "Glue.ptmfx")
+    check(duck_mask(g) == SYNTH_1_BIT, "Glue again: Synth 1")
+    set_mod(g, False)
+    check(duck_mask(g) == 0, "the mod Off: nothing ducked")
+
+    _, plain = run(mods, "Glue.ptmfx", 0, loud)
+    check(plain != mine, "ducks against the master: what plays differs")
+    g, keyless = run(mods, "Glue.ptmfx", SYNTH_1_BIT, loud, sidechain=0)
+    _, plain_keyless = run(mods, "Glue.ptmfx", 0, loud, sidechain=0)
+    check(keyless == plain_keyless and g.m.r8(g.m.addr(DUCK_LIVE)) == 0,
+          "Sidechain off: Glue on the master, as without ducks")
+
+    g = Graph(mods)
+    set_mod(g, True, 0, 0)
+    card = g.sd.files
+    glue = bytearray(card["/MasterFX/Glue.ptmfx"])
+    glue[6] = 0x01                  # PTMFX_FLAG_FLOAT only
+    card["/MasterFX/NoDuck.ptmfx"] = bytes(glue)
+    g.m.call(g.m.addr("_ZN4mods8masterfx7plugins4scanEv"), max_insns=400_000_000)  # the card listed again
+    set_ducks(g, SYNTH_1_BIT)
+    set_dynamics(g, "NoDuck.ptmfx")
+    m = g.m
+    check(m.r8(m.addr(ACTIVE_DYNAMICS)) == 1 and duck_mask(g) == 0,
+          "a dynamics plugin without PTMFX_FLAG_DUCK: it plays on the master, nothing ducked")
+
+    ducks_page(mods)
+
+
+def ducks_page(mods):
+    """The Limiter page's Ducks list: Shift + the button under column 4"""
+    p = MasterPage(mods)
+    m = p.m
+    set_mod(p.r, True, 0, 0)
+    set_dynamics(p.r, "Glue.ptmfx")
+    p.start()
+    stored = []
+    p.r.watch(m.addr("_ZN4mods7project11markChangedEv"), lambda mm: stored.append(1))
+    p.press("limiter")
+    final = last(p.take_log(), "text")
+    label4 = next(h for h, t in final.items() if t == "Back") - 7 + 4
+    shift = [0]
+    p.r.stub(m.addr("_ZN7Buttons15isButtonPressedEi"), lambda mm: shift[0])
+
+    def ducks():
+        return struct.unpack("<H", m.read(m.addr(SETTINGS) + DUCKS_AT, 2))[0]
+
+    def shifted():
+        shift[0] = 1
+        p.press("eq")
+        shift[0] = 0
+
+    def said(log):
+        return last(log, "text").get(label4), last(log, "text2").get(label4)
+
+    shifted()
+    now = said(p.take_log())
+    check(now == ("Ducks", "Master"), f"Shift + column 4: the Ducks list, on the master {now}")
+    bytes_up = sum(p.page_bytes().values())
+    check(bytes_up < LIMIT, f"the page with the Ducks list: {bytes_up} bytes of {LIMIT}")
+    p.encoder(3)
+    p.press("eq")
+    now = said(p.take_log())
+    check(ducks() == 1 << 2 and now[1] == "Track 3", f"three down and its button: Track 3 marked ({ducks():#x}, {now})")
+    check(duck_mask(p.r) == 1 << 2, "and ducked at once")
+    check(bool(stored), "and the project marked changed")
+    p.encoder(6)
+    p.press("eq")
+    now = said(p.take_log())
+    check(ducks() == (1 << 2) | (1 << 8) and now[1] == "2 tracks", f"Synth 1 too: 2 tracks ({ducks():#x}, {now})")
+    p.encoder(20)
+    p.press("eq")
+    check(ducks() == (1 << 2) | (1 << 8) | (1 << 10), f"the cursor stops on Synth 3 ({ducks():#x})")
+    p.take_log()
+    p.press("delete")
+    now = said(p.take_log())
+    check(ducks() == 0 and now[1] == "Master", f"Delete: back to the master {now}")
+    p.press("up")
+    p.press("eq")
+    check(ducks() == 1 << 9, f"Up then its button: Synth 2 ({ducks():#x})")
+    shifted()
+    now = said(p.take_log())
+    check(now[0] == "Sidechain", f"Shift + column 4 again: CE's Sidechain list {now}")
+    check(ducks() == 1 << 9, f"and the ducks kept ({ducks():#x})")
+    p.press("cancel")
+    p.take_log()
+    p.press("limiter")
+    check(said(p.take_log())[0] in (None, "Sidechain"), "the page opens on the Sidechain list")
+    check(not p.r.failures, "no asserts")
+
+    # Stock: Shift + column 4 is CE's
+    q = MasterPage(mods)
+    set_mod(q.r, True, 0, 0)
+    set_dynamics(q.r, "")
+    q.start()
+    q.press("limiter")
+    q.take_log()
+    q.r.stub(q.m.addr("_ZN7Buttons15isButtonPressedEi"), lambda mm: 1)
+    q.press("eq")
+    check("Ducks" not in last(q.take_log(), "text").values(), "Stock: Shift + column 4 is CE's")
+    check(not q.r.failures, "no asserts")
+
+
 def buffers(g):
     """Each effect buffer's [start, end) from the symbols that hold them."""
     out = []
@@ -1164,7 +1468,8 @@ def test_play(mods, ref):
 def main():
     mods, ref = Path(sys.argv[1]), Path(sys.argv[2])
     only = sys.argv[3] if len(sys.argv) > 3 else None
-    for name, fn in (("ui", test_ui), ("graph", test_graph), ("dynamics", test_dynamics), ("stress", test_stress), ("debounce", test_debounce),
+    for name, fn in (("ui", test_ui), ("graph", test_graph), ("dynamics", test_dynamics), ("ducks", test_ducks),
+                     ("stress", test_stress), ("debounce", test_debounce),
                      ("project", test_project), ("play", test_play)):
         if only in (None, name):
             fn(mods, ref)

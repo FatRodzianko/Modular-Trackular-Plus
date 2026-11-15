@@ -58,13 +58,14 @@ struct PackWant
     uint8_t knobs;
 };
 
-// masterfx-1.x's effects (Q15, CE's knobs only), then the glue compressor (float, Ratio and Makeup)
+// masterfx-1.x's effects (Q15, CE's knobs only), then the glue compressor (float, can duck tracks,
+// Ratio and Makeup)
 const PackWant kPackWant[] = {
     { "Freeverb.ptmfx", "Freeverb", PTMFX_SLOT_REVERB, 0, 0 }, { "Plate.ptmfx", "Plate", PTMFX_SLOT_REVERB, 0, 0 },
     { "Spring.ptmfx", "Spring", PTMFX_SLOT_REVERB, 0, 0 },     { "Shimmer.ptmfx", "Shimmer", PTMFX_SLOT_REVERB, 0, 0 },
     { "Gated.ptmfx", "\"Gated\"", PTMFX_SLOT_REVERB, 0, 0 },   { "Reverse.ptmfx", "Reverse", PTMFX_SLOT_REVERB, 0, 0 },
     { "Tape.ptmfx", "Tape", PTMFX_SLOT_DELAY, 0, 0 },          { "BBD.ptmfx", "BBD", PTMFX_SLOT_DELAY, 0, 0 },
-    { "Glue.ptmfx", "Glue", PTMFX_SLOT_DYNAMICS, PTMFX_FLAG_FLOAT, 2 },
+    { "Glue.ptmfx", "Glue", PTMFX_SLOT_DYNAMICS, PTMFX_FLAG_FLOAT | PTMFX_FLAG_DUCK, 2 },
 };
 constexpr size_t kPackSize = sizeof(kPackWant) / sizeof(kPackWant[0]);
 
@@ -101,7 +102,10 @@ void testHeader()
         { "magic", [](PtmfxHeader& h) { h.magic ^= 1; }, 0 },
         { "a .ptsfx's magic", [](PtmfxHeader& h) { h.magic = 0x58465350u; }, 0 },
         { "version", [](PtmfxHeader& h) { h.format_version = 2; }, 0 },
-        { "an unknown flag", [](PtmfxHeader& h) { h.flags |= 0x0002; }, 0 },
+        { "an unknown flag", [](PtmfxHeader& h) { h.flags |= 0x0004; }, 0 },
+        { "a reverb that ducks", [](PtmfxHeader& h) { h.flags = PTMFX_FLAG_FLOAT | PTMFX_FLAG_DUCK; }, 0 },
+        { "a Q15 dynamics plugin that ducks",
+          [](PtmfxHeader& h) { h.slot = PTMFX_SLOT_DYNAMICS; h.state_size = 64; h.flags = PTMFX_FLAG_DUCK; }, 0 },
         { "slot 0", [](PtmfxHeader& h) { h.slot = 0; }, 0 },
         { "slot 4", [](PtmfxHeader& h) { h.slot = 4; }, 0 },
         { "an empty name", [](PtmfxHeader& h) { h.name[0] = 0; }, 0 },
@@ -158,6 +162,8 @@ void testHeader()
     h.num_params = 2;
     h.params[1] = { "Ratio", PTMFX_PARAM_FLOAT, 1.0f, 20.0f, 4.0f, 0.5f, ":1" };
     check(checkHeader(h, f.size, nullptr), "header: a dynamics plugin with two own knobs");
+    h.flags = PTMFX_FLAG_FLOAT | PTMFX_FLAG_DUCK;
+    check(checkHeader(h, f.size, nullptr), "header: a float dynamics plugin that ducks");
 }
 
 // ---- the start and the catalog ------------------------------------------------------------

@@ -568,6 +568,13 @@ static void functEncoder(int16_t value)
             case 1: changeLimiterRelease(value); break;
             case 2: changeLimiterTreshold(value); break;
             case 4:
+#if MT_HAS_MASTERFX // MT:
+                if (MP->masterfxDucksShown())
+                {
+                    MP->moveMasterfxDucks(interfaceGlobals.invertValForList ? -value : value);
+                    break;
+                }
+#endif
                 changeLimiterSidechain(interfaceGlobals.invertValForList ? -value : value);
                 break;
 #if MT_HAS_MASTERFX // MT:
@@ -831,7 +838,16 @@ static void functUp()
             case 0: changeLimiterAttack(1); break;
             case 1: changeLimiterRelease(1); break;
             case 2: changeLimiterTreshold(1); break;
-            case 4: changeLimiterSidechain(-1); break;
+            case 4:
+#if MT_HAS_MASTERFX // MT:
+                if (MP->masterfxDucksShown())
+                {
+                    MP->moveMasterfxDucks(-1);
+                    break;
+                }
+#endif
+                changeLimiterSidechain(-1);
+                break;
 #if MT_HAS_MASTERFX // MT:
             case 5:
             case 6: changeMasterfxKnob(mods::masterfx::kDynamics, MP->selectedPlaceLimiter, 1); break;
@@ -948,7 +964,16 @@ static void functDown()
             case 0: changeLimiterAttack(-1); break;
             case 1: changeLimiterRelease(-1); break;
             case 2: changeLimiterTreshold(-1); break;
-            case 4: changeLimiterSidechain(1); break;
+            case 4:
+#if MT_HAS_MASTERFX // MT:
+                if (MP->masterfxDucksShown())
+                {
+                    MP->moveMasterfxDucks(1);
+                    break;
+                }
+#endif
+                changeLimiterSidechain(1);
+                break;
 #if MT_HAS_MASTERFX // MT:
             case 5:
             case 6: changeMasterfxKnob(mods::masterfx::kDynamics, MP->selectedPlaceLimiter, -1); break;
@@ -1066,7 +1091,16 @@ static void functDelete()
             case 0: setDefaultLimiterAttack(); break;
             case 1: setDefaultLimiterRelease(); break;
             case 2: setDefaultLimiterTreshold(); break;
-            case 4: setDefaultLimiterSidechain(); break;
+            case 4:
+#if MT_HAS_MASTERFX // MT: the Ducks list back to the master
+                if (MP->masterfxDucksShown())
+                {
+                    MP->clearMasterfxDucks();
+                    break;
+                }
+#endif
+                setDefaultLimiterSidechain();
+                break;
 #if MT_HAS_MASTERFX // MT:
             case 5:
             case 6: setDefaultMasterfxKnob(mods::masterfx::kDynamics, MP->selectedPlaceLimiter); break;
@@ -1588,6 +1622,26 @@ static void functSelectLimiterThreshold()
 
 static void functSelectLimiterSidechain()
 {
+#if MT_HAS_MASTERFX // MT: Shift switches the column between Sidechain and Ducks; in Ducks a press
+                    // on the column marks the item under the cursor
+    if (MP->buttons->isButtonPressed(interfaceButtonShift) && mods::masterfx::canDuck())
+    {
+        MP->showMasterfxDucks(!MP->masterfxDucksShown());
+        MP->selectedPlaceLimiter = 4;
+        MP->refreshLimiterFrame();
+        return;
+    }
+    if (MP->masterfxDucksShown())
+    {
+        if (MP->selectedPlaceLimiter == 4)
+        {
+            MP->toggleMasterfxDuck();
+        }
+        MP->selectedPlaceLimiter = 4;
+        MP->refreshLimiterFrame();
+        return;
+    }
+#endif
     if (MP->selectedPlaceLimiter == 4) // zmienianie pozycji listy przyciskiem pod ekranem
     {
         mtProject.values.limiterSidechain++;

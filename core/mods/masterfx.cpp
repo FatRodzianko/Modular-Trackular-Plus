@@ -44,9 +44,10 @@ using pluginkit::sameText;
 
 static_assert(kReverb == pl::kReverb && kDelay == pl::kDelay && kDynamics == pl::kDynamics && kSlots == pl::kSlots);
 static_assert(kFileSize == pl::kFileNameSize && kOwnKnobs == PTMFX_MAX_PARAMS);
-static_assert(sizeof(Settings) == 168, "the record's size");
+static_assert(sizeof(Settings) == 172, "the record's size");
 
 constexpr size_t kV1Size = 2;
+constexpr size_t kV2SlotsOnly = 168; // version 2 before the ducks were added (never released)
 
 // masterfx.bin from the 1.2.0 patch: magic, reverb, delay, two zero bytes, a checksum over
 // those four. Delay 3 was "Gated" before it moved to the reverbs: that plays the stock delay
@@ -79,6 +80,9 @@ Settings allStock()
     {
         stock(slot);
     }
+    s.ducks = 0;
+    s.reserved[0] = 0;
+    s.reserved[1] = 0;
     return s;
 }
 
@@ -105,12 +109,15 @@ Settings fromRecord(const Store& store)
     {
         return fromV1(data[0], data[1]);
     }
-    if (length != sizeof(Settings))
+    if (length != sizeof(Settings) && length != kV2SlotsOnly)
     {
         return allStock();
     }
-    Settings s;
-    memcpy(&s, data, sizeof(s));
+    Settings s = allStock();
+    memcpy(&s, data, length);
+    s.ducks &= kDuckAll;
+    s.reserved[0] = 0;
+    s.reserved[1] = 0;
     for (SlotSetting& slot : s.slot)
     {
         if (!pluginkit::endedText(slot.file))
@@ -163,6 +170,7 @@ void build()
 }
 
 void refreshMenus();
+void applyDucks(); // what plays ducks as settings say (the firmware's)
 
 } // namespace
 
@@ -397,11 +405,82 @@ void defaultOwnKnob(uint8_t slot, uint8_t knob)
     settings.slot[slot].knob[knob] = pl::knob(s, knob);
 }
 
+// ---- the Ducks list ------------------------------------------------------------------
+
+namespace
+{
+
+const char* const kDuckNames[kDuckItems] = {
+    "Master", "Track 1", "Track 2", "Track 3", "Track 4", "Track 5", "Track 6",
+    "Track 7", "Track 8", "Synth 1", "Synth 2", "Synth 3",
+};
+
+MFX_SDRAM char ducksLine[16]; // main loop; written before use
+
+} // namespace
+
+bool canDuck()
+{
+#if defined(MT_HOST_TEST) || defined(PLATFORM_IMX)
+    return ours(kDynamics) && pl::ducks(pl::kDynamics);
+#else
+    return false;
+#endif
+}
+
+const char* const* duckNames()
+{
+    return kDuckNames;
+}
+
+bool ducked(uint8_t item)
+{
+    if (item == 0)
+    {
+        return settings.ducks == 0;
+    }
+    return item < kDuckItems && ((settings.ducks >> (item - 1)) & 1u) != 0;
+}
+
+void toggleDuck(uint8_t item)
+{
+    if (item == 0)
+    {
+        settings.ducks = 0;
+    }
+    else if (item < kDuckItems)
+    {
+        settings.ducks = static_cast<uint16_t>(settings.ducks ^ (1u << (item - 1)));
+    }
+    applyDucks();
+}
+
+const char* ducksText()
+{
+    uint8_t count = 0;
+    uint8_t one = 0;
+    for (uint8_t item = 1; item < kDuckItems; item++)
+    {
+        if (ducked(item))
+        {
+            count++;
+            one = item;
+        }
+    }
+    if (count <= 1)
+    {
+        return kDuckNames[one]; // "Master" when none
+    }
+    snprintf(ducksLine, sizeof(ducksLine), "%u tracks", static_cast<unsigned>(count));
+    return ducksLine;
+}
+
 #ifdef MT_HOST_TEST
 
 namespace
 {
 void refreshMenus() {}
+void applyDucks() {}
 } // namespace
 
 #else
@@ -569,6 +648,11 @@ void applySlot(uint8_t slot, bool isOn)
     runPlugin(slot);
 }
 
+void applyDucks()
+{
+    duckMask = (canDuck() ? settings.ducks : 0u) & kDuckAll;
+}
+
 } // namespace
 
 void dynamicsReset()
@@ -595,6 +679,7 @@ void apply()
     applySlot(kReverb, isOn);
     applySlot(kDelay, isOn);
     applySlot(kDynamics, isOn);
+    applyDucks();
     refreshChoices();
 }
 

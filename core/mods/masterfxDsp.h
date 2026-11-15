@@ -14,6 +14,7 @@
 #include <cstdint>
 
 class AudioEffectLimiter;
+class AudioMux;
 
 namespace mods
 {
@@ -59,6 +60,25 @@ constexpr uint8_t kDynamicsDry = 2;
 extern uint8_t activeDynamics;
 // CE's two limiter objects, left and right (set at the plugins' start)
 extern AudioEffectLimiter* limiters[2];
+
+// ---- ducking chosen tracks instead of the master ---------------------------------------
+// With a PTMFX_FLAG_DUCK plugin in the dynamics slot, a key and a set of tracks, the plugin works
+// out its gain from the key once a block and the tracks' amplifiers multiply by it; the master
+// passes through. A track that runs after the key's source this cycle gets this block's gain,
+// one before it the last block's (one block, 2.9 ms, late).
+// Destinations: 0 to 7 the sample tracks, 8 to 10 the synth parts.
+constexpr uint8_t kDuckDestinations = 11;
+extern uint16_t duckMask;   // main loop: bit d ducks destination d; 0 is the master
+extern uint8_t duckLive;    // the interrupt's: the limiter found a key this block, so tracks duck
+extern AudioMux* keyMuxes[2]; // CE's key muxes, left and right (set at the plugins' start)
+
+inline bool ducking(uint8_t destination)
+{
+    return duckLive != 0 && ((duckMask >> destination) & 1u) != 0;
+}
+
+// A ducked track's block (one side), after its amplifier's own gain
+void duckBlock(int16_t* data);
 
 // One block of the stereo send, in place, through the reverb slot's plugin. The buffers are
 // its memory (given at start); a bypassed plugin returns silence.

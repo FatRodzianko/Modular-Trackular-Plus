@@ -26,9 +26,19 @@
 
 #include "amplifier.h"
 #include "dspApplyGain.h"
+#if MT_HAS_MASTERFX // MT:
+#include "masterfxDsp.h"
+#endif
 
 AUDIO_CORE_RAM void AudioAmplifier::update(void)
 {
+#if MT_HAS_MASTERFX // MT: a track the dynamics plugin ducks
+    if (modsDuck != kModsNoDuck && mods::masterfx::ducking(modsDuck))
+    {
+        modsDuckUpdate();
+        return;
+    }
+#endif
     if (multiplier == MULTI_UNITYGAIN && previousMultiplier == MULTI_UNITYGAIN)
     {
         audio_block_t* block = receiveReadOnly(0);
@@ -48,3 +58,20 @@ AUDIO_CORE_RAM void AudioAmplifier::update(void)
         release(block);
     }
 }
+
+#if MT_HAS_MASTERFX // MT: as update(), then the plugin's gain, on a block of its own
+AUDIO_CORE_RAM void AudioAmplifier::modsDuckUpdate()
+{
+    audio_block_t* block = receiveWritable(0);
+    if (block)
+    {
+        if (multiplier != MULTI_UNITYGAIN || previousMultiplier != MULTI_UNITYGAIN)
+        {
+            applyGain(block->data, multiplier, previousMultiplier);
+        }
+        mods::masterfx::duckBlock(block->data);
+        transmit(block);
+        release(block);
+    }
+}
+#endif

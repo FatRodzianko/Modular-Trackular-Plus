@@ -159,8 +159,8 @@ void testRecord()
     check(!storeIfEdited(store), "stored once");
     uint8_t version = 0;
     uint16_t length = 0;
-    check(store.find(kRecord, &version, &length) != nullptr && version == 2 && length == 168,
-          "as version 2, 168 bytes");
+    check(store.find(kRecord, &version, &length) != nullptr && version == 2 && length == 172,
+          "as version 2, 172 bytes");
     settings = Settings{};
     load(store);
     check(is(4, 2), "the record comes back");
@@ -187,6 +187,12 @@ void testRecord()
     check(storeIfEdited(store), "any file name");
     load(store);
     check(strcmp(settings.slot[kReverb].file, "My reverb with a long name.ptmfx") == 0, "comes back");
+    check(settings.ducks == 0, "ducking the master, as CE");
+    settings.ducks = 0x105;
+    check(storeIfEdited(store), "the tracks the dynamics slot ducks are an edit");
+    settings = Settings{};
+    load(store);
+    check(settings.ducks == 0x105, "and come back");
 
     const auto loaded = [&](std::vector<uint8_t> record, uint8_t recordVersion) {
         store.clear();
@@ -207,17 +213,32 @@ void testRecord()
     loaded({ 3, 1, 0 }, 1);
     check(is(kStock, kStock), "a long version 1 record: Stock everywhere");
 
-    // Version 2, damaged
+    // Version 2 as it was before the ducks (168 bytes, never released): the master
     std::vector<uint8_t> record(168, 0);
     memcpy(record.data(), "Plate.ptmfx", 11);
     loaded(record, 2);
-    check(is(2, kStock), "version 2: its files");
-    check(settings.slot[kReverb].knob[0] == 0.0f, "and its knobs as stored");
+    check(is(2, kStock), "version 2 without the ducks: its files");
+    check(settings.slot[kReverb].knob[0] == 0.0f && settings.ducks == 0, "its knobs as stored, the master ducked");
+
+    // Version 2 with the ducks: bits past the synth parts dropped, the reserved bytes 0
+    std::vector<uint8_t> full(172, 0);
+    memcpy(full.data(), "Plate.ptmfx", 11);
+    full[168] = 0x81;
+    full[169] = 0xFF;
+    full[170] = 7;
+    loaded(full, 2);
+    check(is(2, kStock) && settings.ducks == (0xFF81 & kDuckAll) && settings.reserved[0] == 0,
+          "version 2 with the ducks");
+
+    // Damaged
     std::fill(record.begin(), record.begin() + 48, uint8_t{ 'A' });
     memcpy(record.data() + 56, "Tape.ptmfx", 10);
     loaded(record, 2);
     check(is(kStock, 1) && knobsUnset(kReverb), "a file name with no end: that slot is Stock");
-    record.push_back(0);
+    record.resize(169);
+    loaded(record, 2);
+    check(is(kStock, kStock), "a record of another size: Stock everywhere");
+    record.resize(173);
     loaded(record, 2);
     check(is(kStock, kStock), "a long record: Stock everywhere");
     record.resize(100);
@@ -290,6 +311,22 @@ void testPage()
     check(settings.slot[kDynamics].knob[0] == 2.0f && std::isnan(settings.slot[kDynamics].knob[1]),
           "turning a knob that isn't there leaves settings alone");
 
+    // The Ducks list: the master, or a set of tracks
+    check(!canDuck(), "nothing installed: no Ducks list");
+    check(kDuckItems == 12 && strcmp(duckNames()[0], "Master") == 0 && strcmp(duckNames()[11], "Synth 3") == 0,
+          "Master, 8 tracks, 3 synth parts");
+    check(ducked(0) && !ducked(1) && strcmp(ducksText(), "Master") == 0, "at first the master");
+    toggleDuck(3);
+    check(!ducked(0) && ducked(3) && settings.ducks == 0x4 && strcmp(ducksText(), "Track 3") == 0, "Track 3 marked");
+    toggleDuck(9);
+    check(settings.ducks == 0x104 && strcmp(ducksText(), "2 tracks") == 0, "and Synth 1: 2 tracks");
+    toggleDuck(3);
+    check(settings.ducks == 0x100 && strcmp(ducksText(), "Synth 1") == 0, "Track 3 pressed again: out");
+    toggleDuck(kDuckItems);
+    check(settings.ducks == 0x100, "an item past the list: nothing");
+    toggleDuck(0);
+    check(settings.ducks == 0 && ducked(0), "Master: the set cleared");
+
     switches[mod] = was;
     settings = Settings{};
 }
@@ -310,7 +347,7 @@ void testImportFile()
     check(is(4, 2), "its choices");
     uint8_t version = 0;
     uint16_t length = 0;
-    check(store.find(kRecord, &version, &length) != nullptr && version == 2 && length == 168,
+    check(store.find(kRecord, &version, &length) != nullptr && version == 2 && length == 172,
           "imported as version 2");
 
     store.clear();
