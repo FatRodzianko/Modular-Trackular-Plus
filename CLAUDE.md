@@ -55,6 +55,16 @@ Before planning a mod's tests, read `docs/mt/PAST_FAILURES.md`. Before any devic
 
 Run mod tests on a full build, with CE's factory `.psyn` engines on the fake card (`build/Synths` or `synth/prebuilt`). Their licence (`synth/prebuilt/LICENSE-PROPRIETARY.txt`) allows it, but section 2(c) bans reverse engineering, so they're a black box: no disassembly, no tracing, no hooks inside them or in the `.psyn` pool they load into, no reading them by offset, and no measuring an engine to work out how it works. CE's host (`synth/`) is open, and so are our WAVE and PHASE: the rigs may hook those (`watch_own` in `sound_rig.py`). Sound test plan, including when each part gets built: `docs/mt/SOUND_TEST_PLAN.md`. CPU cost is measured on the device with the Profiler, with all 8 synth voices sounding.
 
+## User pages and UI mockups
+
+A mod that adds or changes anything on the screen (a page, button, column, label, list or picker) gets a user page, `docs/mods/<mod>.md`, linked from its row in the README's Mods table. The page shows a mockup of every screen the mod changes, and its steps refer to what the mockup shows. The user page is for users, so it follows the README's plain style; the plan doc in `docs/mt/` is separate.
+
+- Mockups are SVG files in `docs/mods/img/`, named `<mod>-<screen>.svg`. Draw them at the Tracker+ screen's proportions (800 × 480), in CE's default theme colours.
+- Every label in a mockup is copied from the firmware's own strings, not paraphrased. Mark what the mod adds or changes, for example with an outline, and say in the caption what's marked.
+- One mockup for each state the steps describe, for example a list closed and open, or Off and On.
+- Show the mod in use, with its effect visible, not just the screen it's on. How much depends on the mod: a mod with its own pages, controls or plugins (Synths, Synth FX, Master FX) shows every page and state; a mod set only in Project Settings (Global Swing) shows that settings page.
+- The page ships with the mod: a mod that changes the screen doesn't merge into `modular` without it. A later change to the mod's screens updates its mockups in the same merge.
+
 ## Merging into modular
 
 Every merge into `modular`, from CE's `main` or from a mod branch, goes through all of these before it is committed. Conflicts and passing tests are not enough: git merges a change silently when it touches different lines, and the emulator fakes the SD card, the file manager and real timing.
@@ -66,7 +76,8 @@ Every merge into `modular`, from CE's `main` or from a mod branch, goes through 
 5. List what the emulator can't show for this merge (SD timing, interrupt races, USB, sound) and decide the hardware checks. For each check, make the test project it needs: the user doesn't build projects.
 6. The merge report and the commit message say, in plain words: what changed, what each mod interaction is, what was fixed, what ran, and the hardware checks with their projects. Not one line in passing.
    They also list what was not checked, analysis included. A merge is not called done or tested while anything important is on that list, and "tested" covers only what ran.
-7. Then tag and release as below.
+7. For a mod that changes the screen, check its user page and mockups (above) against the merged firmware's labels and screens.
+8. Then tag and release as below.
 
 ## Releases
 
