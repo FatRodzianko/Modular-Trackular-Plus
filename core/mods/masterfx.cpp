@@ -15,6 +15,7 @@
 #include "Platform.h"
 #include "Tracker.h"
 #include "masterfxDsp.h"
+#include "mods.h" // cardIsLent
 #include "configEditor/configMenuDefs.h"
 #include "mtAudioEngine.h"
 #include <cr_section_macros.h>
@@ -152,6 +153,9 @@ uint32_t get32(const uint8_t* b)
 
 constexpr size_t kMaxChoices = 1 + pl::kCatalogSize + 1; // Stock, the plugins, Missing
 constexpr char kMissing[] = "Missing: ";
+// The list's line and the Master page's text under the column for a project's file that can't
+// play: the column is 94 px wide, so the file's name is in the slot's page title only
+constexpr char kMissingLine[] = "Missing";
 
 // Main loop only, rebuilt before use: SDRAM in the firmware
 MFX_SDRAM const char* names[kSlots][kMaxChoices];
@@ -177,6 +181,7 @@ void applyDucks(); // what plays ducks as settings say (the firmware's)
 void load(const Store& store)
 {
     settings = fromRecord(store);
+    pl::scan(); // a project's open (main loop): files copied to /MasterFX since the last list
     refreshChoices();
 }
 
@@ -242,7 +247,7 @@ void refreshChoices()
             copyText(missingText[s], sizeof(missingText[s]), kMissing);
             pluginkit::appendText(missingText[s], sizeof(missingText[s]), file);
             chosen[s] = static_cast<uint8_t>(n);
-            names[s][n++] = missingText[s];
+            names[s][n++] = kMissingLine;
         }
         counts[s] = static_cast<uint8_t>(n);
     }
@@ -276,7 +281,7 @@ const char* choiceName(uint8_t slot)
 bool missing(uint8_t slot)
 {
     build();
-    return slot < kSlots && settings.slot[slot].file[0] != 0 && names[slot][chosen[slot]] == missingText[slot];
+    return slot < kSlots && settings.slot[slot].file[0] != 0 && names[slot][chosen[slot]] == kMissingLine;
 }
 
 void choose(uint8_t slot, uint8_t index)
@@ -286,7 +291,7 @@ void choose(uint8_t slot, uint8_t index)
     {
         return;
     }
-    if (names[slot][index] == missingText[slot]) // the Missing line: it stays as it is
+    if (names[slot][index] == kMissingLine) // the Missing line: it stays as it is
     {
         return;
     }
@@ -328,7 +333,7 @@ const char* pageTitle(uint8_t slot, const char* word)
     }
     if (missing(slot))
     {
-        snprintf(titleText, sizeof(titleText), "%s: %s", word, choiceName(slot));
+        snprintf(titleText, sizeof(titleText), "%s: %s", word, missingText[slot]);
         return titleText;
     }
     return nullptr;
@@ -686,6 +691,23 @@ void apply()
 const void* menuSetup(uint8_t slot)
 {
     return &slotMenus[slot < kSlots ? slot : 0];
+}
+
+void pageOpened()
+{
+    if (!pl::started() || cardIsLent())
+    {
+        return;
+    }
+    pl::scan(); // files copied to /MasterFX since the last list
+    if (hasStarted)
+    {
+        apply(); // a project's file that is there now plays; what plays already is kept
+    }
+    else
+    {
+        refreshChoices();
+    }
 }
 
 void started()

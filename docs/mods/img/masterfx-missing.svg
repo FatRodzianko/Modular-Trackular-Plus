@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="480" viewBox="0 0 800 480" font-family="'Roboto Mono', 'DejaVu Sans Mono', Consolas, monospace">
+<title>Master FX: a missing plugin</title><desc>The Master page with the project's Limiter plugin missing from the card: Missing in the list and under the column</desc>
+<defs><linearGradient id="shadow" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0A0A0A"/><stop offset="1" stop-color="#000000"/></linearGradient><linearGradient id="barShade" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000000"/><stop offset="1" stop-color="#080808"/></linearGradient></defs>
+<rect x="0" y="0" width="800" height="480" fill="#000000"/>
+<rect x="0" y="0" width="800" height="28" fill="#080808"/>
+<line x1="0" y1="28.5" x2="800" y2="28.5" stroke="#FFFFFF" stroke-width="1"/>
+<text class="lbl" x="9" y="13" font-size="17" font-weight="700" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Master 1/3</text>
+<rect x="1" y="425" width="797" height="54" fill="#0A0A0A"/>
+<line x1="100.5" y1="438.5" x2="100.5" y2="479" stroke="#777777" stroke-width="1"/>
+<line x1="200.5" y1="438.5" x2="200.5" y2="479" stroke="#777777" stroke-width="1"/>
+<line x1="300.5" y1="438.5" x2="300.5" y2="479" stroke="#777777" stroke-width="1"/>
+<line x1="400.5" y1="438.5" x2="400.5" y2="479" stroke="#777777" stroke-width="1"/>
+<line x1="500.5" y1="438.5" x2="500.5" y2="479" stroke="#777777" stroke-width="1"/>
+<line x1="600.5" y1="438.5" x2="600.5" y2="479" stroke="#777777" stroke-width="1"/>
+<line x1="700.5" y1="438.5" x2="700.5" y2="479" stroke="#777777" stroke-width="1"/>
+<rect x="2" y="29" width="97" height="394" fill="#0A0A0A"/>
+<rect x="2" y="413" width="97" height="12" fill="url(#shadow)"/>
+<rect x="12" y="40" width="77" height="369" fill="#080808"/>
+<rect x="12" y="40" width="8" height="369" fill="url(#barShade)"/>
+<rect x="13" y="110" width="75" height="298" fill="#FFFFFF"/>
+<rect x="102" y="29" width="97" height="394" fill="#0A0A0A"/>
+<rect x="102" y="413" width="97" height="12" fill="url(#shadow)"/>
+<rect x="105" y="141" width="91" height="27" fill="none" stroke="#FFFFFF" stroke-width="1"/>
+<clipPath id="clip20"><rect x="115" y="33" width="74" height="189"/></clipPath>
+<g clip-path="url(#clip20)">
+<text class="lbl" x="115" y="46.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Stock</text>
+<text class="lbl" x="115" y="73.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Freeverb</text>
+<text class="lbl" x="115" y="100.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Plate</text>
+<text class="lbl" x="115" y="127.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Spring</text>
+<text class="lbl" x="115" y="154.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Shimmer</text>
+<text class="lbl" x="115" y="181.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">"Gated"</text>
+<text class="lbl" x="115" y="208.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Reverse</text>
+</g>
+<rect x="202" y="29" width="97" height="394" fill="#0A0A0A"/>
+<rect x="202" y="413" width="97" height="12" fill="url(#shadow)"/>
+<rect x="205" y="87" width="91" height="27" fill="none" stroke="#FFFFFF" stroke-width="1"/>
+<clipPath id="clip33"><rect x="215" y="33" width="74" height="81"/></clipPath>
+<g clip-path="url(#clip33)">
+<text class="lbl" x="215" y="46.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Stock</text>
+<text class="lbl" x="215" y="73.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Tape</text>
+<text class="lbl" x="215" y="100.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">BBD</text>
+</g>
+<rect x="302" y="29" width="97" height="394" fill="#0A0A0A"/>
+<rect x="302" y="413" width="97" height="12" fill="url(#shadow)"/>
+<rect x="305" y="87" width="91" height="27" fill="none" stroke="#FFFFFF" stroke-width="1"/>
+<clipPath id="clip42"><rect x="315" y="33" width="74" height="81"/></clipPath>
+<g clip-path="url(#clip42)">
+<text class="lbl" x="315" y="46.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Stock</text>
+<text class="lbl" x="315" y="73.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Glue</text>
+<text class="lbl" x="315" y="100.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Missing</text>
+</g>
+<rect x="402" y="29" width="97" height="394" fill="#0A0A0A"/>
+<rect x="402" y="413" width="97" height="12" fill="url(#shadow)"/>
+<rect x="502" y="29" width="97" height="394" fill="#0A0A0A"/>
+<rect x="502" y="413" width="97" height="12" fill="url(#shadow)"/>
+<rect x="505" y="33" width="91" height="27" fill="none" stroke="#FFFFFF" stroke-width="1"/>
+<clipPath id="clip53"><rect x="515" y="33" width="74" height="135"/></clipPath>
+<g clip-path="url(#clip53)">
+<text class="lbl" x="515" y="46.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Hard Clip</text>
+<text class="lbl" x="515" y="73.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Soft Clip</text>
+<text class="lbl" x="515" y="100.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Saturate</text>
+<text class="lbl" x="515" y="127.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Overdrive</text>
+<text class="lbl" x="515" y="154.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Drive+</text>
+</g>
+<rect x="602" y="29" width="97" height="394" fill="#0A0A0A"/>
+<rect x="602" y="413" width="97" height="12" fill="url(#shadow)"/>
+<rect x="612" y="40" width="77" height="369" fill="#080808"/>
+<rect x="612" y="40" width="8" height="369" fill="url(#barShade)"/>
+<rect x="613" y="408" width="75" height="0" fill="#FFFFFF"/>
+<rect x="702" y="29" width="97" height="394" fill="#0A0A0A"/>
+<rect x="702" y="413" width="97" height="12" fill="url(#shadow)"/>
+<rect x="712" y="40" width="77" height="369" fill="#080808"/>
+<rect x="712" y="40" width="8" height="369" fill="url(#barShade)"/>
+<rect x="713" y="408" width="75" height="0" fill="#FFFFFF"/>
+<text class="lbl" x="50" y="441" font-size="14" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="central" xml:space="preserve">Volume</text>
+<text class="val" x="50" y="461" font-size="17" font-weight="300" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central" xml:space="preserve">0.00 dB</text>
+<text class="lbl" x="150" y="441" font-size="14" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="central" xml:space="preserve">Reverb</text>
+<text class="lbl" x="150" y="461" font-size="17" font-weight="300" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central" xml:space="preserve">Shimmer</text>
+<text class="lbl" x="250" y="441" font-size="14" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="central" xml:space="preserve">Delay</text>
+<text class="lbl" x="250" y="461" font-size="17" font-weight="300" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central" xml:space="preserve">BBD</text>
+<text class="lbl" x="350" y="441" font-size="14" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="central" xml:space="preserve">Limiter</text>
+<text class="lbl" x="350" y="461" font-size="17" font-weight="300" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central" xml:space="preserve">Missing</text>
+<text class="lbl" x="450" y="451" font-size="14" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="central" xml:space="preserve">EQ</text>
+<text class="lbl" x="550" y="441" font-size="14" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="central" xml:space="preserve">Saturation</text>
+<text class="lbl" x="550" y="461" font-size="17" font-weight="300" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central" xml:space="preserve">Hard Clip</text>
+<text class="lbl" x="650" y="441" font-size="14" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="central" xml:space="preserve">Bass Boost</text>
+<text class="val" x="650" y="461" font-size="17" font-weight="300" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central" xml:space="preserve">0</text>
+<text class="lbl" x="750" y="441" font-size="14" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="central" xml:space="preserve">Space</text>
+<text class="val" x="750" y="461" font-size="17" font-weight="300" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central" xml:space="preserve">0</text>
+<rect x="301" y="31" width="97" height="391" fill="none" stroke="#CD1818" stroke-width="1.5"/>
+<rect x="300" y="27" width="101" height="453" rx="3" fill="none" stroke="#2F9BFF" stroke-width="2.5" stroke-dasharray="7 4"/>
+</svg>

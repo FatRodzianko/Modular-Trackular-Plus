@@ -273,6 +273,9 @@ void cMasterParams::update()
 void cMasterParams::start(uint32_t options)
 {
     moduleRefresh = 1;
+#if MT_HAS_MASTERFX // MT: /MasterFX listed again: files copied there since show and play
+    mods::masterfx::pageOpened();
+#endif
 
     //	displayType = display_t::masterValues;
 
@@ -2465,13 +2468,22 @@ void changeSaturationType(int16_t value)
 
 #if MT_HAS_MASTERFX // MT:
 // A step through the slot's list (Stock, the card's plugins, then Missing if the project's file
-// isn't there); the list can change with the choice (Missing goes), so it is shown again
+// isn't there). The list can change with the choice (Missing goes): then the lists get their data
+// again; otherwise only their values, so the other lists' bars stay put
 static void changeMasterfxSlot(uint8_t slot, int16_t value)
 {
-    const int to = clamp<int>(mods::masterfx::choice(slot) + value, 0, mods::masterfx::choiceCount(slot) - 1);
+    const uint8_t count = mods::masterfx::choiceCount(slot);
+    const int to = clamp<int>(mods::masterfx::choice(slot) + value, 0, count - 1);
     mods::masterfx::choose(slot, static_cast<uint8_t>(to));
     mods::masterfxChosen();
-    MP->showMasterfxLists();
+    if (mods::masterfx::choiceCount(slot) != count)
+    {
+        MP->showMasterfxLists();
+    }
+    else
+    {
+        MP->showMasterfxChoices();
+    }
 }
 
 static void changeMasterfxReverb(int16_t value)

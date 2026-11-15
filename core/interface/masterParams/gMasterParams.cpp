@@ -277,18 +277,32 @@ bool masterfxDucksUp = false;
 // The own knobs' values, columns 5 and 6 (main loop; written before use)
 __NOINIT(EXTERNAL_RAM) char masterfxKnobText[2][16];
 
+// start: the list's bar starts on the choice. At 0 a list given its data again draws its bar on
+// Stock and slides it back down to the choice
 void fillMasterfxList(strList& list, uint8_t slot)
 {
-    list.start = 0;
+    list.start = mods::masterfx::choice(slot);
     list.length = mods::masterfx::choiceCount(slot);
     list.linesCount = list.length;
     list.data = (char**)mods::masterfx::choiceNames(slot);
 }
 
-// The Master page's text under a slot's column: the choice, or "Bypassed"
+// The Master page's text under a slot's column: the choice, or "Bypassed". Cut to the label's
+// width, as CE cuts a label's first line (controlStyleLimitTextWidth): a label's second line isn't,
+// and a plugin's name can be 31 characters (main loop; written before use)
+__NOINIT(EXTERNAL_RAM) char masterfxChoiceFit[mods::masterfx::kSlots][32];
+
 const char* masterfxChoiceText(uint8_t slot)
 {
-    return mods::masterfx::bypassed(slot) ? "Bypassed" : mods::masterfx::choiceName(slot);
+    const char* text = mods::masterfx::bypassed(slot) ? "Bypassed" : mods::masterfx::choiceName(slot);
+    constexpr uint32_t kSecondLine = controlStyleFont2; // as showMasterValues sets it
+    const strFont* font = &fonts[((kSecondLine >> 8) & 15) - 1];
+    const uint16_t fit = getMaxTextLengthThatFitSpecificWidth(font, text, 800 / 8 - 6);
+    char* out = masterfxChoiceFit[slot];
+    const size_t n = fit < sizeof(masterfxChoiceFit[slot]) - 1 ? fit : sizeof(masterfxChoiceFit[slot]) - 1;
+    memcpy(out, text, n);
+    out[n] = 0;
+    return out;
 }
 
 // A page's title and CE's knobs' labels (column i is label i) for the slot's plugin. Stock keeps

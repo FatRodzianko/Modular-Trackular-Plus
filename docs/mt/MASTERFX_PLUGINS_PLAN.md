@@ -182,10 +182,81 @@ Where the build stands (section 8's steps):
   - The release tier on the plugin firmware (`b1f71d8`'s build), the recorder build as `--diag`: 46
     jobs, 0 failed of the 21 that ran, the other 25 passed before on the same firmware and tests
     (the cache). It ran with `MT_TEST_CPUS=3` and 3 jobs, the user's 50 % limit, in 1 h 40 min.
-  - Not checked: anything on the unit (the device check, below); the time guard against real cycles,
-    since the emulator's clock is instructions; a sample track ducked, with sound; the cost of a
-    ducked track; a reverb plugin's own knobs on its page.
-- Not yet: the device check, then step 8.
+  - The first device check, 2026-11-15, with both lockup recorder builds and M1 to M3 (the
+    unit's `/mfx_log.txt`):
+    - M1, 8 voices with Shimmer + BBD: today's release averages 62 % of a block, slowest 79 % and
+      73 % over two runs; the plugin firmware averages 62 %, slowest 81 % and 74 %.
+    - M2, with Glue as well: 62 % to 63 % average, slowest 74 % to 76 % over four runs.
+    - M3: GuardSlow is bypassed (the Limiter column read Bypassed) and the voice plays on; the
+      log's slowest is 28 % to 34 %, so its 8 slow blocks came at the project's open, before Play.
+    - Every run: 0 blocks over time, none back to back, CE's synth never over its limit, the
+      audio pool at 40 of 80, free heap 79 to 81 KB, max stack 7,905 B (8,569 B on today's).
+  - What the first device check found, all three on the plugin firmware's Master page, now fixed:
+    - A step in any of the three lists moved the other two lists' bars to Stock and slid them back.
+      Each step gave all three lists their data again with `start` 0, and CE's list draws its bar
+      from `start` and slides it to the value over a few frames. Now each list's `start` is its
+      choice, and a step that leaves the lists' contents as they were only sets the values.
+    - A file copied to `/MasterFX/` after the start stayed Missing until the unit restarted: the
+      folder was listed only at the start. Now `masterfx::load` (a project's open) and the Master
+      page's opening (`masterfx::pageOpened`) list it again, and the page's opening applies.
+    - The Missing text, with the file's name, spilled out of its column under the list in CE's
+      17 pt font. Now the list's line and the column say `Missing`, the slot's page title still
+      names the file, and the text under each column is cut to its 94 px (CE cuts only a
+      label's first line), so a long plugin name can't spill either.
+    - Checked: the new `lists_and_card` part of `test_masterfx_rig.py ui` (16 checks: the bars on
+      their choice from the first frame, no bar moving after Limiter steps, Up at Stock, Missing
+      in the column and the file in the title, a copied file listed and playing once the page
+      opens and once a project opens, a 31-character name cut to 10 characters at a planted 9 px
+      a character, as the rig doesn't unpack the fonts). The build from before the fixes fails
+      12 of them; the fixed build passes `ui`, 91 checks. Host tests all pass; `mem_budget` ok, SDRAM
+      96 B more. The quick tier on the fixed build, 0 failed of 21 run; the release tier, with the
+      fixed code's lockup recorder build as `--diag`, all 46 jobs passed (9 in the last run, 37
+      cached from runs on the same firmware and tests).
+  - The recheck on the unit, 2026-11-15, with the fixed code's lockup recorder build
+    (`TrackerPlus_MFX2_fix_diag.ptf`) and M3, the user's report: Limiter steps, Up at Stock
+    included, leave the Reverb and Delay bars where they are, and so do Reverb steps; the column
+    says Missing inside its box and the title names the file; GuardSlow.ptmfx copied over USB is
+    listed once the card comes back and the Master page opens, and the column reads Limiter /
+    Bypassed; leaving the page and coming back keeps all of it. The user's two readings in M3 were
+    71 % and 28 % (59 % and 28 % on the first check). The log, three runs: average 20 % of a block,
+    slowest 31 %, 28 % and 27 %, 0 blocks over time, none back to back, the synth never over its
+    limit, free heap 80,796 B, max stack 8,025 B. One run's longest main loop gap was 209 ms, the
+    run that took in the USB card mode and the folder's new listing; the others 7 ms and 0 ms.
+  - Not needed again: M1 and M2 on the fixed firmware. They passed on the first check, the fixes
+    change only the main loop's page and the listing, and M3 on the fixed firmware gave the same
+    audio cost as before. The time guard against real cycles: done on the unit, M3 bypassed
+    GuardSlow on both checks.
+  - The device check M4, 2026-11-15, on the fixed code's lockup recorder build, the user's
+    report: Room and Ducker listed and playing from the card's files; the Limiter page's title,
+    Ducker's Trigger in place of LimiterThr, Depth 60 % and Curve Smooth; the kick (a sample
+    track) as the Sidechain key dipping the hats and the synth but not itself; the Ducks list
+    (Shift + the Sidechain button) with Master marked, Track 3 alone ducking only the hats (a
+    sample track as a destination), Synth 1 added reading 2 tracks and ducking both, Delete back
+    to Master, the Sidechain list back with the kick kept; Depth 100 % ducking to silence (its
+    design: a full duck at 100 %), Delete back to 60 %, Curve Linear and Smooth; Glue's Ratio and
+    Makeup with their defaults, Makeup 6.0 dB louder, Delete back for both; Room's Width 80 %,
+    Delete back. By ear, Ratio 20.0 :1 and Width 0 % were hard to tell apart ("sounds right"),
+    so those two are seen on the screen but not clearly heard. The log, four runs (the steps
+    played without stopping, so the Ducks settings aren't apart in it): average 22 % of a block,
+    slowest 42 %, 39 %, 39 % and 40 %, 0 blocks over time, none back to back, the synth never
+    over its limit, the pool at 40 of 80 at most, free heap 79,316 B, max stack 8,757 B (of
+    20,480), the longest main loop gap 37 ms. Ducking's own cost isn't apart from Room's and
+    Ducker's: all of it, with one synth voice and two sample tracks, stayed at 22 % on average.
+    M4 in the emulator on the fixed build: it opens with Master FX On, Room and Ducker active from
+    the card's files, 13 notes through the sequencer, no asserts, the Ducks list's Track 3 +
+    Synth 1 reach the firmware's mask (0x104) and ducking is live every block; with Synth 1 as
+    the key the gain goes down to 0.4. With the kick as the key the gain stays 1: the emulator
+    doesn't load sample tracks' audio, so the kick is silent there.
+- Not yet:
+  - the user page is written, not yet checked on the unit: `docs/mods/masterfx.md`, linked from the
+    README's Master FX row, with six mockups drawn by `tools/docs/mockups_masterfx.py` from the
+    fixed firmware's code (the Master page's lists, Shimmer's words on the Reverb page, Glue's own
+    knobs, the Ducks list, Bypassed, Missing). `tools/docs/check_mockups.py` (which now also reads
+    `masterfx-sdk/pack/` for the pack's names) passes, 41 images. The user pages from `modular`
+    (`e44d0617`, `b091ce22`: `docs/mods/`, `tools/docs/`, the README and CLAUDE.md) are in this
+    branch's working tree as `modular` has them, plus this branch's changes (the README's Master FX
+    row, the checker's sources), so step 8's merge sees only those as new;
+  - step 8, whose checklist then checks the page against the merged firmware's labels.
 
 Today's mod is in [MASTERFX_PORT_PLAN.md](MASTERFX_PORT_PLAN.md): eight effects built into the firmware,
 run inside CE's own reverb and delay objects. This plan turns them into plugins loaded from the card,

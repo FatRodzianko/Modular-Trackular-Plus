@@ -127,7 +127,9 @@ them. `format` is optional.
 1. **Catalog.** At start with the Master FX mod on (or when it is first turned on, or a
    project that has it is opened), the firmware writes the missing pack files, lists every
    `.ptmfx` in `/MasterFX/` (up to 64) and checks each header and file size.
-   A file that fails stays in the list with the reason.
+   A file that fails stays in the list with the reason. The folder is listed again each time a
+   project opens and each time the Master page opens, so a file copied to the card since shows
+   then, and a project's file that was missing plays.
 2. **Read.** When a slot gets a plugin (picked on the Master page or in Config, or from a
    project), its file is read into a buffer in SDRAM and checked again. What plays keeps
    playing meanwhile.
@@ -287,19 +289,23 @@ Section 11 says what it checks.
 
 Copy `Ducker.ptmfx` to `/MasterFX/` on the card. The file name is what a project stores, so
 keep it once a project uses the plugin. The header's name is what the lists show. Then, with
-the Master FX mod on, pick it in the Master page's Limiter column, or in Config > Project >
-Master FX.
+the Master FX mod on, pick it in the Master page's Limiter column, or in Config > Project
+Settings > Master FX.
 
 ---
 
 ## 5. On the Master Page
 
-With the Master FX mod on:
+The user's guide, with pictures of each page: [docs/mods/masterfx.md](mods/masterfx.md). With the
+Master FX mod on:
 
 - **The Master page** has three lists, Reverb, Delay and Limiter, after Volume. Each has Stock
   (CE's effect), then every plugin in `/MasterFX/` made for that slot that loaded cleanly, by
   its header's name. A pick takes effect at once; the slot's effect is silent while its memory
-  is cleared. Config > Project > Master FX has the same three lists.
+  is cleared. Config > Project Settings > Master FX has the same three lists. Under each column the
+  choice's name is cut to what fits in the column's 94 px, so keep names short. A project's file
+  that isn't on the card reads `Missing` in the list and under the column; the slot's page title
+  names the file.
 - **The slot's page** (the Reverb, Delay or Limiter button) is CE's, with the plugin's labels in
   place of CE's where it gives them. Its title says what plays: `Reverb: Shimmer`,
   `Limiter: Glue (bypassed)`, `Limiter: Missing: Gone.ptmfx`.
@@ -316,7 +322,7 @@ With the Master FX mod on:
   opens on it.
 - **A project stores** each slot's file name and its own knobs' values, and the Ducks list. A
   file that is missing or refused plays Stock meanwhile, and the slot's title says why; it is
-  looked for again when the project is next opened.
+  looked for again when the project is next opened or the Master page next opens.
 - **A plugin stopped by the time guard** (section 9.4) reads `Bypassed` under the slot's column
   on the Master page, and its page's title says so. It stays bypassed until it is installed
   again: pick another choice in the slot and then the plugin, or turn the mod off and on.
@@ -337,7 +343,7 @@ the pack files that are missing.
 | `flags` | `PTMFX_FLAG_FLOAT`, `PTMFX_FLAG_DUCK` (with `FLOAT`, dynamics only), or 0 |
 | `slot` | `PTMFX_SLOT_REVERB`, `PTMFX_SLOT_DELAY` or `PTMFX_SLOT_DYNAMICS` |
 | `num_params` | 0 to 2 own knobs |
-| `name` | up to 31 characters; shown in the slot's list and the page's title |
+| `name` | up to 31 characters; shown in the slot's list, under its column on the Master page (cut to the column's 94 px) and in the page's title |
 | `author` | up to 15 characters |
 | `labels` | one for each of CE's knobs on the slot's page, up to 11 characters; empty keeps CE's |
 | `state_size` | 1 byte up to 1 KB (reverb) or 512 bytes (delay, dynamics) |

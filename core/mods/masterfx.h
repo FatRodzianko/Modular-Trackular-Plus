@@ -86,8 +86,8 @@ bool importSideFile(FileIo& io, const char* projectFolder, Store& store);
 
 // ---- the lists the pages show ----------------------------------------------------------
 // For each slot: Stock, the slot's plugins in the card's order (masterfx-sdk's pack first), then
-// "Missing: <file>" when the project's file isn't usable. Rebuilt by refreshChoices (after a load,
-// a choice or a new list of the card).
+// "Missing" when the project's file isn't usable (the page title names the file). Rebuilt by
+// refreshChoices (after a load, a choice or a new list of the card). load lists the card again.
 void refreshChoices();
 uint8_t choiceCount(uint8_t slot);
 const char* const* choiceNames(uint8_t slot);
@@ -101,7 +101,7 @@ bool missing(uint8_t slot);
 
 // ---- the slot's own page (Reverb, Delay, Limiter) ----------------------------------------
 // Its title: "<word>: <plugin>", with " (bypassed)" once the time guard has stopped it, or
-// "<word>: Missing <file>" when the project's file can't play. nullptr: CE's own plays, CE's title.
+// "<word>: Missing: <file>" when the project's file can't play. nullptr: CE's own plays, CE's title.
 const char* pageTitle(uint8_t slot, const char* word);
 // The slot's plugin was stopped by the time guard (it plays silence, or the master untouched).
 bool bypassed(uint8_t slot);
@@ -137,6 +137,10 @@ void apply();
 
 // Main loop only: the unit has started. Cheap to call again.
 void started();
+
+// Main loop only, when the Master page opens: lists /MasterFX again (files copied there since)
+// and applies, so a project's file that was missing plays now. Not while the card is lent.
+void pageOpened();
 
 // The Master page's encoder: a switch reads the card and clears 1.5 MB, so it waits until the
 // encoder has stopped on a choice for a moment. pollApply, from the page's update, does it then;

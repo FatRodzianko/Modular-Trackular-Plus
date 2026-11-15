@@ -32,7 +32,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from masterfx_runtime import DELAY_FILES, REVERB_FILES, START, has_plugins  # noqa: E402
-from sound_rig import PlayRig, SoundRig, find_project_path, peak, set_names  # noqa: E402
+from sound_rig import REPO, PlayRig, SoundRig, find_project_path, peak, set_names  # noqa: E402
 from unicorn import UC_HOOK_MEM_WRITE  # noqa: E402
 from unicorn.arm_const import UC_ARM_REG_LR, UC_ARM_REG_PC, UC_ARM_REG_S0  # noqa: E402
 
@@ -171,6 +171,7 @@ class MasterPage:
         self.pot = None
         self.bytes = 0
         self.texts = []
+        self.ys = []                 # each API_VERTEX2F's y, as the controls draw
         self._catch_display_commands()
         r.stub(m.addr("_ZN7Buttons15isButtonPressedEi"), lambda mm: 0)
         for name, sym in r.syms.items():
@@ -208,6 +209,9 @@ class MasterPage:
                     self.bytes += 24 + 12 * len(text)
                 elif short.startswith("CMD_GRADIENT"):
                     self.bytes += 120
+                elif short.startswith("VERTEX2F"):
+                    self.ys.append(mm.arg(1))
+                    self.bytes += 4
                 else:
                     self.bytes += 4
                 return 0
@@ -323,6 +327,20 @@ class MasterPage:
             if c and self.m.r32(c + self.style_offset) & self.show_bit:
                 out.append(i)
         return out
+
+    def bar_y(self, handle):
+        """One frame of a list control: where its bar is (the top of the outline CE's NewList::drawBar
+        draws, y1 y1 y2 y2 y1 with a row's 27 px), or None"""
+        c = self.m.r32(self.table + 4 * handle)
+        vt = self.m.r32(c)
+        self.ys = []
+        for stage in range(5):
+            self.m.call(self.m.r32(vt + 4 * stage), c, max_insns=5_000_000)
+        y = self.ys
+        for i in range(len(y) - 4):
+            if y[i] == y[i + 1] == y[i + 4] and y[i + 2] == y[i + 3] == y[i] + 27:
+                return y[i]
+        return None
 
     def page_bytes(self):
         """What one full redraw of the shown controls would append, slot by slot."""
@@ -524,6 +542,7 @@ def test_ui(mods, ref):
 
     if limiter_list:
         limiter_page(mods, ref)
+        lists_and_card(mods)
 
     # display bytes, the heaviest choices
     p = MasterPage(mods)
@@ -646,6 +665,91 @@ def limiter_page(mods, ref):
     title = [e[1] for e in q.take_log() if e[0] == "title"]
     check(title[-1:] == ["Limiter: Missing: Gone.ptmfx"], f"missing: the title says so ({title})")
     check(not q.r.failures, "no asserts")
+
+
+def lists_and_card(mods):
+    """What the first device check found: a step in one list moved the others' bars to Stock and slid
+    them back (each list was given its data again, from the top); a file copied to /MasterFX after
+    the start stayed Missing until a restart; the Missing text, with the file's name, spilled out of
+    its column"""
+    p = MasterPage(mods)
+    set_mod(p.r, True, 4, 2)                      # Shimmer + BBD, Stock in the dynamics slot
+    p.start()
+    given = [e[1] for e in p.take_log() if e[0] == "data"][-3:]
+    names = dict(zip(given, ("Reverb", "Delay", "Limiter")))
+    reverb, delay, dynamics = given
+    opened = {names[h]: [p.bar_y(h) for _ in range(4)] for h in given}
+    check(all(None not in f and len(set(f)) == 1 for f in opened.values()),
+          f"the page opens with each list's bar on its choice, still from the first frame ({opened})")
+    settled = {h: opened[names[h]][-1] for h in given}
+    for _ in range(3):
+        p.press("right")                          # to the Limiter list
+    for step, what in ((1, "Glue"), (-1, "back to Stock"), (-1, "Up at Stock")):
+        p.encoder(step)
+        log = p.take_log()
+        frames = {names[h]: [p.bar_y(h) for _ in range(4)] for h in (reverb, delay)}
+        check(all(f == [settled[h]] * 4 for h, f in zip((reverb, delay), frames.values())),
+              f"Limiter list, {what}: the Reverb and Delay bars don't move ({frames})")
+        check(not any(e[0] == "data" for e in log), f"Limiter list, {what}: no list is given its data again")
+    moved = [p.bar_y(dynamics) for _ in range(6)]
+    check(moved[-1] == settled[dynamics], f"and the Limiter bar is back on Stock ({moved})")
+
+    # a file copied to the card after the start: the Master page lists it when it opens, and plays it
+    ducker = REPO / "build" / "masterfx" / "examples" / "Ducker.ptmfx"
+    if not ducker.exists():
+        print(f"     no {ducker} (tools/masterfx/build_pack.py builds it): the card checks skipped")
+        return
+    q = MasterPage(mods)
+    set_mod(q.r, True, 0, 0)
+    set_dynamics(q.r, "Ducker.ptmfx")
+    q.start()
+    log = q.take_log()
+    column = [e for e in log if e[0] == "text2" and e[2] and e[2].startswith("Missing")]
+    check([e[2] for e in column][-1:] == ["Missing"], f"missing: the Limiter column says Missing, no file name ({[e[2] for e in column]})")
+    q.press("limiter")
+    title = [e[1] for e in q.take_log() if e[0] == "title"]
+    check(title[-1:] == ["Limiter: Missing: Ducker.ptmfx"], f"and the Limiter page's title names the file ({title})")
+    q.press("cancel")
+    q.r.sd.files["/MasterFX/Ducker.ptmfx"] = ducker.read_bytes()
+    q.take_log()
+    q.press("cancel")                             # nothing lists the card but the page opening
+    check(slot_file(q.r, DYNAMICS) == "Ducker.ptmfx" and q.m.r8(runtime_slot(q.r, DYNAMICS)) == 0,
+          "copied while the page is open: not yet listed")
+    q.start()
+    log = q.take_log()
+    active = q.m.r8(runtime_slot(q.r, DYNAMICS))
+    check(active == 1, f"the Master page opens: Ducker is listed and plays ({active})")
+    check(any(e[0] == "text2" and e[2] == "Ducker" for e in log), "and the Limiter column says Ducker")
+
+    # and the open of a project: masterfx::load lists the card again
+    w = MasterPage(mods)
+    set_mod(w.r, True, 0, 0)
+    set_dynamics(w.r, "Ducker.ptmfx")
+    w.m.call(w.m.addr("_ZN4mods18masterfxKnobEditedEv"), max_insns=50_000_000)    # into the project's record
+    w.r.sd.files["/MasterFX/Ducker.ptmfx"] = ducker.read_bytes()
+    w.m.call(w.m.addr("_ZN4mods8registry15workspaceLoadedERKNS_5StoreE"),
+             w.m.addr("_ZN4mods12_GLOBAL__N_112projectStoreE"), max_insns=400_000_000)
+    active = w.m.r8(runtime_slot(w.r, DYNAMICS))
+    check(slot_file(w.r, DYNAMICS) == "Ducker.ptmfx" and active == 1,
+          f"copied before a project's open: it plays once the project opens ({slot_file(w.r, DYNAMICS)!r}, {active})")
+
+    # a long name is cut to the column's width; the list's own line is cut by the list
+    data = bytearray(ducker.read_bytes())
+    long_name = b"Ducker, with a much longer name"
+    data[12:44] = long_name + b"\0" * (32 - len(long_name))
+    z = MasterPage(mods)
+    # The display's start fills fonts[]' widths from the fonts it unpacks, and the rig doesn't run
+    # it: Font2, the label's second line, gets 9 px a character, so 94 px holds 10
+    fonts = z.m.sym("fonts")
+    z.m.write(fonts.addr + 1 * 172 + 32, bytes([9]) * 96)
+    z.r.sd.files["/MasterFX/LongName.ptmfx"] = bytes(data)
+    set_mod(z.r, True, 0, 0)
+    set_dynamics(z.r, "LongName.ptmfx")
+    z.start()
+    shown = [e[2] for e in z.take_log() if e[0] == "text2" and e[2] and e[2].startswith("Ducker")]
+    check(shown[-1:] == [long_name.decode()[:10]],
+          f"a 31-character name: cut to the column's 94 px, 10 characters at 9 px ({shown[-1:]!r})")
+    check(not (p.r.failures or q.r.failures or w.r.failures or z.r.failures), "no asserts")
 
 
 class Graph(SoundRig):

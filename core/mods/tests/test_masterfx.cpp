@@ -262,8 +262,9 @@ void testChoices()
 
     setFile(kDelay, "Tape.ptmfx");
     refreshChoices();
-    check(choiceCount(kDelay) == 2 && choice(kDelay) == 1 && strcmp(choiceName(kDelay), "Missing: Tape.ptmfx") == 0,
-          "the project's file not on the card: Missing");
+    check(choiceCount(kDelay) == 2 && choice(kDelay) == 1 && strcmp(choiceName(kDelay), "Missing") == 0,
+          "the project's file not on the card: Missing (the column's 94 px; the title names the file)");
+    check(strcmp(choiceNames(kDelay)[1], "Missing") == 0, "the list's line says Missing too");
     check(missing(kDelay) && !missing(kReverb), "only that slot is missing");
     choose(kDelay, 1);
     check(strcmp(settings.slot[kDelay].file, "Tape.ptmfx") == 0, "choosing Missing keeps the file");

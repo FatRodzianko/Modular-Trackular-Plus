@@ -190,6 +190,7 @@ guard tests, which are for the emulator), and the SDK's Room and Ducker as a use
 | `M1 8 ACD Shimmer BBD` | 8 | version 1: Shimmer + BBD by number, which today's release reads too | The heaviest pair on both firmwares, the same project: the plugins' cost against the built-in effects |
 | `M2 8 ACD Shimmer BBD Glue` | 8 | version 2: Shimmer, BBD and Glue by file | The three slots at once, at the limit |
 | `M3 1 voice ACD GuardSlow` | 1 | version 2: GuardSlow in the dynamics slot, Load Heavy | The time guard: about 600,000 instructions a block, over its eighth of a block on any count, so the slot is bypassed 8 blocks after it starts and the Master page's Limiter column reads Bypassed. The master passes through, so the voice plays on |
+| `M4 1 voice ACD Room Ducker` | 1, plus a kick on track 1 and a closed hat on track 3 | version 2: Room and Ducker, the Ducks list on Master | Written by `--masterfx-duck`. The Ducks list and the own knobs: the kick as the Sidechain key ducking Track 3, then Synth 1 as well; Ducker's Depth and Curve, Room's Width, then Glue's Ratio and Makeup. Needs Room and Ducker on the card. The emulator doesn't load sample tracks' audio, so only the unit hears a sample track as the key or ducked |
 
 Both firmwares are lockup recorder builds: today's release (`CE_20261113`, `d9a6795`) runs `M1` only,
 the plugin firmware all three. Lightest first is `M3`, but it needs GuardSlow on the card, so it
