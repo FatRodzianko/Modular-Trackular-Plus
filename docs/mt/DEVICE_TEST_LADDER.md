@@ -176,6 +176,34 @@ Open of `G2` hangs inside the plugin with the marker on the card and no file ope
 from that card is in safe mode and plays). Neither has a clock, so the time guard's reading there is
 instructions taken as cycles.
 
+## The Master FX plugin set: the slots from the card, Glue, and the time guard
+
+Since `masterfx-2.0`, Master FX plays through `.ptmfx` plugins in `/MasterFX/`; the firmware writes
+its pack there when a file is missing. `python tools/emu/make_masterfx_test_project.py "<project>"
+build/device/masterfx_plugins --masterfx-plugins` writes the projects: all three parts on ACD with its
+Init patch, and a `mods.bin` with Master FX On and its record 4. `tools/masterfx/device/build.sh`
+writes the card's extra plugins to `build/device/masterfx_card/MasterFX`: GuardSlow (and the other
+guard tests, which are for the emulator), and the SDK's Room and Ducker as a user would build them.
+
+| Project | Voices | Record 4 | What it isolates |
+|---|---|---|---|
+| `M1 8 ACD Shimmer BBD` | 8 | version 1: Shimmer + BBD by number, which today's release reads too | The heaviest pair on both firmwares, the same project: the plugins' cost against the built-in effects |
+| `M2 8 ACD Shimmer BBD Glue` | 8 | version 2: Shimmer, BBD and Glue by file | The three slots at once, at the limit |
+| `M3 1 voice ACD GuardSlow` | 1 | version 2: GuardSlow in the dynamics slot, Load Heavy | The time guard: about 600,000 instructions a block, over its eighth of a block on any count, so the slot is bypassed 8 blocks after it starts and the Master page's Limiter column reads Bypassed. The master passes through, so the voice plays on |
+| `M4 1 voice ACD Room Ducker` | 1, plus a kick on track 1 and a closed hat on track 3 | version 2: Room and Ducker, the Ducks list on Master | Written by `--masterfx-duck`. The Ducks list and the own knobs: the kick as the Sidechain key ducking Track 3, then Synth 1 as well; Ducker's Depth and Curve, Room's Width, then Glue's Ratio and Makeup. Needs Room and Ducker on the card. The emulator doesn't load sample tracks' audio, so only the unit hears a sample track as the key or ducked |
+
+Both firmwares are lockup recorder builds: today's release (`CE_20261113`, `d9a6795`) runs `M1` only,
+the plugin firmware all three. Lightest first is `M3`, but it needs GuardSlow on the card, so it
+comes last; it doesn't hang.
+
+The emulator ran each before the unit: `tools/masterfx/test_guards.py` (the release and quick tiers'
+`masterfx guards`: GuardSlow Heavy bypassed after exactly 8 blocks, the output and gain guards, the
+marker and safe mode with GuardHang), `test_masterfx_rig.py play` (8 voices with Shimmer + BBD + Glue
+on a real project) and `tools/masterfx/compare_cost.py` (the release tier's `masterfx cost`: each slot
+against today's release). None of
+them has a clock, so the time guard's reading there is instructions taken as cycles. GuardHang isn't
+run on the unit: the emulator covers the marker, and Synth FX's `G2` showed the recorder's restart.
+
 ## What a firmware comes with
 
 Each one handed over says what ran, what didn't, and the risk to the unit.

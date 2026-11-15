@@ -10,6 +10,7 @@
 #if MT_HAS_SYNTHFX
 
 #include "synthfxPlugins.h"
+#include "plugins/pluginKit.h"
 #include "synthfxPool.h"
 
 #include <cstring>
@@ -86,116 +87,21 @@ inline void barrier()
     __asm__ volatile("" ::: "memory");
 }
 
-// ---- small string helpers (no C library) ------------------------------------------------
-
-size_t textLength(const char* s, size_t limit)
-{
-    size_t n = 0;
-    while (n < limit && s[n] != 0)
-    {
-        n++;
-    }
-    return n;
-}
-
-bool sameText(const char* a, const char* b)
-{
-    while (*a != 0 && *a == *b)
-    {
-        a++;
-        b++;
-    }
-    return *a == *b;
-}
-
-void copyText(char* out, size_t size, const char* in)
-{
-    size_t n = 0;
-    for (; n + 1 < size && in[n] != 0; n++)
-    {
-        out[n] = in[n];
-    }
-    if (size > 0)
-    {
-        out[n] = 0;
-    }
-}
-
-void appendText(char* out, size_t size, const char* in)
-{
-    const size_t n = textLength(out, size);
-    if (n < size)
-    {
-        copyText(out + n, size - n, in);
-    }
-}
+// The shared helpers (core/mods/plugins/pluginKit.h)
+using pluginkit::appendText;
+using pluginkit::copyText;
+using pluginkit::entryAt;
+using pluginkit::finite;
+using pluginkit::lastStep;
+using pluginkit::sameText;
+using pluginkit::stepNearest;
+using pluginkit::textLength;
+using pluginkit::valueAt;
 
 // kDir/file, or false if it doesn't fit
 bool pathOf(const char* file, char* out, size_t size)
 {
-    copyText(out, size, kDir);
-    appendText(out, size, "/");
-    appendText(out, size, file);
-    return textLength(out, size) == textLength(kDir, sizeof(kDir)) + 1 + textLength(file, kFileNameSize);
-}
-
-// ---- numbers ------------------------------------------------------------------------------
-
-inline bool finite(float v)
-{
-    return v - v == 0.0f; // NaN and the infinities give NaN
-}
-
-// The nearest whole number, for |x| < 2^30
-inline int32_t nearest(float x)
-{
-    return x >= 0.0f ? static_cast<int32_t>(x + 0.5f) : -static_cast<int32_t>(-x + 0.5f);
-}
-
-inline float absf(float x)
-{
-    return x < 0.0f ? -x : x;
-}
-
-// x is a whole number, near enough for steps worked out in single precision
-inline bool whole(float x, int32_t* n)
-{
-    if (!(absf(x) < 1.0e9f))
-    {
-        return false;
-    }
-    *n = nearest(x);
-    const float tolerance = 1.0e-3f * (absf(x) > 1.0f ? absf(x) : 1.0f);
-    return absf(x - static_cast<float>(*n)) <= tolerance;
-}
-
-// A knob's last step (it has steps 0 to this)
-uint32_t lastStep(const PtsfxParam& p)
-{
-    int32_t n = 0;
-    whole((p.max_val - p.min_val) / p.step, &n);
-    return n < 0 ? 0u : static_cast<uint32_t>(n);
-}
-
-// min + step x p.step, rounded once (ptsfx.h)
-float valueAt(const PtsfxParam& p, uint32_t step)
-{
-    return __builtin_fmaf(static_cast<float>(step), p.step, p.min_val);
-}
-
-uint32_t stepNearest(const PtsfxParam& p, float value)
-{
-    const uint32_t last = lastStep(p);
-    if (!(value > p.min_val)) // NaN too
-    {
-        return 0;
-    }
-    const float at = (value - p.min_val) / p.step;
-    if (!(at < static_cast<float>(last)))
-    {
-        return last;
-    }
-    return static_cast<uint32_t>(nearest(at));
+    return pluginkit::joinPath(kDir, file, kFileNameSize, out, size);
 }
 
 // ---- the tables ------------------------------------------------------------------------
@@ -218,12 +124,6 @@ const PtsfxParam* paramOf(int id, uint32_t knob)
     }
     const Plugin& p = plugins[in->plugin];
     return knob < p.knobs ? &p.header->params[knob] : nullptr;
-}
-
-template <typename Entry>
-Entry entryAt(const uint8_t* code, uint32_t offset)
-{
-    return reinterpret_cast<Entry>(reinterpret_cast<uintptr_t>(code + offset) | 1u); // Thumb
 }
 
 // The plugin in file loaded (or already), or -1 with *status set
@@ -345,50 +245,14 @@ void listInto(size_t* length, const char* file)
 
 // ---- the interrupt's ----------------------------------------------------------------------
 
-// The rare block that needs it: NaN or infinite → 0 (true: there was one), else held within
-// ±kOutputLimit
-bool fix(float* b)
-{
-    bool bad = false;
-    for (uint32_t i = 0; i < PTSFX_BLOCK; i++)
-    {
-        const float v = b[i];
-        if (!finite(v))
-        {
-            b[i] = 0.0f;
-            bad = true;
-        }
-        else if (v > kOutputLimit)
-        {
-            b[i] = kOutputLimit;
-        }
-        else if (v < -kOutputLimit)
-        {
-            b[i] = -kOutputLimit;
-        }
-    }
-    return bad;
-}
-
-// The block looked at without a branch per sample: v - v is 0 for every finite v and NaN
-// otherwise, so the sums stay 0 unless one isn't; the peak is the largest |v| (VMAXNM, which
-// passes over a NaN: the sums catch those). Only a block that needs it goes through fix().
+// The output guard (pluginKit.h): only a block that needs it goes through fixBlock
 MT_PLUGINS_ISR bool guard(float* b)
 {
-    float nan0 = 0.0f, nan1 = 0.0f, peak0 = 0.0f, peak1 = 0.0f;
-    for (uint32_t i = 0; i < PTSFX_BLOCK; i += 2)
-    {
-        const float v0 = b[i], v1 = b[i + 1];
-        nan0 += v0 - v0;
-        nan1 += v1 - v1;
-        peak0 = __builtin_fmaxf(peak0, __builtin_fabsf(v0));
-        peak1 = __builtin_fmaxf(peak1, __builtin_fabsf(v1));
-    }
-    if (nan0 + nan1 == 0.0f && __builtin_fmaxf(peak0, peak1) <= kOutputLimit)
+    if (pluginkit::blockFine(b, PTSFX_BLOCK, kOutputLimit))
     {
         return false;
     }
-    return fix(b);
+    return pluginkit::fixBlock(b, PTSFX_BLOCK, kOutputLimit);
 }
 
 } // namespace
@@ -445,33 +309,12 @@ bool checkHeader(const PtsfxHeader& h, uint32_t fileSize, const char** why)
             w = "entry";
         }
     }
+    static_assert(PTSFX_PARAM_FLOAT == pluginkit::kKnobFloat && PTSFX_PARAM_INT == pluginkit::kKnobInt &&
+                      PTSFX_PARAM_LIST == pluginkit::kKnobList,
+                  "the kit checks ptsfx.h's display types");
     for (uint32_t k = 0; w == nullptr && k < h.num_params; k++)
     {
-        const PtsfxParam& p = h.params[k];
-        int32_t steps = 0, at = 0;
-        if (p.label[0] == 0 || textLength(p.label, sizeof(p.label)) == sizeof(p.label) ||
-            textLength(p.unit, sizeof(p.unit)) == sizeof(p.unit))
-        {
-            w = "knob label";
-        }
-        else if (p.display_type != PTSFX_PARAM_FLOAT && p.display_type != PTSFX_PARAM_INT &&
-                 p.display_type != PTSFX_PARAM_LIST)
-        {
-            w = "knob display";
-        }
-        else if (!finite(p.min_val) || !finite(p.max_val) || !finite(p.default_val) || !finite(p.step) ||
-                 !(p.step > 0.0f) || !(p.max_val >= p.min_val))
-        {
-            w = "knob range";
-        }
-        else if (!whole((p.max_val - p.min_val) / p.step, &steps) || static_cast<uint32_t>(steps) > kMaxKnobSteps)
-        {
-            w = "knob steps";
-        }
-        else if (!whole((p.default_val - p.min_val) / p.step, &at) || at < 0 || at > steps)
-        {
-            w = "knob default";
-        }
+        w = pluginkit::checkKnob(h.params[k], kMaxKnobSteps);
     }
     return w == nullptr;
 }

@@ -12,6 +12,7 @@
 #include "TrackerImpl.h"
 #include "fileManager.h"
 #include "masterfx.h"
+#include "masterfx/masterfxPlugins.h"
 #include "masterfxDsp.h"
 #include "mods.h"
 #include "mtSequencer.h"
@@ -98,6 +99,7 @@ struct Record
     uint32_t overBlocks;
     uint32_t reverb;
     uint32_t delay;
+    uint32_t dynamics;
     uint32_t pcSamples[kPcSamples];
     uint32_t stack[kStackWords];
     uint32_t sum;
@@ -178,6 +180,7 @@ bool isCode(uint32_t value)
     r.overBlocks = overBlocks;
     r.reverb = mods::masterfx::activeReverb;
     r.delay = mods::masterfx::activeDelay;
+    r.dynamics = mods::masterfx::activeDynamics;
     for (uint32_t i = 0; i < kPcSamples; i++)
     {
         r.pcSamples[i] = pcSamples[i];
@@ -216,14 +219,25 @@ bool lookedForRecord = false;
 Sequencer::enSeqState lastState = Sequencer::SEQ_STATE_STOP;
 uint32_t playStartedMs = 0;
 
-const char* reverbName(uint32_t index)
+// A record keeps whether a slot ran a plugin (masterfxDsp.h); which one is only known now
+const char* reverbName(uint32_t active)
 {
-    return index < mods::masterfx::kReverbCount ? mods::masterfx::kReverbNames[index] : "?";
+    return active ? "a plugin" : "Stock";
 }
 
-const char* delayName(uint32_t index)
+const char* delayName(uint32_t active)
 {
-    return index < mods::masterfx::kDelayCount ? mods::masterfx::kDelayNames[index] : "?";
+    return active ? "a plugin" : "Stock";
+}
+
+const char* dynamicsName(uint32_t active)
+{
+    return active == 1 ? "a plugin" : (active != 0 ? "changing" : "Stock");
+}
+
+const char* slotFile(mods::masterfx::plugins::Slot slot, uint32_t active)
+{
+    return active ? mods::masterfx::plugins::file(slot) : "Stock";
 }
 
 void describeRecord()
@@ -242,7 +256,7 @@ void describeRecord()
         used = snprintf(text,
                         sizeof(text),
                         "LOCKUP: %s, %s. Main loop stopped for %lu ms. Inside the audio interrupt then: %s (next one "
-                        "waiting: %s), %lu of the last %lu ms. Master FX %s + %s. %lu blocks, slowest %lu us, last %lu "
+                        "waiting: %s), %lu of the last %lu ms. Master FX %s + %s + %s. %lu blocks, slowest %lu us, last %lu "
                         "us, %lu over the %lu us a block has.\n  pc %08lx lr %08lx psr %08lx sp %08lx cfsr %08lx hfsr "
                         "%08lx bfar %08lx mmfar %08lx\n  pc samples",
                         r.kind < 6 ? kKindNames[r.kind] : "?",
@@ -254,6 +268,7 @@ void describeRecord()
                         static_cast<unsigned long>(kWindowTicks),
                         reverbName(r.reverb),
                         delayName(r.delay),
+                        dynamicsName(r.dynamics),
                         static_cast<unsigned long>(r.blocks),
                         static_cast<unsigned long>(r.peakUs),
                         static_cast<unsigned long>(r.lastUs),
@@ -304,14 +319,15 @@ void describePlay(uint32_t nowMs)
     const uint32_t count = blocks > 0 ? blocks : 1;
     const int used = snprintf(text,
                               sizeof(text),
-                              "play %lu s: Master FX %s, %s + %s, voices %d %d %d. Audio interrupt: average %lu%%, "
+                              "play %lu s: Master FX %s, %s + %s + %s, voices %d %d %d. Audio interrupt: average %lu%%, "
                               "slowest %lu%%, %lu of %lu blocks over time, %lu back to back. Synth over its limit %lu "
                               "times. Longest main loop gap %lu ms. Pool peak %d of %d. Free heap %d, max stack "
                               "%d.\n",
                               static_cast<unsigned long>((nowMs - playStartedMs) / 1000),
                               mods::on(mods::Mod::masterfx) ? "On" : "Off",
-                              reverbName(mods::masterfx::activeReverb),
-                              delayName(mods::masterfx::activeDelay),
+                              slotFile(mods::masterfx::plugins::kReverb, mods::masterfx::activeReverb),
+                              slotFile(mods::masterfx::plugins::kDelay, mods::masterfx::activeDelay),
+                              slotFile(mods::masterfx::plugins::kDynamics, mods::masterfx::activeDynamics),
                               synth.getMaxVoiceCount(0),
                               synth.getMaxVoiceCount(1),
                               synth.getMaxVoiceCount(2),

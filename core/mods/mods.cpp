@@ -13,6 +13,7 @@
 #include "copypattern.h"
 #include "lockupRecorder.h"
 #include "masterfx.h"
+#include "masterfx/masterfxPlugins.h"
 #include "modsConfig.h"
 #include "modsProject.h"
 #include "modsRegistry.h"
@@ -205,6 +206,12 @@ void init(FileSystem* fileSystem)
         synthfx::startPlugins(fileIo); // the pack onto the card, the list
     }
 #endif
+#if MT_HAS_MASTERFX
+    if (defaults[static_cast<size_t>(Mod::masterfx)] != 0)
+    {
+        masterfx::startPlugins(fileIo); // the pack onto the card, the list
+    }
+#endif
 }
 
 void cardLent(bool lent)
@@ -237,6 +244,20 @@ void update()
         synthfx::updateSlots(); // a project's slots made, old plugins let go
     }
     synthfx::convertOldPatches(); // WAVE's and PHASE's old patch effects into their slots, On or Off
+#endif
+#if MT_HAS_MASTERFX
+    if (!masterfx::plugins::started())
+    {
+        if (on(Mod::masterfx)) // turned on since boot, or a project that has it
+        {
+            masterfx::startPlugins(fileIo);
+            masterfx::apply(); // the project's plugins, now that the card is listed
+        }
+    }
+    else
+    {
+        masterfx::plugins::update();
+    }
 #endif
 }
 
@@ -292,6 +313,14 @@ void masterfxChosen()
         project::markChanged();
     }
     masterfx::applySoon();
+}
+
+void masterfxKnobEdited()
+{
+    if (masterfx::storeIfEdited(projectStore))
+    {
+        project::markChanged();
+    }
 }
 #endif
 

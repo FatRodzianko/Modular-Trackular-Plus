@@ -1,5 +1,5 @@
 /*
- * shimmer_dsp.h: in CE's reverb slot. Included once, by ../masterfxDsp.cpp, after freeverb_dsp.h.
+ * shimmer_dsp.h: in CE's reverb slot. Included by pack.cpp, inside a struct, after freeverb_dsp.h.
  *
  * A shimmer reverb is a reverb with a pitch shifter in its feedback: the tail is shifted
  * up an octave and fed back into the reverb, so every pass adds a layer an octave
@@ -99,7 +99,7 @@ struct shimmer_state {
     float osc[2];
     float hp_x, hp_y, lp, env, feed;        /* the shifted feed: filters, limiter, last value */
 };
-static struct shimmer_state shimmer_state_ram;
+MFX_STATE struct shimmer_state shimmer_state_ram;
 #define SH (&shimmer_state_ram)
 
 #define SH_RD0(off)         ((float)q0[(wp + (off)) & SH_MASK])
@@ -108,7 +108,7 @@ static struct shimmer_state shimmer_state_ram;
 #define SH_WR1(off, v)      (q1[(wp + (off)) & SH_MASK] = sat16(v))
 
 /* Lay out the rings in the two (cleared) buffers. */
-static void shimmer_init(uint32_t buf_l, uint32_t buf_r)
+MFX_FN void shimmer_init(uint32_t buf_l, uint32_t buf_r)
 {
     SH->wp = 0;
     SH->head[0] = SH_WINDOW;
@@ -125,7 +125,7 @@ static void shimmer_init(uint32_t buf_l, uint32_t buf_r)
 
 /* the shifter's triangle window, Q15: 0 at the line's ends, 1 in the middle (the
  * exact value the float 1 - |head * 2 / SH_WINDOW - 1| gave) */
-static inline int32_t sh_window_q15(uint32_t head)
+MFX_FN inline int32_t sh_window_q15(uint32_t head)
 {
     int32_t t = (int32_t)head * (int32_t)(65536u / SH_WINDOW) - 32768;
     return 32768 - (t < 0 ? -t : t);
@@ -139,7 +139,7 @@ static inline int32_t sh_window_q15(uint32_t head)
  * few streams at a time, each a backward walk through its ring, split where one would
  * walk below the ring's start (the shape of gated's burst passes), in integers since
  * the lines hold int16. The gains are the taps' signs. */
-MFX_ITCM static void sh_pass4(int32_t *acc, int first,
+MFX_ITCM MFX_FN void sh_pass4(int32_t *acc, int first,
                      const int16_t *qa, uint32_t sa, int32_t ga,
                      const int16_t *qb, uint32_t sb, int32_t gb,
                      const int16_t *qc, uint32_t sc, int32_t gc,
@@ -171,7 +171,7 @@ MFX_ITCM static void sh_pass4(int32_t *acc, int first,
     }
 }
 
-MFX_ITCM static void sh_pass3(int32_t *acc,          /* three more streams, added on */
+MFX_ITCM MFX_FN void sh_pass3(int32_t *acc,          /* three more streams, added on */
                      const int16_t *qa, uint32_t sa, int32_t ga,
                      const int16_t *qb, uint32_t sb, int32_t gb,
                      const int16_t *qc, uint32_t sc, int32_t gc)
@@ -195,7 +195,7 @@ MFX_ITCM static void sh_pass3(int32_t *acc,          /* three more streams, adde
     }
 }
 
-MFX_ITCM static void sh_pass2(int32_t *acc,          /* two more streams, added on */
+MFX_ITCM MFX_FN void sh_pass2(int32_t *acc,          /* two more streams, added on */
                      const int16_t *qa, uint32_t sa, int32_t ga,
                      const int16_t *qb, uint32_t sb, int32_t gb)
 {
@@ -216,7 +216,7 @@ MFX_ITCM static void sh_pass2(int32_t *acc,          /* two more streams, added 
 }
 
 /* Process one block of the stereo send in place; returns the average output level. */
-MFX_ITCM static float shimmer_process(const ReverbKnobs *obj, int16_t *left, int16_t *right)
+MFX_ITCM MFX_FN float shimmer_process(const ReverbKnobs *obj, int16_t *left, int16_t *right)
 {
     int16_t *q0 = (int16_t *)SH->buf_l, *q1 = (int16_t *)SH->buf_r;
     float size = fclamp(obj->size, 0.0f, 1.0f);

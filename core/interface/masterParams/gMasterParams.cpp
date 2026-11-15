@@ -8,7 +8,9 @@
 #include <masterParams/masterParams.h>
 
 #if MT_HAS_MASTERFX // MT:
+#include "cr_section_macros.h"
 #include "masterfx.h"
+#include "masterfx/masterfxPlugins.h"
 #endif
 
 static const uint16_t framesPlaces[8][4] = {
@@ -260,108 +262,262 @@ namespace
 
 strList masterfxReverbList;
 strList masterfxDelayList;
+strList masterfxDynamicsList;
 
-// What the page calls each knob and itself, per effect. Stock's row isn't used: CE's own
-// words stay.
-struct MasterfxReverbWords
-{
-    const char* title;
-    const char* size;
-    const char* damping;
-    const char* diffusion;
-};
-struct MasterfxDelayWords
-{
-    const char* title;
-    const char* feedback;
-    const char* filter;
-};
+// The Master page has moved the PingPong list to column 3: showDelayScreen moves it back
+bool masterfxMovedPingpong = false;
 
-constexpr MasterfxReverbWords kMasterfxReverbWords[mods::masterfx::kReverbCount] = {
-    { "Master Reverb", "Size", "Damping", "Diffusion" },
-    { "Reverb: Freeverb", "Size", "Damping", "Diffusion" },
-    { "Reverb: Plate", "Decay", "Damping", "Diffusion" },
-    { "Reverb: Spring", "Decay", "Damping", "Drip" },
-    { "Reverb: Shimmer", "Decay", "Tone", "Shimmer" },
-    { "Reverb: \"Gated\"", "Length", "Tone", "Release" },
-    { "Reverb: Reverse", "Length", "Tone", "Release" },
-};
-constexpr MasterfxDelayWords kMasterfxDelayWords[mods::masterfx::kDelayCount] = {
-    { "Master Delay", "Feedback", "Filter" },
-    { "Delay: Tape", "Feedback", "Filter" },
-    { "Delay: BBD", "Feedback", "Filter" },
-};
+// The Limiter page's Ducks list, in the Sidechain list's control: its rows, the marked ones (CE's
+// list colours them, as the file browser's), the cursor, and whether it is up
+strList masterfxDucksList;
+uint8_t masterfxDuckMarks[mods::masterfx::kDuckItems];
+uint8_t masterfxDuckCursor = 0;
+bool masterfxDucksUp = false;
+
+// The own knobs' values, columns 5 and 6 (main loop; written before use)
+__NOINIT(EXTERNAL_RAM) char masterfxKnobText[2][16];
+
+// start: the list's bar starts on the choice. At 0 a list given its data again draws its bar on
+// Stock and slides it back down to the choice
+void fillMasterfxList(strList& list, uint8_t slot)
+{
+    list.start = mods::masterfx::choice(slot);
+    list.length = mods::masterfx::choiceCount(slot);
+    list.linesCount = list.length;
+    list.data = (char**)mods::masterfx::choiceNames(slot);
+}
+
+// The Master page's text under a slot's column: the choice, or "Bypassed". Cut to the label's
+// width, as CE cuts a label's first line (controlStyleLimitTextWidth): a label's second line isn't,
+// and a plugin's name can be 31 characters (main loop; written before use)
+__NOINIT(EXTERNAL_RAM) char masterfxChoiceFit[mods::masterfx::kSlots][32];
+
+const char* masterfxChoiceText(uint8_t slot)
+{
+    const char* text = mods::masterfx::bypassed(slot) ? "Bypassed" : mods::masterfx::choiceName(slot);
+    constexpr uint32_t kSecondLine = controlStyleFont2; // as showMasterValues sets it
+    const strFont* font = &fonts[((kSecondLine >> 8) & 15) - 1];
+    const uint16_t fit = getMaxTextLengthThatFitSpecificWidth(font, text, 800 / 8 - 6);
+    char* out = masterfxChoiceFit[slot];
+    const size_t n = fit < sizeof(masterfxChoiceFit[slot]) - 1 ? fit : sizeof(masterfxChoiceFit[slot]) - 1;
+    memcpy(out, text, n);
+    out[n] = 0;
+    return out;
+}
+
+// A page's title and CE's knobs' labels (column i is label i) for the slot's plugin. Stock keeps
+// CE's words; a missing plugin keeps CE's labels and says so in the title.
+void showMasterfxWords(TitleBar* bar, const hControl* labels, uint8_t slot, const char* word)
+{
+    namespace pl = mods::masterfx::plugins;
+    const char* title = mods::masterfx::pageTitle(slot, word);
+    if (title == nullptr)
+    {
+        return;
+    }
+    bar->setTitle(title);
+    if (!pl::installed(static_cast<pl::Slot>(slot)))
+    {
+        return;
+    }
+    for (uint32_t i = 0; i < pl::kLabels[slot]; i++)
+    {
+        const char* text = pl::label(static_cast<pl::Slot>(slot), i);
+        if (text != nullptr)
+        {
+            display.setControlText(labels[i], text);
+        }
+    }
+}
 
 } // namespace
 
-// On the Master page the two lists of the Delay page's Sync and Rate columns show the
-// choices: those columns are empty here, and showDelayScreen gives the lists back.
+// On the Master page three lists of the Delay page (PingPong, Sync and Rate) show the choices in
+// the Reverb, Delay and Limiter columns: those are empty here, and showDelayScreen gives the lists
+// back (PingPong moves to column 3 and back).
 void cMasterParams::showMasterfxLists()
 {
-    masterfxReverbList.length = mods::masterfx::kReverbCount;
-    masterfxReverbList.linesCount = mods::masterfx::kReverbCount;
-    masterfxReverbList.data = (char**)mods::masterfx::kReverbNames;
-    masterfxDelayList.length = mods::masterfx::kDelayCount;
-    masterfxDelayList.linesCount = mods::masterfx::kDelayCount;
-    masterfxDelayList.data = (char**)mods::masterfx::kDelayNames;
+    fillMasterfxList(masterfxReverbList, mods::masterfx::kReverb);
+    fillMasterfxList(masterfxDelayList, mods::masterfx::kDelay);
+    fillMasterfxList(masterfxDynamicsList, mods::masterfx::kDynamics);
 
+    display.setControlPosition(delayPingpongEnableList, (800 / 8) * 3 + 2, -1);
+    masterfxMovedPingpong = true;
     display.setControlData(delaySyncEnableList, &masterfxReverbList);
     display.setControlData(delaySyncRateList, &masterfxDelayList);
+    display.setControlData(delayPingpongEnableList, &masterfxDynamicsList);
     display.setControlColors(delaySyncEnableList, display.getTheme().activeListColors);
     display.setControlColors(delaySyncRateList, display.getTheme().activeListColors);
+    display.setControlColors(delayPingpongEnableList, display.getTheme().activeListColors);
     display.setControlShow(delaySyncEnableList);
     display.setControlShow(delaySyncRateList);
+    display.setControlShow(delayPingpongEnableList);
 
     showMasterfxChoices();
 }
 
 void cMasterParams::showMasterfxChoices()
 {
-    const mods::masterfx::Settings& chosen = mods::masterfx::settings;
-
-    display.setControlValue(delaySyncEnableList, chosen.reverb);
+    display.setControlValue(delaySyncEnableList, mods::masterfx::choice(mods::masterfx::kReverb));
     display.refreshControl(delaySyncEnableList);
-    display.setControlValue(delaySyncRateList, chosen.delay);
+    display.setControlValue(delaySyncRateList, mods::masterfx::choice(mods::masterfx::kDelay));
     display.refreshControl(delaySyncRateList);
+    display.setControlValue(delayPingpongEnableList, mods::masterfx::choice(mods::masterfx::kDynamics));
+    display.refreshControl(delayPingpongEnableList);
 
-    display.setControlValue(label[1], 1);
-    display.setControlText2(label[1], mods::masterfx::kReverbNames[chosen.reverb]);
-    display.refreshControl(label[1]);
-    display.setControlValue(label[2], 1);
-    display.setControlText2(label[2], mods::masterfx::kDelayNames[chosen.delay]);
-    display.refreshControl(label[2]);
+    for (uint8_t slot = 0; slot < mods::masterfx::kSlots; slot++)
+    {
+        const hControl column = label[1 + slot];
+        display.setControlValue(column, 1);
+        display.setControlText2(column, masterfxChoiceText(slot));
+        display.refreshControl(column);
+    }
 }
 
 void cMasterParams::showMasterfxReverbWords()
 {
-    if (!mods::on(mods::Mod::masterfx) || mods::masterfx::settings.reverb == mods::masterfx::kStock)
-    {
-        return;
-    }
-    const MasterfxReverbWords& words = kMasterfxReverbWords[mods::masterfx::settings.reverb];
-    titleBar->setTitle(words.title);
-    display.setControlText(label[0], words.size);
-    display.setControlText(label[1], words.damping);
-    display.setControlText(label[3], words.diffusion);
+    showMasterfxWords(titleBar, label, mods::masterfx::kReverb, "Reverb");
 }
 
 void cMasterParams::showMasterfxDelayWords()
 {
-    if (!mods::on(mods::Mod::masterfx) || mods::masterfx::settings.delay == mods::masterfx::kStock)
+    showMasterfxWords(titleBar, label, mods::masterfx::kDelay, "Delay");
+}
+
+void cMasterParams::showMasterfxLimiterWords()
+{
+    showMasterfxWords(titleBar, label, mods::masterfx::kDynamics, "Limiter");
+}
+
+// Columns 5 and 6 are empty on CE's Reverb and Limiter pages. Called after the page's labels and
+// bars are up; gives back the page's places count with the knobs in it.
+uint8_t cMasterParams::showMasterfxOwnKnobs(uint8_t slot, uint8_t places)
+{
+    const uint8_t n = mods::masterfx::ownKnobs(slot);
+    for (uint8_t k = 0; k < n; k++)
+    {
+        const hControl column = label[5 + k];
+        display.setControlText(column, mods::masterfx::ownKnobLabel(slot, k));
+        display.setControlShow(barControl[5 + k]);
+        showMasterfxOwnKnob(slot, k);
+    }
+    return n > 0 ? 5 + n : places;
+}
+
+void cMasterParams::showMasterfxOwnKnob(uint8_t slot, uint8_t knob)
+{
+    if (knob >= mods::masterfx::ownKnobs(slot))
     {
         return;
     }
-    const MasterfxDelayWords& words = kMasterfxDelayWords[mods::masterfx::settings.delay];
-    titleBar->setTitle(words.title);
-    display.setControlText(label[4], words.feedback);
-    display.setControlText(label[5], words.filter);
+    mods::masterfx::ownKnobText(slot, knob, masterfxKnobText[knob], sizeof(masterfxKnobText[knob]));
+    display.setControlValue(barControl[5 + knob], mods::masterfx::ownKnobPercent(slot, knob));
+    display.refreshControl(barControl[5 + knob]);
+    display.setControlText2(label[5 + knob], masterfxKnobText[knob]);
+    display.refreshControl(label[5 + knob]);
+}
+
+bool cMasterParams::masterfxDucksShown()
+{
+    return masterfxDucksUp;
+}
+
+void cMasterParams::showMasterfxDucks(bool show)
+{
+    show = show && mods::masterfx::canDuck();
+    if (!show)
+    {
+        if (masterfxDucksUp) // CE's list as it was
+        {
+            masterfxDucksUp = false;
+            display.setControlData(limiterSidechainList, &limiterSidechainData);
+            display.setControlText(label[4], "Sidechain");
+            showLimiterSidechain();
+        }
+        return;
+    }
+    masterfxDucksList.start = 0;
+    masterfxDucksList.length = mods::masterfx::kDuckItems;
+    masterfxDucksList.linesCount = mods::masterfx::kDuckItems;
+    masterfxDucksList.data = (char**)mods::masterfx::duckNames();
+    masterfxDucksList.selectTab = masterfxDuckMarks;
+    masterfxDucksList.selectionActive = 0;
+    masterfxDucksUp = true;
+    display.setControlData(limiterSidechainList, &masterfxDucksList);
+    display.setControlText(label[4], "Ducks");
+    moveMasterfxDucks(0);
+}
+
+void cMasterParams::moveMasterfxDucks(int16_t by)
+{
+    if (!masterfxDucksUp)
+    {
+        return;
+    }
+    masterfxDuckCursor = static_cast<uint8_t>(
+      clamp<int>(static_cast<int>(masterfxDuckCursor) + by, 0, mods::masterfx::kDuckItems - 1));
+    for (uint8_t i = 0; i < mods::masterfx::kDuckItems; i++)
+    {
+        masterfxDuckMarks[i] = mods::masterfx::ducked(i) ? 1 : 0;
+    }
+    display.setControlValue(limiterSidechainList, masterfxDuckCursor);
+    display.refreshControl(limiterSidechainList);
+    display.setControlText2(label[4], mods::masterfx::ducksText());
+    display.refreshControl(label[4]);
+}
+
+void cMasterParams::toggleMasterfxDuck()
+{
+    if (!masterfxDucksUp)
+    {
+        return;
+    }
+    mods::masterfx::toggleDuck(masterfxDuckCursor);
+    mods::masterfxKnobEdited();
+    moveMasterfxDucks(0);
+}
+
+void cMasterParams::clearMasterfxDucks()
+{
+    if (!masterfxDucksUp)
+    {
+        return;
+    }
+    mods::masterfx::toggleDuck(0);
+    mods::masterfxKnobEdited();
+    moveMasterfxDucks(0);
+}
+
+// The time guard has stopped the slot's plugin: the words that say so, where they're up
+void cMasterParams::showMasterfxBypassed(uint8_t slot)
+{
+    if (displayType != displayMode::masterValues || !mods::on(mods::Mod::masterfx))
+    {
+        return;
+    }
+    if (!isReverbScreen && !isDelayScreen && !isLimiterScreen && !isEqualizerScreen)
+    {
+        showMasterfxChoices();
+        return;
+    }
+    const bool shown = (slot == mods::masterfx::kReverb && isReverbScreen) ||
+                       (slot == mods::masterfx::kDelay && isDelayScreen) ||
+                       (slot == mods::masterfx::kDynamics && isLimiterScreen);
+    const char* word = slot == mods::masterfx::kReverb ? "Reverb"
+                       : slot == mods::masterfx::kDelay ? "Delay"
+                                                        : "Limiter";
+    const char* title = shown ? mods::masterfx::pageTitle(slot, word) : nullptr;
+    if (title != nullptr)
+    {
+        titleBar->setTitle(title);
+    }
 }
 #endif
 
 void cMasterParams::showMasterScreen()
 {
 #if MT_HAS_MASTERFX // MT: with the mod Off the lists aren't there to stop on
-    if (!mods::on(mods::Mod::masterfx) && (selectedPlace == 1 || selectedPlace == 2))
+    if (!mods::on(mods::Mod::masterfx) && selectedPlace >= 1 && selectedPlace <= 3)
     {
         selectedPlace = 0;
     }
@@ -467,8 +623,8 @@ void cMasterParams::showMasterScreen()
     // empty space covers
 #if MT_HAS_MASTERFX // MT: the cover draws over the lists, so it moves off their columns
     const bool masterfxLists = mods::on(mods::Mod::masterfx);
-    display.setControlPosition(blankSpaceCover[0], (800 / 8) * (masterfxLists ? 3 : 1) + 2, -1);
-    display.setControlSize(blankSpaceCover[0], (800 / 8) * (masterfxLists ? 2 : 4) - 3, -1);
+    display.setControlPosition(blankSpaceCover[0], (800 / 8) * (masterfxLists ? 4 : 1) + 2, -1);
+    display.setControlSize(blankSpaceCover[0], (800 / 8) * (masterfxLists ? 1 : 4) - 3, -1);
 #else
     display.setControlPosition(blankSpaceCover[0], (800 / 8) * 1 + 2, -1);
     display.setControlSize(blankSpaceCover[0], (800 / 8) * 4 - 3, -1);
@@ -491,8 +647,10 @@ void cMasterParams::showReverbScreen()
     {
         display.setControlHide(delaySyncEnableList);
         display.setControlHide(delaySyncRateList);
+        display.setControlHide(delayPingpongEnableList);
         display.refreshControl(delaySyncEnableList);
         display.refreshControl(delaySyncRateList);
+        display.refreshControl(delayPingpongEnableList);
     }
 #endif
 
@@ -550,6 +708,13 @@ void cMasterParams::showReverbScreen()
     showLineInReverbSend();
 
     frameData.placesCount = 5;
+#if MT_HAS_MASTERFX // MT: the plugin's own knobs in columns 5 and 6
+    frameData.placesCount = showMasterfxOwnKnobs(mods::masterfx::kReverb, frameData.placesCount);
+    if (selectedPlaceReverb >= frameData.placesCount)
+    {
+        selectedPlaceReverb = 0;
+    }
+#endif
     frameData.startPlace = selectedPlaceReverb;
     frameData.places[0] = &framesPlaces[0][0];
     frameData.places[1] = &framesPlaces[1][0];
@@ -575,8 +740,14 @@ void cMasterParams::showReverbScreen()
     }
 
     // empty space covers
+#if MT_HAS_MASTERFX // MT: off the own knobs' columns
+    const uint8_t reverbKnobs = frameData.placesCount - 5;
+    display.setControlPosition(blankSpaceCover[0], (800 / 8) * (5 + reverbKnobs) + 2, -1);
+    display.setControlSize(blankSpaceCover[0], (800 / 8) * (3 - reverbKnobs) - 3, -1);
+#else
     display.setControlPosition(blankSpaceCover[0], (800 / 8) * 5 + 2, -1);
     display.setControlSize(blankSpaceCover[0], (800 / 8) * 3 - 3, -1);
+#endif
     display.setControlShow(blankSpaceCover[0]);
     display.refreshControl(blankSpaceCover[0]);
 
@@ -590,9 +761,15 @@ void cMasterParams::showReverbScreen()
 
 void cMasterParams::showDelayScreen()
 {
-#if MT_HAS_MASTERFX // MT: the Master page borrows these two lists
+#if MT_HAS_MASTERFX // MT: the Master page borrows these three lists, and moves PingPong
     display.setControlData(delaySyncEnableList, &syncEnableData);
     display.setControlData(delaySyncRateList, &syncRateData);
+    display.setControlData(delayPingpongEnableList, &pingpongEnableData);
+    if (masterfxMovedPingpong) // with the mod Off since boot, CE's calls only
+    {
+        display.setControlPosition(delayPingpongEnableList, (800 / 8) * 0 + 2, -1);
+        masterfxMovedPingpong = false;
+    }
 #endif
 
     display.setControlShow(delayPingpongEnableList);
@@ -766,6 +943,13 @@ void cMasterParams::showReverbDiffusion()
 // limiter
 void cMasterParams::showLimiterScreen()
 {
+#if MT_HAS_MASTERFX // MT: the page opens on CE's Sidechain list
+    if (masterfxDucksUp)
+    {
+        masterfxDucksUp = false;
+        display.setControlData(limiterSidechainList, &limiterSidechainData);
+    }
+#endif
     display.setControlHide(delayPingpongEnableList);
     display.setControlHide(delaySyncEnableList);
     display.setControlHide(delaySyncRateList);
@@ -796,6 +980,9 @@ void cMasterParams::showLimiterScreen()
     display.setControlText2(label[6], " ");
     display.setControlText(label[7], "Back");
     display.setControlText2(label[7], " ");
+#if MT_HAS_MASTERFX // MT:
+    showMasterfxLimiterWords();
+#endif
 
     resizeToDefaultMaster();
     resizeBarControl(displayMode::masterValues);
@@ -836,6 +1023,13 @@ void cMasterParams::showLimiterScreen()
     showLimiterSidechain();
 
     frameData.placesCount = 5;
+#if MT_HAS_MASTERFX // MT: the plugin's own knobs in columns 5 and 6
+    frameData.placesCount = showMasterfxOwnKnobs(mods::masterfx::kDynamics, frameData.placesCount);
+    if (selectedPlaceLimiter >= frameData.placesCount)
+    {
+        selectedPlaceLimiter = 0;
+    }
+#endif
     frameData.startPlace = selectedPlaceLimiter;
     frameData.places[0] = &framesPlaces[0][0];
     frameData.places[1] = &framesPlaces[1][0];
@@ -857,8 +1051,21 @@ void cMasterParams::showLimiterScreen()
     }
 
     // empty space covers
+#if MT_HAS_MASTERFX // MT: off the own knobs' columns
+    const uint8_t limiterKnobs = frameData.placesCount - 5;
+    display.setControlPosition(blankSpaceCover[0], (800 / 8) * (5 + limiterKnobs) + 2, -1);
+    if (limiterKnobs > 0)
+    {
+        display.setControlSize(blankSpaceCover[0], (800 / 8) * (3 - limiterKnobs) - 3, -1);
+    }
+    else
+    {
+        display.setControlSize(blankSpaceCover[0], (800 / 1) * 3 - 3, -1);
+    }
+#else
     display.setControlPosition(blankSpaceCover[0], (800 / 8) * 5 + 2, -1);
     display.setControlSize(blankSpaceCover[0], (800 / 1) * 3 - 3, -1);
+#endif
     display.setControlShow(blankSpaceCover[0]);
     display.refreshControl(blankSpaceCover[0]);
 

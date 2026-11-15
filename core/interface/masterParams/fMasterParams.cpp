@@ -95,6 +95,11 @@ static void functSelectSynth3(uint8_t state);
 #include "masterfx.h"
 static void changeMasterfxReverb(int16_t value);
 static void changeMasterfxDelay(int16_t value);
+static void changeMasterfxDynamics(int16_t value);
+// A plugin's own knob in column 5 or 6 (place 5 or 6) of its page: turned, or back to its default
+static void changeMasterfxKnob(uint8_t slot, uint8_t place, int16_t value);
+static void setDefaultMasterfxKnob(uint8_t slot, uint8_t place);
+static void functSelectMasterfxKnob(uint8_t n, uint8_t state);
 #endif
 
 // MASTER EDIT FUNCTIONS
@@ -147,8 +152,13 @@ static elapsedMillis refreshTimer;
 
 void cMasterParams::update()
 {
-#if MT_HAS_MASTERFX // MT: the encoder has stopped on a choice
+#if MT_HAS_MASTERFX // MT: the encoder has stopped on a choice; the time guard stopped a plugin
     mods::masterfx::pollApply();
+    const int masterfxBypassed = mods::masterfx::takeBypassed();
+    if (masterfxBypassed >= 0)
+    {
+        showMasterfxBypassed(static_cast<uint8_t>(masterfxBypassed));
+    }
 #endif
 
     if (displayType == displayMode::mixer && !keyboardManager.getState())
@@ -263,6 +273,9 @@ void cMasterParams::update()
 void cMasterParams::start(uint32_t options)
 {
     moduleRefresh = 1;
+#if MT_HAS_MASTERFX // MT: /MasterFX listed again: files copied there since show and play
+    mods::masterfx::pageOpened();
+#endif
 
     //	displayType = display_t::masterValues;
 
@@ -543,6 +556,10 @@ static void functEncoder(int16_t value)
             case 2: MP->changeReverbPredelay(value); break;
             case 3: MP->changeReverbDiffusion(value); break;
             case 4: MP->changeLineInReverbSend(value); break;
+#if MT_HAS_MASTERFX // MT:
+            case 5:
+            case 6: changeMasterfxKnob(mods::masterfx::kReverb, MP->selectedPlaceReverb, value); break;
+#endif
             default: break;
         }
     }
@@ -554,8 +571,19 @@ static void functEncoder(int16_t value)
             case 1: changeLimiterRelease(value); break;
             case 2: changeLimiterTreshold(value); break;
             case 4:
+#if MT_HAS_MASTERFX // MT:
+                if (MP->masterfxDucksShown())
+                {
+                    MP->moveMasterfxDucks(interfaceGlobals.invertValForList ? -value : value);
+                    break;
+                }
+#endif
                 changeLimiterSidechain(interfaceGlobals.invertValForList ? -value : value);
                 break;
+#if MT_HAS_MASTERFX // MT:
+            case 5:
+            case 6: changeMasterfxKnob(mods::masterfx::kDynamics, MP->selectedPlaceLimiter, value); break;
+#endif
             default: break;
         }
     }
@@ -571,6 +599,7 @@ static void functEncoder(int16_t value)
 #if MT_HAS_MASTERFX // MT:
             case 1: changeMasterfxReverb(interfaceGlobals.invertValForList ? -value : value); break;
             case 2: changeMasterfxDelay(interfaceGlobals.invertValForList ? -value : value); break;
+            case 3: changeMasterfxDynamics(interfaceGlobals.invertValForList ? -value : value); break;
 #endif
             case 5: changeSaturationType(interfaceGlobals.invertValForList ? -value : value); break;
             case 6: changeBassBoost(value); break;
@@ -625,10 +654,10 @@ static void functLeft()
     }
     else
     {
-#if MT_HAS_MASTERFX // MT: the Reverb and Delay lists are stops too
+#if MT_HAS_MASTERFX // MT: the Reverb, Delay and Limiter lists are stops too
         if (mods::on(mods::Mod::masterfx) && MP->selectedPlace >= 1 && MP->selectedPlace <= 5)
         {
-            MP->selectedPlace = MP->selectedPlace == 5 ? 2 : MP->selectedPlace - 1;
+            MP->selectedPlace = MP->selectedPlace == 5 ? 3 : MP->selectedPlace - 1;
             MP->activateLabelsBorder();
             return;
         }
@@ -697,10 +726,10 @@ static void functRight()
     }
     else
     {
-#if MT_HAS_MASTERFX // MT: the Reverb and Delay lists are stops too
-        if (mods::on(mods::Mod::masterfx) && MP->selectedPlace <= 2)
+#if MT_HAS_MASTERFX // MT: the Reverb, Delay and Limiter lists are stops too
+        if (mods::on(mods::Mod::masterfx) && MP->selectedPlace <= 3)
         {
-            MP->selectedPlace = MP->selectedPlace == 2 ? 5 : MP->selectedPlace + 1;
+            MP->selectedPlace = MP->selectedPlace == 3 ? 5 : MP->selectedPlace + 1;
             MP->activateLabelsBorder();
             return;
         }
@@ -798,6 +827,10 @@ static void functUp()
             case 2: MP->changeReverbPredelay(1); break;
             case 3: MP->changeReverbDiffusion(1); break;
             case 4: MP->changeLineInReverbSend(1); break;
+#if MT_HAS_MASTERFX // MT:
+            case 5:
+            case 6: changeMasterfxKnob(mods::masterfx::kReverb, MP->selectedPlaceReverb, 1); break;
+#endif
             default: break;
         }
     }
@@ -808,7 +841,20 @@ static void functUp()
             case 0: changeLimiterAttack(1); break;
             case 1: changeLimiterRelease(1); break;
             case 2: changeLimiterTreshold(1); break;
-            case 4: changeLimiterSidechain(-1); break;
+            case 4:
+#if MT_HAS_MASTERFX // MT:
+                if (MP->masterfxDucksShown())
+                {
+                    MP->moveMasterfxDucks(-1);
+                    break;
+                }
+#endif
+                changeLimiterSidechain(-1);
+                break;
+#if MT_HAS_MASTERFX // MT:
+            case 5:
+            case 6: changeMasterfxKnob(mods::masterfx::kDynamics, MP->selectedPlaceLimiter, 1); break;
+#endif
             default: break;
         }
     }
@@ -824,6 +870,7 @@ static void functUp()
 #if MT_HAS_MASTERFX // MT:
             case 1: changeMasterfxReverb(-1); break;
             case 2: changeMasterfxDelay(-1); break;
+            case 3: changeMasterfxDynamics(-1); break;
 #endif
             case 5: changeSaturationType(-1); break;
             case 6: changeBassBoost(1); break;
@@ -906,6 +953,10 @@ static void functDown()
             case 2: MP->changeReverbPredelay(-1); break;
             case 3: MP->changeReverbDiffusion(-1); break;
             case 4: MP->changeLineInReverbSend(-1); break;
+#if MT_HAS_MASTERFX // MT:
+            case 5:
+            case 6: changeMasterfxKnob(mods::masterfx::kReverb, MP->selectedPlaceReverb, -1); break;
+#endif
             default: break;
         }
     }
@@ -916,7 +967,20 @@ static void functDown()
             case 0: changeLimiterAttack(-1); break;
             case 1: changeLimiterRelease(-1); break;
             case 2: changeLimiterTreshold(-1); break;
-            case 4: changeLimiterSidechain(1); break;
+            case 4:
+#if MT_HAS_MASTERFX // MT:
+                if (MP->masterfxDucksShown())
+                {
+                    MP->moveMasterfxDucks(1);
+                    break;
+                }
+#endif
+                changeLimiterSidechain(1);
+                break;
+#if MT_HAS_MASTERFX // MT:
+            case 5:
+            case 6: changeMasterfxKnob(mods::masterfx::kDynamics, MP->selectedPlaceLimiter, -1); break;
+#endif
             default: break;
         }
     }
@@ -932,6 +996,7 @@ static void functDown()
 #if MT_HAS_MASTERFX // MT:
             case 1: changeMasterfxReverb(1); break;
             case 2: changeMasterfxDelay(1); break;
+            case 3: changeMasterfxDynamics(1); break;
 #endif
             case 5: changeSaturationType(1); break;
             case 6: changeBassBoost(-1); break;
@@ -1015,6 +1080,10 @@ static void functDelete()
             case 2: MP->setDefaultReverbPredelay(); break;
             case 3: MP->setDefaultReverbDiffusion(); break;
             case 4: MP->setDefaultLineInReverbSend(); break;
+#if MT_HAS_MASTERFX // MT:
+            case 5:
+            case 6: setDefaultMasterfxKnob(mods::masterfx::kReverb, MP->selectedPlaceReverb); break;
+#endif
             default: break;
         }
     }
@@ -1025,7 +1094,20 @@ static void functDelete()
             case 0: setDefaultLimiterAttack(); break;
             case 1: setDefaultLimiterRelease(); break;
             case 2: setDefaultLimiterTreshold(); break;
-            case 4: setDefaultLimiterSidechain(); break;
+            case 4:
+#if MT_HAS_MASTERFX // MT: the Ducks list back to the master
+                if (MP->masterfxDucksShown())
+                {
+                    MP->clearMasterfxDucks();
+                    break;
+                }
+#endif
+                setDefaultLimiterSidechain();
+                break;
+#if MT_HAS_MASTERFX // MT:
+            case 5:
+            case 6: setDefaultMasterfxKnob(mods::masterfx::kDynamics, MP->selectedPlaceLimiter); break;
+#endif
             default: break;
         }
     }
@@ -1039,8 +1121,9 @@ static void functDelete()
         {
             case 0: setDefaultMasterVolume(); break;
 #if MT_HAS_MASTERFX // MT: back to Stock
-            case 1: changeMasterfxReverb(-mods::masterfx::kReverbCount); break;
-            case 2: changeMasterfxDelay(-mods::masterfx::kDelayCount); break;
+            case 1: changeMasterfxReverb(-mods::masterfx::choiceCount(mods::masterfx::kReverb)); break;
+            case 2: changeMasterfxDelay(-mods::masterfx::choiceCount(mods::masterfx::kDelay)); break;
+            case 3: changeMasterfxDynamics(-mods::masterfx::choiceCount(mods::masterfx::kDynamics)); break;
 #endif
             case 5: setDefaultSaturationType(); break;
             case 6: setDefaultBassBoost(); break;
@@ -1328,6 +1411,10 @@ void cMasterParams::switchToReverbScreen()
     ip->setButtonObj(interfaceButton3, buttonPress, functSelectReverbDiffusion);
     ip->setButtonObj(interfaceButton4, buttonPress, functReverbLineIn);
     ip->setButtonObj(interfaceButton7, buttonPress, functReverbCancel);
+#if MT_HAS_MASTERFX // MT: the plugin's own knobs
+    ip->setButtonObj(interfaceButton5, functSelectMasterfxKnob);
+    ip->setButtonObj(interfaceButton6, functSelectMasterfxKnob);
+#endif
 
     keyboardManager.deactivateKeyboard();
 
@@ -1347,6 +1434,10 @@ void cMasterParams::switchToLimiterScreen()
     ip->setButtonObj(interfaceButton2, buttonPress, functSelectLimiterThreshold);
     ip->setButtonObj(interfaceButton4, buttonPress, functSelectLimiterSidechain);
     ip->setButtonObj(interfaceButton7, buttonPress, functLimiterCancel);
+#if MT_HAS_MASTERFX // MT: the plugin's own knobs
+    ip->setButtonObj(interfaceButton5, functSelectMasterfxKnob);
+    ip->setButtonObj(interfaceButton6, functSelectMasterfxKnob);
+#endif
 
     keyboardManager.deactivateKeyboard();
 
@@ -1534,6 +1625,26 @@ static void functSelectLimiterThreshold()
 
 static void functSelectLimiterSidechain()
 {
+#if MT_HAS_MASTERFX // MT: Shift switches the column between Sidechain and Ducks; in Ducks a press
+                    // on the column marks the item under the cursor
+    if (MP->buttons->isButtonPressed(interfaceButtonShift) && mods::masterfx::canDuck())
+    {
+        MP->showMasterfxDucks(!MP->masterfxDucksShown());
+        MP->selectedPlaceLimiter = 4;
+        MP->refreshLimiterFrame();
+        return;
+    }
+    if (MP->masterfxDucksShown())
+    {
+        if (MP->selectedPlaceLimiter == 4)
+        {
+            MP->toggleMasterfxDuck();
+        }
+        MP->selectedPlaceLimiter = 4;
+        MP->refreshLimiterFrame();
+        return;
+    }
+#endif
     if (MP->selectedPlaceLimiter == 4) // zmienianie pozycji listy przyciskiem pod ekranem
     {
         mtProject.values.limiterSidechain++;
@@ -2356,20 +2467,82 @@ void changeSaturationType(int16_t value)
 }
 
 #if MT_HAS_MASTERFX // MT:
+// A step through the slot's list (Stock, the card's plugins, then Missing if the project's file
+// isn't there). The list can change with the choice (Missing goes): then the lists get their data
+// again; otherwise only their values, so the other lists' bars stay put
+static void changeMasterfxSlot(uint8_t slot, int16_t value)
+{
+    const uint8_t count = mods::masterfx::choiceCount(slot);
+    const int to = clamp<int>(mods::masterfx::choice(slot) + value, 0, count - 1);
+    mods::masterfx::choose(slot, static_cast<uint8_t>(to));
+    mods::masterfxChosen();
+    if (mods::masterfx::choiceCount(slot) != count)
+    {
+        MP->showMasterfxLists();
+    }
+    else
+    {
+        MP->showMasterfxChoices();
+    }
+}
+
 static void changeMasterfxReverb(int16_t value)
 {
-    mods::masterfx::settings.reverb =
-      clamp<int>(mods::masterfx::settings.reverb + value, 0, mods::masterfx::kReverbCount - 1);
-    mods::masterfxChosen();
-    MP->showMasterfxChoices();
+    changeMasterfxSlot(mods::masterfx::kReverb, value);
 }
 
 static void changeMasterfxDelay(int16_t value)
 {
-    mods::masterfx::settings.delay =
-      clamp<int>(mods::masterfx::settings.delay + value, 0, mods::masterfx::kDelayCount - 1);
-    mods::masterfxChosen();
-    MP->showMasterfxChoices();
+    changeMasterfxSlot(mods::masterfx::kDelay, value);
+}
+
+static void changeMasterfxDynamics(int16_t value)
+{
+    changeMasterfxSlot(mods::masterfx::kDynamics, value);
+}
+
+static void changeMasterfxKnob(uint8_t slot, uint8_t place, int16_t value)
+{
+    const uint8_t knob = place - 5;
+    if (knob >= mods::masterfx::ownKnobs(slot))
+    {
+        return;
+    }
+    mods::masterfx::stepOwnKnob(slot, knob, value);
+    mods::masterfxKnobEdited();
+    MP->showMasterfxOwnKnob(slot, knob);
+}
+
+static void setDefaultMasterfxKnob(uint8_t slot, uint8_t place)
+{
+    const uint8_t knob = place - 5;
+    if (knob >= mods::masterfx::ownKnobs(slot))
+    {
+        return;
+    }
+    mods::masterfx::defaultOwnKnob(slot, knob);
+    mods::masterfxKnobEdited();
+    MP->showMasterfxOwnKnob(slot, knob);
+}
+
+static void functSelectMasterfxKnob(uint8_t n, uint8_t state)
+{
+    const uint8_t slot = MP->isLimiterScreen ? mods::masterfx::kDynamics : mods::masterfx::kReverb;
+    const uint8_t place = n; // the button under column 5 or 6
+    if (state != buttonPress || place < 5 || place - 5 >= mods::masterfx::ownKnobs(slot))
+    {
+        return;
+    }
+    if (MP->isLimiterScreen)
+    {
+        MP->selectedPlaceLimiter = place;
+        MP->refreshLimiterFrame();
+    }
+    else if (MP->isReverbScreen)
+    {
+        MP->selectedPlaceReverb = place;
+        MP->refreshReverbFrame();
+    }
 }
 #endif
 

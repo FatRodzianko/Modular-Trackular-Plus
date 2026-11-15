@@ -39,6 +39,10 @@ class AudioEffectPolyverb : public AudioStream
 
     void unblockUpdate() { isBlockedUpdate = false; }
 
+#if MT_HAS_MASTERFX // MT: the two buffers, the reverb slot's memory for a Master FX plugin
+    uint16_t* modsBuffer(uint32_t which) const { return which == 0 ? buffer : buffer2; }
+#endif
+
   private:
     audio_block_t* inputQueueArray[2];
     Reverb reverb;

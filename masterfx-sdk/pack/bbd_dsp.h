@@ -1,5 +1,5 @@
 /*
- * bbd_dsp.h: in CE's delay slot. Included once, by ../masterfxDsp.cpp.
+ * bbd_dsp.h: in CE's delay slot. Included by pack.cpp, inside a struct, after tape_dsp.h.
  *
  * A model of a delay built on a 4096-stage BBD chip (as the MN3005 in pedals such as
  * the Boss DM-2): the chip passes samples from stage to stage at a clock rate set by the
@@ -55,17 +55,17 @@ struct bbd_state {
     float lp_x[2], lp_y[2];                 /* the Filter knob's lowpass */
     float osc[2];                           /* cos, sin of the drift */
 };
-static struct bbd_state bbd_state_ram;
+MFX_STATE struct bbd_state bbd_state_ram;
 #define BB (&bbd_state_ram)
 
-static inline float bbd_tan(float x)        /* tan for 0 <= x <= 0.9 (within 2 %) */
+MFX_FN inline float bbd_tan(float x)        /* tan for 0 <= x <= 0.9 (within 2 %) */
 {
     float x2 = x * x;
     return x * (1.0f + x2 * (1.0f / 3.0f + x2 * (2.0f / 15.0f)));
 }
 
 /* the 2-pole Butterworth lowpass at the corner for this delay */
-MFX_ITCM static void bbd_coefs(uint32_t delay)
+MFX_ITCM MFX_FN void bbd_coefs(uint32_t delay)
 {
     float fc = BBD_CLOCK_K / (float)delay;
     if (fc < BBD_FC_MIN)
@@ -80,7 +80,7 @@ MFX_ITCM static void bbd_coefs(uint32_t delay)
     BB->coef_for = delay;
 }
 
-static inline float bbd_lowpass(struct biquad *f, float x)
+MFX_FN inline float bbd_lowpass(struct biquad *f, float x)
 {
     float y = BB->b0 * x + f->s1;
     f->s1 = 2.0f * BB->b0 * x - BB->a1 * y + f->s2;
@@ -89,7 +89,7 @@ static inline float bbd_lowpass(struct biquad *f, float x)
 }
 
 /* Lay out the lines in buffers 0 and 1 (cleared beforehand), at the current Time. */
-static void bbd_init(const DelayKnobs *obj, uint32_t buf0, uint32_t buf1)
+MFX_FN void bbd_init(const DelayKnobs *obj, uint32_t buf0, uint32_t buf1)
 {
     BB->buf[0] = buf0;
     BB->buf[1] = buf1;
@@ -107,13 +107,13 @@ static void bbd_init(const DelayKnobs *obj, uint32_t buf0, uint32_t buf1)
     BB->magic = BBD_MAGIC;
 }
 
-static inline float bbd_chip_in(float v)    /* the chip's input stage */
+MFX_FN inline float bbd_chip_in(float v)    /* the chip's input stage */
 {
     return tape_sat(BBD_DRIVE * v) * (1.0f / BBD_DRIVE);
 }
 
 /* Run the BBD over one block: mono send in, left and right out. */
-MFX_ITCM static void bbd_process(const DelayKnobs *obj, const int16_t *in, int16_t *out_l, int16_t *out_r)
+MFX_ITCM MFX_FN void bbd_process(const DelayKnobs *obj, const int16_t *in, int16_t *out_l, int16_t *out_r)
 {
     int16_t *qa = (int16_t *)BB->buf[0], *qb = (int16_t *)BB->buf[1];
     int pingpong = obj->pingpong != 0;

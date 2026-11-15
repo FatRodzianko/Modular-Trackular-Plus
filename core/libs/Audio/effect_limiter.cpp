@@ -1,5 +1,6 @@
 #include "effect_limiter.h"
 #include "ampLogarythmicValues.h"
+#include "masterfxDsp.h" // MT:
 #include "mtStructs.h"
 #include "util_math.h"
 #include <cmath>
@@ -15,6 +16,12 @@ AUDIO_CORE_FLASH void AudioEffectLimiter::begin()
     isAverageGain = false;
 
     memset(inputStorageBuffer, 0, 10);
+#if MT_HAS_MASTERFX // MT: the dynamics slot's plugin starts over too (main loop: resetLimiter, init)
+    if (this == mods::masterfx::limiters[0])
+    {
+        mods::masterfx::dynamicsReset();
+    }
+#endif
 }
 
 AUDIO_CORE_FLASH void AudioEffectLimiter::setThreshold(uint16_t ts)
@@ -24,6 +31,9 @@ AUDIO_CORE_FLASH void AudioEffectLimiter::setThreshold(uint16_t ts)
 }
 AUDIO_CORE_FLASH void AudioEffectLimiter::setAttack(uint16_t a)
 {
+#if MT_HAS_MASTERFX // MT:
+    modsAttack = a;
+#endif
     if (mtProject.values.limiterMode == limiterModeSubtle)
         attackTime = 1 - expf(-2.2f * (1000.0f / (44100.0f * a)));
     else if (mtProject.values.limiterMode == limiterModeHard)
@@ -31,6 +41,9 @@ AUDIO_CORE_FLASH void AudioEffectLimiter::setAttack(uint16_t a)
 }
 AUDIO_CORE_FLASH void AudioEffectLimiter::setRelease(float r)
 {
+#if MT_HAS_MASTERFX // MT:
+    modsRelease = r;
+#endif
     if (mtProject.values.limiterMode == limiterModeSubtle)
         releaseTime = 1 - expf(-2.2f * (1000.0f / (44100.0f * r)));
     else if (mtProject.values.limiterMode == limiterModeHard)
@@ -56,6 +69,17 @@ AUDIO_CORE_RAM void AudioEffectLimiter::update(void)
 {
     if (isBlocked)
         return;
+
+#if MT_HAS_MASTERFX // MT: the dynamics slot: the left object runs both sides, the right one has nothing left
+    if (mods::masterfx::activeDynamics != 0 && mods::masterfx::limiters[1] != nullptr)
+    {
+        if (this == mods::masterfx::limiters[0])
+        {
+            modsUpdate();
+        }
+        return;
+    }
+#endif
 
     if (isSideChainEnable)
         processSidechain();
@@ -189,6 +213,69 @@ AUDIO_CORE_RAM void AudioEffectLimiter::processMainStream()
     if (sidechainBlock)
         release(sidechainBlock);
 }
+
+#if MT_HAS_MASTERFX // MT:
+// The dynamics slot's plugin on the stereo master, from the left object (CE builds it first, and
+// both after the mixer, so the right block and both keys are queued): the right object's blocks
+// are taken here and sent on from it. The meter's gain is the plugin's, on both. CE's own state is
+// kept as at power-up, so its limiter starts clean if it plays again.
+AUDIO_CORE_RAM void AudioEffectLimiter::modsUpdate()
+{
+    AudioEffectLimiter* right = mods::masterfx::limiters[1];
+    audio_block_t* leftBlock = receiveWritable(0);
+    audio_block_t* leftKey = receiveReadOnly(1);
+    audio_block_t* rightBlock = right->receiveWritable(0);
+    audio_block_t* rightKey = right->receiveReadOnly(1);
+
+    float gain = 1.0f;
+    if (leftBlock && rightBlock)
+    {
+        mods::masterfx::DynamicsKnobs knobs;
+        knobs.attack = modsAttack;
+        knobs.release = modsRelease;
+        knobs.threshold = threshold * (1.0f / 32767.0f);
+        knobs.keyOn = isSideChainEnable ? 1u : 0u;
+        const int16_t* keyLeft = nullptr;
+        const int16_t* keyRight = nullptr;
+        if (isSideChainEnable)
+        {
+            keyLeft = leftKey ? leftKey->data : zeroblock;
+            keyRight = rightKey ? rightKey->data : zeroblock;
+        }
+        gain = mods::masterfx::dynamicsProcess(knobs, leftBlock->data, rightBlock->data, keyLeft, keyRight);
+    }
+
+    AudioEffectLimiter* const pair[2] = { this, right };
+    for (AudioEffectLimiter* l : pair)
+    {
+        l->averageGain = gain;
+        l->sumGain = 0.0f;
+        l->isAverageGain = true;
+        l->g = 1.0f;
+        l->xpeak = 0;
+        for (uint8_t i = 0; i < LIMITER_DELAY; i++)
+        {
+            l->inputStorageBuffer[i] = 0;
+            l->outputStorageBuffer[i] = 0;
+        }
+    }
+
+    if (leftBlock)
+    {
+        transmit(leftBlock, 0);
+        release(leftBlock);
+    }
+    if (rightBlock)
+    {
+        right->transmit(rightBlock, 0);
+        release(rightBlock);
+    }
+    if (leftKey)
+        release(leftKey);
+    if (rightKey)
+        release(rightKey);
+}
+#endif
 
 AUDIO_CORE_FLASH void AudioEffectLimiter::blockUpdate()
 {

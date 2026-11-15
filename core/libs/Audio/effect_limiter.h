@@ -2,6 +2,7 @@
 #define LIBS_AUDIO_EFFECT_LIMITER_H_
 
 #include "AudioStream.h"
+#include "modsBuild.h" // MT:
 
 constexpr uint8_t LIMITER_DELAY = 5;
 
@@ -26,6 +27,9 @@ class AudioEffectLimiter : public AudioStream
     void processMainStream();
     void blockUpdate();
     void unblockUpdate();
+#if MT_HAS_MASTERFX // MT: the dynamics slot's plugin runs both sides from the left object
+    void modsUpdate();
+#endif
 
   private:
     audio_block_t* inputQueueArray[2];
@@ -44,6 +48,10 @@ class AudioEffectLimiter : public AudioStream
     bool isAverageGain;
     bool isSideChainEnable;
     bool isBlocked;
+#if MT_HAS_MASTERFX // MT: the knobs as the setters were given them, for the plugin
+    uint16_t modsAttack = 300;
+    float modsRelease = 10.0f;
+#endif
 };
 
 #endif /* LIBS_AUDIO_EFFECT_LIMITER_H_ */

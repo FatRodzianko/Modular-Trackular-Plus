@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="480" viewBox="0 0 800 480" font-family="'Roboto Mono', 'DejaVu Sans Mono', Consolas, monospace">
+<title>Master FX: a plugin's words on the Reverb page</title><desc>The Reverb page with Shimmer: the title names it, and its words Decay, Tone and Shimmer replace Size, Damping and Diffusion</desc>
+<defs><linearGradient id="shadow" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0A0A0A"/><stop offset="1" stop-color="#000000"/></linearGradient><linearGradient id="barShade" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000000"/><stop offset="1" stop-color="#080808"/></linearGradient></defs>
+<rect x="0" y="0" width="800" height="480" fill="#000000"/>
+<rect x="0" y="0" width="800" height="28" fill="#080808"/>
+<line x1="0" y1="28.5" x2="800" y2="28.5" stroke="#FFFFFF" stroke-width="1"/>
+<text class="val" x="9" y="13" font-size="17" font-weight="700" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Reverb: Shimmer</text>
+<rect x="1" y="425" width="797" height="54" fill="#0A0A0A"/>
+<line x1="100.5" y1="438.5" x2="100.5" y2="479" stroke="#777777" stroke-width="1"/>
+<line x1="200.5" y1="438.5" x2="200.5" y2="479" stroke="#777777" stroke-width="1"/>
+<line x1="300.5" y1="438.5" x2="300.5" y2="479" stroke="#777777" stroke-width="1"/>
+<line x1="400.5" y1="438.5" x2="400.5" y2="479" stroke="#777777" stroke-width="1"/>
+<line x1="500.5" y1="438.5" x2="500.5" y2="479" stroke="#777777" stroke-width="1"/>
+<line x1="600.5" y1="438.5" x2="600.5" y2="479" stroke="#777777" stroke-width="1"/>
+<line x1="700.5" y1="438.5" x2="700.5" y2="479" stroke="#777777" stroke-width="1"/>
+<rect x="2" y="29" width="97" height="394" fill="#0A0A0A"/>
+<rect x="2" y="413" width="97" height="12" fill="url(#shadow)"/>
+<rect x="12" y="40" width="77" height="369" fill="#080808"/>
+<rect x="12" y="40" width="8" height="369" fill="url(#barShade)"/>
+<rect x="13" y="224" width="75" height="184" fill="#FFFFFF"/>
+<text class="lbl" x="50" y="441" font-size="14" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="central" xml:space="preserve">Decay</text>
+<text class="val" x="50" y="461" font-size="17" font-weight="300" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central" xml:space="preserve">50</text>
+<rect x="102" y="29" width="97" height="394" fill="#0A0A0A"/>
+<rect x="102" y="413" width="97" height="12" fill="url(#shadow)"/>
+<rect x="112" y="40" width="77" height="369" fill="#080808"/>
+<rect x="112" y="40" width="8" height="369" fill="url(#barShade)"/>
+<rect x="113" y="224" width="75" height="184" fill="#FFFFFF"/>
+<text class="lbl" x="150" y="441" font-size="14" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="central" xml:space="preserve">Tone</text>
+<text class="val" x="150" y="461" font-size="17" font-weight="300" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central" xml:space="preserve">50</text>
+<rect x="202" y="29" width="97" height="394" fill="#0A0A0A"/>
+<rect x="202" y="413" width="97" height="12" fill="url(#shadow)"/>
+<rect x="212" y="40" width="77" height="369" fill="#080808"/>
+<rect x="212" y="40" width="8" height="369" fill="url(#barShade)"/>
+<rect x="213" y="224" width="75" height="184" fill="#FFFFFF"/>
+<text class="lbl" x="250" y="441" font-size="14" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="central" xml:space="preserve">Predelay</text>
+<text class="val" x="250" y="461" font-size="17" font-weight="300" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central" xml:space="preserve">50</text>
+<rect x="302" y="29" width="97" height="394" fill="#0A0A0A"/>
+<rect x="302" y="413" width="97" height="12" fill="url(#shadow)"/>
+<rect x="312" y="40" width="77" height="369" fill="#080808"/>
+<rect x="312" y="40" width="8" height="369" fill="url(#barShade)"/>
+<rect x="313" y="113" width="75" height="295" fill="#FFFFFF"/>
+<text class="lbl" x="350" y="441" font-size="14" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="central" xml:space="preserve">Shimmer</text>
+<text class="val" x="350" y="461" font-size="17" font-weight="300" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central" xml:space="preserve">80</text>
+<rect x="402" y="29" width="97" height="394" fill="#0A0A0A"/>
+<rect x="402" y="413" width="97" height="12" fill="url(#shadow)"/>
+<rect x="412" y="40" width="77" height="369" fill="#080808"/>
+<rect x="412" y="40" width="8" height="369" fill="url(#barShade)"/>
+<rect x="413" y="408" width="75" height="0" fill="#FFFFFF"/>
+<text class="lbl" x="450" y="441" font-size="14" font-weight="400" fill="#333333" text-anchor="middle" dominant-baseline="central" xml:space="preserve">Line in</text>
+<text class="val" x="450" y="461" font-size="17" font-weight="300" fill="#575757" text-anchor="middle" dominant-baseline="central" xml:space="preserve">-inf dB</text>
+<rect x="502" y="29" width="297" height="394" fill="#0A0A0A"/>
+<rect x="502" y="413" width="297" height="12" fill="url(#shadow)"/>
+<text class="lbl" x="750" y="451" font-size="14" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="central" xml:space="preserve">Back</text>
+<rect x="1" y="31" width="97" height="391" fill="none" stroke="#CD1818" stroke-width="1.5"/>
+<rect x="0" y="0" width="800" height="28" rx="3" fill="none" stroke="#2F9BFF" stroke-width="2.5" stroke-dasharray="7 4"/>
+<rect x="1" y="426" width="98" height="52" rx="3" fill="none" stroke="#2F9BFF" stroke-width="2.5" stroke-dasharray="7 4"/>
+<rect x="101" y="426" width="98" height="52" rx="3" fill="none" stroke="#2F9BFF" stroke-width="2.5" stroke-dasharray="7 4"/>
+<rect x="301" y="426" width="98" height="52" rx="3" fill="none" stroke="#2F9BFF" stroke-width="2.5" stroke-dasharray="7 4"/>
+</svg>

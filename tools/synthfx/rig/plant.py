@@ -1,6 +1,6 @@
 # Modular-Trackular mods. SPDX-License-Identifier: MIT
 """Planted faults for the Synth FX plugins' runtime: each copies core/mods/synthfx, makes one
-mistake in the copy's synthfxPlugins.cpp, builds the emulator rig (tools/synthfx/rig/build.sh)
+mistake in the copy's synthfxPlugins.cpp (or its copy of core/mods/plugins), builds the emulator rig (tools/synthfx/rig/build.sh)
 or the host test (core/mods/tests/test_synthfx_plugins.cpp) from it, and runs the test, which
 has to fail on the check named. A fault the tests miss is a gap in them.
 
@@ -23,11 +23,16 @@ SRC = ROOT / "core" / "mods" / "synthfx"
 OUT = ROOT / "build" / "emu" / "plant_rig"
 TEST = ROOT / "tools" / "synthfx" / "test_runtime.py"
 F = "synthfxPlugins.cpp"
+KIT = ROOT / "core" / "mods" / "plugins"
+KIT_FILE = "pluginKit.h"
+KIT_FAULTS = {"guard: NaN let through", "guard: no clamp", "header: a default between steps passed"}
 
 # (name, where: rig or host, old text, new text, a check that must fail: a substring of its line)
+# The fault goes in synthfxPlugins.cpp, or in the shared kit (core/mods/plugins/pluginKit.h) for
+# the names in KIT_FAULTS.
 FAULTS = [
-    ("guard: NaN let through", "rig", "if (nan0 + nan1 == 0.0f && ", "if (", "NaN: becomes 0"),
-    ("guard: no clamp", "rig", "__builtin_fmaxf(peak0, peak1) <= kOutputLimit", "__builtin_fmaxf(peak0, peak1) <= 1000.0f",
+    ("guard: NaN let through", "rig", "return nan0 + nan1 == 0.0f && ", "return ", "NaN: becomes 0"),
+    ("guard: no clamp", "rig", "__builtin_fmaxf(peak0, peak1) <= limit;", "__builtin_fmaxf(peak0, peak1) <= 1000.0f;",
      "loud: held"),
     ("guard: NaN doesn't reset the plugin", "rig", "    if (bad)\n    {\n        in.resetWanted = 1;\n    }\n", "",
      "NaN: the plugin reset"),
@@ -87,16 +92,18 @@ def main() -> int:
         shutil.rmtree(work, ignore_errors=True)
         copy = work / "synthfx"
         shutil.copytree(SRC, copy)
-        text = (copy / F).read_text(encoding="utf-8")
+        shutil.copytree(KIT, work / "plugins")
+        target = work / "plugins" / KIT_FILE if name in KIT_FAULTS else copy / F
+        text = target.read_text(encoding="utf-8")
         if text.count(old) != 1:
             print(f"FAULT TEXT NOT FOUND ONCE: {name}")
             missed.append(name)
             continue
-        (copy / F).write_text(text.replace(old, new), encoding="utf-8", newline="\n")
+        target.write_text(text.replace(old, new), encoding="utf-8", newline="\n")
         if where == "rig":
             axf = work / "rig.axf"
             b = wsl(["bash", wsl_path(ROOT / "tools" / "synthfx" / "rig" / "build.sh"), a.toolchain],
-                    {"RIG_SRC": wsl_path(copy), "RIG_OUT": wsl_path(axf)})
+                    {"RIG_SRC": wsl_path(copy), "RIG_OUT": wsl_path(axf), "RIG_KIT": wsl_path(work)})
             if b.returncode != 0:
                 print(f"caught {name}: it doesn't build")
                 continue

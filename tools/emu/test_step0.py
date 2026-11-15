@@ -109,8 +109,10 @@ class FakeSd:
         self.unexpected: list[str] = []
         self.calls: list[str] = []
         # listDirContents' name filter is a std::function, which a stub can't call: the firmware's
-        # filter for each folder listed, in Python (Synth FX lists only .ptsfx files); others keep all
-        self.list_filters = {"SynthFX": lambda name: name.lower().endswith(".ptsfx")}
+        # filter for each folder listed, in Python (Synth FX lists only .ptsfx files, Master FX only
+        # .ptmfx: mods.cpp's ModsFileIo::list); others keep all
+        self.list_filters = {"SynthFX": lambda name: name.lower().endswith(".ptsfx"),
+                             "MasterFX": lambda name: name.lower().endswith(".ptmfx")}
 
         impl_vt = m.addr("_ZTV14FileSystemImpl") + 8
         slots = m.sym("_ZTV14FileSystemImpl").size // 4 - 2

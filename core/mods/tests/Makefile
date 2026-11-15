@@ -3,9 +3,9 @@
 
 CXX      ?= g++
 CXXFLAGS := -std=gnu++20 -Wall -Wextra -Werror -g -fsanitize=address,undefined -DMT_HOST_TEST -I..
-COMMON   := ../modsStore.cpp ../modsSwitches.cpp ../modsProject.cpp ../humanize.cpp ../swing.cpp ../colorsong.cpp ../masterfx.cpp ../tracklen.cpp ../copypattern.cpp ../songloop.cpp ../synthfx/synthfxSettings.cpp
+COMMON   := ../modsStore.cpp ../modsSwitches.cpp ../modsProject.cpp ../humanize.cpp ../swing.cpp ../colorsong.cpp ../masterfx.cpp ../tracklen.cpp ../copypattern.cpp ../songloop.cpp ../synthfx/synthfxSettings.cpp ../masterfx/masterfxPlugins.cpp ../masterfx/masterfxPack.cpp
 BUILD    := build
-TESTS    := test_mods test_registry test_registry_partial test_humanize test_swing test_colorsong test_masterfx test_tracklen test_copypattern test_songloop test_synthfx test_synthfx_plugins test_cardguard
+TESTS    := test_mods test_registry test_registry_partial test_humanize test_swing test_colorsong test_masterfx test_tracklen test_copypattern test_songloop test_synthfx test_synthfx_plugins test_masterfx_plugins test_cardguard
 # The registry again with some mods left out of the build.
 PARTIAL  := -DMT_HAS_SWING=0 -DMT_HAS_COLORSONG=0
 
@@ -38,7 +38,7 @@ $(BUILD)/test_colorsong: $(COMMON) test_colorsong.cpp $(wildcard ../*.h)
 	@mkdir -p $(BUILD)
 	$(CXX) $(CXXFLAGS) -o $@ $(filter %.cpp,$^)
 
-$(BUILD)/test_masterfx: $(COMMON) test_masterfx.cpp $(wildcard ../*.h)
+$(BUILD)/test_masterfx: $(COMMON) test_masterfx.cpp $(wildcard ../*.h) $(wildcard ../masterfx/*.h) $(wildcard ../plugins/*.h) ../masterfx/masterfxPack.inc
 	@mkdir -p $(BUILD)
 	$(CXX) $(CXXFLAGS) -o $@ $(filter %.cpp,$^)
 
@@ -62,7 +62,11 @@ $(BUILD)/test_synthfx: $(COMMON) test_synthfx.cpp $(wildcard ../*.h) $(wildcard 
 	@mkdir -p $(BUILD)
 	$(CXX) $(CXXFLAGS) -o $@ $(filter %.cpp,$^)
 
-$(BUILD)/test_synthfx_plugins: ../synthfx/synthfxPlugins.cpp ../synthfx/synthfxPack.cpp test_synthfx_plugins.cpp ../modsFileIo.h $(wildcard ../synthfx/*.h) ../synthfx/synthfxPack.inc
+$(BUILD)/test_synthfx_plugins: ../synthfx/synthfxPlugins.cpp ../synthfx/synthfxPack.cpp test_synthfx_plugins.cpp ../modsFileIo.h $(wildcard ../synthfx/*.h) $(wildcard ../plugins/*.h) ../synthfx/synthfxPack.inc
+	@mkdir -p $(BUILD)
+	$(CXX) $(CXXFLAGS) -o $@ $(filter %.cpp,$^)
+
+$(BUILD)/test_masterfx_plugins: ../masterfx/masterfxPlugins.cpp ../masterfx/masterfxPack.cpp test_masterfx_plugins.cpp ../modsFileIo.h $(wildcard ../masterfx/*.h) $(wildcard ../plugins/*.h) ../masterfx/masterfxPack.inc ../../../masterfx-sdk/ptmfx.h
 	@mkdir -p $(BUILD)
 	$(CXX) $(CXXFLAGS) -o $@ $(filter %.cpp,$^)
 

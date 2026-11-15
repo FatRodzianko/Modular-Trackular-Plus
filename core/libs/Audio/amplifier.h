@@ -28,6 +28,7 @@
 #define mixer_h_
 
 #include "AudioStream.h"
+#include "modsBuild.h" // MT:
 #include "util_math.h"
 
 class AudioAmplifier : public AudioStream
@@ -52,10 +53,19 @@ class AudioAmplifier : public AudioStream
         multiplier = gain * kUnityGain;
     }
 
+#if MT_HAS_MASTERFX // MT: masterfx ducks this track's side by the dynamics plugin's gain
+    static constexpr uint8_t kModsNoDuck = 0xFF;
+    void modsSetDuck(uint8_t index) { modsDuck = index; } // masterfx's destination, or kModsNoDuck
+#endif
+
   private:
     int32_t multiplier;
     int32_t previousMultiplier;
     audio_block_t* inputQueueArray[1];
+#if MT_HAS_MASTERFX // MT:
+    uint8_t modsDuck = kModsNoDuck;
+    void modsDuckUpdate();
+#endif
 };
 
 #endif

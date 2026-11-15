@@ -3,7 +3,7 @@
 
 1. each one parses as XML and is 800 x 480;
 2. each text of class "lbl" is a string in the firmware's source: inside a C string literal in core/,
-   synth/source/, synth/include/ or synthfx-sdk/pack/ (the default Synth FX plugins; the whole label, or the label as one entry of a list);
+   synth/source/, synth/include/, synthfx-sdk/pack/ or masterfx-sdk/pack/ (the default Synth FX and Master FX plugins; the whole label, or the label as one entry of a list);
 3. each page in docs/mods/ links only images that exist, and each image is linked from a page.
 
 Texts of class "val" (values the firmware formats) and "demo" (a project's own names) are listed
@@ -21,7 +21,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 IMG = ROOT / "docs" / "mods" / "img"
 PAGES = ROOT / "docs" / "mods"
-SOURCES = [ROOT / "core", ROOT / "synth" / "source", ROOT / "synth" / "include", ROOT / "synthfx-sdk" / "pack"]
+SOURCES = [ROOT / "core", ROOT / "synth" / "source", ROOT / "synth" / "include", ROOT / "synthfx-sdk" / "pack",
+           ROOT / "masterfx-sdk" / "pack"]
 NS = "{http://www.w3.org/2000/svg}"
 LITERAL = re.compile(r'"((?:[^"\\\n]|\\.)*)"')
 

@@ -49,6 +49,15 @@ SYNTHFX_CARD = ROOT / "build" / "device" / "synthfx_card" / "SynthFX"
 # Synth FX phase 1's firmware (commit 42a415e, built with `make plus EDITION_NAME=MT`): the built-in
 # effects a version 1 project played, which test_synthfx.py's as_before compares the plugins with
 SYNTHFX_BEFORE = ROOT / "build" / "emu" / "TrackerPlus_MT_p1.axf"
+# Master FX's default pack (tools/masterfx/build_pack.py, in WSL) and the firmware from before the
+# plugins (commit d9a6795, built with `make plus EDITION_NAME=MT`): the built-in effects that
+# tools/masterfx/test_pack.py compares the pack with
+MASTERFX_PACK = ROOT / "build" / "masterfx" / "pack"
+MASTERFX_BEFORE = ROOT / "build" / "emu" / "TrackerPlus_MT_d9a6795.axf"
+# The Master FX SDK's examples, built by build_pack.py with the pack, and the guard tests' card
+# (tools/masterfx/device/build.sh, in WSL), which test_guards.py runs
+MASTERFX_EXAMPLES = ROOT / "build" / "masterfx" / "examples"
+MASTERFX_CARD = ROOT / "build" / "device" / "masterfx_card" / "MasterFX"
 OUT = ROOT / "build" / "test_out"
 
 
@@ -128,10 +137,16 @@ def jobs_for(args, projects):
             inputs=[SYNTHFX_RIG, SYNTHFX_PACK, ROOT / "build" / "synthfx" / "rig"]),
         Job("synthfx pack", ROOT / "tools" / "synthfx" / "test_pack.py", LEVEL_A, SYNTHFX_PACK,
             inputs=[LEVEL_A, SYNTHFX_PACK]),
+        Job("masterfx pack", ROOT / "tools" / "masterfx" / "test_pack.py", MASTERFX_BEFORE, MASTERFX_PACK,
+            inputs=[MASTERFX_BEFORE, MASTERFX_PACK]),
+        Job("masterfx sdk", ROOT / "tools" / "masterfx" / "check_ptmfx.py", MASTERFX_EXAMPLES, MASTERFX_PACK,
+            "--firmware", mods, inputs=[mods, MASTERFX_EXAMPLES, MASTERFX_PACK]),
+        Job("masterfx guards", ROOT / "tools" / "masterfx" / "test_guards.py", mods, MASTERFX_CARD,
+            inputs=[mods, MASTERFX_CARD]),
         Job("masterfx objects", e / "test_masterfx.py", mods, ref, *([args.rig] if args.rig else []),
             inputs=both + ((args.rig,) if args.rig else ())),
     ]
-    for section in ("ui", "graph", "stress", "debounce", "project"):
+    for section in ("ui", "graph", "dynamics", "ducks", "stress", "debounce", "project"):
         jobs.append(Job(f"masterfx {section}", e / "test_masterfx_rig.py", mods, ref, section, inputs=both))
     if args.tier == "quick":
         return jobs
@@ -144,6 +159,9 @@ def jobs_for(args, projects):
     play_gaps = "300,3000" if args.tier == "release" else "100,1500"
     worst_loops = {"held": 300, "worst": 20 if args.tier == "release" else 60}
     jobs.append(Job("masterfx play", e / "test_masterfx_rig.py", mods, ref, "play", inputs=both))
+    # Each slot's cost against today's release, in instructions (tools/masterfx/compare_cost.py)
+    jobs.append(Job("masterfx cost", ROOT / "tools" / "masterfx" / "compare_cost.py", mods, MASTERFX_BEFORE,
+                    inputs=[mods, MASTERFX_BEFORE]))
     seeds = (1,) if args.tier == "release" else (1, 2, 3, 4)
     blocks = 20000 if args.tier == "release" else 100000
     jobs.append(Job("masterfx long stress", e / "stress_masterfx.py", mods, "--blocks", blocks,

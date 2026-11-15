@@ -1,5 +1,5 @@
 /*
- * tape_dsp.h: in CE's delay slot. Included once, by ../masterfxDsp.cpp.
+ * tape_dsp.h: in CE's delay slot. Included by pack.cpp, inside a struct.
  *
  * A model of a tape echo in the style of a Roland Space Echo, from the mono delay send
  * to the stereo delay return (wet only): one record head and one playback head on a loop of tape, the playback head's
@@ -53,8 +53,8 @@
 /* the three modulations of the playback point: depth in samples, and the rotation of
  * each oscillator over one block (cos, sin of 2 pi f 128 / 44100) */
 #define MODS                3u
-static const float mod_depth[MODS] = {45.0f, 2.0f, 54.0f};          /* wow, flutter, drift */
-static const float mod_rot[MODS][2] = {
+MFX_TABLE float mod_depth[MODS] = {45.0f, 2.0f, 54.0f};          /* wow, flutter, drift */
+MFX_TABLE float mod_rot[MODS][2] = {
     {0.99994970f, 0.01003013f},             /* 0.55 Hz */
     {0.99340711f, 0.11463993f},             /* 6.3 Hz */
     {0.99999719f, 0.00237080f},             /* 0.13 Hz */
@@ -74,10 +74,10 @@ struct tape_state {
     float hp_x[2], hp_y[2];                 /* low cut, per tape */
     float rec_lp[2];                        /* the record head's lowpass, per tape */
 };
-static struct tape_state tape_state_ram;
+MFX_STATE struct tape_state tape_state_ram;
 #define TP (&tape_state_ram)
 
-static inline uint32_t tape_target(const DelayKnobs *obj)
+MFX_FN inline uint32_t tape_target(const DelayKnobs *obj)
 {
     uint32_t t = obj->time;
     if (t < TAPE_MIN)
@@ -89,7 +89,7 @@ static inline uint32_t tape_target(const DelayKnobs *obj)
 
 /* Lay out the tapes in buffers 0 and 1 (cleared beforehand); the delay starts at the
  * current Time, without a glide. */
-static void tape_init(const DelayKnobs *obj, uint32_t buf0, uint32_t buf1)
+MFX_FN void tape_init(const DelayKnobs *obj, uint32_t buf0, uint32_t buf1)
 {
     TP->buf[0] = buf0;
     TP->buf[1] = buf1;
@@ -107,7 +107,7 @@ static void tape_init(const DelayKnobs *obj, uint32_t buf0, uint32_t buf1)
 
 /* One sample of the delay moving towards the target: a part `coef` of the way, growing
  * by at most GLIDE_RATE and shrinking by at most `fast` samples per sample. */
-static inline void glide(uint32_t target, uint32_t *dint, float *dfrac, float coef, float fast)
+MFX_FN inline void glide(uint32_t target, uint32_t *dint, float *dfrac, float coef, float fast)
 {
     float step = ((float)((int32_t)target - (int32_t)*dint) - *dfrac) * coef;
     if (step > GLIDE_RATE)
@@ -122,7 +122,7 @@ static inline void glide(uint32_t target, uint32_t *dint, float *dfrac, float co
     *dfrac = f - (float)whole;
 }
 
-static inline float tape_sat(float u)       /* the record head */
+MFX_FN inline float tape_sat(float u)       /* the record head */
 {
     if (u >= SAT_KNEE)
         return 1.0f;
@@ -132,13 +132,13 @@ static inline float tape_sat(float u)       /* the record head */
 }
 
 /* The record head: the tape's high-frequency loss, then the drive into the saturation. */
-static inline float tape_record(float v, float *lp)
+MFX_FN inline float tape_record(float v, float *lp)
 {
     *lp += TAPE_HF * (v - *lp);
     return tape_sat(DRIVE * *lp) * (1.0f / DRIVE);
 }
 
-static inline int16_t to16(float u)         /* -1..1 -> 16 bits */
+MFX_FN inline int16_t to16(float u)         /* -1..1 -> 16 bits */
 {
     int32_t v = (int32_t)(u * 32767.0f);
     return (int16_t)(v > 32767 ? 32767 : v < -32767 ? -32767 : v);
@@ -146,7 +146,7 @@ static inline int16_t to16(float u)         /* -1..1 -> 16 bits */
 
 /* The playback head: tape q, `back` whole samples behind the record position, plus
  * `frac` (0..1) further back; 4-point Hermite interpolation. */
-static inline float tape_read(const int16_t *q, uint32_t pos, uint32_t back, float frac)
+MFX_FN inline float tape_read(const int16_t *q, uint32_t pos, uint32_t back, float frac)
 {
     uint32_t i = (pos - back - 1u) & TAPE_MASK;     /* the sample just before the point */
     float u = 1.0f - frac;                          /* the point, from sample i */
@@ -158,7 +158,7 @@ static inline float tape_read(const int16_t *q, uint32_t pos, uint32_t back, flo
 }
 
 /* Run the tape over one block: mono send in, left and right out. */
-MFX_FLASH static void tape_process(const DelayKnobs *obj, const int16_t *in, int16_t *out_l, int16_t *out_r)
+MFX_FLASH MFX_FN void tape_process(const DelayKnobs *obj, const int16_t *in, int16_t *out_l, int16_t *out_r)
 {
     int16_t *qa = (int16_t *)TP->buf[0], *qb = (int16_t *)TP->buf[1];
     int pingpong = obj->pingpong != 0;
