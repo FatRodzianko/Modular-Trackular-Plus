@@ -132,21 +132,6 @@ AUDIO_CORE_RAM uint8_t playerEngine ::noteOn(uint8_t instr_idx,
         changeTunePerformanceMode(performanceMod.tune);
     }
     //******** seqFx
-    if (velocity >= 0)
-    {
-        if (isFxVelocity(fx1_id))
-        {
-            fx1_id = Sequencer::strFxConsts::FX_TYPE_VOLUME;
-            fx1_val = velocity;
-        }
-
-        if (isFxVelocity(fx2_id))
-        {
-            fx2_id = Sequencer::strFxConsts::FX_TYPE_VOLUME;
-            fx2_val = velocity;
-        }
-    }
-
     seqFx(fx2_id, fx2_val, 1); // mniej wazny najpierw
     seqFx(fx1_id, fx1_val, 0);
 

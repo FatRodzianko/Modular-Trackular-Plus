@@ -24,12 +24,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from boot_rig import STACK_SIZE, BootRig  # noqa: E402
-from machine import SCRATCH, STACK_TOP, STUB_BASE, STUB_RET  # noqa: E402
+from machine import SCRATCH, STACK_TOP, STUB_BASE, STUB_RET, after_hooked_store  # noqa: E402
 from sim_kernel import BLOCK, Kernel, Log, Params, PLACEHOLDERS  # noqa: E402
 from unicorn import (UC_ARCH_ARM, UC_HOOK_BLOCK, UC_HOOK_CODE, UC_HOOK_MEM_INVALID, UC_HOOK_MEM_WRITE, UC_MODE_MCLASS, UC_MODE_THUMB,  # noqa: E402
                      Uc, UcError)
 from unicorn import arm_const as A  # noqa: E402
-from vtables import CLASSES, Model, Unmodelled, resolve  # noqa: E402
+from vtables import CLASSES, Model, Unmodelled, resolve, slots  # noqa: E402
 
 # The device's while(1), in the stub region's style (built from this source with the WSL toolchain):
 #   tramp: ldr r3, =pass_start ; blx r3 ; cbz r0, 2f
@@ -250,6 +250,7 @@ class Sim(BootRig):
         dirty = self._dirty
 
         def on_write(uc, access, address, size, value, user):
+            after_hooked_store(uc)
             self._wrote = True
             self.write_calls += 1
             if address < 0x20000:
@@ -344,16 +345,58 @@ class Sim(BootRig):
         def await_empty(mm):
             self.wait(self.copro_busy_until - k.now(), "display")
             return 0
-        display = {name: idle("no screen in stage 1") for name in (
+
+        # CE's display lists in the MCU (CE 9d6d10a): the lists go straight to the chip's list memory.
+        # As the IMX driver does it (DisplayDriverImpl.cpp, MCU_Layer.cpp): startDisplayListWrite sends
+        # by DMA in the background; every other access to the chip starts in MCU_CSlow, which waits for
+        # that DMA; a swap takes effect at the panel's next frame.
+        self.dl_busy_until = 0
+        self.swap_done_at = 0
+
+        def chip(mm=None):
+            if self.in_interrupt:
+                self.invariants.append(f"display call in an interrupt at {k.now()}")
+            self.wait(self.dl_busy_until - k.now(), "display")       # MCU_CSlow
+            return 0
+
+        def spi_words(count):
+            return count * p.t_dl_word_ps // 1000
+
+        def start_list_write(mm):
+            chip()
+            self.dl_busy_until = k.now() + spi_words(mm.arg(3))
+            return 0
+
+        def write_list(mm):
+            chip()
+            self.wait(spi_words(mm.arg(3)), "display")
+            return 0
+
+        def swap(mm):
+            chip()
+            f = p.t_panel_frame_ns
+            self.swap_done_at = (k.now() // f + 1) * f
+            return 0
+
+        def swap_pending(mm):
+            chip()
+            return 1 if k.now() < self.swap_done_at else 0
+
+        display = {name: Model(chip, pure=True) for name in (  # no screen in stage 1: each waits for the DMA
             "setPowerState", "setBrightness", "setRotation", "getImgProps", "getDisplayListOffset",
             "IncCMDOffset", "WriteData32", "beginCoProListNoCheck", "writeDataRAMG", "writeFontRAMG",
-            "readDataRAMG", "readBackDataRAMG", "sendString", "writeDataToCMD", "initStreamDma",
-            "updateStreamDma", "stopStreamDma")}
+            "readDataRAMG", "readBackDataRAMG", "sendString", "writeDataToCMD")}
         display.update({
             "endCoProList": Model(end_list),
             "awaitCoProEmpty": Model(await_empty, pure=True),        # impure only when it waits: wait() says so
             "beginCoProList": Model(await_empty, pure=True),         # API_LIB_BeginCoProList awaits first
             "isCoProEmpty": Model(lambda mm: 1 if k.now() >= self.copro_busy_until else 0, pure=True),
+            "writesDisplayListInBackground": Model(lambda mm: 1, pure=True),
+            "startDisplayListWrite": Model(start_list_write),
+            "writeDisplayList": Model(write_list),
+            "isDisplayListWriteDone": Model(lambda mm: 1 if k.now() >= self.dl_busy_until else 0, pure=True),
+            "swapDisplayList": Model(swap),
+            "isDisplayListSwapPending": Model(swap_pending, pure=True),  # impure only when it waits
         })
         self.display_driver = self._object("DisplayDriver", display)
 
@@ -383,8 +426,13 @@ class Sim(BootRig):
             "getEncoder": self._object("Encoder", {"setAcceleration": idle("no encoder"),
                                                    "setResolution": idle("no encoder")}),
             "getDisplayDriver": self.display_driver,
-            "getUsbAudio": self._object("UsbAudio", {n: idle("updateBuffers' USB audio is platform code") for n in (
-                "beginFillData", "fillChannelData", "finishFillData")}),
+            "getUsbAudio": self._object("UsbAudio", {**{n: idle("updateBuffers' USB audio is platform code") for n in (
+                "beginFillData", "fillChannelData", "finishFillData")},
+                # CE 7482cc8: AudioOutputUsb sends only while this is true; the IMX answers false with
+                # no USB host attached (isUsbAudioOutputActive, audio_unified.c), as in the simulator.
+                # Older images have no such slot.
+                **({"isOutputActive": idle("no USB host", 0)}
+                   if any(s.method == "isOutputActive" for s in slots(self.m.elf, CLASSES["UsbAudio"])) else {})}),
             "getUartMidi": uart,
             "getUsbMidi": usb_midi,
             "getConfigManager": self._object("ConfigManager", {"readData": idle("as boot_rig.py: 0"),

@@ -33,6 +33,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from masterfx_runtime import DELAY_FILES, REVERB_FILES, START, has_plugins  # noqa: E402
 from sound_rig import REPO, PlayRig, SoundRig, find_project_path, peak, set_names  # noqa: E402
+from machine import after_hooked_store  # noqa: E402
 from unicorn import UC_HOOK_MEM_WRITE  # noqa: E402
 from unicorn.arm_const import UC_ARM_REG_LR, UC_ARM_REG_PC, UC_ARM_REG_S0  # noqa: E402
 
@@ -956,6 +957,34 @@ def test_dynamics(mods, ref):
               f"threshold down, side {side}: the held note turned down (peak {peak(a[side][128 * 20:])} against {peak(base[0][side][128 * 20:])})")
     check(gains[0] == gains[1] and 0.0 < gains[0] < 0.95, f"the meter: the plugin's gain on both objects {gains}")
 
+    # Over silence (CE's 7482cc8): the master sends no block while it's silent, and the slot runs the
+    # plugin on a zeroed one, so Glue's level releases. The sound is cut at once (Synth::silencePart,
+    # as a patch load does; a CUT step does the same to a sample track), with Glue's level still high.
+    # With the plugin skipped over the silence (before the fix, 2026-11-16) the next note's first six
+    # blocks peaked at 1,232 against 17,002: about 23 dB down, swelling back as Glue released.
+    # A note that fades out lets Glue release before the silence, so it doesn't show this.
+    g = graph(mods, "Glue.ptmfx", threshold=loud)
+    lm = g.syms["_ZN18AudioEffectLimiter10modsUpdateEv"]
+    made = [0]
+
+    def on_allocate(mm):
+        lr = mm.uc.reg_read(UC_ARM_REG_LR) & ~1
+        if lm.addr & ~1 <= lr < (lm.addr & ~1) + lm.size:
+            made[0] += 1
+    g.watch(g.m.addr("_ZN11AudioStream8allocateEv"), on_allocate)
+    g.note(0, 60, True)
+    first = g.blocks(40)
+    g.m.call(g.m.addr("_ZN5Synth11silencePartEi"), g.synth, 0, max_insns=50_000_000)
+    g.blocks(20)
+    silent_blocks = made[0] // 2
+    g.note(0, 60, True)
+    second = g.blocks(40)
+    head = slice(0, 128 * 6)
+    p1, p2 = peak(first[0][head]), peak(second[0][head])
+    check(silent_blocks >= 15 and p2 >= 0.8 * p1,
+          f"cut at once, then {silent_blocks} blocks of a silent master: the next note comes in as the first did "
+          f"(its first 6 blocks peak {p2} against {p1})")
+
     # A key that is silent: nothing to duck, though the master is over the threshold
     g = graph(mods, "Glue.ptmfx", threshold=loud, sidechain=1)   # sample track 1, which plays nothing
     a, b = phrase(g)
@@ -1079,9 +1108,10 @@ def first_ducked(mine, ce):
     return None
 
 
-def watch_gain(g):
+def watch_gain(g, track_blocks=None):
     """Who works out each block's gain: a ducked track's amplifier (the key made before it, this
-    block's gain) or the limiter (the key made after it: the track had the last block's)"""
+    block's gain) or the limiter (the key made after it: the track had the last block's). With
+    track_blocks, also each time a ducked track had a block to duck ("block")"""
     m = g.m
     s = g.syms[DUCK_BLOCK]
     calls = []
@@ -1090,6 +1120,8 @@ def watch_gain(g):
         lr = mm.uc.reg_read(UC_ARM_REG_LR) & ~1
         calls.append("track" if s.addr <= lr < s.addr + s.size else "limiter")
     g.watch(m.addr(DUCK_COMPUTE), f)
+    if track_blocks is not None:
+        g.watch(s.addr, lambda mm: track_blocks.append("block"))
     return calls
 
 
@@ -1139,15 +1171,23 @@ def test_ducks(mods, ref):
 
     def each(gg):
         if "calls" not in who:
-            who["calls"] = watch_gain(gg)
+            who["blocks"] = []
+            who["calls"] = watch_gain(gg, who["blocks"])
             return
-        seen.append((gg.m.r8(gg.m.addr(DUCK_LIVE)), meter(gg)[0], tuple(who["calls"])))
+        seen.append((gg.m.r8(gg.m.addr(DUCK_LIVE)), meter(gg)[0], tuple(who["calls"]), bool(who["blocks"])))
         who["calls"].clear()
+        who["blocks"].clear()
     g, mine = run(mods, "Glue.ptmfx", SYNTH_1_BIT, loud, watch=each)
     check(duck_mask(g) == SYNTH_1_BIT, f"Synth 1 in the record: the mask the interrupt reads ({duck_mask(g):#x})")
-    check(all(live == 1 for live, _, _ in seen), "a key and a ducking plugin: ducking every block")
-    callers = {c for _, _, c in seen}
-    check(callers == {("track",)}, f"a key made before the track (Line in): this block's gain, worked out once, by the track {callers}")
+    check(all(live == 1 for live, _, _, _ in seen), "a key and a ducking plugin: ducking every block")
+    # Since CE's 7482cc8 a track with no sound sends no block, so its amplifier has nothing to duck;
+    # the limiter then works the gain out (it runs on silence for the plugin), so the gain follows
+    # the key on every block
+    by_track = {c for _, _, c, had in seen if had}
+    by_limiter = {c for _, _, c, had in seen if not had}
+    check(by_track == {("track",)} and by_limiter <= {("limiter",)},
+          f"a key made before the track (Line in): this block's gain, worked out once, by the track when it has "
+          f"a block ({by_track}), else by the limiter ({by_limiter}, {sum(not had for *_, had in seen)} blocks)")
     for side in (0, 1):
         before = 128 * quiet - 5
         check(mine[side][:before] == ce[side][5:before + 5],
@@ -1157,7 +1197,7 @@ def test_ducks(mods, ref):
         check(a < 0.8 * b, f"side {side}, under the key: Synth 1 ducked (peak {a} against {b})")
     first = first_ducked(mine[0], ce[0])
     print(f"     (the first block ducked: {first}, the key from {quiet})")
-    meters = [gain for _, gain, _ in seen]
+    meters = [gain for _, gain, _, _ in seen]
     check(meters[quiet - 3] == 1.0 and min(meters[quiet:quiet + key]) < 0.95,
           f"the meter: 1 before the key, under 0.95 with it ({meters[quiet - 3]}, {min(meters[quiet:quiet + key])})")
     tail = peak(mine[0][-128 * 10:]), peak(ce[0][-128 * 10:])
@@ -1360,6 +1400,7 @@ def test_stress(mods, ref):
             if s.size and s.is_func and n.startswith(("_ZN4mods8masterfx", "_ZN21AudioEffectShortDelay", "_ZN19AudioEffectPolyverb"))]
 
     def on_write(uc, access, address, size, value, user):
+        after_hooked_store(uc)
         pc = uc.reg_read(UC_ARM_REG_PC)
         if any(start <= address < end for _, start, end in guarded):    # the reverb's starts where the delay's ends
             return

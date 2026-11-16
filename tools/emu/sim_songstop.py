@@ -117,17 +117,20 @@ def make_project(source, parent, name, patterns, length, tempo):
     return out
 
 
-def copy_return(sim):
-    """The return address of loadPatternFromWorkspace's call to copyBufferToBufferPattern (open CE code):
-    preloadedPattern is set right after it."""
+def copy_returns(sim):
+    """The return addresses of loadPatternFromWorkspace's calls to copyBufferToBufferPattern (open CE
+    code): one for a pattern read from its file, one for a pattern without a file. preloadedPattern is set
+    right after either. Every call, not the first: since CE's cc53303 the compiler puts the no-file one
+    first, and watching only that one saw no load finish."""
     from capstone import CS_ARCH_ARM, CS_MODE_THUMB, Cs
     caller, callee = sim.syms[LOAD_FROM], sim.syms[LOADED]
     start = caller.addr & ~1
     code = bytes(sim.m.read(start, caller.size))
-    for insn in Cs(CS_ARCH_ARM, CS_MODE_THUMB).disasm(code, start):
-        if insn.mnemonic == "bl" and int(insn.op_str.lstrip("#"), 0) == callee.addr & ~1:
-            return insn.address + insn.size
-    raise SystemExit("loadPatternFromWorkspace doesn't call copyBufferToBufferPattern directly in this build")
+    found = [insn.address + insn.size for insn in Cs(CS_ARCH_ARM, CS_MODE_THUMB).disasm(code, start)
+             if insn.mnemonic == "bl" and int(insn.op_str.lstrip("#"), 0) == callee.addr & ~1]
+    if not found:
+        raise SystemExit("loadPatternFromWorkspace doesn't call copyBufferToBufferPattern directly in this build")
+    return found
 
 
 def run(args):
@@ -159,7 +162,8 @@ def run(args):
         if kind == "stop":
             sim.watch(syms[name].addr, lambda mm: ev["stop_missing"].append(k.now()) if k.context != "main" else None)
         elif kind == "loaded":
-            sim.watch(copy_return(sim), mark("loaded"))
+            for at in copy_returns(sim):
+                sim.watch(at, mark("loaded"))
         else:
             sim.watch(syms[name].addr, mark(kind))
 
@@ -256,10 +260,13 @@ def main():
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--phase-ns", type=int, default=0)
     ap.add_argument("--log", type=Path)
+    ap.add_argument("--expect-play", action="store_true", help="fail unless the song plays to the end")
     args = ap.parse_args()
     print("UNCALIBRATED: timing is placeholder; this compares builds at the same settings", flush=True)
     out = run(args)
     print(json.dumps(out, indent=1), flush=True)
+    if args.expect_play:
+        return 0 if out["result"] == "played" else 1
     return 0 if not out["result"].startswith("FAILED") else 1
 
 

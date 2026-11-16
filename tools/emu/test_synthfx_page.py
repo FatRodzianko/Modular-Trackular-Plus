@@ -49,6 +49,7 @@ from unicorn.arm_const import UC_ARM_REG_R0
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from sound_rig import SoundRig  # noqa: E402
+from machine import after_hooked_store  # noqa: E402
 from test_masterfx_rig import LIMIT, MasterPage  # noqa: E402
 from test_step0 import store_image  # noqa: E402
 from test_swing import Projects  # noqa: E402
@@ -157,6 +158,7 @@ class EditorPage(MasterPage):
         seen = []
 
         def on_write(uc, access, address, sz, value, user):
+            after_hooked_store(uc)
             if not seen and sz == 1:
                 seen.append(address - self.page)
         h = m.uc.hook_add(UC_HOOK_MEM_WRITE, on_write, begin=self.page, end=self.page + 0x4000)

@@ -169,18 +169,8 @@ Pass a `GlobalFileBrowserConfig` struct to `GlobalFileBrowser::open(cfg)` (or `o
 
 ## 5. Memory Budget & FatFs Safety
 
-### Shared Scratch Partitioning (`24 KB`)
-`cGlobalFileBrowser` does not allocate permanent large directory buffers in internal SRAM. Instead, it uses the top **`24 KB`** slice of `externalRamScratchBuff` (`SHARED_SCRATCH_MEMORY_SIZE = 768 KB` in [`core/source/mtStructs.h`](../core/source/mtStructs.h)):
-
-```text
-Offset 0 KB               128 KB                  512 KB                 744 KB          768 KB
-├─────────────────────────┼───────────────────────┼──────────────────────┼───────────────┤
-│ .ptfx Code              │ .ptfx Working Scratch │ .ptfx Secondary WAV  │ Global File   │
-│ (128KB IMX / 32KB MK66) │ (384 KB)              │ Buffer (232 KB)      │ Browser (24KB)│
-└─────────────────────────┴───────────────────────┴──────────────────────┴───────────────┘
-```
-
-Because `[744 KB .. 768 KB]` sits cleanly above the `.ptfx` code (`0..128 KB`), `.ptfx` working scratch (`128..512 KB`, defined by `kPtfxScratchTopOffset` in [`core/effector/ptfx_loader.h`](../core/effector/ptfx_loader.h)), and `.ptfx` secondary sample buffer (`512..744 KB`), a Sample Editor `.ptfx` effect can open `GlobalFileBrowser` to load an `.ir`, `.wav`, or `.ptp` preset without corrupting the active `.ptfx` plugin binary, working scratch RAM, or loaded secondary WAV audio.
+### Shared Scratch Partitioning
+`cGlobalFileBrowser` does not allocate permanent large directory buffers in internal SRAM. Instead, it uses a dedicated `kBrowserScratchBytes` slice at the very top of `externalRamScratchBuff` (`SHARED_SCRATCH_MEMORY_SIZE` in [`core/source/mtStructs.h`](../core/source/mtStructs.h)), cleanly above `.ptfx` executable code, working scratch (`kPtfxScratchTopOffset`), and the secondary `.wav` sample buffer — see [`docs/memory_map.md`](memory_map.md#3-shared-768-kb-scratch-buffer-map-externalramscratchbuff) for the full partition map. Because its slice never overlaps any active `.ptfx` buffer, a Sample Editor `.ptfx` effect can open `GlobalFileBrowser` to load an `.ir`, `.wav`, or `.ptp` preset without corrupting the active plugin binary, working scratch RAM, or loaded secondary WAV audio.
 
 > [!IMPORTANT]
 > **FatFs File-Handle Lifetime in `onDescribeItem` & `onPreviewStart`:**

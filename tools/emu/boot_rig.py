@@ -428,9 +428,9 @@ def main():
     def on_alloc(mm):
         if r.in_interrupt:
             r.interrupt_allocs += 1
-    for name in ("malloc", "_malloc_r", "calloc", "_calloc_r", "realloc", "_realloc_r"):
-        if name in r.syms and r.syms[name].addr:
-            r.watch(r.syms[name].addr, on_alloc)
+    for alloc in ("malloc", "_malloc_r", "calloc", "_calloc_r", "realloc", "_realloc_r"):  # not name: where() uses it
+        if alloc in r.syms and r.syms[alloc].addr:
+            r.watch(r.syms[alloc].addr, on_alloc)
     active = lambda: None
     if "_ZN4mods8masterfx12activeReverbE" in r.syms:
         active = lambda: (m.r8(m.addr("_ZN4mods8masterfx12activeReverbE")),

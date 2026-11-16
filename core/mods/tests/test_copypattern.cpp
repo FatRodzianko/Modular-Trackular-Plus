@@ -83,6 +83,9 @@ void testRules()
     t.volume = 0;
     check(!stepIsEmpty(t), "a V of 0 counts");
     t = Step();
+    t.volume = -2;
+    check(!stepIsEmpty(t), "CE's !OFF in the V lane counts");
+    t = Step();
     t.micromove = 0;
     check(!stepIsEmpty(t), "an m of 0 counts");
 

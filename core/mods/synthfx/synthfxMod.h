@@ -140,6 +140,12 @@ struct Insert
 // a few tests and the part plays as CE's.
 Insert begin(int part, const polysynth::Patch* patch, bool engineStereo);
 
+// Audio interrupt, before CE's silent-part check (PolySynth::update): whether a slot of the part
+// still runs, a plugin or one fading out. CE's 0238786 skips rendering a part whose voices are
+// silent; while a slot runs the part renders as before, so the plugin's tail plays out and its
+// delay lines don't hold an old block for the next note.
+bool holdsPart(int part);
+
 // Audio interrupt, after the engine has rendered the part's block into left (and right, if
 // engineStereo): the slots, in place. right is written whenever insert.stereo.
 void run(const Insert& insert, int part, float* left, float* right, bool engineStereo);

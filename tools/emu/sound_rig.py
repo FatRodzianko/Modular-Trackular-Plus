@@ -54,6 +54,11 @@ class ClosedCode(Exception):
     """A hook was asked for inside the closed engines' memory."""
 
 
+# Engine files to put on the fake card in place of build/Synths' (file name -> bytes), for a test that
+# needs a given build of an engine; set before a rig is made, and cleared after
+SYNTH_OVERRIDES: dict[str, bytes] = {}
+
+
 def synth_files():
     """The .psyn engines for the fake card's /Synths/: name -> bytes."""
     folders = [SYNTHS] if SYNTHS.is_dir() and any(SYNTHS.glob("*.psyn")) else list(SYNTHS_FALLBACK)
@@ -64,6 +69,7 @@ def synth_files():
     missing = [n for n in FACTORY_SYNTHS + OWN_SYNTHS if f"{n}.psyn" not in files]
     if missing:
         raise RuntimeError(f"no {', '.join(missing)}.psyn for the fake card: run `make psyn`")
+    files.update(SYNTH_OVERRIDES)
     return files
 
 

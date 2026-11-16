@@ -50,6 +50,11 @@ class Params:
                                        # the first instruction after the unmask, however short the gap
     t_platform_ns: int = 500           # the device loop's own calls each pass (placeholder)
     t_copro_ns: int = 100_000          # the display's coprocessor, busy after each list (placeholder)
+    t_dl_word_ps: int = 1_066_667      # a display-list word sent to the chip: 32 bits at 30 MHz
+                                       # (MCU_Layer.cpp: spiBus->setSpeed(30000000)), no gaps between words
+    t_panel_frame_ns: int = 18_480_000  # a panel frame, when a list swap takes effect: 1056 x 525 clocks
+                                        # (FT81x_Config.h, kConfig800_480) at 30 MHz (PCLK 2 of the
+                                        # FT812's 60 MHz default system clock)
     t_card_call_ns: int = 100_000      # a card call (placeholder)
     t_card_byte_ps: int = 50_000       # a card byte read or written, in picoseconds (placeholder: 20 MB/s)
     cpu_mhz: int = 720                 # CPU_FREQ

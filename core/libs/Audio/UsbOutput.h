@@ -44,6 +44,7 @@ class UsbOutputStream : public AudioStream
         std::fill(std::begin(usbChannelToInput), std::end(usbChannelToInput), kChannelDisconnected);
     }
     virtual void update(void);
+    void syncActive();
 };
 #endif
 

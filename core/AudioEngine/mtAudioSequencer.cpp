@@ -643,6 +643,10 @@ void playerEngine::fxRandomVolume(uint8_t fx_val, uint8_t fx_n)
     if (trackControlParameter[(int)controlType::sequencerMode + otherFx_n]
                              [(int)parameterList::volume])
         localVolume = currentSeqModValues.volume;
+    else if (stepVelocity >= 0)
+        localVolume = (uint8_t)clamp<int>((int)stepVelocity,
+                                          (int)MIN_INSTRUMENT_VOLUME,
+                                          (int)MAX_INSTRUMENT_VOLUME);
     else
         localVolume = mtProject.instrument[currentInstrument_idx].volume;
 

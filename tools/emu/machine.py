@@ -23,9 +23,25 @@ import cpu_limit
 from unicorn import (UC_ARCH_ARM, UC_HOOK_CODE, UC_HOOK_MEM_INVALID, UC_MODE_MCLASS,
                      UC_MODE_THUMB, Uc, UcError)
 from unicorn.arm_const import (UC_ARM_REG_LR, UC_ARM_REG_PC, UC_ARM_REG_R0, UC_ARM_REG_R1,
-                               UC_ARM_REG_R2, UC_ARM_REG_R3, UC_ARM_REG_SP)
+                               UC_ARM_REG_R2, UC_ARM_REG_R3, UC_ARM_REG_SP, UC_ARM_REG_XPSR)
 
 cpu_limit.apply()
+
+IT_BITS = (3 << 25) | (0x3F << 10)      # xPSR's ITSTATE: IT[1:0] at 26:25, IT[7:2] at 15:10
+
+
+def after_hooked_store(uc):
+    """Every UC_HOOK_MEM_WRITE hook calls this. Unicorn 2.1.4 stores a store's IT state in the CPU state
+    before it calls a write hook, and nothing clears it when the IT block ends in the same translation
+    block: the next block, after a branch, is translated as if still in the IT block, and its instructions
+    run conditionally. In the simulator newlib's malloc (ite eq; streq r2,[r6] to __malloc_free_list;
+    ...; b) then skipped an add after the branch and returned an address in DTCM. Clearing it is right:
+    the rest of the block keeps the IT state it was translated with, and a block that ends inside the IT
+    block stores its own. Checked against runs without a hook over every IT block of 1 to 4 stores and
+    moves, both conditions, with the run stopped and resumed after each instruction (5,440 cases)."""
+    x = uc.reg_read(UC_ARM_REG_XPSR)
+    if x & IT_BITS:
+        uc.reg_write(UC_ARM_REG_XPSR, x & ~IT_BITS)
 
 # Our own region for stubs (unused by the chip's map).
 STUB_BASE = 0x70000000

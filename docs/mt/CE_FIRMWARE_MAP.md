@@ -465,6 +465,36 @@ for its 56 KB arena, 8 KB build buffer, 8 KB frame and the two 8 KB copies of th
 mods build takes it as well as the mods' 1 MiB (`mtStructs.h`), so the sample pool is 55,410,688
 bytes.
 
+### After CE's audio optimisations (2026-11-16)
+
+`tools/mem_budget.py` on the merged mod build (CE `cc53303`), against `modular` before it
+(`2cbd759`), both built the same way:
+
+| Region | Free after | Free before |
+| --- | --- | --- |
+| Flash | 14,976,188 | 14,997,732 |
+| ITCM | 40,096 | 48,320 |
+| OCRAM | 9,556 | 9,556 |
+| SDRAM unreserved | 610,844 | 610,844 |
+| DTCM unreserved | 4,496 | 4,680 |
+
+ITCM is 8,224 bytes tighter. 256 of them are the mods' answers to CE's silence work: the delay
+shortcut's `activeDelay` test, the Synth FX `holdsPart` test in `PolySynth::update`, and the
+dynamics slot running its plugin on silence (`AudioEffectLimiter::modsUpdate`). The other 7,968
+are CE's (7482cc8, 0238786). About 2.1 KB of CE's is new code there: the
+mixer's `mix`, the delay's and filter's idle checks, the voice-sleep checks
+(`InstrumentImpl::prepareSilentBlock`, `isIdle`), `AudioMux::update`, and `memset`, `memmove` and
+`memcmp`. The other 6 KB is growth of code that was already there: the synth render, the reverb and
+delay updates, the sample players, `Sequencer::tick` and `PolySynth::update`. Plain CE goes to 68,728
+free. DTCM is 184
+bytes tighter, again all CE's: plain CE goes from 11,724 to 11,540. That leaves 400 bytes above the
+4,096 floor. The diagnostic build (`MT_LOCKUP_RECORDER`) is at 2,976, under the floor, with
+40,064 of ITCM free.
+
+Heap after boot and the open of the D1 project, from the simulator (`sim_boot.py --play 1.0`,
+not the unit): 72,692 bytes free, against 79,536 before the merge. Max stack 8,360 against 8,344.
+Heap and stack are only exact on the unit (Config with `/.develop`).
+
 ## 16. How much was read
 
 | Area | Coverage |

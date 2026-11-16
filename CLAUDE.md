@@ -21,6 +21,16 @@ Before hooking a function, grep its callers up to an entry point above or to mai
 - At a pattern end in song mode, and for a queued pattern change, the sequencer swaps patterns only if `isPatternPreloaded` says the buffer holds the one it is about to play, and otherwise stops (CE's c476ce1). A mod that changes which pattern comes next must check the pattern it will switch to without deciding again: Song Loop does it with `mods::songloop::expectedNext`. Emulator rigs that stub `loadWorkspacePattern` must answer `isPatternPreloaded` too.
 - MIDI note-off on the Sample Recorder screen → `hidePreviewValue` → `display.setControlText`.
 
+**CE skips silent work in the interrupt (7482cc8, 0238786).** With `AUDIO_NULL_IS_SILENCE` a null block is silence, and these skip work for it:
+- `transmit` passes nothing to an inactive destination.
+- The reverb skips a block while `reverb.IsQuiet()`.
+- The delay stops processing, and zeroes its lines, once `quietSamplesCount` reaches its time.
+- `PolySynth::update` skips a part whose voices `prepareSilentInstrument` calls idle.
+- The limiter's sidechain mux is off while CE's Sidechain is 0.
+- Objects downstream get no block at all while it's silent: a track with no sound sends none, and neither does the master into the limiter.
+
+These are decided from CE's own state. A mod that keeps state on one of these paths must run before the skip, or switch it off while that state runs. Master FX's delay does this with `mods::masterfx::activeDelay` in `effect_shortDelay.cpp`, and Synth FX with `holdsPart` in `synth_PolySynth.cpp`. Otherwise the tail is cut and the old state plays on the next note. A mod that runs only when a block arrives must run on a zeroed block instead: the dynamics slot does in `AudioEffectLimiter::modsUpdate`, or Glue's level wouldn't release over silence.
+
 ## Display limit
 
 Since CE's 9d6d10a, `cDisplay::buildControl` builds each control's display list in the MCU, and `composeFrame` puts the frame together. Count the bytes of anything added to a screen, against three limits:
@@ -37,7 +47,7 @@ All three only add to `displayList::overflows`, which nothing shows; `lastMemory
 Map and figures: `docs/mt/CE_FIRMWARE_MAP.md`. Run `python3 tools/mem_budget.py <axf>`: it gives the real free space per region and fails under a floor. Give each mod's cost in its plan section.
 
 - State the audio interrupt touches per sample or per step: DTCM, and keep it small.
-- Hot audio code: ITCM (`AUDIO_CORE_RAM`). About 11 KB is free, so pick the inner loops.
+- Hot audio code: ITCM (`AUDIO_CORE_RAM`). About 40 KB is free since CE's cc53303 (the map's section 15), and CE keeps moving its own audio code there, so pick the inner loops.
 - Tables for the main loop: SDRAM with `__NOINIT(EXTERNAL_RAM)`. Startup doesn't zero it, so the owner must. Mod builds have 1 MiB for this, taken from `SAMPLE_MEMORY_SIZE`; don't lower that further without asking.
 - Constants: flash.
 - OCRAM is CE's, and mods stay out. Mods don't use the heap: after boot a failed malloc hangs the unit.

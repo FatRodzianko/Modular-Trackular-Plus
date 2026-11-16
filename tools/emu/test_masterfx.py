@@ -352,10 +352,15 @@ def only_the_chosen_runs(mods):
 
     d = DelayRig(mods)
     d.knobs()
-    sym = d.m.sym("_ZN21AudioEffectShortDelay7processEPsS0_S0_i")
+    # CE's delay DSP: process() until cc53303; since then update() calls processBlock<> (and its
+    # runPingpong, runMono and runSwitching), and process() is only a wrapper for other callers
+    dsp = [s for name, s in d.m.elf.symbols.items() if s.is_func and name.startswith("_ZN21AudioEffectShortDelay")
+           and any(k in name for k in ("7processE", "processBlock", "runPingpong", "runMono", "runSwitching"))]
     n = [0]
-    d.m.uc.hook_add(UC_HOOK_CODE, lambda uc, a, s, u: n.__setitem__(0, n[0] + 1),
-                    begin=sym.addr & ~1, end=(sym.addr & ~1) + sym.size)
+    for sym in dsp:
+        d.m.uc.hook_add(UC_HOOK_CODE, lambda uc, a, s, u: n.__setitem__(0, n[0] + 1),
+                        begin=sym.addr & ~1, end=(sym.addr & ~1) + sym.size)
+    d.m.uc.ctl_flush_tb()
     d.block(noise(2, 1)[0])
     stock = n[0]
     d.active("delay", 1)
@@ -466,14 +471,16 @@ def reverb_checks(mods, which, name):
     q, _ = s.run(silence(400 if not gated else 60))
     check(max(map(abs, q[-BLOCK:])) < 32767, f"{name}: top knobs and loud noise, still in range")
 
-    q = make()
-    q.input_missing[0] = True
-    x = q.block(noise(8, 1)[0])
-    check(x == (None, None) and q.released == [], f"{name}: no left block: nothing sent")
-    q = make()
-    q.input_missing[1] = True
-    x = q.block(noise(8, 1)[0])
-    check(x == (None, None) and q.released == [q.blocks[0]], f"{name}: no right block: nothing sent, the left released")
+    # Since CE's 7482cc8 (AUDIO_NULL_IS_SILENCE) a missing block is silence: CE's update() puts a
+    # zeroed block in its place and the reverb runs, so both sides go out and every block comes back
+    for side in (0, 1):
+        q = make()
+        q.input_missing[side] = True
+        q.handed.clear()
+        q.released.clear()
+        x = q.block(noise(8, 1)[0])
+        check(x[0] is not None and x[1] is not None and sorted(q.handed) == sorted(q.released),
+              f"{name}: no {('left', 'right')[side]} block: silence in its place, both sides sent, every block released")
 
     r1 = make(size=0.5)
     r2 = make(size=0.5)
@@ -484,7 +491,8 @@ def reverb_checks(mods, which, name):
 
     r = make()
     z = r.run(silence(20))
-    check(max(map(abs, z[0])) == 0, f"{name}: silence in, silence out")
+    # a quiet reverb sends nothing for silence since CE's 7482cc8: no block is silence too
+    check(max(map(abs, z[0]), default=0) == 0, f"{name}: silence in, silence out ({len(z[0]) // BLOCK} blocks sent)")
 
 
 def delay_checks(mods, which, name):

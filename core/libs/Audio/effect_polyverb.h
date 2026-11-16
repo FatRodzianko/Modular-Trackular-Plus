@@ -35,9 +35,17 @@ class AudioEffectPolyverb : public AudioStream
     // Predelay length, 0-1
     void SetPredelayLength(float length) { reverb.SetPredelayLength(length); }
 
-    void blockUpdate() { isBlockedUpdate = true; }
+    void blockUpdate()
+    {
+        isBlockedUpdate = true;
+        __atomic_signal_fence(__ATOMIC_SEQ_CST);
+    }
 
-    void unblockUpdate() { isBlockedUpdate = false; }
+    void unblockUpdate()
+    {
+        __atomic_signal_fence(__ATOMIC_SEQ_CST);
+        isBlockedUpdate = false;
+    }
 
 #if MT_HAS_MASTERFX // MT: the two buffers, the reverb slot's memory for a Master FX plugin
     uint16_t* modsBuffer(uint32_t which) const { return which == 0 ? buffer : buffer2; }
@@ -48,5 +56,5 @@ class AudioEffectPolyverb : public AudioStream
     Reverb reverb;
     uint16_t* buffer;
     uint16_t* buffer2;
-    bool isBlockedUpdate;
+    volatile bool isBlockedUpdate;
 };

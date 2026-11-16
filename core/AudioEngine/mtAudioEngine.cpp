@@ -219,7 +219,7 @@ void audioEngine::init(Platform* platform, [[maybe_unused]] Synth* synth)
     //	filterReverbOut.setType(filterType::lowPass);
     //	filterReverbOut.setCutoff(1.0);
     //	filterReverbOut.connect();
-    delay->begin(mtProject.values.delayFeedback,
+    delay->begin(mtProject.values.delayFeedback / 100.0,
                  mtProject.values.delayTime,
                  mtProject.values.delayParams & 0b10000000,
                  mtProject.values.delayParams & 0b01000000,
@@ -249,7 +249,7 @@ void audioEngine::init(Platform* platform, [[maybe_unused]] Synth* synth)
 
     polyverb->reset();
     polyverb->setTime(mtProject.values.reverb.size);
-    polyverb->setDamp(mtProject.values.reverb.damp);
+    polyverb->setDamp(1.0f - mtProject.values.reverb.damp);
     polyverb->SetPredelayLength(mtProject.values.reverb.predelay);
     polyverb->SetDiffusion(mtProject.values.reverb.diffusion);
     polyverb->unblockUpdate();
@@ -316,6 +316,9 @@ void audioEngine::updateSdStream()
 AUDIO_CORE_RAM void audioEngine::updateAudioBuffers(void* left, void* right, int length)
 {
     (void)length;
+#ifdef PLATFORM_IMX
+    output.getUsbStream()->syncActive();
+#endif
     output.getStream()->setOutBuffers(left, right);
     AudioStream::update_all();
 }
@@ -420,6 +423,19 @@ void audioEngine::connectInputToMixer(AudioInput* input, MixerAndFxs<kVoices>* m
                           0,
                           mixerAndFxs->getPreFxMixer(MixerAndFxs<kVoices>::FxType::kReverb),
                           kRightInputMixerChannel));
+
+#ifdef AUDIO_NULL_IS_SILENCE
+    input->getGate(AudioInput::InputChannels::kLeft)
+      ->setSilenceWatch(mixerAndFxs->getPreFxMixer(MixerAndFxs<kVoices>::FxType::kDelay),
+                        kLeftInputMixerChannel,
+                        mixerAndFxs->getPreFxMixer(MixerAndFxs<kVoices>::FxType::kReverb),
+                        kLeftInputMixerChannel);
+    input->getGate(AudioInput::InputChannels::kRight)
+      ->setSilenceWatch(mixerAndFxs->getPreFxMixer(MixerAndFxs<kVoices>::FxType::kDelay),
+                        kRightInputMixerChannel,
+                        mixerAndFxs->getPreFxMixer(MixerAndFxs<kVoices>::FxType::kReverb),
+                        kRightInputMixerChannel);
+#endif
 
     constexpr int kTracksAndSendsMixerInputIdx = 3;
 
@@ -1093,17 +1109,20 @@ void audioEngine::setLimiterThreshold(uint16_t threshold)
 
 void audioEngine::setLimiterSidechain(uint8_t sidechain)
 {
-    limiter[AudioOutput::OutputChannels::kLeft]->setSidechainEnable((bool)sidechain);
-    limiter[AudioOutput::OutputChannels::kRight]->setSidechainEnable((bool)sidechain);
-
     uint8_t mux = sidechain ? sidechain - 1 : 0;
 
 #ifndef PLATFORM_IMX
     output.getLimiterSidechainMux()->setOut(mux);
+    output.getLimiterSidechainMux()->setEnabled(sidechain != 0);
 #else
     output.getLimiterSidechainMux(AudioOutput::OutputChannels::kLeft)->setOut(mux);
+    output.getLimiterSidechainMux(AudioOutput::OutputChannels::kLeft)->setEnabled(sidechain != 0);
     output.getLimiterSidechainMux(AudioOutput::OutputChannels::kRight)->setOut(mux);
+    output.getLimiterSidechainMux(AudioOutput::OutputChannels::kRight)->setEnabled(sidechain != 0);
 #endif
+    __atomic_signal_fence(__ATOMIC_SEQ_CST);
+    limiter[AudioOutput::OutputChannels::kLeft]->setSidechainEnable((bool)sidechain);
+    limiter[AudioOutput::OutputChannels::kRight]->setSidechainEnable((bool)sidechain);
 }
 #ifdef FEATURE_SYNTH
 
@@ -1315,6 +1334,10 @@ AUDIO_CORE_RAM void audioEngine::updateSynthParams()
 {
     for (int synthIdx = 0; synthIdx < kSynthParts; synthIdx++)
     {
+        if (isSynthParamDirty[synthIdx].none())
+        {
+            continue;
+        }
         for (int paramIdx = 0; paramIdx < SynthParam::kSynthParamsCount; paramIdx++)
         {
             updateSynthParam(synthIdx, (SynthParam)paramIdx);
@@ -2332,19 +2355,29 @@ void audioEngine::clearReverb()
 #endif
 }
 
+void audioEngine::resetDelay()
+{
+    if (delay != nullptr)
+    {
+        delay->clear();
+    }
+}
+
 void audioEngine::resetLimiter()
 {
     limiter[AudioOutput::OutputChannels::kLeft]->begin();
     limiter[AudioOutput::OutputChannels::kRight]->begin();
 
+    const bool scEnabled = mtProject.values.limiterSidechain != 0;
+    const uint8_t scMux = mtProject.values.limiterSidechain ? mtProject.values.limiterSidechain - 1 : 0;
 #ifndef PLATFORM_IMX
-    output.getLimiterSidechainMux()->setOut(
-      mtProject.values.limiterSidechain ? mtProject.values.limiterSidechain - 1 : 0);
+    output.getLimiterSidechainMux()->setOut(scMux);
+    output.getLimiterSidechainMux()->setEnabled(scEnabled);
 #else
-    output.getLimiterSidechainMux(AudioOutput::OutputChannels::kLeft)
-      ->setOut(mtProject.values.limiterSidechain ? mtProject.values.limiterSidechain - 1 : 0);
-    output.getLimiterSidechainMux(AudioOutput::OutputChannels::kRight)
-      ->setOut(mtProject.values.limiterSidechain ? mtProject.values.limiterSidechain - 1 : 0);
+    output.getLimiterSidechainMux(AudioOutput::OutputChannels::kLeft)->setOut(scMux);
+    output.getLimiterSidechainMux(AudioOutput::OutputChannels::kLeft)->setEnabled(scEnabled);
+    output.getLimiterSidechainMux(AudioOutput::OutputChannels::kRight)->setOut(scMux);
+    output.getLimiterSidechainMux(AudioOutput::OutputChannels::kRight)->setEnabled(scEnabled);
 #endif
 }
 

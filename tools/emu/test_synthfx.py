@@ -21,7 +21,9 @@ Each part plays note 60 (PERC: 48, which differs left and right, so a lost right
    difference dies away with the effect's filters), and within the last bit with a Phaser at high
    Feedback after a Distortion, while the note still sounds. PERC only: CE's .psyn engines don't
    sound as the phase 1 build's built-in ones did, so on the others the effects can't be told apart
-   from the engine; PERC's sound is as it was.
+   from the engine; PERC's sound is as it was. Both rigs play CE's PERC from before 1620e85
+   (PERC_BEFORE, from git): the phase 1 host plays CE's new PERC differently from today's host
+   (up to 14 apart dry, 2026-11-16), so with it the effects could no longer be compared.
 4. Each engine with each pack plugin: the sound changes from the first block it can (LATENCY blocks
    after the pick) without a click (no sample-to-sample jump bigger than the steady sound's own); no
    clipping run longer than the dry sound's; a mono part goes stereo only with a widening plugin.
@@ -67,6 +69,7 @@ from __future__ import annotations
 import argparse
 import math
 import struct
+import subprocess
 import sys
 from pathlib import Path
 
@@ -74,6 +77,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from unicorn.arm_const import UC_ARM_REG_PC, UC_ARM_REG_R0  # noqa: E402
 
 from machine import Machine  # noqa: E402
+import sound_rig  # noqa: E402
 from sound_rig import BLOCK, BLOCK_MS, SoundRig, peak  # noqa: E402
 from test_step0 import menu_item_named  # noqa: E402
 from test_synths import BLOCK_BUDGET, CHORD, PHASE, WAVE, clip_run  # noqa: E402
@@ -325,11 +329,34 @@ def mix_zero(mods):
                   f"{'stereo' if stereo(*dry) else 'mono'} dry)")
 
 
+# CE's PERC.psyn before its 1620e85 builds (synth/prebuilt at 2cbd759), a git blob: the phase 1 build's
+# host and today's play it the same dry, so the effects are all that differs between them
+PERC_BEFORE = "503e34ff8795247f57d5501288c2e3c2a60a62ad"
+
+
+def perc_before() -> bytes | None:
+    root = Path(__file__).resolve().parents[2]
+    r = subprocess.run(["git", "-C", str(root), "cat-file", "blob", PERC_BEFORE], capture_output=True)
+    return r.stdout if r.returncode == 0 and r.stdout[:4] else None
+
+
 def as_before(mods, before):
     """A version 1 project's effects through the plugins, against the phase 1 build's built-in ones"""
     if before is None:
         check(False, "as_before needs --before <the phase 1 build>")
         return
+    old_perc = perc_before()
+    if old_perc is None:
+        check(False, f"as_before needs CE's earlier PERC.psyn, git blob {PERC_BEFORE}")
+        return
+    sound_rig.SYNTH_OVERRIDES["PERC.psyn"] = old_perc
+    try:
+        _as_before(mods, before)
+    finally:
+        sound_rig.SYNTH_OVERRIDES.pop("PERC.psyn", None)
+
+
+def _as_before(mods, before):
     # The built-in Distortion ramped in over about 8 blocks from its pick; the plugin is on from its
     # first sample (the slot fades it in over one block), so they differ at first and the difference
     # dies away with the effect's filters (2026-11-11): the Overdrive's within about 55 blocks, CHIP's

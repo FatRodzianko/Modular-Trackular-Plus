@@ -365,7 +365,7 @@ Generators synthesize audio from scratch (`in` is `NULL`) and can run even when 
 - See [`editor-fx-sdk/effects/analog_kick_gen.c`](../editor-fx-sdk/effects/analog_kick_gen.c) and [`editor-fx-sdk/effects/chiptune_gen.c`](../editor-fx-sdk/effects/chiptune_gen.c).
 
 ### 7.5 Pattern D: Using Working Scratch RAM (`PTFX_SCRATCH`)
-Because plugin `.bss` shares the executable code buffer (`32 KB` limit on Original Tracker, `128 KB` on Tracker+ / Tracker Mini), never declare large arrays as `static` global variables. Instead:
+Because plugin `.bss` shares the executable code buffer (`PtfxLoader::getMaxCodeSize()` — see [`docs/memory_map.md`](memory_map.md#3-shared-768-kb-scratch-buffer-map-externalramscratchbuff) for platform code and `scratch_mem` limits), never declare large arrays as `static` global variables. Instead:
 1. Request scratch memory via `// PTFX_SCRATCH: <bytes>`.
 2. Cast `scratch_mem` to your state struct inside `plugin_init()`:
 ```c
@@ -554,22 +554,22 @@ flowchart TD
 
 ### 9.2 Platform Resource & Memory Allocation
 
+All `.ptfx` execution, working scratch, secondary `.wav` decoding, and concurrent [`GlobalFileBrowser`](global_file_browser.md) storage share non-overlapping slices of `externalRamScratchBuff` (`SHARED_SCRATCH_MEMORY_SIZE`) — see [`docs/memory_map.md`](memory_map.md#3-shared-768-kb-scratch-buffer-map-externalramscratchbuff) for the full byte-offset map and [`Section 2`](memory_map.md#2-external-sdram-pool--reclaimable-sample-ram-external_ram) for `externalRamEffectsBuff` sizing.
+
 | Resource / Limit | Original Tracker (`MK66`) | Tracker+ & Tracker Mini (`IMX`) |
 | :--- | :--- | :--- |
 | **MCU & Core** | NXP MK66FX1M0 (`Cortex-M4F` @ 180 MHz) | NXP i.MX RT1051/RT1064 (`Cortex-M7F` @ 600 MHz) |
 | **Max Discovered Plugins** | `128` `.ptfx` files in `/Effects/` | `128` `.ptfx` files in `/Effects/` |
 | **Max Parameters per Plugin** | `12` (`3` pages of `4`) | `12` (`3` pages of `4`) |
-| **Executable Code + BSS Limit** | `32,768 B` (`32 KB` at base of `externalRamScratchBuff`) | `131,072 B` (`128 KB` at base of `externalRamScratchBuff`, `0x80000000`) |
-| **Plugin Scratch Buffer (`scratch_mem`)** | `externalRamScratchBuff + 128 KB` (`[128 KB .. 512 KB]`, `393,216 B` / `384 KB`) | `externalRamScratchBuff + 128 KB` (`[128 KB .. 512 KB]`, `393,216 B` / `384 KB`) |
-| **Secondary WAV Sample Buffer** | `externalRamScratchBuff + 512 KB` (`[512 KB .. 744 KB]`, `232 KB`, ~`118k` `int16_t` samples) | `externalRamScratchBuff + 512 KB` (`[512 KB .. 744 KB]`, `232 KB`, ~`118k` `int16_t` samples) |
-| **Global File Browser Scratch** | `externalRamScratchBuff + 744 KB` (`[744 KB .. 768 KB]`, `24 KB`) | `externalRamScratchBuff + 744 KB` (`[744 KB .. 768 KB]`, `24 KB`) |
-| **Sample Editor Buffers (`confirmed` / `processed`)** | `externalRamEffectsBuff` (`1` channel, `2 × 1.875 MB` halves) | `externalRamEffectsBuff` (`2` channels, `4 × 1.875 MB` halves) |
+| **Executable Code + BSS Limit** | `PtfxLoader::getMaxCodeSize()` at base of `externalRamScratchBuff` — see [`memory_map.md`](memory_map.md#3-shared-768-kb-scratch-buffer-map-externalramscratchbuff) | `PtfxLoader::getMaxCodeSize()` at `0x80000000` (`externalRamScratchBuff` base) — see [`memory_map.md`](memory_map.md#3-shared-768-kb-scratch-buffer-map-externalramscratchbuff) |
+| **Plugin Scratch (`scratch_mem`) & Secondary WAV** | Capped by `PtfxLoader::getMaxScratchSize()` + `kPtfxSecondarySampleBytes` — see [`memory_map.md`](memory_map.md#3-shared-768-kb-scratch-buffer-map-externalramscratchbuff) | Capped by `PtfxLoader::getMaxScratchSize()` + `kPtfxSecondarySampleBytes` — see [`memory_map.md`](memory_map.md#3-shared-768-kb-scratch-buffer-map-externalramscratchbuff) |
+| **Sample Editor Buffers (`confirmed` / `processed`)** | `externalRamEffectsBuff` (`1` channel: `confirmed` + `processed` halves at `EDIT_BUFF_OFFSET`, `1,966,080` frames max) | `externalRamEffectsBuff` (`2` channels: `confirmed` + `processed` halves at `EDIT_BUFF_OFFSET`, `1,966,080` frames max) |
 
 > [!IMPORTANT]
-> **Two-Stage Lazy Caching & Non-Overlapping `768 KB` Partition (`externalRamScratchBuff`)**:
+> **Two-Stage Lazy Caching & Non-Overlapping Scratch Partition (`externalRamScratchBuff`)**:
 > - **Stage 1 (Catalog Cache)**: `s_ptfxEntries[128]` stores 76 bytes per plugin (`filename[42]`, `displayName[32]`, `flags`), enabling 60 FPS rotary jog-wheel scrolling across up to 128 custom plugins with zero SD card seeks during scrolling.
 > - **Stage 2 (Single-Pass Loader)**: When the user selects a modular plugin, `PtfxLoader::loadPlugin()` opens the `.ptfx` file once and reads the 472-byte `s_activeHeader` and executable code payload in the same `f_open` session.
-> - **Four-Region `768 KB` Scratch Partition**: `kPtfxScratchTopOffset = 512 * 1024` (`512 KB`) in [`core/effector/ptfx_loader.h`](../core/effector/ptfx_loader.h) caps `.ptfx` plugin `scratch_mem` at `384 KB` (`[128 KB .. 512 KB]`). `[512 KB .. 744 KB]` (`kPtfxSecondarySampleOffset` / `kPtfxSecondarySampleBytes = 232 * 1024`) holds the pre-decoded secondary WAV sample (`PARAM_FILE`), and `[744 KB .. 768 KB]` (`24 KB`) is reserved exclusively for [`GlobalFileBrowser`](global_file_browser.md) so opening the file browser never overwrites plugin state.
+> - **Concurrent `GlobalFileBrowser` Safety**: Because `cGlobalFileBrowser` uses only the top slice of `externalRamScratchBuff` above `kPtfxSecondarySampleOffset + kPtfxSecondarySampleBytes` (see [`docs/memory_map.md`](memory_map.md#3-shared-768-kb-scratch-buffer-map-externalramscratchbuff)), opening the file browser from inside the Sample Editor or an effect parameter never overwrites active plugin code, `scratch_mem`, or loaded secondary WAV audio.
 
 ### 9.3 Cortex-M7 L1 Cache Coherency & FatFs Loading (`PLATFORM_IMX`)
 
@@ -621,5 +621,5 @@ Preset files store both numeric/list parameter values and all `PTFX_PARAM_FILE` 
 ### Preset Restore Lifecycle
 When a `.ptp` preset is loaded:
 1. Firmware validates `"PTFP"` version `1`, restores all saved `params[]`, and calls `PtfxLoader::setSelectedFilePath(i, path)` for each bit set in `fileMask`.
-2. Any `.wav` `PARAM_FILE` slot is automatically pre-decoded back into the `232 KB` secondary WAV buffer (`PtfxLoader::loadSecondaryWavFile()`).
+2. Any `.wav` `PARAM_FILE` slot is automatically pre-decoded back into the secondary WAV buffer (`PtfxLoader::loadSecondaryWavFile()`).
 3. The `.ptfx` module reloads cleanly, calls `plugin_init()`, and replays `plugin_set_param()` across all active parameters.

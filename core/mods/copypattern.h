@@ -51,12 +51,12 @@ constexpr size_t kMessageSize = 32;
 // ---- the rules, on plain data ------------------------------------------------------------
 
 // A step with nothing in it, as CE's clearStep leaves it. Anything else counts: a note-off,
-// an instrument without a note, an FX type, a volume or a micro-move.
+// an instrument without a note, an FX type, a volume (CE's !OFF, -2, too) or a micro-move.
 template <class Step>
 inline bool stepIsEmpty(const Step& step)
 {
     return step.note == kNoteEmpty && step.instrument == 0 && step.fx[0].type == 0 &&
-           step.fx[1].type == 0 && step.volume < 0 && step.micromove < 0;
+           step.fx[1].type == 0 && step.volume == -1 && step.micromove < 0;
 }
 
 // Every step of every track, past the pattern's length too.
