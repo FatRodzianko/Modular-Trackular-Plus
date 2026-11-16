@@ -72,6 +72,9 @@ struct Settings
 
 extern Settings settings; // the open project's
 
+// At boot: settings emptied (they're in SDRAM, which startup doesn't zero).
+void init();
+
 // The project's record into settings: Stock everywhere if it has none or a damaged one. A
 // version 1 record is converted.
 void load(const Store& store);

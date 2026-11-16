@@ -18,7 +18,8 @@ Checks:
   the reverb and delay channels carry the plugins' tails;
 - a computer attached, then unplugged and attached again while the tails play: the speaker output
   as in a run with no computer, sample for sample; nothing sent while unplugged; the first block
-  attached again silent, as on the reference build, and USB's master the speaker output after it;
+  attached again USB's master silent (the reverb, delay and synth channels not), as on the
+  reference build, and USB's master the speaker output after it;
   the audio pool back where the run without a computer has it;
 - Synth FX (Flanger and Chorus on part 1): the part's USB channels carry it, its tail included,
   and USB's master is the speaker output.
@@ -178,15 +179,18 @@ def test_unplug(mods, ref):
     first, last, _ = marks[1]
     sent_off = max((peak(v) for b in u1.blocks[first:last] for v in b.values()), default=0)
     check(sent_off == 0, f"unplugged (blocks {first} to {last - 1}): nothing but silence filled")
-    # Attached again, the first block is silence, on CE's own build too: USB, like the speaker, is
-    # handed the master block the last interrupt made, and that block wasn't queued for USB while
-    # it was unplugged (an inactive destination takes no block). From the next one on it's the same.
+    # Attached again, USB's master is silent for one block, on CE's own build too: USB, like the
+    # speaker, is handed the master block the last interrupt made, and that block wasn't queued for
+    # USB while it was unplugged (an inactive destination takes no block). The reverb, delay and
+    # synth channels come from objects that run in this interrupt, so they carry sound at once.
     again = marks[2][0]
     for name in ("plug", "ce"):
         u, out = runs[name][0], runs[name][1]
-        check(peak(out[0][again * BLOCK:(again + 1) * BLOCK]) > 0 and
-              all(peak(v) == 0 for v in u.blocks[again].values()),
-              f"{name}: the first block attached again (block {again}) is silence on USB, the speaker playing")
+        b = u.blocks[again]
+        check(peak(out[0][again * BLOCK:(again + 1) * BLOCK]) > 0 and peak(b.get(0, ())) == 0 and
+              peak(b.get(1, ())) == 0 and peak(b.get(DELAY[0], ())) > 0,
+              f"{name}: the first block attached again (block {again}): USB's master silent, the speaker "
+              f"and USB's delay channel playing")
     for a, b in ((marks[0][0], marks[0][1]), (again + 1, marks[2][1])):
         m_ok = u1.channel(0, a, b) == list(out1[0][a * BLOCK:b * BLOCK]) and \
             u1.channel(1, a, b) == list(out1[1][a * BLOCK:b * BLOCK])

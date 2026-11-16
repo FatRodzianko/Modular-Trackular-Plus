@@ -60,7 +60,7 @@ constexpr std::array<ModDescriptor, kBuiltModCount> kMods{ {
     .name = "Master FX",
     .record = masterfx::kRecord,
     .recordVersion = masterfx::kRecordVersion,
-    .init = nullptr,
+    .init = masterfx::init,      // settings emptied (they're in SDRAM)
     .load = masterfx::load,
     .apply = masterfx::apply,
     .reset = nullptr,

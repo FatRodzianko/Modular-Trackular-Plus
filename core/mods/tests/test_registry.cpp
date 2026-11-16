@@ -105,7 +105,7 @@ const std::vector<Expected> kExpected = {
       swing::storeIfEdited, swing::amountEdited },
 #endif
 #if MT_HAS_MASTERFX
-    { Mod::masterfx, masterfx::kRecord, masterfx::kRecordVersion, nullptr, masterfx::load, masterfx::apply,
+    { Mod::masterfx, masterfx::kRecord, masterfx::kRecordVersion, masterfx::init, masterfx::load, masterfx::apply,
       nullptr, masterfx::storeIfEdited, masterfx::apply },
 #endif
 #if MT_HAS_COLORSONG

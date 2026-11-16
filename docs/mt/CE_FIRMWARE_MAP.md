@@ -254,16 +254,16 @@ in file-transfer mode. `handleFileTransferMode` swaps the class and resets the b
 
 ## 15. Memory budget
 
-Exact, from the ELF, with `tools/mem_budget.py`. "Mods" is the mod build with Color Song and
-the 1 MiB taken from sample memory.
+Exact, from the ELF, with `tools/mem_budget.py`, on CE `f25fb89` (2026-11-16). "Mods" is the release
+mod build, every mod in, with the 1 MiB taken from sample memory.
 
 | Region | Size | Plain CE free | Mods free | Floor | Notes |
 | --- | --- | --- | --- | --- | --- |
-| Flash | 16,580,608 | 14,908,540 | 14,871,636 | 1 MiB | 1.2.0 images up to 8 MB flashed whole |
-| ITCM | 131,064 | 16,416 | 10,512 | 1,024 | closed libs, audio code, masterfx's 5,584 |
-| DTCM unreserved | gap | 17,432 | 15,376 | 4,096 | heap end to stack base |
+| Flash | 16,580,608 | 15,111,060 | 14,971,044 | 1 MiB | 1.2.0 images up to 8 MB flashed whole |
+| ITCM | 131,064 | 68,728 | 40,096 | 1,024 | closed libs, audio code, masterfx's 5,584 |
+| DTCM unreserved | gap | 11,048 | 4,176 | 4,096 | heap end to stack base; the recorder (diag) build has 2,648 |
 | OCRAM | 32,768 | 9,556 | 9,556 | 1,024 | mods stay out |
-| SDRAM unreserved | 67,108,864 | 12,716 | 1,029,708 | 256 KiB | the pool takes all the rest in plain CE |
+| SDRAM unreserved | 67,108,864 | 21,048 | 611,336 | 256 KiB | the pool takes all the rest in plain CE |
 
 Mods use 31,616 bytes of SDRAM so far: `projectBuffer` 10,496, `configBuffer` 512, Color Song
 12,144, Variable Track Length 8,443 and alignment.

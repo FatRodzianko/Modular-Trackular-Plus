@@ -15,7 +15,7 @@
 	* See [`docs/custom_synth_sdk.md`](docs/custom_synth_sdk.md) and [`synth-plugin-sdk/README.md`](synth-plugin-sdk/README.md).
 
 2. **Unified File Browser Across All Screens (All 3 Devices)**
-	* Replaced the older single-folder file pickers with a unified folder-navigating browser across Project **`Open`** / **`Save As`**, **`.mod` / `.it` Import**, Synth Patch **`Load`** / **`Save`**, Synth **Sample Slot** `.wav` selection, and Sample Editor **Effect Presets & File Parameters**.
+	* Replaced the older single-folder file pickers with a unified folder-navigating browser across Project **`Open`** / **`Save As`**, **`.mod` / `.it` Import**, Synth Patch **`Load`** / **`Save`**, Synth **Sample Slot** `.wav` selection, and Sample Editor **Effect Loader (`Load Effect...`), File Parameters & Effect Presets** (with direct switching out to other screens via hardware module buttons).
 	* See [`docs/global_file_browser.md`](docs/global_file_browser.md).
 
 3. **Per-Sample SD Streaming Controls & RAM Default in Sample Loader (All 3 Devices)**
@@ -33,9 +33,11 @@
 6. **Sample Editor - New Effects, Presets & Plugin SDK Additions**
 	* **`Transient Shaper` (All 3 Devices)**: New Sample Editor effect (`transient_shaper.ptfx`) with `Attack` (`-100%` to `+100%`) and `Sustain` (`-100%` to `+100%`) controls for shaping drum hits and loops.
 	* **`Haas Effect` (Tracker+ & Tracker Mini)**: New stereo widener effect (`haas.ptfx`) that delays the Left or Right channel (`1–100 ms`) with a smooth tail fade-out.
+	* **`Sample Cross-Mod` (All 3 Devices)**: New reference effect (`cross_mod.ptfx`) that layers, ring-modulates, FM-scrubs, amplitude-follows, or sidechains a sample against a secondary `.wav` file selected from the SD card.
+	* **On-Demand `.ptfx` Effect Loader (All 3 Devices)**: Removed the 128-plugin startup scan limit in favor of **`Load Effect...`** at the bottom of the Sample Editor effect list, browsing `/Effects/` (including subfolders) in `GlobalFileBrowser` with pretty effect display names and keeping the currently loaded effect above `Load Effect...`.
 	* **Effect Presets (All 3 Devices)**: Load, save, and reset effect presets via **`More`** (stored under `/Effects/Presets/<PluginName>/*.ptp`), automatically saving and restoring knob values and selected files.
 	* **Mono-to-Stereo Effect Support (Tracker+ & Tracker Mini)**: Applying a stereo effect plugin (such as `Haas Effect` or `Stereo Delay`) to a mono sample now automatically converts the instrument to stereo when the left and right channels differ.
-	* **Plugin SDK — File Pickers & Secondary Audio (All 3 Devices)**: `.ptfx` plugins can now declare input/output file parameters (`PTFX_PARAM_FILE` / `PTFX_PARAM_SAVE_FILE`) with automatic secondary `.wav` decoding and SD file I/O helpers. See [`docs/modular_effects_system.md`](docs/modular_effects_system.md).
+	* **Plugin SDK — File Pickers & Secondary Audio (All 3 Devices)**: `.ptfx` plugins can now declare input/output file parameters (`PTFX_PARAM_FILE` / `PTFX_PARAM_SAVE_FILE`) rendered with vertical rotated filenames, single-press browser open, `Delete` to clear, automatic secondary `.wav` decoding, and SD file I/O helpers. See [`docs/modular_effects_system.md`](docs/modular_effects_system.md).
 
 7. **Clearer `[m | V]` vs `[Fx1 | Fx2]` Pattern Editor View & Volume Lane `!OFF` (All 3 Devices)**
 	* Empty step slots in the **`[m | V]`** pattern view now show dimmed **`m--`** and **`V--`** indicators instead of `---`, making it obvious at a glance whether you are viewing `[m | V]` or `[Fx1 | Fx2]`.

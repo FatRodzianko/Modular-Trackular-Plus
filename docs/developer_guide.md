@@ -75,7 +75,7 @@ Full details in [`docs/custom_synth_sdk.md`](custom_synth_sdk.md), [`synth-plugi
 Full details in [`docs/modular_effects_system.md`](modular_effects_system.md).
 
 * **Plugin, Parameter, File & Preset Limits**:
-  * Up to `kMaxModularPlugins` `.ptfx` plugins are indexed from `/Effects/` alongside the `kBuiltInEffectsCount` built-in Sample Editor effects in `s_effectDisplayNames` ([`core/effector/ptfx_manager.h`](../core/effector/ptfx_manager.h)).
+  * External `.ptfx` plugins under `/Effects/` (including subfolders) are browsed and loaded on demand via **`Load Effect...`** in `GlobalFileBrowser` (with no plugin-count cap); the currently loaded plugin (`s_activeEntry`) is listed immediately above `Load Effect...` alongside the `kBuiltInEffectsCount` built-in Sample Editor effects in `s_effectDisplayNames` ([`core/effector/ptfx_manager.h`](../core/effector/ptfx_manager.h)).
   * Each `.ptfx` plugin supports up to **12 parameters** (`PtfxHeader::params[12]` in [`core/effector/tracker_plugin.h`](../core/effector/tracker_plugin.h) and [`editor-fx-sdk/tracker_plugin.h`](../editor-fx-sdk/tracker_plugin.h)), including continuous float, stepped integer, pipe-separated string lists, and SD file pickers/savers (`PTFX_PARAM_FILE` / `PTFX_PARAM_SAVE_FILE`).
   * Any `.ptfx` plugin with `>= 1` parameter automatically gains a **Presets** page via the `More` screen button (`Load` / `Save` `.ptp` presets in `/Effects/Presets/<SanitizedPluginName>/` via [`GlobalFileBrowser`](global_file_browser.md), plus `Reset`).
 * **`.ptfx` Code, Scratch & Secondary WAV Regions (`externalRamScratchBuff`)**:

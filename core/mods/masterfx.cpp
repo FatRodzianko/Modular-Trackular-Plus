@@ -34,7 +34,9 @@ const char* const kV1Reverbs[kV1ReverbCount] = {
 };
 const char* const kV1Delays[kV1DelayCount] = { "", "Tape.ptmfx", "BBD.ptmfx" };
 
-Settings settings;
+// Read and written in the main loop only (the interrupt plays what apply() hands the plugins),
+// so SDRAM, not DTCM: init() empties it at boot, as startup doesn't zero SDRAM.
+MFX_SDRAM Settings settings;
 
 namespace
 {
@@ -177,6 +179,11 @@ void refreshMenus();
 void applyDucks(); // what plays ducks as settings say (the firmware's)
 
 } // namespace
+
+void init()
+{
+    memset(&settings, 0, sizeof(settings)); // Stock in every slot, no ducks: as a project with no record
+}
 
 void load(const Store& store)
 {
