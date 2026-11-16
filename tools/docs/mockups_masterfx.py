@@ -137,26 +137,39 @@ def reverb_page(title: str, words, place: int = 0) -> Screen:
 
 
 def limiter_page(title: str, title_kind: str, words, column4, own=(), place: int = 5,
-                 first=((10, "0.100s"), (0, "0.001s"), (92, "-6.00 dB"))) -> Screen:
+                 first=((10, "0.100s"), (0, "0.001s"), (92, "-6.00 dB")), column3=None) -> Screen:
     """showLimiterScreen: Attack, Release, Threshold (CE's, with the plugin's words, or the plugin's
-    own knobs in their place), Gain Reduce, column 4 (CE's Sidechain list, Master FX's Ducks list or
-    Glue's Tracks list), the plugin's own knobs in 5 and 6, Back"""
+    own knobs in their place), Gain Reduce, column 4 (CE's Sidechain list or Glue's Tracks list), the
+    plugin's own knobs in 5 and 6, Back. With column3 (a ducking plugin's Ducks list,
+    showMasterfxDucks), the Gain Reduce meter is column 7's bar, labelled Gain Reduce over Back
+    (showMasterfxLimiterMeter)"""
     s = Screen(title)
     s.title_bar(title, title_kind=title_kind)
     s.bottom_bar()
     for i, (v, text) in enumerate(first):                  # CE's defaults, or the plugin's
         bar(s, i, v)
         label(s, i, words[i], text)
-    bar(s, 3, None)
-    label(s, 3, "Gain Reduce")
+    if column3 is None:
+        bar(s, 3, None)
+        label(s, 3, "Gain Reduce")
+    else:
+        rows, at, kinds, marked, word, text, text_kind = column3
+        clist(s, 3, rows, at, kinds, marked)
+        label(s, 3, word, text, kind2=text_kind)
     rows, at, kinds, marked, word, text, text_kind = column4
     clist(s, 4, rows, at, kinds, marked)
     label(s, 4, word, text, kind2=text_kind)
     for k, (name, v, text) in enumerate(own):
         bar(s, 5 + k, v)
         label(s, 5 + k, name, text)
-    cover(s, 5 + len(own), 3 - len(own))
-    label(s, 7, "Back")
+    if column3 is None:
+        cover(s, 5 + len(own), 3 - len(own))
+        label(s, 7, "Back")
+    else:
+        if len(own) < 2:
+            cover(s, 5 + len(own), 2 - len(own))
+        bar(s, 7, None)
+        label(s, 7, "Gain Reduce", "Back", kind2="lbl")
     frame(s, place)
     return s
 
@@ -165,6 +178,10 @@ CE_LIMITER = ("LimiterAtt", "LimiterRls", "LimiterThr")
 # compressor.cpp: Ratio 4 of 1-20 by 0.5 (step 6 of 38), Makeup 0 of 0-12
 COMPRESSOR_KNOBS = (("Ratio", 15, "4.0:1"), ("Makeup", 0, "+0.0 dB"))
 SIDECHAIN_OFF = (SIDECHAIN, 0, SIDECHAIN_KINDS, (), "Sidechain", "Disable", "lbl")
+# CE's Sidechain list on Track 1 (the kick), its name as a new project has it
+SIDECHAIN_KICK = (SIDECHAIN, 1, SIDECHAIN_KINDS, (), "Sidechain", "Track 1", "demo")
+# Compressor's Ducks list in column 3: on Master, as a new project has it
+DUCKS_MASTER = (DUCKS, 0, None, (), "Ducks", "Master", "val")
 # glue.cpp: Attack step 40 of 0-60 (10 ms), Release step 12 of 0-32 (200 ms), Threshold -12 of -40-0
 # by 0.5 (step 56 of 80); Ratio 4 of 1-10 by 0.1 (step 30 of 90), Makeup 0 of 0-12
 GLUE_WORDS = ("Attack", "Release", "Threshold")
@@ -195,17 +212,22 @@ def main() -> None:
     write("masterfx-reverb.svg", s, "The Reverb page with Shimmer: the title names it, and its words "
                                      "Decay, Tone and Shimmer replace Size, Damping and Diffusion")
 
-    # 3. the Limiter page with Compressor: its own knobs in columns 5 and 6, Ratio selected
-    s = limiter_page("Limiter: Compressor", "val", CE_LIMITER, SIDECHAIN_OFF, COMPRESSOR_KNOBS, place=5)
+    # 3. the Limiter page with Compressor: its own knobs in columns 5 and 6, Ratio selected; the
+    # Ducks list in column 3, the Gain Reduce meter above Back
+    s = limiter_page("Limiter: Compressor", "val", CE_LIMITER, SIDECHAIN_OFF, COMPRESSOR_KNOBS, place=5,
+                     column3=DUCKS_MASTER)
     s.mark(0, 0, 800, 28, pad=0)
     mark_column(s, 5, 2)
     write("masterfx-knobs.svg", s, "The Limiter page with Compressor: its own knobs Ratio and Makeup in "
                                     "columns 5 and 6")
 
-    # 4. the Ducks list in column 4 (Shift + its button): Track 3 and Synth 1 marked
+    # 4. the Ducks list in column 3: Track 3 and Synth 1 marked, the kick's Track 1 as the key; the
+    # Gain Reduce meter above Back
     ducks = (DUCKS, 9, None, (3, 9), "Ducks", "2 tracks", "val")
-    s = limiter_page("Limiter: Compressor", "val", CE_LIMITER, ducks, COMPRESSOR_KNOBS, place=4)
-    mark_column(s, 4)
+    s = limiter_page("Limiter: Compressor", "val", CE_LIMITER, SIDECHAIN_KICK, COMPRESSOR_KNOBS, place=3,
+                     column3=ducks)
+    mark_column(s, 3)
+    mark_column(s, 7)
     write("masterfx-ducks.svg", s, "The Limiter page's Ducks list: Track 3 and Synth 1 marked, so "
                                     "the key turns those two down instead of the master")
 

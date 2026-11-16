@@ -364,6 +364,21 @@ def last(log, kind):
     return {e[1]: e[2] for e in log if e[0] == kind}
 
 
+def label0_of(final, second):
+    """label[0]'s handle, from column 7's Back: its first line, or its second on a ducking plugin's
+    Limiter page (Gain Reduce over Back)"""
+    h = next((h for h, t in final.items() if t == "Back"), None)
+    if h is None:
+        h = next(h for h, t in second.items() if t == "Back")
+    return h - 7
+
+
+def bar_of(label0, i):
+    """barControl[i]'s handle: cMasterParams::start makes label 0 to 7, bgLabel, then for each column
+    trackNameLabel, trackVolumeBar and barControl"""
+    return label0 + 11 + 3 * i
+
+
 def drive(page):
     """One walk over the page: every stop, every direction, the two effect pages and back."""
     page.start()
@@ -595,22 +610,32 @@ def limiter_page(mods, ref):
     log = p.take_log()
     titles = [e[1] for e in log if e[0] == "title"]
     final, second = last(log, "text"), last(log, "text2")
-    label0 = next(h for h, t in final.items() if t == "Back") - 7
+    label0 = label0_of(final, second)
     check(titles[-1] == "Limiter: Compressor", f"Compressor: the Limiter page's title ({titles[-1]})")
     said = [final[label0 + i] for i in range(3)]
     check(said == ["LimiterAtt", "LimiterRls", "LimiterThr"], f"Compressor: CE's labels for Attack, Release, Threshold ({said})")
     own = [(final.get(label0 + 5), second.get(label0 + 5)), (final.get(label0 + 6), second.get(label0 + 6))]
     check(own == [("Ratio", "4.0:1"), ("Makeup", "+0.0 dB")], f"Compressor: its own knobs in columns 5 and 6 at their defaults ({own})")
     check(all(math.isnan(k) for k in own_knobs(p.r)), "and settings leave them unset")
-    cover = [e for e in log if e[0] == "position" and e[2] == (800 // 8) * 7 + 2]
-    check(bool(cover), "the cover moves to column 7, off the own knobs")
+    # The Ducks list has column 3, so the Gain Reduce meter is above Back
+    columns = {i: (final.get(label0 + i), second.get(label0 + i)) for i in (3, 4, 7)}
+    check(columns == {3: ("Ducks", "Master"), 4: ("Sidechain", "Disable"), 7: ("Gain Reduce", "Back")},
+          f"Compressor: Ducks in column 3, CE's Sidechain in 4, Gain Reduce over Back in 7 ({columns})")
+    check(("value", bar_of(label0, 0), 10) in log, "the bars are where the rig looks (CE's Attack bar at 10)")
+    shown = set(p.shown())
+    check(bar_of(label0, 7) in shown and bar_of(label0, 3) not in shown,
+          "the meter is column 7's bar, column 3's bar hidden")
+    # blankSpaceCover[0] is moved with its y left as it is (-1); the bars get y 29
+    cover = {e[1] for e in log if e[0] == "position" and e[2] == (800 // 8) * 7 + 2 and e[3] == 0xFFFFFFFF}
+    check(cover and not cover & shown,
+          f"the cover is off: nothing empty between Makeup and the meter (moved {sorted(cover)}, shown {sorted(cover & shown)})")
 
     frame = p.handle_of("_ZTV6cFrame")
     stops = []
     for _ in range(6):
         p.press("right")
         stops.append(p.place(frame))
-    check(stops == [1, 2, 4, 5, 6, 6], f"Right stops on 1, 2, 4, 5, 6 ({stops})")
+    check(stops == [1, 2, 3, 4, 5, 6], f"Right stops on 1, 2, 3, 4, 5, 6 ({stops})")
     p.take_log()
     p.encoder(1)
     log = p.take_log()
@@ -646,6 +671,7 @@ def limiter_page(mods, ref):
     log = p.take_log()
     check(any(e[0] == "text2" and e[2] == "Bypassed" for e in log), "the Master page's Limiter column says Bypassed")
     check(not p.r.failures, "no asserts")
+    space = p.m.r32(p.m.r32(p.table + 4 * bar_of(label0, 7)) + p.style_offset)
 
     # Stock: CE's page, no own knobs
     q = MasterPage(mods)
@@ -653,6 +679,8 @@ def limiter_page(mods, ref):
     set_dynamics(q.r, "")
     q.start()
     q.take_log()
+    stock_space = q.m.r32(q.m.r32(q.table + 4 * bar_of(label0, 7)) + q.style_offset)
+    check(space == stock_space, f"back on the Master page, Space's bar has CE's style again ({space:#x}, {stock_space:#x})")
     q.press("limiter")
     log = q.take_log()
     r_page = MasterPage(ref)
@@ -785,6 +813,14 @@ def glue_page(mods):
     ducks = struct.unpack("<H", m.read(m.addr(SETTINGS) + DUCKS_AT, 2))[0]
     check(slot_file(p.r, DYNAMICS) == "Compressor.ptmfx" and ducks == 0,
           f"Glue to Compressor: the set back to the master ({slot_file(p.r, DYNAMICS)}, {ducks:#x})")
+    p.press("cancel")
+    p.take_log()
+    p.press("limiter")
+    log = p.take_log()
+    final, second = last(log, "text"), last(log, "text2")
+    columns = {i: (final.get(label0 + i), second.get(label0 + i)) for i in (3, 4, 7)}
+    check(columns == {3: ("Ducks", "Master"), 4: ("Sidechain", "Disable"), 7: ("Gain Reduce", "Back")},
+          f"then the Limiter page: Ducks in 3, CE's Sidechain list back in 4, the meter above Back ({columns})")
     check(not p.r.failures, "no asserts")
 
 
@@ -1645,7 +1681,8 @@ def booted(axf, folder, blocks, saturation=None):
 
 
 def ducks_page(mods):
-    """The Limiter page's Ducks list: Shift + the button under column 4"""
+    """The Limiter page's Ducks list with Compressor: column 3, its own button; CE's Sidechain list
+    stays in column 4"""
     p = MasterPage(mods)
     m = p.m
     set_mod(p.r, True, 0, 0)
@@ -1654,55 +1691,60 @@ def ducks_page(mods):
     stored = []
     p.r.watch(m.addr("_ZN4mods7project11markChangedEv"), lambda mm: stored.append(1))
     p.press("limiter")
-    final = last(p.take_log(), "text")
-    label4 = next(h for h, t in final.items() if t == "Back") - 7 + 4
+    log = p.take_log()
+    label3 = label0_of(last(log, "text"), last(log, "text2")) + 3
+    frame = p.handle_of("_ZTV6cFrame")
     shift = [0]
     p.r.stub(m.addr("_ZN7Buttons15isButtonPressedEi"), lambda mm: shift[0])
 
     def ducks():
         return struct.unpack("<H", m.read(m.addr(SETTINGS) + DUCKS_AT, 2))[0]
 
-    def shifted():
-        shift[0] = 1
-        p.press("eq")
-        shift[0] = 0
-
     def said(log):
-        return last(log, "text").get(label4), last(log, "text2").get(label4)
+        return last(log, "text").get(label3), last(log, "text2").get(label3)
 
-    shifted()
-    now = said(p.take_log())
-    check(now == ("Ducks", "Master"), f"Shift + column 4: the Ducks list, on the master {now}")
+    now = said(log)
+    check(now == ("Ducks", "Master"), f"the Ducks list in column 3, on the master {now}")
     bytes_up = sum(p.page_bytes().values())
-    check(bytes_up < LIMIT, f"the page with the Ducks list: {bytes_up} bytes of {LIMIT}")
+    check(bytes_up < LIMIT, f"the page with the Ducks and Sidechain lists and the meter: {bytes_up} bytes of {LIMIT}")
+    p.press("limiter")                  # the button under column 3
+    check(p.place(frame) == 3 and ducks() == 0, f"the button under column 3 selects the list, marks nothing ({ducks():#x})")
     p.encoder(3)
-    p.press("eq")
+    p.press("limiter")
     now = said(p.take_log())
     check(ducks() == 1 << 2 and now[1] == "Track 3", f"three down and its button: Track 3 marked ({ducks():#x}, {now})")
     check(duck_mask(p.r) == 1 << 2, "and ducked at once")
     check(bool(stored), "and the project marked changed")
     p.encoder(6)
-    p.press("eq")
+    p.press("limiter")
     now = said(p.take_log())
     check(ducks() == (1 << 2) | (1 << 8) and now[1] == "2 tracks", f"Synth 1 too: 2 tracks ({ducks():#x}, {now})")
     p.encoder(20)
-    p.press("eq")
+    p.press("limiter")
     check(ducks() == (1 << 2) | (1 << 8) | (1 << 10), f"the cursor stops on Synth 3 ({ducks():#x})")
     p.take_log()
     p.press("delete")
     now = said(p.take_log())
     check(ducks() == 0 and now[1] == "Master", f"Delete: back to the master {now}")
     p.press("up")
-    p.press("eq")
+    p.press("limiter")
     check(ducks() == 1 << 9, f"Up then its button: Synth 2 ({ducks():#x})")
-    shifted()
-    now = said(p.take_log())
-    check(now[0] == "Sidechain", f"Shift + column 4 again: CE's Sidechain list {now}")
-    check(ducks() == 1 << 9, f"and the ducks kept ({ducks():#x})")
+    p.press("right")
+    check(p.place(frame) == 4, "Right: CE's Sidechain list")
+    p.press("left")
+    check(p.place(frame) == 3, "Left: the Ducks list again")
+    shift[0] = 1
+    p.take_log()
+    p.press("eq")
+    shift[0] = 0
+    log = p.take_log()
+    check("Ducks" not in last(log, "text").values() and ducks() == 1 << 9,
+          f"Shift + column 4: CE's, no Ducks list there, the ducks kept ({ducks():#x})")
     p.press("cancel")
     p.take_log()
     p.press("limiter")
-    check(said(p.take_log())[0] in (None, "Sidechain"), "the page opens on the Sidechain list")
+    now = said(p.take_log())
+    check(now == ("Ducks", "Synth 2"), f"opened again: the Ducks list, Synth 2 marked {now}")
     check(not p.r.failures, "no asserts")
 
     # Stock: Shift + column 4 is CE's

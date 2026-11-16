@@ -632,7 +632,7 @@ Branch `mod/masterfx-glue`, off `modular` at `250cd04` (Master FX 2.0, `masterfx
 
 - **Compressor:** 2.0's Glue renamed, the same behaviour and knobs: CE's Attack, Release and
   Threshold and CE's Sidechain list; Ratio 1 to 20 by 0.5, Makeup 0 to 12; the Ducks list with
-  Shift + Sidechain. `Compressor.ptmfx`, "Compressor" in the list.
+  Shift + Sidechain (in its own column since 2026-11-16, below). `Compressor.ptmfx`, "Compressor" in the list.
 - **Glue:** a new bus compressor on the Limiter page: Attack 0.1 to 100 ms (10 ms), Release 50 ms
   to 2 s (200 ms), Threshold -40 to 0 dB (-12 dB), CE's Gain Reduce, a Tracks list (Master,
   Track 1 to 8, Synth 1 to 3; Master), Ratio 1:1 to 10:1 (4:1), Makeup 0 to +12 dB (0 dB), Back.
@@ -745,6 +745,34 @@ merge as below.
 - **The user page:** its labels, ranges and defaults checked against `glue.cpp`, `compressor.cpp`,
   `gMasterParams.cpp` and `masterfx.cpp`. Glue's two mockups had the figure's name in the screen's
   title bar; it is "Limiter: Glue" now, as the firmware and the ui rig have it.
+
+### The Ducks list's own column (2026-11-16)
+
+The user's request: on Compressor's page the column above Back was empty; put the Gain Reduce meter
+there, still labelled "Gain Reduce" and with "Back" at the bottom, so the Ducks list can have its
+own column.
+
+- With a ducking plugin (`canDuck`, not a bus plugin), `showLimiterScreen`'s MT: hooks put the
+  Ducks list in column 3, in the Delay page's PingPong list (moved there as the Master page moves it
+  for the Limiter choices; `showDelayScreen` moves it back), always up. CE's Sidechain list stays in
+  column 4, and Shift + its button is CE's again. The Gain Reduce meter is column 7's bar, CE's
+  meter style; label 7 says "Gain Reduce" over "Back" (its two lines), and button 7 is still Back.
+  `resizeBarControl` gives column 7's bar CE's style back on the next page. The cover goes off,
+  as Ratio and Makeup fill columns 5 and 6.
+- Column 3 is a place: Left and Right stop on it, the encoder and Up/Down move the cursor, Delete
+  clears, and the button under it selects it, then marks. A new `setButtonObj` for button 3 on the
+  Limiter page; it does nothing without the Ducks list there.
+- Glue (a bus plugin) is as before: Gain Reduce in column 3, the Tracks list in column 4.
+- The plugins aren't changed: the pack is byte for byte the tested one (`Compressor.ptmfx`
+  included), so the pack's replacement and its hashes don't change.
+- The tested state before this is commit `be7827f`, also the local branch
+  `backup/masterfx-2.1-glue5`.
+- What ran on this build (before CE's ed51301): the host tests, every suite 0 failures; the rig's
+  ui section 120 pass, ducks 38 pass (rewritten for column 3); the release tier with the diag
+  build, 0 failed of 39 run; `check_mockups` 0 failures; `mem_budget` DTCM 7,760 bytes free (8 less
+  than before), diag DTCM 6,232, ITCM 48,032. What didn't: the unit. On the unit, still to check:
+  that the two-line Gain Reduce over Back label reads well, the page's real display bytes, and the
+  meter moving above Back.
 
 ### Not checked
 

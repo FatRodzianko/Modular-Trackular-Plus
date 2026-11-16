@@ -60,7 +60,7 @@ Compressor has **Ratio** and **Makeup**:
 2. Turn the jog wheel, or press Up or Down, to change it one step at a time.
 3. Press **Delete** to set it back to the plugin's default.
 
-![The Limiter page with Compressor: the title Limiter: Compressor, CE's columns, the Sidechain list, then Ratio 4.0:1 and Makeup +0.0 dB, Ratio framed](img/masterfx-knobs.svg)
+![The Limiter page with Compressor: the title Limiter: Compressor, CE's LimiterAtt, LimiterRls and LimiterThr, the Ducks list on Master, the Sidechain list, then Ratio 4.0:1, Makeup +0.0 dB and Gain Reduce over Back, Ratio framed](img/masterfx-knobs.svg)
 
 *The Limiter page with Compressor, Ratio selected. Marked: the title and Compressor's own knobs.*
 
@@ -72,19 +72,21 @@ A Limiter plugin that can duck (Compressor can) turns chosen tracks down by its 
 whole master. It follows the key you pick in CE's **Sidechain** list, for example the kick's track.
 
 1. On the Limiter page, pick the key in the **Sidechain** list.
-2. Hold **Shift** and press the button under **Sidechain**. The column becomes the **Ducks** list:
+2. Press the button under **Ducks**, the column before **Sidechain**, to select the **Ducks** list:
    **Master**, **Track 1** to **Track 8** and **Synth 1** to **Synth 3**.
-3. Move the cursor with the jog wheel or Up and Down, and press the button under the column to mark
+3. Move the cursor with the jog wheel or Up and Down, and press the button under **Ducks** to mark
    or unmark the item under it. Marked items are red.
 4. Under the column is what is ducked: **Master**, the one track, or the number of tracks.
 5. **Master**, or **Delete**, unmarks them all: the plugin works on the whole master again.
-6. Hold **Shift** and press the button again to go back to the **Sidechain** list. The page always
-   opens on it.
 
-![The Limiter page's Ducks list: Master, Track 1 to 8, Synth 1 to 3; Track 3 and Synth 1 in red, the cursor on Synth 1, 2 tracks under the column](img/masterfx-ducks.svg)
+With a plugin that can duck, the **Gain Reduce** meter is above **Back**: the label there says
+**Gain Reduce** over **Back**, and the button still goes back.
 
-*Track 3 and Synth 1 marked: the key turns those two down and leaves the rest of the mix alone.
-Marked: the Ducks list and its column.*
+![The Limiter page with Compressor: the Ducks list with Track 3 and Synth 1 in red and the cursor on Synth 1, 2 tracks under it; the Sidechain list on Track 1; Ratio and Makeup; the Gain Reduce meter above Back](img/masterfx-ducks.svg)
+
+*Track 1 (the kick) as the key, Track 3 and Synth 1 marked: the kick turns those two down and leaves
+the rest of the mix alone. Marked: the Ducks list and its column, and the Gain Reduce meter above
+Back.*
 
 The Ducks list is there only while a plugin that can duck plays in the Limiter slot. A track's sends
 to the reverb and delay aren't ducked.
@@ -283,11 +285,12 @@ put, and it pays little attention to the lowest bass.
 | LimiterAtt (CE's) | How fast it turns down when the level rises. | 0.001 s to 1.000 s | 0.100 s |
 | LimiterRls (CE's) | How fast it comes back up when the level falls. | 0.001 s to 1.000 s | 0.001 s |
 | LimiterThr (CE's) | The level it starts turning down at; the change starts gently, 3 dB below it. | up to 0.00 dB | −6.00 dB |
+| Ducks | Master: it turns the whole mix down. Marked tracks: the key turns only those down (see [Duck chosen tracks](#duck-chosen-tracks)). | Master, Track 1 to Track 8, Synth 1 to Synth 3 | Master |
 | Sidechain (CE's) | Disable: it follows the mix. Anything else: it follows that (the key), and the key keeps its own level. | Disable, the eight tracks, Line in L, Line in R, Synth 1 to Synth 3 | Disable |
 | Ratio | How strongly it turns down past LimiterThr: 1.0:1 does nothing, 20.0:1 is nearly a limiter. | 1.0:1 to 20.0:1, in 0.5 steps | 4.0:1 |
 | Makeup | Lifts the result. Nothing limits it after that: past full scale the sound clips. | +0.0 dB to +12.0 dB, in 0.5 dB steps | +0.0 dB |
 
-Gain Reduce shows how far it turns down, without the Makeup.
+Gain Reduce, above Back, shows how far it turns down, without the Makeup.
 
 Cost: up to 0.5 % of a block, and about 0.4 % more for the firmware's handling around it (0.6 % with
 a key).

@@ -67,6 +67,9 @@ static void functSelectLimiterAttack();
 static void functSelectLimiterRelease();
 static void functSelectLimiterThreshold();
 static void functSelectLimiterSidechain();
+#if MT_HAS_MASTERFX // MT:
+static void functSelectLimiterDucks();
+#endif
 static void functLimiterCancel();
 // equalizer
 static void functSelectEqualizerBand(uint8_t n, uint8_t state);
@@ -577,9 +580,17 @@ static void functEncoder(int16_t value)
             case 0: changeLimiterAttack(value); break;
             case 1: changeLimiterRelease(value); break;
             case 2: changeLimiterTreshold(value); break;
+#if MT_HAS_MASTERFX // MT: the Ducks list in column 3
+            case 3:
+                if (MP->masterfxDucksColumn() == 3)
+                {
+                    MP->moveMasterfxDucks(interfaceGlobals.invertValForList ? -value : value);
+                }
+                break;
+#endif
             case 4:
-#if MT_HAS_MASTERFX // MT:
-                if (MP->masterfxDucksShown())
+#if MT_HAS_MASTERFX // MT: the Tracks list in column 4
+                if (MP->masterfxDucksColumn() == 4)
                 {
                     MP->moveMasterfxDucks(interfaceGlobals.invertValForList ? -value : value);
                     break;
@@ -647,6 +658,11 @@ static void functLeft()
     }
     else if (MP->isLimiterScreen)
     {
+#if MT_HAS_MASTERFX // MT: column 3 is a place with the Ducks list in it
+        if (MP->selectedPlaceLimiter == 4 && MP->masterfxDucksColumn() == 3)
+            MP->selectedPlaceLimiter = 3;
+        else
+#endif
         if (MP->selectedPlaceLimiter == 4)
             MP->selectedPlaceLimiter = 2;
         else if (MP->selectedPlaceLimiter > 0)
@@ -719,6 +735,11 @@ static void functRight()
     }
     else if (MP->isLimiterScreen)
     {
+#if MT_HAS_MASTERFX // MT: column 3 is a place with the Ducks list in it
+        if (MP->selectedPlaceLimiter == 2 && MP->masterfxDucksColumn() == 3)
+            MP->selectedPlaceLimiter = 3;
+        else
+#endif
         if (MP->selectedPlaceLimiter == 2)
             MP->selectedPlaceLimiter = 4;
         else if (MP->selectedPlaceLimiter < MP->frameData.placesCount - 1)
@@ -855,9 +876,17 @@ static void functUp()
             case 0: changeLimiterAttack(1); break;
             case 1: changeLimiterRelease(1); break;
             case 2: changeLimiterTreshold(1); break;
+#if MT_HAS_MASTERFX // MT: the Ducks list in column 3
+            case 3:
+                if (MP->masterfxDucksColumn() == 3)
+                {
+                    MP->moveMasterfxDucks(-1);
+                }
+                break;
+#endif
             case 4:
-#if MT_HAS_MASTERFX // MT:
-                if (MP->masterfxDucksShown())
+#if MT_HAS_MASTERFX // MT: the Tracks list in column 4
+                if (MP->masterfxDucksColumn() == 4)
                 {
                     MP->moveMasterfxDucks(-1);
                     break;
@@ -988,9 +1017,17 @@ static void functDown()
             case 0: changeLimiterAttack(-1); break;
             case 1: changeLimiterRelease(-1); break;
             case 2: changeLimiterTreshold(-1); break;
+#if MT_HAS_MASTERFX // MT: the Ducks list in column 3
+            case 3:
+                if (MP->masterfxDucksColumn() == 3)
+                {
+                    MP->moveMasterfxDucks(1);
+                }
+                break;
+#endif
             case 4:
-#if MT_HAS_MASTERFX // MT:
-                if (MP->masterfxDucksShown())
+#if MT_HAS_MASTERFX // MT: the Tracks list in column 4
+                if (MP->masterfxDucksColumn() == 4)
                 {
                     MP->moveMasterfxDucks(1);
                     break;
@@ -1122,9 +1159,17 @@ static void functDelete()
             case 0: setDefaultLimiterAttack(); break;
             case 1: setDefaultLimiterRelease(); break;
             case 2: setDefaultLimiterTreshold(); break;
-            case 4:
 #if MT_HAS_MASTERFX // MT: the Ducks list back to the master
-                if (MP->masterfxDucksShown())
+            case 3:
+                if (MP->masterfxDucksColumn() == 3)
+                {
+                    MP->clearMasterfxDucks();
+                }
+                break;
+#endif
+            case 4:
+#if MT_HAS_MASTERFX // MT: the Tracks list back to the master
+                if (MP->masterfxDucksColumn() == 4)
                 {
                     MP->clearMasterfxDucks();
                     break;
@@ -1462,9 +1507,10 @@ void cMasterParams::switchToLimiterScreen()
     ip->setButtonObj(interfaceButton2, buttonPress, functSelectLimiterThreshold);
     ip->setButtonObj(interfaceButton4, buttonPress, functSelectLimiterSidechain);
     ip->setButtonObj(interfaceButton7, buttonPress, functLimiterCancel);
-#if MT_HAS_MASTERFX // MT: the plugin's own knobs
+#if MT_HAS_MASTERFX // MT: the plugin's own knobs, and a ducking plugin's Ducks list
     ip->setButtonObj(interfaceButton5, functSelectMasterfxKnob);
     ip->setButtonObj(interfaceButton6, functSelectMasterfxKnob);
+    ip->setButtonObj(interfaceButton3, buttonPress, functSelectLimiterDucks);
 #endif
 
     keyboardManager.deactivateKeyboard();
@@ -1653,16 +1699,8 @@ static void functSelectLimiterThreshold()
 
 static void functSelectLimiterSidechain()
 {
-#if MT_HAS_MASTERFX // MT: Shift switches the column between Sidechain and Ducks; in Ducks a press
-                    // on the column marks the item under the cursor
-    if (MP->buttons->isButtonPressed(interfaceButtonShift) && mods::masterfx::canDuck())
-    {
-        MP->showMasterfxDucks(!MP->masterfxDucksShown());
-        MP->selectedPlaceLimiter = 4;
-        MP->refreshLimiterFrame();
-        return;
-    }
-    if (MP->masterfxDucksShown())
+#if MT_HAS_MASTERFX // MT: the Tracks list in the column: a press on it marks the item under the cursor
+    if (MP->masterfxDucksColumn() == 4)
     {
         if (MP->selectedPlaceLimiter == 4)
         {
@@ -1688,6 +1726,23 @@ static void functSelectLimiterSidechain()
     MP->selectedPlaceLimiter = 4;
     MP->refreshLimiterFrame();
 }
+
+#if MT_HAS_MASTERFX // MT: the Ducks list in column 3: a press selects it, and on it marks the item
+                    // under the cursor
+static void functSelectLimiterDucks()
+{
+    if (MP->masterfxDucksColumn() != 3)
+    {
+        return;
+    }
+    if (MP->selectedPlaceLimiter == 3)
+    {
+        MP->toggleMasterfxDuck();
+    }
+    MP->selectedPlaceLimiter = 3;
+    MP->refreshLimiterFrame();
+}
+#endif
 
 static void functLimiterCancel()
 {

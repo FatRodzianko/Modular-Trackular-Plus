@@ -350,14 +350,15 @@ Master FX mod on:
   pick them, the encoder and Up/Down move one step a tick, and Delete puts a knob back to its
   default. The Delay page has no free column: a delay plugin's own knobs stay at the project's
   values, or their defaults, so give a delay plugin defaults that work.
-- **The Ducks list** (section 3.4): on the Limiter page, Shift + the button under column 4 swaps
-  CE's Sidechain list for it, while a plugin with `PTMFX_FLAG_DUCK` plays. It lists Master,
-  Track 1 to 8 and Synth 1 to 3. The button marks or clears the item under the cursor (Master
-  clears them all), Delete goes back to Master, and the column's label says `Master`, the one
-  track, or `3 tracks`. Shift + the button again shows the Sidechain list; the page always
-  opens on it.
-- **The Tracks list** (section 3.5) is in the same column, always up, while a plugin with
-  `PTMFX_FLAG_BUS` plays. It lists the same items and works the same way; Shift does nothing.
+- **The Ducks list** (section 3.4): in column 3 of the Limiter page, always up while a plugin
+  with `PTMFX_FLAG_DUCK` plays; CE's Sidechain list stays in column 4, and CE's Gain Reduce meter
+  moves above Back (labelled `Gain Reduce` over `Back`). It lists Master, Track 1 to 8 and
+  Synth 1 to 3. The button under the column selects it, then marks or clears the item under the
+  cursor (Master clears them all), Delete goes back to Master, and the column's label says
+  `Master`, the one track, or `3 tracks`.
+- **The Tracks list** (section 3.5) is in column 4, in CE's Sidechain list's place, always up,
+  while a plugin with `PTMFX_FLAG_BUS` plays (a bus plugin has no key). It lists the same items
+  and works the same way; Gain Reduce stays in column 3.
   Picking another plugin in the Limiter slot sets the Ducks or Tracks list back to Master.
 - **A project stores** each slot's file name and its own knobs' values, and the Ducks or Tracks
   list. A

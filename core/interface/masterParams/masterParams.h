@@ -63,9 +63,13 @@ class cMasterParams : public ModuleBase
     bool showMasterfxLimiterColumn(uint8_t column); // shown if the column has an own knob
     // The time guard stopped a plugin: the page's words for it again
     void showMasterfxBypassed(uint8_t slot);
-    // The Limiter page's column 4: CE's Sidechain list, the Ducks list (Shift + its button), or a
-    // bus plugin's Tracks list (always)
+    // The Limiter page's Ducks list, for a ducking plugin, in column 3 (the Gain Reduce meter then
+    // above Back), or a bus plugin's Tracks list in column 4 (CE's Sidechain list's control); always
+    // up for either
     bool masterfxDucksShown();
+    uint8_t masterfxDucksColumn(); // 3 or 4, 0 if it isn't up
+    uint8_t masterfxMeterColumn(); // the Gain Reduce meter's column: 3, or 7 above Back
+    void showMasterfxLimiterMeter();
     void showMasterfxDucks(bool show);
     void moveMasterfxDucks(int16_t by);
     void toggleMasterfxDuck(); // the item under the cursor
