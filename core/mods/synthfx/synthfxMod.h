@@ -10,7 +10,7 @@
 //
 // A mono part stays mono until a slot holds a plugin that widens (WIDENS: the Chorus, Flanger and
 // Phaser of the default pack), then it goes out as stereo (one more audio block). A stereo
-// engine's plugins get both sides (CE's factory ones: PERC and GRAIN; an engine says so in its
+// engine's plugins get both sides (CE's factory one: PERC; an engine says so in its
 // metadata). An engine that renders its own sends (PERC) has only its main output in the slots.
 //
 // WAVE and PHASE (core/mods/synths) have no effects of their own: these slots are theirs. They go
@@ -139,6 +139,12 @@ struct Insert
 // engineStereo: the engine renders stereo (PERC). With the mod Off, or both slots empty, it is
 // a few tests and the part plays as CE's.
 Insert begin(int part, const polysynth::Patch* patch, bool engineStereo);
+
+// Audio interrupt, before CE's silent-part check (PolySynth::update): whether a slot of the part
+// still runs, a plugin or one fading out. CE's 0238786 skips rendering a part whose voices are
+// silent; while a slot runs the part renders as before, so the plugin's tail plays out and its
+// delay lines don't hold an old block for the next note.
+bool holdsPart(int part);
 
 // Audio interrupt, after the engine has rendered the part's block into left (and right, if
 // engineStereo): the slots, in place. right is written whenever insert.stereo.

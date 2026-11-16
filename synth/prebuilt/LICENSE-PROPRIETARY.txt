@@ -6,14 +6,9 @@ This license governs ONLY the precompiled proprietary factory `.psyn`
 synthesizer plugin binaries located in `synth/prebuilt/`:
   - ACD.psyn
   - DIRT.psyn
-  - DWA.psyn
   - FAT.psyn
-  - GRAIN.psyn
   - PERC.psyn
-  - PHZ.psyn
-  - PMD.psyn
   - VAP.psyn
-  - WAVS.psyn
   - WTFM.psyn
 
 1. Grant of License (Polyend Hardware & Non-Commercial DIY Projects)

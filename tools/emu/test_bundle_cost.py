@@ -22,12 +22,13 @@ import struct
 import sys
 from pathlib import Path
 
-from unicorn import UC_HOOK_CODE, UC_HOOK_MEM_READ, UC_HOOK_MEM_WRITE
+from unicorn import UC_HOOK_CODE, UC_HOOK_MEM_READ, UC_HOOK_MEM_WRITE, UC_MEM_WRITE
 from unicorn.arm_const import (UC_ARM_REG_R0, UC_ARM_REG_R1, UC_ARM_REG_R2, UC_ARM_REG_R3, UC_ARM_REG_S0,
                                UC_ARM_REG_SP)
 
 sys.path.insert(0, str(Path(__file__).parent))
 from boot_rig import BootRig  # noqa: E402
+from machine import after_hooked_store  # noqa: E402
 from test_masterfx import DELAYS, REVERBS  # noqa: E402
 from test_masterfx_rig import Graph  # noqa: E402
 
@@ -122,6 +123,8 @@ def effect_cost(mods):
             state["insns"] += 1
 
         def mem(uc, access, addr, size, value, user):
+            if access == UC_MEM_WRITE:
+                after_hooked_store(uc)
             if size >= 4 and addr % 4:
                 pc = uc.reg_read(15)
                 state["odd"][pc] = state["odd"].get(pc, 0) + 1

@@ -41,7 +41,7 @@ REPO = Path(__file__).resolve().parents[2]
 SYNTHS = REPO / "build" / "Synths"           # `make psyn`
 OWN_PSYN_BUILD = REPO / "core" / "mods" / "synths" / "psyn" / "build"
 SYNTHS_FALLBACK = (REPO / "synth" / "prebuilt", REPO / "synth-plugin-sdk" / "build", OWN_PSYN_BUILD)
-FACTORY_SYNTHS = ("ACD", "DIRT", "FAT", "GRAIN", "PERC", "VAP", "WTFM")
+FACTORY_SYNTHS = ("ACD", "DIRT", "FAT", "PERC", "VAP", "WTFM")  # synth/prebuilt; CE dropped GRAIN (CE 26baedf)
 OWN_SYNTHS = ("WAVE", "PHASE")                # ours, open: core/mods/synths/psyn
 PSYN_HEADER = 128
 HEAP_SIZE = 138_752                 # CE's fixed heap
@@ -54,6 +54,11 @@ class ClosedCode(Exception):
     """A hook was asked for inside the closed engines' memory."""
 
 
+# Engine files to put on the fake card in place of build/Synths' (file name -> bytes), for a test that
+# needs a given build of an engine; set before a rig is made, and cleared after
+SYNTH_OVERRIDES: dict[str, bytes] = {}
+
+
 def synth_files():
     """The .psyn engines for the fake card's /Synths/: name -> bytes."""
     folders = [SYNTHS] if SYNTHS.is_dir() and any(SYNTHS.glob("*.psyn")) else list(SYNTHS_FALLBACK)
@@ -64,6 +69,7 @@ def synth_files():
     missing = [n for n in FACTORY_SYNTHS + OWN_SYNTHS if f"{n}.psyn" not in files]
     if missing:
         raise RuntimeError(f"no {', '.join(missing)}.psyn for the fake card: run `make psyn`")
+    files.update(SYNTH_OVERRIDES)
     return files
 
 

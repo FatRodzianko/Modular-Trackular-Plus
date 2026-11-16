@@ -800,10 +800,57 @@ doesn't say "Limiter" in its controls.
   8,172); `check_mockups` 0 failures. Not run, by the user's choice: the release tier, which waits
   for the CE merge.
 
+### modular with CE f25fb89 merged in (2026-11-16)
+
+`modular` (`6301640`: CE's `ed51301`, `cc53303` and `f25fb89` merged, 23 CE commits) merged into
+this branch. Each CE change against what 2.1 adds:
+
+- **The bus hook (fixed).** CE's 7482cc8 rewrote the mixer: with `AUDIO_NULL_IS_SILENCE` (on, in
+  `AudioStream.h`) `AudioMixer::update` calls `AudioMixerBase::mix`, and the old update is under
+  `#else`. git merged 2.1's MT: hook into the `#else` branch only, with no conflict, so Glue on
+  chosen tracks would have done nothing. The hook is now in the built update too, and
+  `modsBusUpdate` sets an input's `previousMultiplier` when it has no block, as CE's `mix()` does
+  (its gain ramp is finished; `isInputSilenced` reads it). The rest of `modsBusUpdate` already
+  takes a missing block as silence and sends nothing on a side with none, as `mix()` does; the
+  plugin still runs on a silent bus. `nm`: `AudioMixer<11>::modsBusUpdate<11>()` is in the image.
+- **The dynamics slot over silence:** `modular`'s `AudioEffectLimiter::modsUpdate` runs the plugin
+  on a zeroed block when the master sends none. Both of 2.1's dynamics plugins go through it: the
+  rig's silence check now runs Compressor and Glue (below), and `dynamicsProcess` still sets
+  `busLive` on every block.
+- **Settings in SDRAM** (`modular`'s DTCM fix): 2.1's 208-byte record is there too, emptied by
+  `masterfx::init`. Read and written in the main loop only, as before.
+- **The display lists** (ed51301): the Limiter page uses CE's controls only; the rig's upper bound
+  is as before (6,996 of 8,172 bytes on Compressor's page).
+- No other CE change touches 2.1's code.
+
+Tests changed, each for what the firmware does:
+- `test_masterfx_rig.py` dynamics: `modular`'s silence check was written for 2.0's Glue (2.1's
+  Compressor). It runs on Compressor as before, and on the new Glue with 350 silent blocks: Glue's
+  Release is 200 ms, and after 19 blocks it is still turning down (the next note 4.7 dB down; 2.6 dB
+  after 59 blocks with its fastest Release; 0.06 dB after 349), which a frozen level wouldn't do.
+- `compare_cost.py`: `modular`'s plain-CE Stock row and 2.1's Compressor and Glue rows together;
+  "each update runs" is now over 500 instructions, as CE's tracks mixer costs about 750 here.
+- `make_masterfx_test_project.py --masterfx-compressor` writes `M6 1 voice ACD Compressor duck`:
+  Compressor ducking Synth 1, CE's Sidechain on Track 1 and Threshold -20 dB in project.mt (0x4FB
+  and 0x128, from `cFileManager::writeProjectFileToFileStruct`). Booted and played in the emulator:
+  ducking live, the synth down to about 1 % on the kick and under 70 % for about 96 ms.
+
+What ran, on `TrackerPlus_MT_ce1116` (mods), `TrackerPlus_ref_ce1116` (MT_NO_MODS, the reference)
+and `TrackerPlus_MT_ce1116_diag` (the lockup recorder), all from this tree:
+- The build with -Werror; host tests, 14 suites, 0 failures; `check_mockups` 43 images, 0 failures.
+- `mem_budget.py`: DTCM 4,136 free (floor 4,096; `modular` alone 4,176), ITCM 39,808, SDRAM 610,824,
+  Flash 14,964,404.
+- The release tier: 53 jobs, 51 passed; the two failures were the tests above, which then passed.
+  The jobs that import the project maker ran before M6 was added to it (an added function only).
+- `verify_card.py` on M2, M3, M5 and M6 with the recorder image: Glue (Attack 10.0 ms: the new one)
+  in M2, Glue on the drums in M5, Compressor in M6, GuardSlow in M3; the titles without "Limiter".
+- Not run: the MT_NO_MODS image against plain CE f25fb89 byte for byte (`modular`'s merge did
+  that; 2.1 adds only `MT_HAS_MASTERFX` code).
+
 ### Not checked
 
 - Anything on the unit: the sound of Glue and Compressor, the cost in cycles, the pack replaced on a
-  real card. The device list has each.
+  real card, the Gain Reduce meter above Back, Back itself. The device list has each.
 - The cost with more than one bus track playing: estimated from the loop, measured with one.
 - The display bytes on the unit: the emulator's figure is an upper bound.
 - Glue's sound against a reference compressor: none was used; the rig checks what it does

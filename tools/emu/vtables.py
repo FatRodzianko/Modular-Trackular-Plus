@@ -67,12 +67,12 @@ def _method_of(symbol: str, cls: str | None = None):
     """('millis', 'Ev') from _ZN9TimerImpl6millisEv; ('~D1', 'Ev') for a destructor. With cls, None unless
     the method is cls's own; without, a method of any one class (an inherited one: ButtonsBaseImpl's)."""
     if cls is None:
-        m = re.match(r"_ZN(\d+)", symbol)
+        m = re.match(r"_ZNK?(\d+)", symbol)        # K: a const method (_ZNK12UsbAudioImpl14isOutputActiveEv)
         if not m:
             return None
         cls = symbol[m.end():m.end() + int(m.group(1))]
-    prefix = f"_ZN{len(cls)}{cls}"
-    if not symbol.startswith(prefix):
+    prefix = next((p for p in (f"_ZN{len(cls)}{cls}", f"_ZNK{len(cls)}{cls}") if symbol.startswith(p)), None)
+    if prefix is None:
         return None
     rest = symbol[len(prefix):]
     if rest[:2] in ("D0", "D1", "D2", "C1", "C2"):

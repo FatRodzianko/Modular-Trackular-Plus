@@ -182,8 +182,8 @@ Since `masterfx-2.0`, Master FX plays through `.ptmfx` plugins in `/MasterFX/`; 
 its pack there when a file is missing, and since `masterfx-2.1` replaces a pack file that is still
 as an earlier release shipped it. In 2.1, 2.0's Glue is Compressor, and Glue is a new bus compressor
 with its own Attack, Release and Threshold and a Tracks list. `python tools/emu/make_masterfx_test_project.py "<project>"
-build/device/masterfx_glue --masterfx-plugins` writes the projects (`--masterfx-duck` writes `M4` and
-`--masterfx-glue` writes `M5`): all three parts on ACD with its Init patch, and a `mods.bin` with Master
+build/device/masterfx_glue --masterfx-plugins` writes the projects (`--masterfx-duck` writes `M4`,
+`--masterfx-glue` `M5` and `--masterfx-compressor` `M6`): all three parts on ACD with its Init patch, and a `mods.bin` with Master
 FX On and its record 4 (version 3 since 2.1: five own knobs a slot, then the Ducks or Tracks set). `tools/masterfx/device/build.sh`
 writes the card's extra plugins to `build/device/masterfx_card/MasterFX`: GuardSlow (and the other
 guard tests, which are for the emulator), and the SDK's Room and Ducker as a user would build them.
@@ -195,6 +195,7 @@ guard tests, which are for the emulator), and the SDK's Room and Ducker as a use
 | `M3 1 voice ACD GuardSlow` | 1 | version 3: GuardSlow in the dynamics slot, Load Heavy | The time guard: about 600,000 instructions a block, over its eighth of a block on any count, so the slot is bypassed 8 blocks after it starts and the Master page's Limiter column reads Bypassed. The master passes through, so the voice plays on |
 | `M4 1 voice ACD Room Ducker` | 1, plus a kick on track 1 and a closed hat on track 3 | version 3: Room and Ducker, the Ducks list on Master | Written by `--masterfx-duck`. The Ducks list and the own knobs: the kick as the Sidechain key ducking Track 3, then Synth 1 as well; Ducker's Depth and Curve, Room's Width, then Compressor's Ratio and Makeup. Needs Room and Ducker on the card. The play rig (`PlayRig`) doesn't load samples; the bus test boots the firmware (`BootRig`), which does |
 | `M5 1 voice ACD Glue drums` | 1, plus M4's kick and hat | version 3: Glue on Track 1 and Track 3 (the Tracks list), Attack 1.0 ms, Threshold -30 dB, Ratio 10:1, Makeup +6 dB | Written by `--masterfx-glue`. Glue on a bus of the two drum tracks: the drums squashed together, the held synth voice untouched. The rig's `bus` test checks the same in the emulator: sample for sample with CE's mixers on Hard Clip under full scale, and against CE's Saturate curve with Saturate |
+| `M6 1 voice ACD Compressor duck` | 1, plus M4's kick and hat | version 3: Compressor, the Ducks list on Synth 1; in project.mt CE's Sidechain on Track 1 and Threshold -20 dB | Written by `--masterfx-compressor`. Compressor's page since 2.1: the Sidechain list in column 3, the Ducks list in column 4, the Gain Reduce meter above Back. The kick ducks the held synth voice on every hit. In the emulator, booted and played: the synth drops to about 1 % on the kick and is under 70 % for about 96 ms, then back to full |
 
 Both firmwares are lockup recorder builds: today's release (`CE_20261113`, `d9a6795`) runs `M1` only,
 the plugin firmware all three. Lightest first is `M3`, but it needs GuardSlow on the card, so it

@@ -134,7 +134,7 @@ them. `format` is optional.
 ### 3.3 Channels
 
 - **Mono part:** `R` is null; the plugin works on `L` only.
-- **Stereo part** (an engine whose metadata says stereo, such as CE's PERC and GRAIN):
+- **Stereo part** (an engine whose metadata says stereo, such as CE's PERC):
   `R` is given and `in_channels` is 2.
 - **Widening plugin on a mono part** (`PTSFX_FLAG_WIDENS`): `R` is given for output only and
   `in_channels` is 1. The part goes out as stereo (one more audio block) while such a plugin
@@ -258,8 +258,8 @@ synth part's Edit Patch screen, press button 3 and pick it in FX1 or FX2.
 
 With the Synth FX mod on, button 3 on a synth part's Edit Patch screen shows the Synth FX rows:
 FX1, its plugin's knobs, FX2, its plugin's knobs. Button 3 again, or picking a section, goes
-back. On a row of a sample slot (an engine with sample slots, such as CE's GRAIN), button 3
-is CE's Load WAV instead; its label says which.
+back. On a row of a sample slot (an engine whose metadata gives it sample slots), button 3 is
+CE's Load WAV instead; its label says which.
 
 - **A slot's row** picks the plugin: None, then every plugin in `/SynthFX/` that loaded
   cleanly, by its header's name, without the one in the part's other slot.

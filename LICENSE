@@ -95,10 +95,9 @@ PART 3: PRECOMPILED FACTORY SYNTH PLUGINS (`synth/prebuilt/`) & THIRD-PARTY CODE
    All open-source host, mixer, amplifier, and master FX DSP code (`libPolySynth`,
    `PolyDSP`, `Delay`, `Reverb`, `Modulation`) is compiled from source under
    Part 1. The precompiled factory `.psyn` plugin binaries in `synth/prebuilt/`
-   (`ACD.psyn`, `DIRT.psyn`, `DWA.psyn`, `FAT.psyn`, `GRAIN.psyn`, `PERC.psyn`,
-   `PHZ.psyn`, `PMD.psyn`, `VAP.psyn`, `WAVS.psyn`, `WTFM.psyn`) contain
-   Polyend's proprietary factory synthesizer engines. They are governed by
-   `synth/prebuilt/LICENSE-PROPRIETARY.txt`, which permits free use on
+   (`ACD.psyn`, `DIRT.psyn`, `FAT.psyn`, `PERC.psyn`, `VAP.psyn`, `WTFM.psyn`)
+   contain Polyend's proprietary factory synthesizer engines. They are governed
+   by `synth/prebuilt/LICENSE-PROPRIETARY.txt`, which permits free use on
    authentic Polyend hardware as well as personal, hobbyist, and DIY
    non-commercial projects, while prohibiting embedding or redistributing those
    proprietary binaries in commercial third-party products or paid bundles.

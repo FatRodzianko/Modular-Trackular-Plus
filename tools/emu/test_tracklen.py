@@ -62,7 +62,7 @@ GRID_OUTSIDE_PATTERN = 20
 PLAYMODE_BACKWARD = 1
 MENU_LIST_TEXT_ACTION = 4
 DISPLAY_LIMIT = 8172
-FONT_SIZE = 172
+FONT_COUNT = 5                  # displayFontCount (display.cpp)
 VIEWS = (0, 1, 2, 4, 8, 3, 5, 9, 6, 10, 12)     # patternViewMode: 4 tracks, or 8 with one or two columns
 
 failures = 0
@@ -929,11 +929,13 @@ class Drawing:
         m.call(m.addr(f"_ZN{len(cls)}{cls}C1EP20strControlProperties"), self.obj, 0)
         self.tp = m.alloc(TP_SIZE, 8)
         fonts = m.sym("fonts")          # as the display's init sets them, from its font files
-        for i in range(fonts.size // FONT_SIZE):
-            a = fonts.addr + i * FONT_SIZE
+        size = fonts.size // FONT_COUNT  # strFont: data[] (148 bytes before CE's 9d6d10a, 256 since), then 24
+        data = size - 24
+        for i in range(FONT_COUNT):
+            a = fonts.addr + i * size
             m.write(a, bytes([0]) + bytes([10] * 127))
-            m.write(a + 152, struct.pack("<h", i + 1))
-            m.write(a + 164, struct.pack("<HH", 10, 20))
+            m.write(a + data + 4, struct.pack("<h", i + 1))       # handle
+            m.write(a + data + 16, struct.pack("<HH", 10, 20))    # width, height
         self.colors = m.alloc(4 * 32, 4)
         for i in range(32):
             m.w32(self.colors + 4 * i, 0x100000 + i)

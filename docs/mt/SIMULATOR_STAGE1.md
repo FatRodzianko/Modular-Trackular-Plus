@@ -757,6 +757,10 @@ Open and 2 virtual seconds of Play. Five runs in parallel, so the wall times inc
   So the main instance uses block hooks and the interrupt instance code hooks.
 - `emu_start(timeout=…)` costs about 15 ms a call. A watchdog thread stops a hung interrupt instead.
 - `mask_step` is 1, so a held interrupt fires on the first instruction after the unmask.
+- A store inside an IT block that hits a `UC_HOOK_MEM_WRITE` range leaves the IT state set, so the
+  code after the branch that ends the block runs conditionally (found 2026-11-16, below). A write
+  hook whose range the store misses doesn't, and neither do read hooks. Every write hook calls
+  `machine.after_hooked_store`, which clears it.
 
 **Not done or not checked:**
 - `tracklen` and `synthfx` haven't run. Neither has 10 s of Play: only 2 s.
@@ -927,3 +931,44 @@ Each run takes about 1 to 1.5 minutes of wall time. Run five at a time to stay i
 limit. Example:
 
     python tools/emu/sim_songstop.py <axf> <held project> --patterns 48 --card-scale 8 --mod colorsong
+
+## On CE cc53303 (2026-11-16)
+
+The simulator hadn't run since CE's plugin synths. On the CE `cc53303` merge it didn't start, then crashed, on
+every current image, stock CE included. Four rig fixes, none in the firmware:
+- `vtables.py` didn't name const methods (`_ZNK...`), so CE's new `UsbAudio::isOutputActive` had no model.
+  The model answers false, as the IMX does with no USB host. Images without the slot get none.
+- The DisplayDriver model was for the stream DMA that CE's 9d6d10a removed. It now follows the IMX
+  driver: a display-list write goes out by DMA in the background, at 32 bits per word at 30 MHz
+  (`t_dl_word_ps`); every other chip access waits for it, as `MCU_CSlow` does; a swap happens at the
+  panel's next frame (`t_panel_frame_ns`, 18.48 ms). A display call in an interrupt breaks an invariant.
+- The Unicorn IT-block bug above: newlib's `malloc` returned the address of its own free list, and the
+  boot crashed in `Synth::init`. `machine.after_hooked_store` fixes it, in every rig with a write hook.
+- `sim_songstop.py` watched only the first `copyBufferToBufferPattern` return in
+  `loadPatternFromWorkspace`, which since cc53303 is the no-file branch. It watches both.
+
+**Results** (placeholder timing, so these compare builds):
+
+| Run | Before the merge (`2cbd759`) | After (`cc53303`) |
+|---|---|---|
+| `sim_boot.py`, D1 MT screens, mods, 1 s of Play | ok: 22 notes, free heap 79,536, stack 8,344 | ok: 22 notes, free heap 72,692, stack 8,360 |
+| Song-stop, stock, card scale 1 | plays, loads 2.56 ms | plays, loads 2.40 ms |
+| Song-stop, stock, card scale 7 | plays, 15.59 ms | plays, 16.04 ms |
+| Song-stop, stock, card scale 8 | plays, 17.33 ms | stops at the first pattern change |
+| Song-stop, Color Song / Copy to New, scale 7 | | plays, 16.10 / 16.04 ms |
+| Song-stop, Color Song / Copy to New, scale 8 | | stops, as stock does |
+
+CE's cc53303 asks the card for a pattern file's size once more on each load: the check for a
+zero-length file in `loadPatternFromWorkspace`, before the size it already asked for. That is 1.742
+against 1.642 ms of card time per load at scale 1, so 0.8 ms more at scale 8, where the margin was
+about 0.4 ms. So at 800 BPM on a card 8 times slower than the placeholder, stock CE now stops the
+song at the first pattern change, and the mods stop with it, not earlier. Each mod's loads stay
+within 0.06 ms of stock's, and the card guard holds: no card reads and no copy checks during
+play.
+
+The release tier now runs the simulator: `sim boot held` on both builds, and the 48-pattern
+800 BPM song at card scale 1 with no mod, with Color Song and with Copy to New, each of which
+must play to the end.
+
+**Not checked:** a real card's time for the extra size call (FatFs looks the file up in its
+folder, which may be cached); the scale-8 result on the unit.

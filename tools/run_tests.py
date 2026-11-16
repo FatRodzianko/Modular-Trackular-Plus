@@ -159,9 +159,13 @@ def jobs_for(args, projects):
     play_gaps = "300,3000" if args.tier == "release" else "100,1500"
     worst_loops = {"held": 300, "worst": 20 if args.tier == "release" else 60}
     jobs.append(Job("masterfx play", e / "test_masterfx_rig.py", mods, ref, "play", inputs=both))
+    # USB audio with a computer attached, unplugged and attached again (CE's 7482cc8 sends only while
+    # one listens): the mods' master, reverb, delay and synth parts on USB as on the speaker
+    jobs.append(Job("usb audio", e / "test_usb_audio.py", mods, ref, inputs=both))
     # Each slot's cost against today's release, in instructions (tools/masterfx/compare_cost.py)
+    # Stock against plain CE from the same commit (ref): CE's own costs move with each CE merge
     jobs.append(Job("masterfx cost", ROOT / "tools" / "masterfx" / "compare_cost.py", mods, MASTERFX_BEFORE,
-                    inputs=[mods, MASTERFX_BEFORE]))
+                    "--reference", ref, inputs=[mods, MASTERFX_BEFORE, ref]))
     seeds = (1,) if args.tier == "release" else (1, 2, 3, 4)
     blocks = 20000 if args.tier == "release" else 100000
     jobs.append(Job("masterfx long stress", e / "stress_masterfx.py", mods, "--blocks", blocks,
@@ -182,6 +186,17 @@ def jobs_for(args, projects):
                                 "--preempt", "3000,120000", "--preempt-play", play_gaps, inputs=[axf, folder]))
         jobs.append(Job("send leak", e / "test_send_leak.py", mods, ref, projects["held"],
                         inputs=[mods, ref, projects["held"]]))
+        # The simulator (docs/mt/SIMULATOR_STAGE1.md): the whole firmware on a virtual clock, booting as
+        # the unit boots with the audio interrupt on; then an 800 BPM song of 48 patterns that must play
+        # through its pattern loads, with the card mods at work. Placeholder card timing: this compares
+        # builds, it doesn't say a real card keeps up.
+        held = projects["held"]
+        for firmware, axf in (("mods", mods), ("reference", ref)):
+            jobs.append(Job(f"sim boot held {firmware}", e / "sim_boot.py", axf, held, "--play", "1.0",
+                            inputs=[axf, held]))
+        for mod, axf in (("none", ref), ("colorsong", mods), ("copytonew", mods)):
+            jobs.append(Job(f"sim songstop {mod}", e / "sim_songstop.py", axf, held, "--patterns", 48,
+                            "--mod", mod, "--expect-play", inputs=[axf, held]))
         jobs.append(Job("cost", e / "test_bundle_cost.py", mods, ref, projects["worst"], inputs=[mods, ref, projects["worst"]]))
         short = projects["tracklen"]
         jobs.append(Job("boot tracklen", boot, mods, short, "--blocks", 300, "--expect-tracklen", inputs=[mods, short]))

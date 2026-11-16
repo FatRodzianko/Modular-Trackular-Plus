@@ -153,6 +153,8 @@ void testSteps()
         step.micromove = 0;
         step.volume = 0;
         check(outcomes(step, s, true, volumeOf) == span(0, 0), "V 0 stays 0");
+        step.volume = -2;
+        check(outcomes(step, s, true, volumeOf) == span(-2, -2), "CE's !OFF (-2) stays !OFF");
         check(outcomes(step, s, true, micromoveOf) == span(0, 10), "m 0 is a value, in a window");
     }
 

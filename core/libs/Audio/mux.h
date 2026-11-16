@@ -19,6 +19,7 @@ class AudioMux : public AudioStream
     }
     virtual void update(void);
     void setOut(uint8_t channel);
+    void setEnabled(bool enabled);
 #if MT_HAS_MASTERFX // MT: the chosen input's block once its source has sent it this cycle (until
                     // update() takes it), or null. Read only, in the audio interrupt.
     const audio_block_t* modsPeek() const { return inputQueueArray[outChannel]; }
@@ -26,6 +27,7 @@ class AudioMux : public AudioStream
 
   private:
     uint8_t outChannel = 0;
+    bool muxEnabled = true;
     audio_block_t* inputQueueArray[MUX_SIZE];
 };
 

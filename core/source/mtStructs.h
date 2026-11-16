@@ -70,9 +70,10 @@ const uint32_t EXTERAL_MEMORY_ADDRESS = 0x80000000;
 const uint32_t TOTAL_EXTERNAL_MEMORY = (64 * 1024 * 1024); // 64 MB
 const uint32_t PSYN_RAM_POOL_SIZE = (6 * 1024 * 1024);      // 6 MB for .psyn plugins & synth SamplePool
 #if MT_MODS // MT: 1 MiB goes to the mods' buffers. See docs/mt/CE_FIRMWARE_MAP.md section 15.
-const uint32_t SAMPLE_MEMORY_SIZE = ((60 * 1024 - 64 - 1024) * 1024) - PSYN_RAM_POOL_SIZE;
+const uint32_t SAMPLE_MEMORY_SIZE = ((60 * 1024 - 64 - 96 - 1024) * 1024) - PSYN_RAM_POOL_SIZE;
 #else
-const uint32_t SAMPLE_MEMORY_SIZE = ((60 * 1024 - 64) * 1024) - PSYN_RAM_POOL_SIZE; // ~54 MB
+// ~54 MB: 60 MB minus 64 KB for pattern buffers, 96 KB for the display lists kept in the MCU and the pool above
+const uint32_t SAMPLE_MEMORY_SIZE = ((60 * 1024 - 64 - 96) * 1024) - PSYN_RAM_POOL_SIZE;
 #endif
 #endif
 

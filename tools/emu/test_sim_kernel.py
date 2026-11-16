@@ -363,9 +363,72 @@ def resolver():
             check(True, f"resolver: {what} is refused")
 
 
+def const_methods():
+    """A const method's symbol starts _ZNK: CE's UsbAudio::isOutputActive (7482cc8) is one."""
+    from vtables import _method_of
+    check(_method_of("_ZNK12UsbAudioImpl14isOutputActiveEv", "UsbAudioImpl") == ("isOutputActive", "Ev"),
+          "resolver: a const method is named")
+    check(_method_of("_ZNK12UsbAudioImpl14isOutputActiveEv") == ("isOutputActive", "Ev"),
+          "resolver: a const method of any class is named")
+
+
+def it_after_hooked_store():
+    """machine.after_hooked_store: a store inside an IT block that a write hook sees must not leave the IT
+    state set for the code after the branch that ends the block (Unicorn 2.1.4 does). Every IT block of 1 to
+    4 stores and adds, both conditions, against a run with no hook; then stopped after each instruction."""
+    from machine import after_hooked_store
+    from unicorn import UC_HOOK_MEM_WRITE
+    import itertools
+    store, add = {"t": "3260", "e": "6260"}, {"t": "0131", "e": "0233"}   # str r2,[r6] / [r4,#4]; adds r1/r3
+
+    def build(cond, pattern, kinds):
+        mask = 0
+        for i, p in enumerate(pattern[1:]):
+            mask |= (cond & 1 if p == "t" else 1 - (cond & 1)) << (3 - i)
+        mask |= 1 << (3 - (len(pattern) - 1))
+        body = bytes.fromhex("0028" + struct.pack("<H", 0xBF00 | (cond << 4) | mask).hex()
+                             + "".join((store if k == "s" else add)[p] for p, k in zip(pattern, kinds)))
+        code = bytearray(0x80)
+        target = bytes.fromhex("3846" "04f10b06" "0135" "fee7")         # mov r0,r7; add.w r6,r4,#11; adds r5,#1; b .
+        code[4:4 + len(target)] = target
+        code[0x20:0x20 + len(body)] = body
+        at = 0x1020 + len(body)
+        code[at - 0x1000:at - 0x1000 + 2] = struct.pack("<H", 0xE000 | (((0x1004 - (at + 4)) >> 1) & 0x7FF))
+        return bytes(code)
+
+    def run(code, r0, hook, split=0):
+        uc = Uc(UC_ARCH_ARM, UC_MODE_THUMB | UC_MODE_MCLASS)
+        uc.mem_map(0x1000, 0x1000)
+        uc.mem_write(0x1000, code)
+        uc.mem_map(0x20000000, 0x1000)
+        for reg, v in ((A.UC_ARM_REG_R0, r0), (A.UC_ARM_REG_R2, 0x55), (A.UC_ARM_REG_R6, 0x20000100),
+                       (A.UC_ARM_REG_R4, 0x20000200), (A.UC_ARM_REG_R7, 0x77)):
+            uc.reg_write(reg, v)
+        if hook:
+            uc.hook_add(UC_HOOK_MEM_WRITE, lambda u, *a: after_hooked_store(u), begin=0x20000000, end=0x20000FFF)
+        uc.emu_start(0x1021, 0x100C, count=split)
+        if uc.reg_read(A.UC_ARM_REG_PC) != 0x100C:
+            uc.emu_start(uc.reg_read(A.UC_ARM_REG_PC) | 1, 0x100C)
+        return ([uc.reg_read(getattr(A, f"UC_ARM_REG_R{i}")) for i in range(8)],
+                bytes(uc.mem_read(0x20000100, 4)), bytes(uc.mem_read(0x20000204, 4)))
+    cases = wrong = 0
+    for length in (1, 2, 3, 4):
+        for rest in itertools.product("te", repeat=length - 1):
+            pattern = "t" + "".join(rest)
+            for kinds in itertools.product("sa", repeat=length):
+                for cond in (0, 1):
+                    code = build(cond, pattern, kinds)
+                    for r0 in (0, 1):
+                        want = run(code, r0, False)
+                        for split in range(0, 9):
+                            cases += 1
+                            wrong += run(code, r0, True, split) != want
+    check(wrong == 0, f"a hooked store in an IT block leaves no IT state behind ({cases} cases)", f"{wrong} wrong")
+
+
 def main():
     for test in (cadence, masks, waits, overload, chosen, idle_skip, determinism, thumb_masks, two_instances,
-                 resolver):
+                 resolver, const_methods, it_after_hooked_store):
         test()
     print("FAILED: " + ", ".join(failed) if failed else "all passed", flush=True)
     return 1 if failed else 0

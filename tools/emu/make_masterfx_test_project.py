@@ -12,6 +12,7 @@
     python tools/emu/make_masterfx_test_project.py "<project>" "<out folder>" --masterfx-plugins
     python tools/emu/make_masterfx_test_project.py "<project>" "<out folder>" --masterfx-duck
     python tools/emu/make_masterfx_test_project.py "<project>" "<out folder>" --masterfx-glue
+    python tools/emu/make_masterfx_test_project.py "<project>" "<out folder>" --masterfx-compressor
 
 The project given is only read. In the copy:
 - project.mt: the new name, the voices given on the three synth parts, both sends at 60.
@@ -46,6 +47,10 @@ volume every 8 steps, so it is the Sidechain key's loud part and there are gaps 
 --masterfx-glue writes M5 (MASTERFX_GLUE): M4's kick, hat and held synth voice, and record 4 with Glue in the
 dynamics slot on Track 1 and Track 3 (the Tracks list), turned hard (MASTERFX_GLUE_KNOBS) so it is plain to hear
 that the drums are squashed and the synth isn't.
+
+--masterfx-compressor writes M6 (MASTERFX_COMPRESSOR): M4's kick, hat and held synth voice, and record 4 with
+Compressor in the dynamics slot ducking Synth 1 (the Ducks list), keyed by Track 1, the kick (CE's Sidechain
+in project.mt), with CE's Threshold at -20 dB, so the synth plainly dips on every kick.
 
 --sound writes that file's last set. `A1 Master FX sound` is one voice of ACD Init with a short note every 16
 steps, so the gaps let the reverb and delay be heard, with no masterfx.bin. `R2 Real project sends` is the source
@@ -328,6 +333,16 @@ MASTERFX_OWN_KNOBS = 5
 MASTERFX_GLUE = ("M5 1 voice ACD Glue drums", ("", "", "Glue.ptmfx"))
 MASTERFX_GLUE_KNOBS = (20.0, None, -30.0, 10.0, 6.0)
 MASTERFX_GLUE_TRACKS = (1 << DUCK_KICK[0]) | (1 << DUCK_HAT[0])
+# M6: Compressor ducking Synth 1 (bit 8) from Track 1, the kick. CE's limiter values in project.mt (the
+# file is strProjectFile: strMtValues at 0x110, as cFileManager::writeProjectFileToFileStruct copies
+# it): limiterThreshold (uint16, 0 to 32767 linear) at 0x128 and limiterSidechain (uint8: 0 Disable,
+# 1 to 8 Track 1 to 8) at 0x4FB (0x110 + 0x3EB).
+MASTERFX_COMPRESSOR = ("M6 1 voice ACD Compressor duck", ("", "", "Compressor.ptmfx"))
+MASTERFX_COMPRESSOR_DUCKS = 1 << 8      # Synth 1
+PROJECT_LIMITER_THRESHOLD = 0x128
+PROJECT_LIMITER_SIDECHAIN = 0x4FB
+COMPRESSOR_THRESHOLD = 3277             # -20 dB
+COMPRESSOR_SIDECHAIN = DUCK_KICK[0] + 1 # Track 1
 
 
 def masterfx_record(files, dynamics_knobs=(), ducks=0) -> bytes:
@@ -419,6 +434,26 @@ def make_masterfx_glue(source: Path, parent: Path, name: str = MASTERFX_GLUE[0],
     old = folder / "mods.bin"
     old_bytes = old.read_bytes() if old.exists() else b""
     old.write_bytes(masterfx_mods_file(old_bytes, 3, masterfx_record(MASTERFX_GLUE[1], knobs, tracks)))
+    return [folder]
+
+
+def make_masterfx_compressor(source: Path, parent: Path, name: str = MASTERFX_COMPRESSOR[0],
+                             ducks: int = MASTERFX_COMPRESSOR_DUCKS, sidechain: int = COMPRESSOR_SIDECHAIN,
+                             dynamics: str = MASTERFX_COMPRESSOR[1][2], synth: bool = True,
+                             drums: bool = True) -> list:
+    """M6, or (for a check) the same with another set, key or dynamics file, or the synth or the drums
+    left out"""
+    folder = make(source, parent, name, (1, 0, 0), engine="ACD")
+    for path in (folder / "patterns").glob("pattern_*.mtp"):
+        path.write_bytes(duck_pattern(synth, drums))
+    old = folder / "mods.bin"
+    old_bytes = old.read_bytes() if old.exists() else b""
+    old.write_bytes(masterfx_mods_file(old_bytes, 3, masterfx_record(("", "", dynamics), (), ducks)))
+    mt = bytearray((folder / "project.mt").read_bytes())
+    struct.pack_into("<H", mt, PROJECT_LIMITER_THRESHOLD, COMPRESSOR_THRESHOLD)
+    mt[PROJECT_LIMITER_SIDECHAIN] = sidechain
+    mt[PROJECT_CRC:PROJECT_CRC + 4] = bytes(4)      # no CRC, as make() leaves it
+    (folder / "project.mt").write_bytes(mt)
     return [folder]
 
 
@@ -563,16 +598,18 @@ def main() -> int:
     parser.add_argument("--masterfx-plugins", action="store_true")
     parser.add_argument("--masterfx-duck", action="store_true")
     parser.add_argument("--masterfx-glue", action="store_true")
+    parser.add_argument("--masterfx-compressor", action="store_true")
     args = parser.parse_args()
     try:
         if (args.ladder or args.engines or args.sound or args.synths or args.synthfx or args.synthfx_plugins
-                or args.masterfx_plugins or args.masterfx_duck or args.masterfx_glue):
+                or args.masterfx_plugins or args.masterfx_duck or args.masterfx_glue or args.masterfx_compressor):
             maker = (make_ladder if args.ladder else make_engines if args.engines else make_sound if args.sound
                      else make_synthfx_ladder if args.synthfx
                      else make_plugin_ladder if args.synthfx_plugins
                      else make_masterfx_plugins if args.masterfx_plugins
                      else make_masterfx_duck if args.masterfx_duck
                      else make_masterfx_glue if args.masterfx_glue
+                     else make_masterfx_compressor if args.masterfx_compressor
                      else lambda source, parent: make_engines(source, parent, SYNTHS_LADDER))
             for folder in maker(args.project, args.out):
                 print(f"Copy written: {folder}")

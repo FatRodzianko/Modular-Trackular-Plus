@@ -34,7 +34,7 @@ from pathlib import Path
 from unicorn import UC_HOOK_MEM_READ, UC_HOOK_MEM_WRITE
 
 sys.path.insert(0, str(Path(__file__).parent))
-from machine import STACK_TOP  # noqa: E402
+from machine import STACK_TOP, after_hooked_store  # noqa: E402
 from test_masterfx import BLOCK, DL_A0, DL_B1, DL_FEEDBACK, DL_TIME, OBJECT, DelayRig, ReverbRig, f32  # noqa: E402
 
 LIMIT = 400_000
@@ -85,6 +85,8 @@ def guard(rig, allowed_writes, allowed_reads):
         return out
 
     def on_access(uc, access, address, size, value, user):
+        if user == "write":
+            after_hooked_store(uc)
         problems.append((user, hex(address), size, hex(uc.reg_read(15))))
 
     for begin, end in gaps(allowed_writes):

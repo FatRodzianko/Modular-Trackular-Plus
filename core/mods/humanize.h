@@ -115,7 +115,9 @@ void humanizeStep(Step& step,
                                                : pick(step.micromove, timingRange, 0, 100, random));
     }
 
-    if (s.volumeOn != 0 && !volumeFx && step.volume != 0)
+    // V 0 and CE's !OFF (-2, Sequencer::STEP_VELO_OFF since CE's cc53303: back to the
+    // instrument's own volume) stay as they are; an empty V (-1) gets one
+    if (s.volumeOn != 0 && !volumeFx && step.volume != 0 && step.volume >= -1)
     {
         const int center =
           step.volume > 0 ? step.volume

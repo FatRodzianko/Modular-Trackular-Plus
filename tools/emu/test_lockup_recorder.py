@@ -16,6 +16,7 @@ from unicorn import UC_HOOK_MEM_WRITE
 
 sys.path.insert(0, str(Path(__file__).parent))
 from boot_rig import BootRig  # noqa: E402
+from machine import after_hooked_store  # noqa: E402
 
 AIRCR = 0xE000ED0C
 CFSR = 0xE000ED28
@@ -44,6 +45,7 @@ class Rig(BootRig):
         self.resets = 0
 
         def on_reset(uc, access, address, size, value, user):
+            after_hooked_store(uc)
             if address == AIRCR and value & 4:
                 self.resets += 1
                 uc.emu_stop()

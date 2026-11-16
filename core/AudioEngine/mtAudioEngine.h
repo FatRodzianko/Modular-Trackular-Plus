@@ -142,6 +142,7 @@ class audioEngine
     void soloDelaySend(uint8_t state);
     void soloReverbSend(uint8_t state);
     void clearDelay();
+    void resetDelay();
     void clearReverb();
     void resetLimiter();
     void performanceModeEndAll();
@@ -286,6 +287,7 @@ class playerEngine
                    uint8_t fx2_val); // tylko ten note on do nut w sequencerze
     void noteOff(int8_t option = -4);
     void setStepVelocity(int8_t velocity);
+    uint8_t getMostSignificantVolume();
     void clean();
 
     void setInterpolationEnable(bool value);
@@ -640,7 +642,6 @@ class playerEngine
     //**********************FUNKCJE POMOCNICZE
     uint8_t isFxVelocity(uint8_t fx_id);
     float getMostSignificantAmount();
-    uint8_t getMostSignificantVolume();
     void initEnvelopesParameters(uint8_t n, envelopeGenerator::strEnv* env);
     void setSyncParamsLFO(uint8_t type);
     void setSyncParamsAmpLFO();

@@ -4,13 +4,18 @@ own reverb, delay and limiter objects' update(), the panning amplifiers' (where 
 the tracks mixer's (where a bus runs), each counted whole per block (the slot's hook, the runtime and
 the plugin inside it), on the sound rig's graph with a synth part playing 4 voices into both sends.
 
-    python tools/masterfx/compare_cost.py <plugin firmware .axf> <masterfx-1.x firmware .axf> [--blocks N]
+    python tools/masterfx/compare_cost.py <plugin firmware .axf> <masterfx-1.x firmware .axf>
+        [--reference <plain CE .axf>] [--blocks N]
 
 The masterfx-1.x firmware is today's release, d9a6795 built with `make plus EDITION_NAME=MT`: its
 reverbs and delays are built in. Each choice runs on both firmwares where both have it; the dynamics
 slot's plugins only on the plugin firmware, against CE's limiter on today's. Code hooks cover only
 ITCM and flash, never the .psyn pool where the closed engines run (the rig's guard checks), and
 count nothing outside the five update functions.
+
+Stock is measured against the plain CE build of the same CE commit (--reference, MT_NO_MODS) when
+one is given: since CE's cc53303 its delay and limiter cost about 27 % less than on the CE that
+masterfx-1.x is built on, so Stock can no longer match today's release both ways.
 
 Limits: Stock on both the same to within 1 %; each pack reverb or delay within 2 % of the built-in
 effect it replaces, or PACK_SLACK more, whichever allows more; Compressor's whole limiter update no
@@ -111,9 +116,11 @@ class Counted(Graph):
         return {k: self.counts[k] / blocks for k in UPDATES}
 
 
-def run(axf: Path, reverb=0, delay=0, dynamics=None, threshold=32767, key=0, blocks=40, tracks=0) -> dict[str, float]:
+def run(axf: Path, reverb=0, delay=0, dynamics=None, threshold=32767, key=0, blocks=40, plain=False,
+        tracks=0) -> dict[str, float]:
     g = Counted(axf)
-    set_mod(g, True, reverb, delay)
+    if not plain:                   # plain CE has no mod settings: its Stock is all it has
+        set_mod(g, True, reverb, delay)
     if tracks:
         g.m.write(g.m.addr(SETTINGS) + DUCKS_AT, tracks.to_bytes(2, "little"))   # the Tracks list
     if dynamics is not None:
@@ -126,6 +133,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("plugins", type=Path)
     ap.add_argument("today", type=Path)
+    ap.add_argument("--reference", type=Path, help="plain CE built from the same commit (MT_NO_MODS), for Stock")
     ap.add_argument("--blocks", type=int, default=40)
     a = ap.parse_args()
     probe = Counted(a.plugins)
@@ -144,8 +152,13 @@ def main() -> int:
         check(mine[slot] <= max(theirs[slot] * limit + slack, theirs[slot] + floor),
               f"{what}: {slot} {mine[slot]:,.0f} against today's {theirs[slot]:,.0f} ({100 * (ratio - 1):+.1f} %, {allowed})")
 
-    print("-- Stock, both firmwares --", flush=True)
-    stock_mine, stock_today = run(a.plugins, blocks=n), run(a.today, blocks=n)
+    def stock(**k):
+        """Stock to compare with: plain CE from the same commit if given, else today's release"""
+        return run(a.reference, plain=True, **k) if a.reference else run(a.today, **k)
+    base = "plain CE" if a.reference else "today's"
+
+    print(f"-- Stock, against {base} --", flush=True)
+    stock_mine, stock_today = run(a.plugins, blocks=n), stock(blocks=n)
     for slot in UPDATES:
         if slot == "amplifiers":    # the ducking hook's test, with nothing ducked: a few hundred
             row("Stock", stock_mine, stock_today, slot, 1.0, AMPLIFIER_SLACK)
@@ -154,8 +167,10 @@ def main() -> int:
             row("Stock", stock_mine, stock_today, slot, 1.0, MIXER_SLACK)
             continue
         row("Stock", stock_mine, stock_today, slot, 1.01)
-        check(stock_today[slot] / max(stock_mine[slot], 1) <= 1.01, f"Stock: {slot} no cheaper than today's either")
-    check(min(stock_mine.values()) > 1000, "each update runs (the counts aren't empty)")
+        check(stock_today[slot] / max(stock_mine[slot], 1) <= 1.01, f"Stock: {slot} no cheaper than {base} either")
+    # Since CE's 7482cc8 the tracks mixer sums only the blocks that come (about 750 instructions
+    # here), so each update over 500, not 1,000
+    check(min(stock_mine.values()) > 500, f"each update runs (the counts aren't empty: {min(stock_mine.values()):,.0f} at least)")
 
     print("-- the reverbs and delays --", flush=True)
     for i, name in REVERBS.items():
@@ -166,9 +181,9 @@ def main() -> int:
     print("-- the dynamics slot --", flush=True)
     for key, label in ((0, "no key"), (KEY, "a key")):
         today = run(a.today, threshold=HOT, key=key, blocks=n)
-        stock = run(a.plugins, dynamics="", threshold=HOT, key=key, blocks=n)
+        mine_stock = run(a.plugins, dynamics="", threshold=HOT, key=key, blocks=n)
         compressor = run(a.plugins, dynamics="Compressor.ptmfx", threshold=HOT, key=key, blocks=n)
-        row(f"Stock limiter, {label}", stock, today, "limiter", 1.01)
+        row(f"Stock limiter, {label}", mine_stock, stock(threshold=HOT, key=key, blocks=n), "limiter", 1.01)
         row(f"Compressor, {label}", compressor, today, "limiter", 1.5)
         row(f"Compressor, {label}", compressor, today, "amplifiers", 1.0, AMPLIFIER_SLACK)
     today = run(a.today, threshold=HOT, blocks=n)

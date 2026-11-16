@@ -133,6 +133,15 @@ class Synth
                                    int instrumentId) = 0;
 #endif
 
+    [[nodiscard]] virtual bool isInstrumentIdle(int instrumentId) const = 0;
+
+    /**
+     * Check whether live audio rendering for `instrumentId` can be skipped for this block.
+     * When Voice Sleep is Off and the engine provides `tickIdle()`, advances idle voices here
+     * and returns true so silence still propagates without downstream audio wakeups.
+     */
+    virtual bool prepareSilentInstrument(int instrumentId) = 0;
+
     /**
      * Update the synth in audio thread.
      */

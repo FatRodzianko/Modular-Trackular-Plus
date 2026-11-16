@@ -223,6 +223,12 @@ Insert begin(int part, const polysynth::Patch* patch, bool engineStereo)
     return { true, engineStereo || widens, engineStereo && !sidesAlike(patch) };
 }
 
+bool holdsPart(int part)
+{
+    return part >= 0 && part < kParts && mods::on(Mod::synthfx) &&
+           (running(runs[part][0]) || running(runs[part][1]));
+}
+
 void run(const Insert& insert, int part, float* left, float* right, bool engineStereo)
 {
     if (!insert.on)
