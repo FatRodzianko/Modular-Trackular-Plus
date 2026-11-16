@@ -40,7 +40,7 @@ SWITCHES = "_ZN4mods8switchesE"
 SETTINGS = "_ZN4mods8masterfx8settingsE"
 MASTERFX = 3                        # mods::Mod::masterfx
 ENGINE_IDS = (1, 2, 4, 5, 6, 7, 8)  # Synth::kSynthTypes, as project.mt's models number them
-LIMIT = 8172                        # cDisplay::step3
+LIMIT = 8172                        # kFrameControlBytes (cDisplay::composeFrame)
 CONTROLS = 65                       # controlsCount
 
 BUTTON = {"reverb": 1, "delay": 2, "limiter": 3, "eq": 4, "knob5": 5, "knob6": 6, "cancel": 7,
@@ -741,7 +741,7 @@ def lists_and_card(mods):
     # The display's start fills fonts[]' widths from the fonts it unpacks, and the rig doesn't run
     # it: Font2, the label's second line, gets 9 px a character, so 94 px holds 10
     fonts = z.m.sym("fonts")
-    z.m.write(fonts.addr + 1 * 172 + 32, bytes([9]) * 96)
+    z.m.write(fonts.addr + 1 * (fonts.size // 5) + 32, bytes([9]) * 96)   # fonts[1]; 5 fonts (displayFontCount)
     z.r.sd.files["/MasterFX/LongName.ptmfx"] = bytes(data)
     set_mod(z.r, True, 0, 0)
     set_dynamics(z.r, "LongName.ptmfx")

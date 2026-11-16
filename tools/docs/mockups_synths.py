@@ -291,9 +291,9 @@ def write(name: str, screen: Screen, desc: str) -> None:
     print("wrote", OUT / name)
 
 
-# the Model list: CE's kSynthTypes order (core/synth/Synth.h), WAVE and PHASE at 7 and 8, then the
-# other engines on the card (GRAIN); each row is the engine's code name
-MODELS = ["ACD", "FAT", "VAP", "WTFM", "PERC", "DIRT", "CHIP", "WAVE", "PHASE", "GRAIN"]
+# the Model list: CE's kSynthTypes order (core/synth/Synth.h), WAVE and PHASE at 7 and 8; the
+# release's Synths zip has no other engines (CE dropped GRAIN); each row is the engine's code name
+MODELS = ["ACD", "FAT", "VAP", "WTFM", "PERC", "DIRT", "CHIP", "WAVE", "PHASE"]
 
 # which parameter each page selects: a list shows its choices in column 8
 WAVE_SELECT = [0, 2, 2, 2, 1, 2, 1, 0]

@@ -65,8 +65,16 @@ STEP_BLOCKS = 312500.0 / TEMPO * 48 / 1e6 / DT
 LENGTH = 8                                       # steps per pattern
 FX_BREAK = 13
 PLAYMODE_BACKWARD = 1
-FONT_SIZE = 172                                  # strFont
+FONT_COUNT = 5                                   # displayFontCount (display.cpp)
 STATUS_FONT = 3
+
+
+def font_fields(m) -> tuple:
+    """strFont's size and where its fields after data[] start: data[] was 148 bytes before CE's
+    9d6d10a and is 256 since (displayList::kFontMetricsSize). Then size, handle, address,
+    source, width, height, format, linestride: 24 bytes."""
+    size = m.sym("fonts").size // FONT_COUNT
+    return size, size - 24
 LIST_ICON, LIST_ICON_ARMED = 140000, 140200
 CONTROLS_RAM_START = 150000
 GLYPHS_APPLIED = "_ZN4mods8songloop12_GLOBAL__N_113glyphsAppliedE"
@@ -770,13 +778,14 @@ def font_rig(mt: Path, on: bool, real_fonts: bool = False) -> tuple:
     display = m.sym("display")
     for o in range(0, display.size, 4):
         m.w32(display.addr + o, d.obj)               # wherever cDisplay keeps its driver
-    f = m.addr("fonts") + STATUS_FONT * FONT_SIZE
+    size, data = font_fields(m)
+    f = m.addr("fonts") + STATUS_FONT * size
     widths = bytearray([0] * 0x18 + [16] * (128 - 0x18))
     widths[0x1A], widths[0x1B] = 21, 22
     m.write(f, bytes(widths))
-    m.w32(f + 156, 0x10000)                           # address
-    m.w32(f + 160, 0x10000 + 148)                     # source
-    m.write(f + 164, struct.pack("<HHBxH", 20, 24, 2, 10))   # width, height, format, linestride
+    m.w32(f + data + 8, 0x10000)                      # address
+    m.w32(f + data + 12, 0x10000 + 148)               # source (the chip's metric block is still 148)
+    m.write(f + data + 16, struct.pack("<HHBxH", 20, 24, 2, 10))   # width, height, format, linestride
     return r, d, f
 
 
@@ -824,7 +833,9 @@ def test_fonts(mt: Path) -> None:
         ready = r.m.call(r.m.addr("_ZN4mods8songloop11glyphsReadyEv")) & 0xFF
         w = r.m.read(f, 128)
         writes = {a for k, a, _, _ in d.log if k == "write"}
-        width, height, stride = struct.unpack("<HH", r.m.read(f + 164, 4)) + struct.unpack("<H", r.m.read(f + 170, 2))
+        data = font_fields(r.m)[1]
+        width, height, stride = (struct.unpack("<HH", r.m.read(f + data + 16, 4))
+                                 + struct.unpack("<H", r.m.read(f + data + 22, 2)))
         print(f"   {name}: status font {width} px wide, {height} high, {stride} bytes a row")
         check(ready and LIST_ICON in writes and (w[0x60], w[0x5E]) == (w[0x1A], w[0x1B]),
               f"the {name} font loaded: the glyphs and the list icons in again")

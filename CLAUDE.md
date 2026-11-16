@@ -23,7 +23,12 @@ Before hooking a function, grep its callers up to an entry point above or to mai
 
 ## Display limit
 
-Each frame has 8,172 bytes of display list. `cDisplay::step3` appends controls from the highest slot down and stops at the first that doesn't fit, so the rest silently don't draw. Count the bytes of anything added to a screen. `lastMemoryUsed` reports the total in DEBUG builds only.
+Since CE's 9d6d10a, `cDisplay::buildControl` builds each control's display list in the MCU, and `composeFrame` puts the frame together. Count the bytes of anything added to a screen, against three limits:
+- A frame takes at most `kFrameControlBytes`, 8,172 bytes of controls. `composeFrame` adds them from the highest slot down and skips any control that doesn't fit. That control silently doesn't draw, while smaller ones after it still can.
+- A control's own list over 8 KB (`kFragmentWords`) is thrown away whole and draws nothing.
+- The lists of every control that exists, shown or hidden, share a 56 KB arena in SDRAM. A list that doesn't fit draws nothing.
+
+All three only add to `displayList::overflows`, which nothing shows; `lastMemoryUsed` is no longer set. Inside a control's `update()`, a coprocessor command with no MCU expansion is dropped (`displayList::droppedCommands`). The ones with an expansion are text, number, gradient, bitmap set-up and `API_BITMAP_ROTATE_270`. Draw with plain display-list words. The emulator rigs stub the `API_*` functions and count an upper bound per call; they don't run the MCU capture.
 
 `controlStyle*` bits 0–29 are taken; only 30 and 31 are free.
 

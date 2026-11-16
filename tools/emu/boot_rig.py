@@ -22,6 +22,7 @@ from unicorn.arm_const import UC_ARM_REG_LR, UC_ARM_REG_BASEPRI, UC_ARM_REG_PC, 
 sys.path.insert(0, str(Path(__file__).parent))
 from machine import SCRATCH, STACK_TOP, STUB_RET  # noqa: E402
 from sound_rig import BLOCK, BLOCK_MS, SoundRig  # noqa: E402
+from vtables import slots  # noqa: E402
 
 STACK_SIZE = 20480
 
@@ -63,6 +64,14 @@ class BootRig(SoundRig):
         for i in range(64):
             m.w32(vtable + 4 * i, idle)
         m.w32(vtable + 4 * 11, m.add_stub(lambda mm: 1))
+        # Since CE's 9d6d10a the display code writes its lists itself and waits on these (beginScreen,
+        # waitForChip). As the IMX driver answers with nothing in flight: it sends in the background,
+        # each write is done at once, and a swap has happened (on the unit, at the next panel frame).
+        # Found by name, so an image without them (older CE) keeps the idle answers.
+        answers = {"writesDisplayListInBackground": 1, "isDisplayListWriteDone": 1, "isDisplayListSwapPending": 0}
+        for slot in slots(m.elf, "DisplayDriverImpl"):
+            if slot.method in answers:
+                m.w32(vtable + 4 * slot.index, m.add_stub(lambda mm, v=answers[slot.method]: v))
         self.display_driver = m.alloc(4096, 8)
         m.w32(self.display_driver, vtable)
         m.w32(self.display_driver + 4, 0)

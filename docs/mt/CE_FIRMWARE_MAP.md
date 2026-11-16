@@ -209,12 +209,18 @@ to Mute/Unmute. MIDI CC reaches only volumes (71–82), never reverb or delay kn
 
 ## 12. Display
 
-FT812 over LPSPI4 with DMA. `cDisplay::update` has three steps. Controls render bitmaps into
-RAM_G and `step3` appends each control's list from the highest slot down, stopping at the
-first that doesn't fit the 8,172 bytes (`CLAUDE.md`). Themes are JSON (`ThemeManager`) and fonts
-are decompressed into SDRAM. 15,684 lines in `core/libs/NewDisplay`.
+FT812 over LPSPI4. Since CE's 9d6d10a (merged 2026-11-15) the MCU builds each control's display
+list (`cDisplay::buildControl`, `core/libs/FT812/DisplayList.cpp` expands text, numbers, gradients
+and bitmap set-up into the words the chip would make) into a 56 KB arena in SDRAM. `composeFrame`
+adds the shown controls from the highest slot down, skipping any that doesn't fit the 8,172 bytes
+(`CLAUDE.md`), and only the stretches that differ from the chip's back list are sent to RAM_DL. On
+the IMX, stretches of 48 words or more go by eDMA channel 5 (LPSPI4 Tx request, no interrupt); audio
+is on channels 0 and 1. `MCU_CSlow`, where every chip access starts, waits for that DMA. A pass of
+the main loop spends at most about 1 ms building and 320 words sending. The coprocessor is left with
+image decoding and screenshots. Themes are JSON (`ThemeManager`) and fonts are decompressed into SDRAM. 15,684 lines in `core/libs/NewDisplay`.
 
-Each control's `ramSize` is what the coprocessor really wrote, which only the device knows.
+Each control's `ramSize` is now the MCU's own count of its list (before 9d6d10a it was what the
+coprocessor wrote, which only the device knew).
 Bytes from source: `cList` about 206 B (background 28, shadow with `CMD_GRADIENT`, selection frame
 36) plus per line a 4 B colour and a `CMD_TEXT`. For planning, take at most 24 B per text plus 12 B
 per glyph, and 120 B per gradient. The Master page comes to about 4.2 KB at those bounds. 65
@@ -438,6 +444,27 @@ any that won't fit, so WAVE is read from the card (530,660 bytes) the first time
 audio masked, CE's own path. Both run from SDRAM through the cache; as built-in engines they ran
 from flash.
 
+### After CE's display lists in the MCU (2026-11-15)
+
+`tools/mem_budget.py` on the merged mod build (CE `ed51301`), against `modular` before it
+(`250cd04`), both built the same way:
+
+| Region | Free after | Free before |
+| --- | --- | --- |
+| Flash | 14,997,732 | 15,002,100 |
+| ITCM | 48,320 | 48,320 |
+| OCRAM | 9,556 | 9,556 |
+| SDRAM unreserved | 610,844 | 603,196 |
+| DTCM unreserved | 4,680 | 7,840 |
+
+DTCM is 3,160 bytes tighter, all of it CE's (plain CE goes from 14,876 to 11,724 free): the DMA
+descriptors `writeTcds` 1,024, `romFontMetrics` 512, the arena's table `fragments` 460, `display`
+108 more, and smaller ones. That leaves 584 bytes above the 4,096 floor. The diagnostic build
+(`MT_LOCKUP_RECORDER`) is at 3,160, under the floor. CE takes 96 KB of SDRAM out of sample memory
+for its 56 KB arena, 8 KB build buffer, 8 KB frame and the two 8 KB copies of the chip's lists; the
+mods build takes it as well as the mods' 1 MiB (`mtStructs.h`), so the sample pool is 55,410,688
+bytes.
+
 ## 16. How much was read
 
 | Area | Coverage |
@@ -453,7 +480,7 @@ from flash.
 | File manager | Operation steps, autosave, load check; not import/export (`.mod`, `.it`) |
 | `FileSystemImpl`, FatFs config | API and settings; not the SD driver |
 | Interface, input | Module list, input path, `InputProcessor`; other 12 modules not read inside |
-| Display | `step3` budget, `cList`, `cLabel`, `cBar`, `cFrame` drawing; other controls not read |
+| Display | `composeFrame` budget and the arena, `cList`, `cLabel`, `cBar`, `cFrame` drawing; `DisplayList.cpp` expansions not checked against the chip; other controls not read |
 | `masterParams` | Read except mixer solo functions in `fMasterParams.cpp` lines 1800–2300 |
 | `AudioEffectPolyverb`, `Reverb`, `AudioEffectShortDelay` | Read in full |
 | USB, pads, LEDs, power | Entry points only |

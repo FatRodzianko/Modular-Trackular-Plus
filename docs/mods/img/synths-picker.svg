@@ -40,7 +40,7 @@
 <rect x="1" y="29" width="97" height="394" fill="#0A0A0A"/>
 <rect x="1" y="413" width="97" height="12" fill="url(#shadow)"/>
 <rect x="4" y="222" width="91" height="27" fill="none" stroke="#FFFFFF" stroke-width="1"/>
-<clipPath id="clip39"><rect x="14" y="33" width="74" height="270"/></clipPath>
+<clipPath id="clip39"><rect x="14" y="33" width="74" height="243"/></clipPath>
 <g clip-path="url(#clip39)">
 <text class="val" x="14" y="46.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">ACD</text>
 <text class="val" x="14" y="73.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">FAT</text>
@@ -51,7 +51,6 @@
 <text class="val" x="14" y="208.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">CHIP</text>
 <text class="val" x="14" y="235.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">WAVE</text>
 <text class="val" x="14" y="262.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">PHASE</text>
-<text class="val" x="14" y="289.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">GRAIN</text>
 </g>
 <rect x="1" y="31" width="97" height="391" fill="none" stroke="#CD1818" stroke-width="1.5"/>
 <rect x="1" y="425" width="797" height="54" fill="#0A0A0A"/>

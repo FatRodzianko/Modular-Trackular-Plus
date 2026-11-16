@@ -10,7 +10,7 @@
 //
 // A mono part stays mono until a slot holds a plugin that widens (WIDENS: the Chorus, Flanger and
 // Phaser of the default pack), then it goes out as stereo (one more audio block). A stereo
-// engine's plugins get both sides (CE's factory ones: PERC and GRAIN; an engine says so in its
+// engine's plugins get both sides (CE's factory one: PERC; an engine says so in its
 // metadata). An engine that renders its own sends (PERC) has only its main output in the slots.
 //
 // WAVE and PHASE (core/mods/synths) have no effects of their own: these slots are theirs. They go

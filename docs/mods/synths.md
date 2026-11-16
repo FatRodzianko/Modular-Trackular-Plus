@@ -22,7 +22,7 @@ not the same.
    also steps to the next model.
 4. Press **Edit Patch** to open the patch editor.
 
-![The Synth Parameters 1/2 screen, Model list: ACD, FAT, VAP, WTFM, PERC, DIRT, CHIP, WAVE, PHASE, GRAIN, with WAVE picked](img/synths-picker.svg)
+![The Synth Parameters 1/2 screen, Model list: ACD, FAT, VAP, WTFM, PERC, DIRT, CHIP, WAVE, PHASE, with WAVE picked](img/synths-picker.svg)
 
 *The Model list with WAVE picked. Marked: the WAVE and PHASE rows. The right label shows the part and
 its model, here Synth 1 (WAVE).*

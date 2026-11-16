@@ -59,8 +59,8 @@ have no mods.
    [Building Firmware](#building-firmware) below), which makes
    `build/TrackerPlus_MT_1.0.0.ptf`.
 3. **Copy the synth engines to the card.** Every synth engine is a `.psyn` file on the card,
-   not part of the firmware: CE's (ACD, FAT, VAP, WTFM, PERC, DIRT, CHIP and GRAIN) and the
-   Synths mod's WAVE and PHASE. Each release has all ten in `PolyendTracker_CE_Synths.zip`, and
+   not part of the firmware: CE's (ACD, FAT, VAP, WTFM, PERC, DIRT and CHIP) and the
+   Synths mod's WAVE and PHASE. Each release has all nine in `PolyendTracker_CE_Synths.zip`, and
    `make psyn` puts them in `build/Synths/`. Copy the `Synths` folder to the card's root.
    Without the folder, a project's synth parts can open on another engine, since the project
    stores each part's engine by its place in the list.
