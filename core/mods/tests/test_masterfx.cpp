@@ -129,7 +129,12 @@ void setV1(int reverb, int delay)
 
 bool knobsUnset(uint8_t slot)
 {
-    return std::isnan(settings.slot[slot].knob[0]) && std::isnan(settings.slot[slot].knob[1]);
+    bool all = true;
+    for (const float k : settings.slot[slot].knob)
+    {
+        all = all && std::isnan(k);
+    }
+    return all;
 }
 
 void testNames()
@@ -159,8 +164,8 @@ void testRecord()
     check(!storeIfEdited(store), "stored once");
     uint8_t version = 0;
     uint16_t length = 0;
-    check(store.find(kRecord, &version, &length) != nullptr && version == 2 && length == 172,
-          "as version 2, 172 bytes");
+    check(store.find(kRecord, &version, &length) != nullptr && version == 3 && length == 208,
+          "as version 3, 208 bytes");
     settings = Settings{};
     load(store);
     check(is(4, 2), "the record comes back");
@@ -171,6 +176,12 @@ void testRecord()
     settings = Settings{};
     load(store);
     check(settings.slot[kDelay].knob[1] == 0.25f && std::isnan(settings.slot[kDelay].knob[0]),
+          "and comes back");
+    settings.slot[kDynamics].knob[4] = 3.0f;
+    check(storeIfEdited(store), "a fifth own knob is an edit");
+    settings = Settings{};
+    load(store);
+    check(settings.slot[kDynamics].knob[4] == 3.0f && std::isnan(settings.slot[kDynamics].knob[3]),
           "and comes back");
 
     setFile(kReverb, "");
@@ -219,6 +230,24 @@ void testRecord()
     loaded(record, 2);
     check(is(2, kStock), "version 2 without the ducks: its files");
     check(settings.slot[kReverb].knob[0] == 0.0f && settings.ducks == 0, "its knobs as stored, the master ducked");
+    check(std::isnan(settings.slot[kReverb].knob[2]) && std::isnan(settings.slot[kReverb].knob[4]),
+          "version 2: the knobs it didn't have unset");
+
+    // Version 2 (masterfx-2.0): each slot 48 bytes of file and 2 knobs, then the ducks
+    std::vector<uint8_t> v2(172, 0);
+    memcpy(v2.data() + 2 * 56, "Glue.ptmfx", 10);
+    const float ratio = 6.0f, makeup = 1.5f;
+    memcpy(v2.data() + 2 * 56 + 48, &ratio, 4);
+    memcpy(v2.data() + 2 * 56 + 52, &makeup, 4);
+    memcpy(v2.data() + 56, "Tape.ptmfx", 10);
+    v2[168] = 0x06;
+    loaded(v2, 2);
+    check(reverbIndex() == kStock && delayIndex() == 1 && strcmp(settings.slot[kDynamics].file, "Glue.ptmfx") == 0,
+          "version 2: each slot's file in its place");
+    check(settings.slot[kDynamics].knob[0] == ratio && settings.slot[kDynamics].knob[1] == makeup &&
+            std::isnan(settings.slot[kDynamics].knob[2]),
+          "version 2: its two knobs, the rest unset");
+    check(settings.ducks == 0x06, "version 2: its ducks");
 
     // Version 2 with the ducks: bits past the synth parts dropped, the reserved bytes 0
     std::vector<uint8_t> full(172, 0);
@@ -275,6 +304,16 @@ void testChoices()
     check(settings.slot[kDelay].file[0] == 0 && knobsUnset(kDelay), "Stock: no file, knobs unset");
     check(choiceCount(kDelay) == 1 && !missing(kDelay), "and Missing is gone");
 
+    // Another dynamics plugin: the Ducks or Tracks set back to the master
+    setFile(kDynamics, "Glue.ptmfx");
+    settings.ducks = 0x7;
+    refreshChoices();
+    choose(kDynamics, 0);
+    check(settings.slot[kDynamics].file[0] == 0 && settings.ducks == 0, "a dynamics choice: the set back to the master");
+    settings.ducks = 0x7;
+    choose(kDelay, 0);
+    check(settings.ducks == 0x7, "another slot's choice leaves it");
+
     settings = Settings{};
 }
 
@@ -301,6 +340,9 @@ void testPage()
     check(!bypassed(kDynamics) && takeBypassed() == -1, "nothing bypassed");
 
     check(ownKnobs(kDynamics) == 0 && ownKnobs(kReverb) == 0, "nothing installed: no own knobs");
+    check(!ownDynamics(kDynamics) && !canBus(), "nothing installed: CE's Attack, Release and Threshold, no Tracks list");
+    check(ownKnobColumn(kReverb, 0) == 5 && ownKnobColumn(kReverb, 1) == 6, "own knobs in columns 5 and 6");
+    check(ownKnobAt(kDynamics, 0) == -1 && ownKnobAt(kDynamics, 5) == -1, "no knob in any column");
     check(strcmp(ownKnobLabel(kDynamics, 0), "") == 0 && ownKnobPercent(kDynamics, 0) == 0,
           "and no label or bar");
     char text[16] = "x";
@@ -348,8 +390,8 @@ void testImportFile()
     check(is(4, 2), "its choices");
     uint8_t version = 0;
     uint16_t length = 0;
-    check(store.find(kRecord, &version, &length) != nullptr && version == 2 && length == 172,
-          "imported as version 2");
+    check(store.find(kRecord, &version, &length) != nullptr && version == 3 && length == 208,
+          "imported as version 3");
 
     store.clear();
     io.files[kPath] = sideFile(0, 1);

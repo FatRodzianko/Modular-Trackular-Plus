@@ -41,7 +41,8 @@ from unicorn import UC_HOOK_CODE, UC_HOOK_MEM_WRITE  # noqa: E402
 from unicorn.arm_const import UC_ARM_REG_LR, UC_ARM_REG_PC, UC_ARM_REG_S0, UC_ARM_REG_SP  # noqa: E402
 
 B = 128
-HEADER = 240
+HEADER = 336                                  # format version 2's; version 1's was 240, with 2 knobs
+V1_HEADER = 240
 CLOCK_HZ = 600e6
 SHARE = CLOCK_HZ * B / 44100.0 / 8.0          # the time guard: an eighth of a block at 600 MHz
 ENOUGH = 20                                   # blocks of bad output before a plugin's run stops
@@ -49,7 +50,7 @@ ENOUGH = 20                                   # blocks of bad output before a pl
 
 class Enough(Exception):
     """Enough seen of a plugin to fail it"""
-FLAG_FLOAT, FLAG_DUCK = 1, 2
+FLAG_FLOAT, FLAG_DUCK, FLAG_OWN_DYNAMICS, FLAG_BUS = 1, 2, 4, 8
 KINDS = {1: "reverb", 2: "delay", 3: "dynamics"}
 SLOT = {"reverb": 0, "delay": 1, "dynamics": 2}
 CE_LABELS = {"reverb": ["Size", "Damping", "Predelay", "Diffusion"],
@@ -88,14 +89,14 @@ def q15(m, a: int) -> list[int]:
 class Header:
     def __init__(self, d: bytes):
         self.data = d
-        self.flags, = struct.unpack_from("<H", d, 6)
+        self.version, self.flags = struct.unpack_from("<HH", d, 4)
         self.slot, self.nparams = d[8], d[9]
         self.name = d[12:44].split(b"\0")[0].decode(errors="replace")
         self.author = d[44:60].split(b"\0")[0].decode(errors="replace")
         self.labels = [d[60 + 12 * i:72 + 12 * i].split(b"\0")[0].decode(errors="replace") for i in range(6)]
         (self.state_size, self.code_offset, self.code_size, *self.entries) = struct.unpack_from("<8I", d, 132)
         self.knobs = []
-        for k in range(min(self.nparams, 2)):
+        for k in range(min(self.nparams, 2 if self.version == 1 else 5)):
             o = 176 + 32 * k
             label = d[o:o + 11].split(b"\0")[0].decode(errors="replace")
             lo, hi, de, st = struct.unpack_from("<4f", d, o + 12)
@@ -115,7 +116,7 @@ class Checker:
 
     # ---- 1. the header and the install, through the firmware ---------------------------------
     def header(self) -> bool:
-        if len(self.data) < HEADER:
+        if len(self.data) < V1_HEADER:
             self.problem(f"{len(self.data)} bytes: not a .ptmfx (the header alone is {HEADER})")
             return False
         m = self.m = Machine(self.firmware)
@@ -123,7 +124,7 @@ class Checker:
             raise SystemExit(f"{self.firmware}: a firmware without the Master FX plugins (masterfx-1.x or CE)")
         h = self.h = Header(self.data)
         at = m.alloc(HEADER, 4)
-        m.write(at, self.data[:HEADER])
+        m.write(at, (self.data[:HEADER] + bytes(HEADER))[:HEADER] if h.version == 1 else self.data[:HEADER])
         why = m.alloc(4, 4)
         m.w32(why, 0)
         ok = m.call(m.addr(CHECK_HEADER), at, len(self.data), why, max_insns=1_000_000) & 0xFF
@@ -138,7 +139,10 @@ class Checker:
         self.slot = SLOT[self.kind]
         if h.flags & FLAG_DUCK and "_ZN4mods8masterfx8duckMaskE" not in m.elf.symbols:
             self.notes.append("warning: this firmware can't duck tracks; the flag is for a later one")
-        flags = [n for n, bit in (("FLOAT", FLAG_FLOAT), ("DUCK", FLAG_DUCK)) if h.flags & bit]
+        if h.flags & FLAG_BUS and "_ZN4mods8masterfx7busMaskE" not in m.elf.symbols:
+            self.notes.append("warning: this firmware has no Tracks list; the flag is for a later one")
+        flags = [n for n, bit in (("FLOAT", FLAG_FLOAT), ("DUCK", FLAG_DUCK), ("OWN_DYNAMICS", FLAG_OWN_DYNAMICS),
+                                  ("BUS", FLAG_BUS)) if h.flags & bit]
         self.notes.append(f"'{h.name}' by '{h.author}', the {self.kind} slot: {h.code_size:,} B of code, "
                           f"{h.state_size:,} B of state, flags {' '.join(flags) or 'none (16-bit blocks)'}")
         named = [f"{ce} as '{mine}'" for ce, mine in zip(CE_LABELS[self.kind], h.labels) if mine]
@@ -205,6 +209,14 @@ class Checker:
             self.ret = uc.reg_read(UC_ARM_REG_LR) & ~1
             self.sp = uc.reg_read(UC_ARM_REG_SP)
         m.uc.hook_add(UC_HOOK_CODE, on_entry, begin=self.entry, end=self.entry)
+
+        # The other entries (init, set_param, reset, format) run from the main loop, on a stack
+        # shallower or deeper than process()'s: each one's own stack starts at its own SP
+        def on_other_entry(uc, a, s, u):
+            self.sp = uc.reg_read(UC_ARM_REG_SP)
+        for offset in self.h.entries:
+            if offset < 8192 and code + offset != self.entry:
+                m.uc.hook_add(UC_HOOK_CODE, on_other_entry, begin=code + offset, end=code + offset)
         # a first block, to learn where the plugin's process() returns to in the runtime
         self.run_block([0] * B, [0] * B, None, [0] * B, self.ce_knobs()[0], count=False)
         if self.ret is None:
@@ -237,7 +249,7 @@ class Checker:
             if sp - 0x200 <= addr < self.sp:  # its own stack (a push is seen before SP moves)
                 return
             if not any(a <= addr < b for a, b in allowed) and len(self.stray) < 4:
-                self.stray.append(addr)
+                self.stray.append((addr, pc - self.code_range[0]))
         m.uc.hook_add(UC_HOOK_MEM_WRITE, on_write)
 
     def ce_knobs(self) -> list[bytes]:
@@ -413,7 +425,7 @@ class Checker:
         costs, bad = self.costs, self.bad
         if self.stray:
             self.problem("the plugin writes outside its state, the slot's memory and its blocks (a global, or "
-                         f"past its state), e.g. at {', '.join(hex(a) for a in self.stray)}")
+                         f"past its state), e.g. at {', '.join(f'{a:#x} (code +{pc:#x})' for a, pc in self.stray)}")
         for b in bad[:4]:
             self.problem(f"output the firmware would change: {b}")
         if len(bad) > 4:

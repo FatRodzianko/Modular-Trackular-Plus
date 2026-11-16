@@ -42,20 +42,21 @@
 </g>
 <rect x="302" y="29" width="97" height="394" fill="#0A0A0A"/>
 <rect x="302" y="413" width="97" height="12" fill="url(#shadow)"/>
-<rect x="305" y="87" width="91" height="27" fill="none" stroke="#FFFFFF" stroke-width="1"/>
-<clipPath id="clip42"><rect x="315" y="33" width="74" height="81"/></clipPath>
+<rect x="305" y="114" width="91" height="27" fill="none" stroke="#FFFFFF" stroke-width="1"/>
+<clipPath id="clip42"><rect x="315" y="33" width="74" height="108"/></clipPath>
 <g clip-path="url(#clip42)">
 <text class="lbl" x="315" y="46.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Stock</text>
 <text class="lbl" x="315" y="73.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Glue</text>
-<text class="lbl" x="315" y="100.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Missing</text>
+<text class="lbl" x="315" y="100.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Compressor</text>
+<text class="lbl" x="315" y="127.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Missing</text>
 </g>
 <rect x="402" y="29" width="97" height="394" fill="#0A0A0A"/>
 <rect x="402" y="413" width="97" height="12" fill="url(#shadow)"/>
 <rect x="502" y="29" width="97" height="394" fill="#0A0A0A"/>
 <rect x="502" y="413" width="97" height="12" fill="url(#shadow)"/>
 <rect x="505" y="33" width="91" height="27" fill="none" stroke="#FFFFFF" stroke-width="1"/>
-<clipPath id="clip53"><rect x="515" y="33" width="74" height="135"/></clipPath>
-<g clip-path="url(#clip53)">
+<clipPath id="clip54"><rect x="515" y="33" width="74" height="135"/></clipPath>
+<g clip-path="url(#clip54)">
 <text class="lbl" x="515" y="46.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Hard Clip</text>
 <text class="lbl" x="515" y="73.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Soft Clip</text>
 <text class="lbl" x="515" y="100.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Saturate</text>

@@ -8,7 +8,7 @@ plugin is loaded from its .ptmfx file into the same emulator as the firmware loa
 copied to an address, its state zeroed, init with the slot's memory, reset) and called through
 its entries with a host table of stubs it must not call.
 
-1. The files: magic, version, slot, sizes, the entries inside the code, no own knobs, the
+1. The files: magic, version (2), slot, sizes, the entries inside the code, no own knobs, the
    labels as masterfx-1.x's pages named the knobs.
 2. Bit for bit against the built-in, from the first sample: each reverb and delay on noise, a
    sine and a note then silence, at several knob settings, the knobs moved while it plays, and
@@ -33,7 +33,7 @@ from machine import Machine  # noqa: E402
 from unicorn.arm_const import UC_ARM_REG_S0  # noqa: E402
 
 B = 128
-HEADER = 240
+HEADER = 336                            # format version 2's (ptmfx.h)
 NO_ENTRY = 0xFFFFFFFF
 MAGIC = 0x464D5450
 LOAD_AT = (0x83000000, 0x83123460)      # two places in SDRAM, 32-byte aligned as the code areas are
@@ -233,7 +233,7 @@ def main() -> int:
     # 1. the files
     for f, p in pack.items():
         reverb = f in REVERBS
-        ok = (p.magic == MAGIC and p.version == 1 and p.flags == 0 and p.nparams == 0 and p.reserved == b"\0\0"
+        ok = (p.magic == MAGIC and p.version == 2 and p.flags == 0 and p.nparams == 0 and p.reserved == b"\0\0"
               and p.slot == (1 if reverb else 2) and p.code_offset == HEADER and len(p.data) == HEADER + p.code_size
               and p.code_size <= 8192 and p.state_size <= (1024 if reverb else 512)
               and all(o < p.code_size and o % 2 == 0 for o in p.entries[:4])

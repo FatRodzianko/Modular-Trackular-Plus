@@ -1,15 +1,17 @@
 # Modular-Trackular mods. SPDX-License-Identifier: MIT
 """The Master FX mod's mockups (docs/mods/masterfx.md): the Master page's three lists, a plugin's
-labels on the Reverb page, a plugin's own knobs and the Ducks list on the Limiter page, and the
-Bypassed and Missing states.
+labels on the Reverb page, a plugin's own knobs and the Ducks list on the Limiter page, Glue's page
+with its Tracks list, and the Bypassed and Missing states.
 
 The screens are CE's (core/interface/masterParams/gMasterParams.cpp: showMasterScreen,
 showReverbScreen, showLimiterScreen and the framesPlaces), with Master FX's additions from the same
-file (showMasterfxLists, showMasterfxOwnKnobs, showMasterfxDucks). The lists are CE's cList
+file (showMasterfxLists, showMasterfxOwnKnobs, showMasterfxLimiterColumn, showMasterfxDucks). The lists are CE's cList
 (core/libs/NewDisplay/list.cpp) in activeListColors: rows of 27 px, a white outline on the choice,
 marked rows in red. The lists' rows are masterfx::refreshChoices' (Stock, the pack in its order, then
-the card's files), the labels and knobs the plugins' own (masterfx-sdk/pack/pack.cpp, glue.cpp), and
-the values CE's defaults as its show functions print them.
+the card's files), the labels and knobs the plugins' own (masterfx-sdk/pack/pack.cpp, glue.cpp,
+compressor.cpp), and the values CE's defaults as its show functions print them, or the plugins'
+defaults as their format() prints them. An own knob's bar is masterfx::ownKnobPercent: its step
+times 100 over its steps less one.
 
     python tools/docs/mockups_masterfx.py
 """
@@ -24,9 +26,9 @@ OUT = Path(__file__).resolve().parents[2] / "docs" / "mods" / "img"
 # masterfx::refreshChoices: Stock, then the slot's plugins of the pack, in masterfxPack.inc's order
 REVERBS = ["Stock", "Freeverb", "Plate", "Spring", "Shimmer", '"Gated"', "Reverse"]
 DELAYS = ["Stock", "Tape", "BBD"]
-LIMITERS = ["Stock", "Glue"]
+LIMITERS = ["Stock", "Glue", "Compressor"]
 
-# The Limiter page's Ducks list (masterfx.cpp kDuckNames) and CE's Sidechain list (masterParams.h
+# The Limiter page's Ducks list, and Glue's Tracks list (masterfx.cpp kDuckNames) and CE's Sidechain list (masterParams.h
 # limiterSidechainListTxt: the tracks' names are the project's, "Track 1" to "Track 8" in a new one)
 DUCKS = ["Master"] + [f"Track {n}" for n in range(1, 9)] + ["Synth 1", "Synth 2", "Synth 3"]
 SIDECHAIN = ["Disable"] + [f"Track {n}" for n in range(1, 9)] + ["Line in L", "Line in R",
@@ -134,13 +136,15 @@ def reverb_page(title: str, words, place: int = 0) -> Screen:
     return s
 
 
-def limiter_page(title: str, title_kind: str, words, column4, own=(), place: int = 5) -> Screen:
-    """showLimiterScreen: Attack, Release, Threshold (or the plugin's words), Gain Reduce, column 4
-    (CE's Sidechain list or Master FX's Ducks list), the plugin's own knobs in 5 and 6, Back"""
+def limiter_page(title: str, title_kind: str, words, column4, own=(), place: int = 5,
+                 first=((10, "0.100s"), (0, "0.001s"), (92, "-6.00 dB"))) -> Screen:
+    """showLimiterScreen: Attack, Release, Threshold (CE's, with the plugin's words, or the plugin's
+    own knobs in their place), Gain Reduce, column 4 (CE's Sidechain list, Master FX's Ducks list or
+    Glue's Tracks list), the plugin's own knobs in 5 and 6, Back"""
     s = Screen(title)
     s.title_bar(title, title_kind=title_kind)
     s.bottom_bar()
-    for i, (v, text) in enumerate(((10, "0.100s"), (0, "0.001s"), (92, "-6.00 dB"))):  # CE's defaults
+    for i, (v, text) in enumerate(first):                  # CE's defaults, or the plugin's
         bar(s, i, v)
         label(s, i, words[i], text)
     bar(s, 3, None)
@@ -158,8 +162,21 @@ def limiter_page(title: str, title_kind: str, words, column4, own=(), place: int
 
 
 CE_LIMITER = ("LimiterAtt", "LimiterRls", "LimiterThr")
-GLUE_KNOBS = (("Ratio", 15, "4.0 :1"), ("Makeup", 0, "0.0 dB"))   # glue.cpp: 4 of 1-20 by 0.5, 0 of 0-12
+# compressor.cpp: Ratio 4 of 1-20 by 0.5 (step 6 of 38), Makeup 0 of 0-12
+COMPRESSOR_KNOBS = (("Ratio", 15, "4.0:1"), ("Makeup", 0, "+0.0 dB"))
 SIDECHAIN_OFF = (SIDECHAIN, 0, SIDECHAIN_KINDS, (), "Sidechain", "Disable", "lbl")
+# glue.cpp: Attack step 40 of 0-60 (10 ms), Release step 12 of 0-32 (200 ms), Threshold -12 of -40-0
+# by 0.5 (step 56 of 80); Ratio 4 of 1-10 by 0.1 (step 30 of 90), Makeup 0 of 0-12
+GLUE_WORDS = ("Attack", "Release", "Threshold")
+GLUE_FIRST = ((66, "10.0 ms"), (37, "200 ms"), (70, "-12.0 dB"))
+GLUE_KNOBS = (("Ratio", 33, "4.0:1"), ("Makeup", 0, "+0.0 dB"))
+
+
+def glue_page(title: str, tracks_at: int, marked, text: str, place: int) -> Screen:
+    """Glue's page: its own Attack, Release and Threshold in columns 0 to 2, the Tracks list always up
+    in column 4, Ratio and Makeup in 5 and 6"""
+    tracks = (DUCKS, tracks_at, None, marked, "Tracks", text, "val")
+    return limiter_page(title, "val", GLUE_WORDS, tracks, GLUE_KNOBS, place, GLUE_FIRST)
 
 
 def main() -> None:
@@ -178,28 +195,42 @@ def main() -> None:
     write("masterfx-reverb.svg", s, "The Reverb page with Shimmer: the title names it, and its words "
                                      "Decay, Tone and Shimmer replace Size, Damping and Diffusion")
 
-    # 3. the Limiter page with Glue: its own knobs in columns 5 and 6, Ratio selected
-    s = limiter_page("Limiter: Glue", "val", CE_LIMITER, SIDECHAIN_OFF, GLUE_KNOBS, place=5)
+    # 3. the Limiter page with Compressor: its own knobs in columns 5 and 6, Ratio selected
+    s = limiter_page("Limiter: Compressor", "val", CE_LIMITER, SIDECHAIN_OFF, COMPRESSOR_KNOBS, place=5)
     s.mark(0, 0, 800, 28, pad=0)
     mark_column(s, 5, 2)
-    write("masterfx-knobs.svg", s, "The Limiter page with Glue: its own knobs Ratio and Makeup in "
+    write("masterfx-knobs.svg", s, "The Limiter page with Compressor: its own knobs Ratio and Makeup in "
                                     "columns 5 and 6")
 
     # 4. the Ducks list in column 4 (Shift + its button): Track 3 and Synth 1 marked
     ducks = (DUCKS, 9, None, (3, 9), "Ducks", "2 tracks", "val")
-    s = limiter_page("Limiter: Glue", "val", CE_LIMITER, ducks, GLUE_KNOBS, place=4)
+    s = limiter_page("Limiter: Compressor", "val", CE_LIMITER, ducks, COMPRESSOR_KNOBS, place=4)
     mark_column(s, 4)
     write("masterfx-ducks.svg", s, "The Limiter page's Ducks list: Track 3 and Synth 1 marked, so "
                                     "the key turns those two down instead of the master")
 
-    # 5. the time guard has stopped Glue: the Limiter column says Bypassed
+    # 5. Glue's page on the master: its own Attack, Release and Threshold, Tracks, Ratio and Makeup
+    s = glue_page("Limiter: Glue", 0, (), "Master", 0)
+    s.mark(0, 0, 800, 28, pad=0)
+    mark_column(s, 0, 3)
+    mark_column(s, 4, 3)
+    write("masterfx-glue.svg", s, "Glue's page: its own Attack, Release and Threshold, the Tracks list "
+                                   "on Master, Ratio and Makeup")
+
+    # 6. Glue on the drums: Track 1, 2 and 3 marked in the Tracks list
+    s = glue_page("Limiter: Glue", 3, (1, 2, 3), "3 tracks", 4)
+    mark_column(s, 4)
+    write("masterfx-glue-tracks.svg", s, "Glue's Tracks list: Track 1, 2 and 3 marked, so only those "
+                                          "three are compressed, together")
+
+    # 7. the time guard has stopped Glue: the Limiter column says Bypassed
     s = master_page("Master FX: a bypassed plugin", (4, 2, 1), texts=["Shimmer", "BBD", "Bypassed"], place=3)
     s.mark(COL * 3 + 3, 428, COL - 6, 48)
     write("masterfx-bypassed.svg", s, "The Master page with the Limiter slot's plugin stopped by the "
                                        "time guard: its column says Bypassed")
 
-    # 6. the project's Limiter file isn't on the card: Missing in the list and the column
-    s = master_page("Master FX: a missing plugin", (4, 2, 2),
+    # 8. the project's Limiter file isn't on the card: Missing in the list and the column
+    s = master_page("Master FX: a missing plugin", (4, 2, 3),
                     lists=(REVERBS, DELAYS, LIMITERS + ["Missing"]), place=3)
     mark_column(s, 3)
     write("masterfx-missing.svg", s, "The Master page with the project's Limiter plugin missing from "

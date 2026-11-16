@@ -274,8 +274,8 @@ uint8_t masterfxDuckMarks[mods::masterfx::kDuckItems];
 uint8_t masterfxDuckCursor = 0;
 bool masterfxDucksUp = false;
 
-// The own knobs' values, columns 5 and 6 (main loop; written before use)
-__NOINIT(EXTERNAL_RAM) char masterfxKnobText[2][16];
+// The own knobs' values (main loop; written before use)
+__NOINIT(EXTERNAL_RAM) char masterfxKnobText[mods::masterfx::kOwnKnobs][16];
 
 // start: the list's bar starts on the choice. At 0 a list given its data again draws its bar on
 // Stock and slides it back down to the choice
@@ -389,19 +389,24 @@ void cMasterParams::showMasterfxLimiterWords()
     showMasterfxWords(titleBar, label, mods::masterfx::kDynamics, "Limiter");
 }
 
-// Columns 5 and 6 are empty on CE's Reverb and Limiter pages. Called after the page's labels and
-// bars are up; gives back the page's places count with the knobs in it.
+// Columns 5 and 6 are empty on CE's Reverb and Limiter pages; an own-dynamics plugin's first three
+// knobs take the Limiter page's 0 to 2 from CE's. Called after the page's labels and bars are up;
+// gives back the page's places count with the knobs in it.
 uint8_t cMasterParams::showMasterfxOwnKnobs(uint8_t slot, uint8_t places)
 {
     const uint8_t n = mods::masterfx::ownKnobs(slot);
     for (uint8_t k = 0; k < n; k++)
     {
-        const hControl column = label[5 + k];
-        display.setControlText(column, mods::masterfx::ownKnobLabel(slot, k));
-        display.setControlShow(barControl[5 + k]);
+        const uint8_t column = mods::masterfx::ownKnobColumn(slot, k);
+        display.setControlText(label[column], mods::masterfx::ownKnobLabel(slot, k));
+        display.setControlShow(barControl[column]);
         showMasterfxOwnKnob(slot, k);
+        if (column + 1 > places)
+        {
+            places = column + 1;
+        }
     }
-    return n > 0 ? 5 + n : places;
+    return places;
 }
 
 void cMasterParams::showMasterfxOwnKnob(uint8_t slot, uint8_t knob)
@@ -410,11 +415,24 @@ void cMasterParams::showMasterfxOwnKnob(uint8_t slot, uint8_t knob)
     {
         return;
     }
+    const uint8_t column = mods::masterfx::ownKnobColumn(slot, knob);
     mods::masterfx::ownKnobText(slot, knob, masterfxKnobText[knob], sizeof(masterfxKnobText[knob]));
-    display.setControlValue(barControl[5 + knob], mods::masterfx::ownKnobPercent(slot, knob));
-    display.refreshControl(barControl[5 + knob]);
-    display.setControlText2(label[5 + knob], masterfxKnobText[knob]);
-    display.refreshControl(label[5 + knob]);
+    display.setControlValue(barControl[column], mods::masterfx::ownKnobPercent(slot, knob));
+    display.refreshControl(barControl[column]);
+    display.setControlText2(label[column], masterfxKnobText[knob]);
+    display.refreshControl(label[column]);
+}
+
+// CE's Attack, Release or Threshold column holds the plugin's own knob: shown, and CE's isn't
+bool cMasterParams::showMasterfxLimiterColumn(uint8_t column)
+{
+    const int knob = mods::masterfx::ownKnobAt(mods::masterfx::kDynamics, column);
+    if (knob < 0)
+    {
+        return false;
+    }
+    showMasterfxOwnKnob(mods::masterfx::kDynamics, static_cast<uint8_t>(knob));
+    return true;
 }
 
 bool cMasterParams::masterfxDucksShown()
@@ -422,9 +440,12 @@ bool cMasterParams::masterfxDucksShown()
     return masterfxDucksUp;
 }
 
+// The Ducks list (Shift + Sidechain) or, for a bus plugin, the Tracks list, always up: the same
+// set and the same control
 void cMasterParams::showMasterfxDucks(bool show)
 {
-    show = show && mods::masterfx::canDuck();
+    const bool tracks = mods::masterfx::canBus();
+    show = show && (mods::masterfx::canDuck() || tracks);
     if (!show)
     {
         if (masterfxDucksUp) // CE's list as it was
@@ -444,7 +465,7 @@ void cMasterParams::showMasterfxDucks(bool show)
     masterfxDucksList.selectionActive = 0;
     masterfxDucksUp = true;
     display.setControlData(limiterSidechainList, &masterfxDucksList);
-    display.setControlText(label[4], "Ducks");
+    display.setControlText(label[4], tracks ? "Tracks" : "Ducks");
     moveMasterfxDucks(0);
 }
 
@@ -1023,7 +1044,11 @@ void cMasterParams::showLimiterScreen()
     showLimiterSidechain();
 
     frameData.placesCount = 5;
-#if MT_HAS_MASTERFX // MT: the plugin's own knobs in columns 5 and 6
+#if MT_HAS_MASTERFX // MT: a bus plugin's Tracks list; the plugin's own knobs in columns 5 and 6 (and 0 to 2)
+    if (mods::masterfx::canBus())
+    {
+        showMasterfxDucks(true);
+    }
     frameData.placesCount = showMasterfxOwnKnobs(mods::masterfx::kDynamics, frameData.placesCount);
     if (selectedPlaceLimiter >= frameData.placesCount)
     {
@@ -1080,6 +1105,12 @@ void cMasterParams::showLimiterScreen()
 void cMasterParams::showLimiterAttack()
 {
     constexpr uint8_t LIMITER_ATTACK_FIELD_IDX = 0;
+#if MT_HAS_MASTERFX // MT:
+    if (showMasterfxLimiterColumn(LIMITER_ATTACK_FIELD_IDX))
+    {
+        return;
+    }
+#endif
 
     sprintf(limitAttackVal, "%.3fs", (float)(mtProject.values.limiterAttack / 1000.0f));
 
@@ -1095,6 +1126,12 @@ void cMasterParams::showLimiterAttack()
 void cMasterParams::showLimiterRelease()
 {
     constexpr uint8_t LIMITER_RELEASE_FIELD_IDX = 1;
+#if MT_HAS_MASTERFX // MT:
+    if (showMasterfxLimiterColumn(LIMITER_RELEASE_FIELD_IDX))
+    {
+        return;
+    }
+#endif
 
     sprintf(limitReleaseVal, "%.3fs", (float)(mtProject.values.limiterRelease / 1000.0f));
 
@@ -1110,6 +1147,12 @@ void cMasterParams::showLimiterRelease()
 void cMasterParams::showLimiterThreshold()
 {
     constexpr uint8_t LIMITER_THRESHOLD_FIELD_IDX = 2;
+#if MT_HAS_MASTERFX // MT:
+    if (showMasterfxLimiterColumn(LIMITER_THRESHOLD_FIELD_IDX))
+    {
+        return;
+    }
+#endif
 
     uint8_t percentValue = (mtProject.values.limiterThreshold * 100) / LIMITER_THRESHOLD_MAX;
 
@@ -1148,6 +1191,13 @@ void cMasterParams::showLimiterGainReduce()
 
 void cMasterParams::showLimiterSidechain()
 {
+#if MT_HAS_MASTERFX // MT: the Ducks or Tracks list is in the column
+    if (masterfxDucksUp)
+    {
+        moveMasterfxDucks(0);
+        return;
+    }
+#endif
     display.setControlValue(limiterSidechainList, mtProject.values.limiterSidechain);
     display.refreshControl(limiterSidechainList);
 

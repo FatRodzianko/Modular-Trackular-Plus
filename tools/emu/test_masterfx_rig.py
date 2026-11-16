@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """masterfx on the sound rig: the Master page, the real switch, the real graph with the synths in.
 
-Usage: python tools/emu/test_masterfx_rig.py <mods.axf> <reference.axf> [only: ui|graph|stress|debounce|project|play]
+Usage: python tools/emu/test_masterfx_rig.py <mods.axf> <reference.axf> [only: ui|graph|dynamics|ducks|bus|stress|debounce|project|play]
 
 test_masterfx.py checks each effect against 1.2.0 on its own. This one checks what's around them:
 - ui: CE's real cMasterParams with display commands caught at API_*. With the mod Off the page
   makes the same display calls as the reference build. On: the lists, stops, names, and the
   page's display bytes counted against the limit. On firmware with the Limiter list (masterfx-2.0's
-  step 5): that list, the Limiter page's title and Glue's own knobs, Missing and Bypassed.
+  step 5): that list, the Limiter page's title and Compressor's own knobs, Missing and Bypassed;
+  Glue's page (its own Attack, Release and Threshold, the Tracks list).
+- bus: Glue on chosen tracks: only they change, exactly; the synth parts a pass behind.
 - graph: the switch through mods::projectMasterfxSwitchChanged, the boot gate, and synth notes
   through CE's sends to the chosen effect.
 - stress: 8 synth voices with the heaviest pair, then switches, knobs and notes while playing.
@@ -60,9 +62,11 @@ def check(ok, what):
         failures += 1
 
 
-SLOT_SIZE = 56                      # masterfx::SlotSetting: the file (48), two own knobs
+OWN_KNOBS = 5                       # masterfx::kOwnKnobs (record version 3; 2.0 had 2)
+SLOT_SIZE = 48 + 4 * OWN_KNOBS      # masterfx::SlotSetting: the file (48), the own knobs
 FILE_IO = "_ZN4mods12_GLOBAL__N_16fileIoE"
 SLOTS = "_ZN4mods8masterfx7plugins12_GLOBAL__N_15slotsE"    # the runtime's SlotState[3]
+KNOB_VALUES = 16                    # SlotState.value[0]: after 8 bytes and dirty[5], aligned
 
 
 def files_of(slot):
@@ -440,7 +444,9 @@ def test_ui(mods, ref):
         log = p.take_log()
         check(any(e[0] == "text2" and e[2] == "Glue" for e in log), "the Limiter label's second line says Glue")
         p.encoder(1)
-        check(slot_file(p.r, DYNAMICS) == "Glue.ptmfx", "and stops at the end of the list")
+        check(slot_file(p.r, DYNAMICS) == "Compressor.ptmfx", "then Compressor")
+        p.encoder(1)
+        check(slot_file(p.r, DYNAMICS) == "Compressor.ptmfx", "and stops at the end of the list")
         p.press("delete")
         check(slot_file(p.r, DYNAMICS) == "", "Delete: Limiter back to Stock")
         p.press("left")
@@ -542,6 +548,7 @@ def test_ui(mods, ref):
 
     if limiter_list:
         limiter_page(mods, ref)
+        glue_page(mods)
         lists_and_card(mods)
 
     # display bytes, the heaviest choices
@@ -563,15 +570,23 @@ def test_ui(mods, ref):
         total = sum(p.page_bytes().values())
         check(total < LIMIT, f"{name} page fits ({total} of {LIMIT} B, upper bound)")
         p.press("cancel")
+    if limiter_list:
+        for file in ("Glue.ptmfx", "Compressor.ptmfx"):
+            set_dynamics(p.r, file)
+            p.press("limiter")
+            total = sum(p.page_bytes().values())
+            print(f"     the Limiter page with {file}: {total} B")
+            check(total < LIMIT, f"the Limiter page with {file} fits ({total} of {LIMIT} B, upper bound)")
+            p.press("cancel")
 
 
 def limiter_page(mods, ref):
-    """The Limiter page with Glue: its title, CE's knobs' labels (Glue has none of its own), its own
+    """The Limiter page with Compressor: its title, CE's knobs' labels (Compressor has none of its own), its own
     knobs in columns 5 and 6, then Stock, a missing file and Bypassed"""
     p = MasterPage(mods)
     m = p.m
     set_mod(p.r, True, 0, 0)
-    set_dynamics(p.r, "Glue.ptmfx")
+    set_dynamics(p.r, "Compressor.ptmfx")
     p.start()
     p.take_log()
     stored = []
@@ -581,11 +596,11 @@ def limiter_page(mods, ref):
     titles = [e[1] for e in log if e[0] == "title"]
     final, second = last(log, "text"), last(log, "text2")
     label0 = next(h for h, t in final.items() if t == "Back") - 7
-    check(titles[-1] == "Limiter: Glue", f"Glue: the Limiter page's title ({titles[-1]})")
+    check(titles[-1] == "Limiter: Compressor", f"Compressor: the Limiter page's title ({titles[-1]})")
     said = [final[label0 + i] for i in range(3)]
-    check(said == ["LimiterAtt", "LimiterRls", "LimiterThr"], f"Glue: CE's labels for Attack, Release, Threshold ({said})")
+    check(said == ["LimiterAtt", "LimiterRls", "LimiterThr"], f"Compressor: CE's labels for Attack, Release, Threshold ({said})")
     own = [(final.get(label0 + 5), second.get(label0 + 5)), (final.get(label0 + 6), second.get(label0 + 6))]
-    check(own == [("Ratio", "4.0:1"), ("Makeup", "+0.0 dB")], f"Glue: its own knobs in columns 5 and 6 at their defaults ({own})")
+    check(own == [("Ratio", "4.0:1"), ("Makeup", "+0.0 dB")], f"Compressor: its own knobs in columns 5 and 6 at their defaults ({own})")
     check(all(math.isnan(k) for k in own_knobs(p.r)), "and settings leave them unset")
     cover = [e for e in log if e[0] == "position" and e[2] == (800 // 8) * 7 + 2]
     check(bool(cover), "the cover moves to column 7, off the own knobs")
@@ -605,14 +620,14 @@ def limiter_page(mods, ref):
     check(bool(stored), "and the project marked changed")
     p.press("left")
     p.encoder(2)
-    check(own_knobs(p.r) == (5.0, 0.5), f"encoder on Ratio, two steps: 5.0 {own_knobs(p.r)}")
-    value = struct.unpack("<f", m.read(runtime_slot(p.r, DYNAMICS) + 12, 4))[0]
+    check(own_knobs(p.r)[:2] == (5.0, 0.5), f"encoder on Ratio, two steps: 5.0 {own_knobs(p.r)}")
+    value = struct.unpack("<f", m.read(runtime_slot(p.r, DYNAMICS) + KNOB_VALUES, 4))[0]
     check(value == 5.0, f"the plugin is given 5.0 ({value})")
     p.press("up")
     p.take_log()
     p.press("delete")
     log = p.take_log()
-    check(own_knobs(p.r) == (4.0, 0.5) and any(e[0] == "text2" and e[2] == "4.0:1" for e in log),
+    check(own_knobs(p.r)[:2] == (4.0, 0.5) and any(e[0] == "text2" and e[2] == "4.0:1" for e in log),
           f"Delete on Ratio: its default, 4.0 {own_knobs(p.r)}")
     p.press("knob6")
     check(p.place(frame) == 6, "the button under column 6 selects Makeup")
@@ -624,7 +639,7 @@ def limiter_page(mods, ref):
     p.take_log()
     p.update()
     titles = [e[1] for e in p.take_log() if e[0] == "title"]
-    check(titles == ["Limiter: Glue (bypassed)"], f"bypassed: the title says so ({titles})")
+    check(titles == ["Limiter: Compressor (bypassed)"], f"bypassed: the title says so ({titles})")
     p.update()
     check(not [e for e in p.take_log() if e[0] == "title"], "and only once")
     p.press("cancel")
@@ -665,6 +680,112 @@ def limiter_page(mods, ref):
     title = [e[1] for e in q.take_log() if e[0] == "title"]
     check(title[-1:] == ["Limiter: Missing: Gone.ptmfx"], f"missing: the title says so ({title})")
     check(not q.r.failures, "no asserts")
+
+
+def glue_page(mods):
+    """The Limiter page with Glue: its own Attack, Release and Threshold in CE's columns 0 to 2 (CE's
+    knobs untouched), the Tracks list in column 4 always, Ratio and Makeup in 5 and 6"""
+    p = MasterPage(mods)
+    m = p.m
+    set_mod(p.r, True, 0, 0)
+    set_dynamics(p.r, "Glue.ptmfx")
+    p.start()
+    ce_calls = []
+    for name in ("_Z19changeLimiterAttacks", "_Z20changeLimiterReleases", "_Z21changeLimiterTresholds",
+                 "_Z23setDefaultLimiterAttackv"):
+        if name in p.r.syms:
+            p.r.watch(m.addr(name), lambda mm, n=name: ce_calls.append(n))
+    p.take_log()
+    p.press("limiter")
+    log = p.take_log()
+    titles = [e[1] for e in log if e[0] == "title"]
+    final, second = last(log, "text"), last(log, "text2")
+    label0 = next(h for h, t in final.items() if t == "Back") - 7
+    check(titles[-1] == "Limiter: Glue", f"Glue: the Limiter page's title ({titles[-1]})")
+    cols = [(final.get(label0 + i), second.get(label0 + i)) for i in range(7)]
+    want = [("Attack", "10.0 ms"), ("Release", "200 ms"), ("Threshold", "-12.0 dB"), ("Gain Reduce", ""),
+            ("Tracks", "Master"), ("Ratio", "4.0:1"), ("Makeup", "+0.0 dB")]
+    check(cols == want, f"Glue: its knobs in columns 0 to 2, Tracks in 4, Ratio and Makeup in 5 and 6 ({cols})")
+    frame = p.handle_of("_ZTV6cFrame")
+    stops = []
+    for _ in range(6):
+        p.press("right")
+        stops.append(p.place(frame))
+    check(stops == [1, 2, 4, 5, 6, 6], f"Right stops on 1, 2, 4, 5, 6 ({stops})")
+    for _ in range(6):
+        p.press("left")
+    check(p.place(frame) == 0, "back on Attack")
+    p.take_log()
+    p.encoder(1)
+    log = p.take_log()
+    k = own_knobs(p.r)
+    check(k[0] == 41.0 and any(e[0] == "text2" and e[2] == "11.2 ms" for e in log),
+          f"encoder on Attack: one step, 11.2 ms, in settings as step 41 {k}")
+    p.encoder(-100)
+    check(own_knobs(p.r)[0] == 0.0, f"Attack stops at 0.1 ms (step 0) {own_knobs(p.r)}")
+    p.take_log()
+    p.press("delete")
+    log = p.take_log()
+    check(own_knobs(p.r)[0] == 40.0 and any(e[0] == "text2" and e[2] == "10.0 ms" for e in log),
+          f"Delete on Attack: its default, 10.0 ms {own_knobs(p.r)}")
+    p.press("right")
+    p.encoder(100)
+    log = p.take_log()
+    check(own_knobs(p.r)[1] == 32.0 and any(e[0] == "text2" and e[2] == "2.00 s" for e in log),
+          f"Release at its end: 2.00 s {own_knobs(p.r)}")
+    p.press("right")
+    p.encoder(-4)
+    log = p.take_log()
+    check(own_knobs(p.r)[2] == -14.0 and any(e[0] == "text2" and e[2] == "-14.0 dB" for e in log),
+          f"Threshold, four steps down: -14.0 dB {own_knobs(p.r)}")
+    check(not ce_calls, f"CE's Attack, Release and Threshold aren't touched ({ce_calls})")
+    value = struct.unpack("<f", m.read(runtime_slot(p.r, DYNAMICS) + KNOB_VALUES + 4 * 2, 4))[0]
+    check(value == -14.0, f"the plugin is given -14.0 for its Threshold ({value})")
+
+    # The Tracks list: always up in column 4, the same set as the Ducks list
+    p.press("right")
+    check(p.place(frame) == 4, "Right from Threshold: the Tracks list")
+    p.encoder(1)
+    p.press("eq")
+    p.encoder(2)
+    p.press("eq")
+    log = p.take_log()
+    ducks = struct.unpack("<H", m.read(m.addr(SETTINGS) + DUCKS_AT, 2))[0]
+    check(ducks == 0b101 and last(log, "text2").get(label0 + 4) == "2 tracks",
+          f"Track 1 and Track 3 marked: 2 tracks ({ducks:#x})")
+    bus = struct.unpack("<H", m.read(m.addr(BUS_MASK), 2))[0]
+    check(bus == 0b101 and duck_mask(p.r) == 0, f"the bus at once: Track 1 and 3, nothing ducked ({bus:#x})")
+    shift = [1]
+    p.r.stub(m.addr("_ZN7Buttons15isButtonPressedEi"), lambda mm: shift[0])
+    p.take_log()
+    p.press("eq")
+    shift[0] = 0
+    check(last(p.take_log(), "text").get(label0 + 4) in (None, "Tracks"),
+          "Shift + column 4: still the Tracks list (no Ducks list for a bus plugin)")
+    p.press("delete")
+    ducks = struct.unpack("<H", m.read(m.addr(SETTINGS) + DUCKS_AT, 2))[0]
+    check(ducks == 0 and struct.unpack("<H", m.read(m.addr(BUS_MASK), 2))[0] == 0,
+          f"Delete on Tracks: back to the master ({ducks:#x})")
+    total = sum(p.page_bytes().values())
+    check(total < LIMIT, f"Glue's page fits ({total} of {LIMIT} B, upper bound)")
+    p.press("cancel")
+    p.take_log()
+    p.press("limiter")
+    log = p.take_log()
+    check(last(log, "text").get(label0 + 4) == "Tracks" and last(log, "text2").get(label0 + 2) == "-14.0 dB",
+          "opened again: the Tracks list, and the knobs as left")
+    check(not p.r.failures, "no asserts")
+
+    # Another dynamics plugin picked (masterfx::choose, as the Master page's list and Config call it):
+    # the set back to the master
+    m.write(m.addr(SETTINGS) + DUCKS_AT, struct.pack("<H", 0b101))
+    m.call(m.addr("_ZN4mods8masterfx5applyEv"), max_insns=400_000_000)
+    m.call(m.addr("_ZN4mods8masterfx6chooseEhh"), DYNAMICS, 2, max_insns=50_000_000)
+    m.call(m.addr("_ZN4mods8masterfx5applyEv"), max_insns=400_000_000)
+    ducks = struct.unpack("<H", m.read(m.addr(SETTINGS) + DUCKS_AT, 2))[0]
+    check(slot_file(p.r, DYNAMICS) == "Compressor.ptmfx" and ducks == 0,
+          f"Glue to Compressor: the set back to the master ({slot_file(p.r, DYNAMICS)}, {ducks:#x})")
+    check(not p.r.failures, "no asserts")
 
 
 def lists_and_card(mods):
@@ -874,14 +995,15 @@ def set_dynamics(r, file, knobs=None):
     """The dynamics slot's file in settings, as masterfx::choose leaves it (the own knobs unset, or
     `knobs`), then applied"""
     m = r.m
-    own = b"".join(UNSET if k is None else struct.pack("<f", k) for k in (knobs or (None, None)))
+    knobs = list(knobs or ()) + [None] * (OWN_KNOBS - len(knobs or ()))
+    own = b"".join(UNSET if k is None else struct.pack("<f", k) for k in knobs)
     m.write(m.addr(SETTINGS) + SLOT_SIZE * DYNAMICS, file.encode() + b"\0" * (48 - len(file)) + own)
     m.call(m.addr("_ZN4mods8masterfx5applyEv"), max_insns=400_000_000)
 
 
 def own_knobs(r):
     """The dynamics slot's own knobs as the record holds them"""
-    return struct.unpack("<2f", r.m.read(r.m.addr(SETTINGS) + SLOT_SIZE * DYNAMICS + 48, 8))
+    return struct.unpack(f"<{OWN_KNOBS}f", r.m.read(r.m.addr(SETTINGS) + SLOT_SIZE * DYNAMICS + 48, 4 * OWN_KNOBS))
 
 
 def limiter_knobs(r, threshold=32767, sidechain=0):
@@ -930,12 +1052,12 @@ def test_dynamics(mods, ref):
     note_peak = peak(base[0][0])
     check(note_peak > 2000, f"the note plays (peak {note_peak} at the output, after CE's master volume)")
 
-    # Glue, the threshold at the top: nothing to do. CE's limiter delays the master by 5 samples
+    # Compressor, the threshold at the top: nothing to do. CE's limiter delays the master by 5 samples
     # (LIMITER_DELAY) and the plugin doesn't, so the plugin's master is CE's 5 samples sooner.
-    g = graph(mods, "Glue.ptmfx")
+    g = graph(mods, "Compressor.ptmfx")
     m = g.m
-    check(m.r8(m.addr(ACTIVE_DYNAMICS)) == 1, "Glue chosen: the dynamics hook runs the plugin")
-    check(all(math.isnan(k) for k in own_knobs(g)), f"its own knobs left unset in settings: Glue's defaults play {own_knobs(g)}")
+    check(m.r8(m.addr(ACTIVE_DYNAMICS)) == 1, "Compressor chosen: the dynamics hook runs the plugin")
+    check(all(math.isnan(k) for k in own_knobs(g)), f"its own knobs left unset in settings: Compressor's defaults play {own_knobs(g)}")
     calls = []
     g.watch(m.addr(PROCESS), lambda mm: calls.append(mm.arg(0)) if mm.arg(0) == DYNAMICS else None)
     a, b = phrase(g)
@@ -945,10 +1067,10 @@ def test_dynamics(mods, ref):
         mine = a[side] + b[side]
         ce = base[0][side] + base[1][side]
         check(mine[:-5] == ce[5:], f"threshold at the top, side {side}: CE's master 5 samples sooner, sample for sample")
-    check(not g.failures, "Glue: no asserts")
+    check(not g.failures, "Compressor: no asserts")
 
-    # Glue, the threshold down: both sides turned down, the meter shows it
-    g = graph(mods, "Glue.ptmfx", threshold=loud)
+    # Compressor, the threshold down: both sides turned down, the meter shows it
+    g = graph(mods, "Compressor.ptmfx", threshold=loud)
     a, b = phrase(g, tail=40)
     gains = meter(g)
     for side in (0, 1):
@@ -957,7 +1079,7 @@ def test_dynamics(mods, ref):
     check(gains[0] == gains[1] and 0.0 < gains[0] < 0.95, f"the meter: the plugin's gain on both objects {gains}")
 
     # A key that is silent: nothing to duck, though the master is over the threshold
-    g = graph(mods, "Glue.ptmfx", threshold=loud, sidechain=1)   # sample track 1, which plays nothing
+    g = graph(mods, "Compressor.ptmfx", threshold=loud, sidechain=1)   # sample track 1, which plays nothing
     a, b = phrase(g)
     for side in (0, 1):
         mine = a[side] + b[side]
@@ -966,13 +1088,13 @@ def test_dynamics(mods, ref):
 
     # Bypassed by the time guard (its byte set, as the interrupt sets it; tools/masterfx/test_guards.py
     # makes the guard trip): the master passes through untouched, the threshold down or not
-    g = graph(mods, "Glue.ptmfx", threshold=loud)
+    g = graph(mods, "Compressor.ptmfx", threshold=loud)
     g.m.write(runtime_slot(g, DYNAMICS) + 2, b"\x01")
     a, b = phrase(g)
     for side in (0, 1):
         mine = a[side] + b[side]
         ce = base[0][side] + base[1][side]
-        check(mine[:-5] == ce[5:], f"Glue bypassed, side {side}: the master untouched, CE's 5 samples sooner")
+        check(mine[:-5] == ce[5:], f"Compressor bypassed, side {side}: the master untouched, CE's 5 samples sooner")
 
     # A bypassed reverb or delay returns silence: the output is the dry sound alone, as with no send
     for slot, reverb, delay in ((0, 4, 0), (1, 0, 2)):
@@ -992,7 +1114,7 @@ def test_dynamics(mods, ref):
 
     # CE's resetLimiter (Sample Editor, Sample Recorder): the slot's memory cleared with the master
     # passed through, then the plugin starts over
-    g = graph(mods, "Glue.ptmfx", threshold=loud)
+    g = graph(mods, "Compressor.ptmfx", threshold=loud)
     m = g.m
     seen = []
     g.watch(m.addr("_ZN4mods8masterfx19clearDynamicsMemoryEv"), lambda mm: seen.append(("clear", m.r8(m.addr(ACTIVE_DYNAMICS)))))
@@ -1003,17 +1125,17 @@ def test_dynamics(mods, ref):
           f"resetLimiter: memory cleared and the plugin reset with the master passed through, then it runs again {seen}")
 
     # Back to Stock: CE's limiter plays again, from its power-up state
-    g = graph(mods, "Glue.ptmfx")
+    g = graph(mods, "Compressor.ptmfx")
     phrase(g)
     set_dynamics(g, "")
     check(g.m.r8(g.m.addr(ACTIVE_DYNAMICS)) == 0, "Stock again: CE's limiter")
     again = phrase(g)
     fresh = graph(mods, "")
     phrase(fresh)
-    check(again == phrase(fresh), "Stock after Glue: as if Glue had never played")
+    check(again == phrase(fresh), "Stock after Compressor: as if Compressor had never played")
 
     # The mod Off: CE's limiter
-    g = graph(mods, "Glue.ptmfx")
+    g = graph(mods, "Compressor.ptmfx")
     set_mod(g, False)
     check(g.m.r8(g.m.addr(ACTIVE_DYNAMICS)) == 0, "mod Off: CE's limiter")
 
@@ -1133,7 +1255,7 @@ def test_ducks(mods, ref):
     _, ce_quiet = run(ref, sidechain=0)
     print(f"     (the Line in {'is' if ce[0] != ce_quiet[0] else 'is not'} heard on the master here)")
 
-    # Glue ducking Synth 1 by the Line in
+    # Compressor ducking Synth 1 by the Line in
     seen = []
     who = {}
 
@@ -1143,7 +1265,7 @@ def test_ducks(mods, ref):
             return
         seen.append((gg.m.r8(gg.m.addr(DUCK_LIVE)), meter(gg)[0], tuple(who["calls"])))
         who["calls"].clear()
-    g, mine = run(mods, "Glue.ptmfx", SYNTH_1_BIT, loud, watch=each)
+    g, mine = run(mods, "Compressor.ptmfx", SYNTH_1_BIT, loud, watch=each)
     check(duck_mask(g) == SYNTH_1_BIT, f"Synth 1 in the record: the mask the interrupt reads ({duck_mask(g):#x})")
     check(all(live == 1 for live, _, _ in seen), "a key and a ducking plugin: ducking every block")
     callers = {c for _, _, c in seen}
@@ -1165,19 +1287,19 @@ def test_ducks(mods, ref):
     check(not g.failures, "no asserts")
 
     # A silent destination: the master and Synth 1 untouched though the key is loud
-    _, silent = run(mods, "Glue.ptmfx", 1 << 0, loud)
+    _, silent = run(mods, "Compressor.ptmfx", 1 << 0, loud)
     check(first_ducked(silent[0], ce[0]) is None and first_ducked(silent[1], ce[1]) is None,
           "ducking Track 1, which is silent: the master untouched all through, CE's 5 samples sooner")
 
     # The key made after the track (synth part 1: PolySynth runs after the panning amplifiers):
     # the gain the block before kept, one block late
     _, ce_synth = run(ref, sidechain=SYNTH_2, synth_key=True)
-    _, late = run(mods, "Glue.ptmfx", SYNTH_1_BIT, loud, SYNTH_2, synth_key=True)
+    _, late = run(mods, "Compressor.ptmfx", SYNTH_1_BIT, loud, SYNTH_2, synth_key=True)
     g2 = Graph(mods)
     g2.set_instrument(1, 2)
     set_mod(g2, True, 0, 0)
     set_ducks(g2, SYNTH_1_BIT)
-    set_dynamics(g2, "Glue.ptmfx")
+    set_dynamics(g2, "Compressor.ptmfx")
     limiter_knobs(g2, loud, SYNTH_2)
     line = LineIn(g2)
     g2.note(0, 48, True)
@@ -1201,7 +1323,7 @@ def test_ducks(mods, ref):
     g = Graph(mods)
     set_mod(g, True, 0, 0)
     set_ducks(g, SYNTH_1_BIT)
-    set_dynamics(g, "Glue.ptmfx")
+    set_dynamics(g, "Compressor.ptmfx")
     limiter_knobs(g, loud, LINE_IN_L)
     line = LineIn(g)
     m = g.m
@@ -1224,22 +1346,22 @@ def test_ducks(mods, ref):
     set_ducks(g, SYNTH_1_BIT)
     set_dynamics(g, "")
     check(duck_mask(g) == 0, "Stock in the dynamics slot: nothing ducked, though the record says Synth 1")
-    set_dynamics(g, "Glue.ptmfx")
-    check(duck_mask(g) == SYNTH_1_BIT, "Glue again: Synth 1")
+    set_dynamics(g, "Compressor.ptmfx")
+    check(duck_mask(g) == SYNTH_1_BIT, "Compressor again: Synth 1")
     set_mod(g, False)
     check(duck_mask(g) == 0, "the mod Off: nothing ducked")
 
-    _, plain = run(mods, "Glue.ptmfx", 0, loud)
+    _, plain = run(mods, "Compressor.ptmfx", 0, loud)
     check(plain != mine, "ducks against the master: what plays differs")
-    g, keyless = run(mods, "Glue.ptmfx", SYNTH_1_BIT, loud, sidechain=0)
-    _, plain_keyless = run(mods, "Glue.ptmfx", 0, loud, sidechain=0)
+    g, keyless = run(mods, "Compressor.ptmfx", SYNTH_1_BIT, loud, sidechain=0)
+    _, plain_keyless = run(mods, "Compressor.ptmfx", 0, loud, sidechain=0)
     check(keyless == plain_keyless and g.m.r8(g.m.addr(DUCK_LIVE)) == 0,
-          "Sidechain off: Glue on the master, as without ducks")
+          "Sidechain off: Compressor on the master, as without ducks")
 
     g = Graph(mods)
     set_mod(g, True, 0, 0)
     card = g.sd.files
-    glue = bytearray(card["/MasterFX/Glue.ptmfx"])
+    glue = bytearray(card["/MasterFX/Compressor.ptmfx"])
     glue[6] = 0x01                  # PTMFX_FLAG_FLOAT only
     card["/MasterFX/NoDuck.ptmfx"] = bytes(glue)
     g.m.call(g.m.addr("_ZN4mods8masterfx7plugins4scanEv"), max_insns=400_000_000)  # the card listed again
@@ -1252,12 +1374,282 @@ def test_ducks(mods, ref):
     ducks_page(mods)
 
 
+PLAY_BUTTON = 23                   # the Play button, as hardware.cpp reports it
+QUIET_DRUMS = 10                    # of 100: the bus test's kick and hat step volume
+BUS_MASK = "_ZN4mods8masterfx7busMaskE"
+BUS_LIVE = "_ZN4mods8masterfx7busLiveE"
+BUS_MIXERS = "_ZN4mods8masterfx9busMixersE"
+SET_SATURATION = "_ZN11audioEngine17setSaturationTypeE14SaturationType"
+HARD_CLIP, SATURATE = 0, 2          # CE's SaturationType
+SYNTH_2_BIT = 1 << 9
+MAKEUP_6 = 10 ** (6 / 20)           # Glue's Makeup at +6 dB, linear
+
+
+def bus_update(syms):
+    """AudioMixer<11>::modsBusUpdate<11>(), the tracks mixer's bus (a member template: found by name)"""
+    names = [n for n in syms if "AudioMixer" in n and "modsBusUpdate" in n]
+    return names[0] if len(names) == 1 else None
+
+
+def ce_saturate(x):
+    """CE's kSaturate (dspApplyGain.cpp saturate), on one int32 sample: 3x/2 - x^3/2 at 16 bits,
+    with C's integer division and the shifts' rounding (multiply_32x32_rshift(a, b, z) is the
+    64-bit product shifted right by 31 - z)"""
+    if abs(x) > 32767:
+        return 32767 if x >= 0 else -32768
+    half = 3 * x
+    half = half // 2 if half >= 0 else -((-half) // 2)      # C: toward zero
+    out = half - ((((x * x) >> 16) * x) >> 15)
+    return max(-32768, min(32767, out))
+
+
+def through_mixers(x):
+    """CE's tracks mixer and dry mix mixer, both at kSaturate, on the tracks mixer's int32 sum (no
+    sends, so the dry mix mixer has only the tracks mixer)"""
+    return ce_saturate(ce_saturate(x))
+
+
+def bus_close(got, want, most=2):
+    """Each sample within `most` of what it should be: the master's two roundings (the bus's, CE's
+    master volume) are the only difference. The largest difference."""
+    return max((abs(a - b) for a, b in zip(got, want)), default=0) <= most and len(got) == len(want), \
+        max((abs(a - b) for a, b in zip(got, want)), default=0)
+
+
+def test_bus(mods, ref):
+    """Glue on chosen tracks (the Tracks list): the plugin works on their sum in CE's tracks mixer, and
+    the mixer sums the rest + what it made of it before its saturation. Checked by superposition where
+    CE's mixers are linear (hard clip, under full scale), so the exact sample timing is checked too,
+    and against CE's saturation curve where they aren't."""
+    print("-- bus --")
+    if BUS_MASK not in SoundRig(mods).syms:
+        print("SKIP the bus: firmware from before it")
+        return
+    on_blocks = 60
+
+    def synths(tracks, knobs, parts=(0, 1)):
+        """Synth 1 holds a low note and Synth 2 a high one (each part on its own), through Glue. Three
+        silent blocks first: the bus starts the pass after the limiter first takes it, and the synth
+        parts' sum a pass after that, so from the note on the plugin hears the same either way."""
+        g = Graph(mods)
+        g.set_instrument(1, 2)
+        for part in (0, 1):
+            # PolySynth::gainDB, CE's host: each part alone reaches full scale, and the sum of two
+            # mustn't clip CE's int16 mix, or the parts don't add up whatever Glue does
+            g._send("_ZN11audioEngine12setSynthGainEif", part, -20.0)
+        set_mod(g, True, 0, 0)
+        m = g.m
+        m.write(m.addr(SETTINGS) + DUCKS_AT, struct.pack("<H", tracks))
+        set_dynamics(g, "Glue.ptmfx", knobs)
+        g.blocks(3)
+        for part, note in ((0, 48), (1, 72)):
+            if part in parts:
+                g.note(part, note, True)
+        out = g.blocks(on_blocks)
+        return g, out
+
+    null = (None, None, None, 1.0, 0.0)         # Ratio 1:1, no makeup: Glue changes nothing
+    lift = (None, None, None, 1.0, 6.0)         # Ratio 1:1, +6 dB: the bus times MAKEUP_6, nothing more
+    hard = (0.0, None, -40.0, 10.0, 0.0)        # 0.1 ms, -40 dB, 10:1: it squashes
+
+    g, both = synths(0, null)
+    check(g.m.r8(g.m.addr(ACTIVE_DYNAMICS)) == 1 and struct.unpack("<H", g.m.read(g.m.addr(BUS_MASK), 2))[0] == 0,
+          "Glue on the master: the plugin plays, no bus")
+    _, one = synths(0, null, parts=(0,))
+    _, two = synths(0, null, parts=(1,))
+    check(peak(one[0]) > 1000 and peak(two[0]) > 1000 and peak(both[0]) < 30000,
+          f"both synth parts play, and together don't clip ({peak(one[0])}, {peak(two[0])}, {peak(both[0])})")
+    for side in (0, 1):
+        ok, worst = bus_close(both[side], [a + b for a, b in zip(one[side], two[side])])
+        check(ok, f"side {side}: the two parts add up on the master, as the bus test needs (off by {worst} at most)")
+
+    # Synth 1 lifted alone: the master gains (makeup - 1) * Synth 1, Synth 2 untouched
+    g, lifted = synths(1 << 8, lift)
+    m = g.m
+    check(struct.unpack("<H", m.read(m.addr(BUS_MASK), 2))[0] == 1 << 8 and m.r8(m.addr(BUS_LIVE)) == 1,
+          "Synth 1 in the Tracks list: the bus is live")
+    for side in (0, 1):
+        want = [round(a + (MAKEUP_6 - 1) * c) for a, c in zip(both[side], one[side])]
+        check(peak(want) < 30000, f"side {side}: the lifted mix stays under full scale ({peak(want)}), so it can add up")
+        ok, worst = bus_close(lifted[side], want)
+        check(ok, f"side {side}: +6 dB on Synth 1 alone, Synth 2 as it was, sample for sample "
+                  f"(off by {worst} at most)")
+    check(not g.failures, "no asserts")
+
+    # The same with Synth 1 squashed: the master is Synth 2 + Glue's Synth 1 played alone
+    _, squashed_alone = synths(0, hard, parts=(0,))
+    _, squashed = synths(1 << 8, hard)
+    for side in (0, 1):
+        want = [a + b for a, b in zip(two[side], squashed_alone[side])]
+        ok, worst = bus_close(squashed[side], want)
+        check(ok, f"side {side}: Glue on Synth 1 is Glue on Synth 1 alone, plus Synth 2 untouched (off by {worst})")
+        check(rms(squashed_alone[side][128 * 20:]) < 0.7 * rms(one[side][128 * 20:]),
+              f"side {side}: and it does squash ({rms(squashed_alone[side][128 * 20:]):.0f} against {rms(one[side][128 * 20:]):.0f})")
+
+    # The tracks mixer's left object runs the bus once a block, for both sides
+    g = Graph(mods)
+    set_mod(g, True, 0, 0)
+    m = g.m
+    m.write(m.addr(SETTINGS) + DUCKS_AT, struct.pack("<H", 1 << 8))
+    set_dynamics(g, "Glue.ptmfx")
+    name = bus_update(g.syms)
+    check(name is not None, "the tracks mixer's bus update is in the build")
+    if name is not None:
+        left = m.r32(m.addr(BUS_MIXERS))
+        right = m.r32(m.addr(BUS_MIXERS) + 4)
+        objects = []
+        g.watch(m.addr(name), lambda mm: objects.append(mm.arg(0)))
+        g.blocks(2)
+        objects.clear()
+        g.blocks(5)
+        check(left != 0 and right != 0 and left != right and objects == [left] * 5,
+              f"once a block, from the left tracks mixer only ({len(objects)} in 5 blocks)")
+
+    # Not a bus: Stock, the mod Off, Compressor
+    set_dynamics(g, "Compressor.ptmfx")
+    check(struct.unpack("<H", m.read(m.addr(BUS_MASK), 2))[0] == 0, "Compressor: no bus, though the record has a set")
+    set_dynamics(g, "")
+    check(struct.unpack("<H", m.read(m.addr(BUS_MASK), 2))[0] == 0, "Stock: no bus")
+    set_dynamics(g, "Glue.ptmfx")
+    set_mod(g, False)
+    check(struct.unpack("<H", m.read(m.addr(BUS_MASK), 2))[0] == 0 and m.r8(m.addr(ACTIVE_DYNAMICS)) == 0,
+          "the mod Off: CE's limiter, no bus")
+
+    # The sample tracks, through a project booted from the card and played: M5's kick (Track 1) and
+    # hat (Track 3) and a held synth voice (Track 8, Synth 1). A boot, as PlayRig loads no samples.
+    source = source_project()
+    if source is None:
+        print("     no project beside the repo to copy: the sample-track checks skipped")
+        return
+    import tempfile
+    import make_masterfx_test_project as maker
+    blocks = 200
+    drums = (1 << 0) | (1 << 2)
+    with tempfile.TemporaryDirectory() as temp:
+        def play(name, knobs, tracks, synth=True, drums_on=True, sends=False, saturation=HARD_CLIP):
+            # The drums quieter than M5's (its kick is at full scale) and no sends: the mixes don't
+            # clip, and the sums below are of the tracks' own sound. M5 itself is played as made last.
+            # saturation: CE's, forced after the boot (None: the project's own)
+            folder = maker.make_masterfx_glue(source, Path(temp), name, knobs, tracks, synth, drums_on,
+                                              None if sends else QUIET_DRUMS)[0]
+            if not sends:
+                no_sends(folder)
+            out, r = booted(mods, folder, blocks, saturation)
+            check(slot_file(r, DYNAMICS) == "Glue.ptmfx" and r.m.r8(r.m.addr(ACTIVE_DYNAMICS)) == 1 and not r.failures,
+                  f"{name}: Glue from the project, playing, no asserts {r.failures}")
+            return out, r
+
+        # Hard clip under full scale: CE's mixers add, so the tracks' sounds add up
+        full, _ = play("all null", null, 0)
+        alone, _ = play("drums null", null, 0, synth=False)
+        held, _ = play("synth null", null, 0, drums_on=False)
+        check(peak(alone[0]) > 1000 and peak(held[0]) > 500 and peak(full[0]) < 30000,
+              f"the drums and the synth play, and together don't clip ({peak(alone[0])}, {peak(held[0])}, {peak(full[0])})")
+        for side in (0, 1):
+            ok, worst = bus_close([a + h for a, h in zip(alone[side], held[side])], full[side])
+            check(ok, f"side {side}: the drums and the synth add up to the full mix (off by {worst}), so the sums "
+                      "below are the tracks'")
+        lifted, r = play("drums lifted", lift, drums)
+        check(struct.unpack("<H", r.m.read(r.m.addr(BUS_MASK), 2))[0] == drums, "the project's Tracks: Track 1 and 3")
+        synth_lifted, _ = play("synth lifted", lift, 1 << 8)
+        for side in (0, 1):
+            # From the second block: the bus starts the pass after the limiter first takes it
+            for got, part, what in ((lifted, alone, "Track 1 and 3"), (synth_lifted, held, "Synth 1")):
+                want = [round(a + (MAKEUP_6 - 1) * d) for a, d in zip(full[side], part[side])]
+                check(peak(want) < 30000, f"side {side}: {what} lifted stays under full scale ({peak(want)}), so it adds up")
+                ok, worst = bus_close(got[side][128:], want[128:])
+                check(ok, f"side {side}: +6 dB on {what} alone, the rest as it was, sample for sample from the "
+                          f"second block (off by {worst} at most)")
+
+        # CE's Saturate: the mixers aren't linear (x 1.5 at low level, each), so a bus taken after them
+        # is wrong. Glue that changes nothing changes nothing; Glue's +6 dB on the drums is CE's two
+        # mixers on the drums' sum times the makeup.
+        sat_full, _ = play("all null, Saturate", null, 0, saturation=SATURATE)
+        sat_null, _ = play("drums on a null bus, Saturate", null, drums, saturation=SATURATE)
+        for side in (0, 1):
+            ok, worst = bus_close(sat_null[side], sat_full[side], most=0)
+            check(ok, f"side {side}: Saturate, a bus Glue leaves alone: the master exactly as without one (off by {worst})")
+        # The drums alone: on Hard Clip the output is the tracks mixer's sum itself (they don't clip),
+        # so CE's Saturate curve twice on it is what Saturate gives, Glue or not
+        hard_lifted, _ = play("drums lifted, Hard Clip", lift, drums, synth=False)
+        sat_alone, _ = play("drums null, Saturate", null, 0, synth=False, saturation=SATURATE)
+        sat_lifted, _ = play("drums lifted, Saturate", lift, drums, synth=False, saturation=SATURATE)
+        for side in (0, 1):
+            ok, worst = bus_close(sat_alone[side], [through_mixers(x) for x in alone[side]], most=0)
+            check(ok, f"side {side}: Saturate is CE's curve twice on the drums' sum, as the rig models it (off by {worst})")
+            ok, worst = bus_close(sat_lifted[side][128:], [through_mixers(x) for x in hard_lifted[side][128:]], most=0)
+            gain = rms(sat_lifted[side][128:]) / max(rms(sat_alone[side][128:]), 1)
+            check(ok, f"side {side}: Saturate, +6 dB on the drums is the makeup before CE's saturation, from the second "
+                      f"block (off by {worst}; {gain:.3f}x the drums)")
+
+        # The project's own saturation: Glue squashes the drums (no makeup, so it can only turn down)
+        own_alone, _ = play("drums null, the project's saturation", null, 0, synth=False, saturation=None)
+        squashed, _ = play("drums squashed, the project's saturation", hard, drums, synth=False, saturation=None)
+        for side in (0, 1):
+            check(rms(squashed[side][128 * 20:]) < 0.7 * rms(own_alone[side][128 * 20:]),
+                  f"side {side}: Glue on the drums turns them down ({rms(squashed[side][128 * 20:]):.0f} against "
+                  f"{rms(own_alone[side][128 * 20:]):.0f})")
+        _, r = play("M5 as made, with its sends", maker.MASTERFX_GLUE_KNOBS, drums, sends=True, saturation=None)
+        check(struct.unpack("<H", r.m.read(r.m.addr(BUS_MASK), 2))[0] == drums and r.m.r8(r.m.addr(BUS_LIVE)) == 1,
+              "M5 as the device gets it: the bus live on Track 1 and 3")
+
+
+def no_sends(folder):
+    """The project's instruments and synth parts with no reverb or delay send: the returns aren't the
+    bus, and the sums above are of the tracks' own sound"""
+    import make_masterfx_test_project as maker
+    for path in (folder / "instruments").glob("*.pti"):
+        data = bytearray(path.read_bytes())
+        data[maker.INSTRUMENT_DELAY_SEND] = data[maker.INSTRUMENT_REVERB_SEND] = 0
+        path.write_bytes(data)
+    mt = bytearray((folder / "project.mt").read_bytes())
+    for slot in range(3):
+        record = maker.ce.SLOT_RECORDS + slot * maker.ce.SLOT_RECORD_SIZE
+        struct.pack_into("<f", mt, record + maker.SLOT_REVERB_SEND, 0.0)
+        struct.pack_into("<f", mt, record + maker.SLOT_DELAY_SEND, 0.0)
+    mt[maker.PROJECT_CRC:maker.PROJECT_CRC + 4] = bytes(4)     # as the maker leaves it
+    (folder / "project.mt").write_bytes(mt)
+
+
+def booted(axf, folder, blocks, saturation=None):
+    """The project as the unit plays it: a boot from a card with it in the Workspace, its samples
+    loaded by CE's file manager in the main loop, then Play. What comes out, and the rig.
+    saturation: CE's SaturationType set on the mixers before Play, as the Master page does (None: the
+    project's own)."""
+    from boot_rig import BootRig
+    r = BootRig(axf)
+    m = r.m
+    screen = [0]
+    r.watch(m.addr("_ZN14cPatternEditor6updateEv"), lambda mm: screen.__setitem__(0, screen[0] + 1))
+    r.card_from(folder, "Glue", workspace=True)
+    r.boot()
+    for _ in range(3000):
+        r.loop()
+        r.interrupt()
+        if screen[0] > 5:
+            break
+    if saturation is not None:
+        m.call(m.addr(SET_SATURATION), m.addr("engine"), saturation)
+    for _ in range(2):              # press, release
+        (r.press if _ == 0 else r.release)(PLAY_BUTTON)
+        r.loop()
+        r.interrupt()
+    left, right = [], []
+    for i in range(blocks):
+        if i % 8 == 0:
+            r.loop()
+        a, b = r.interrupt()
+        left += a
+        right += b
+    return (left, right), r
+
+
 def ducks_page(mods):
     """The Limiter page's Ducks list: Shift + the button under column 4"""
     p = MasterPage(mods)
     m = p.m
     set_mod(p.r, True, 0, 0)
-    set_dynamics(p.r, "Glue.ptmfx")
+    set_dynamics(p.r, "Compressor.ptmfx")
     p.start()
     stored = []
     p.r.watch(m.addr("_ZN4mods7project11markChangedEv"), lambda mm: stored.append(1))
@@ -1597,8 +1989,8 @@ def test_play(mods, ref):
                                      f"(peak {max(peak(out[0]), peak(out[1]))}, audio pool {r.pool_peak()})")
             if count != 8 or START not in r.syms:
                 continue
-            # The device check's load: the heaviest pair and Glue in the dynamics slot, CE's knobs as
-            # the project left them
+            # The device check's load (M2): the heaviest pair and Glue in the dynamics slot, Glue's own
+            # knobs at their defaults
             pair, _ = played(mods, folder, (True, 4, 2), blocks)
             out, r = played(mods, folder, (True, 4, 2), blocks, "Glue.ptmfx")
             glue = r.m.read(runtime_slot(r, DYNAMICS), 1)[0] == 1 and slot_file(r, DYNAMICS) == "Glue.ptmfx"
@@ -1608,8 +2000,11 @@ def test_play(mods, ref):
             check(r.itcm_intact, "8 voices, Shimmer + BBD + Glue: nothing written over the code")
             check(out != pair, "8 voices, Shimmer + BBD + Glue: Glue runs on the master (the output differs)")
             db = [20 * math.log10(max(rms(x), 1) / max(y, 1)) for x, y in zip(out, stock_level)]
-            check(max(abs(d) for d in db) < 3.0,
-                  f"8 voices, Shimmer + BBD + Glue: output against Stock {db[0]:+.1f} dB, {db[1]:+.1f} dB "
+            # Glue's defaults (-12 dB, 4:1, no makeup) can only turn the mix down, and by no more than
+            # 4:1 above -12 dB takes off a full-scale peak (9 dB). 2.0's Glue, on CE's knobs, was held
+            # within 3 dB of Stock here; that is the Compressor now.
+            check(all(-9.0 < d < 0.1 for d in db),
+                  f"8 voices, Shimmer + BBD + Glue: Glue turns the mix down, by less than 9 dB: output against Stock {db[0]:+.1f} dB, {db[1]:+.1f} dB "
                   f"(peak {max(peak(out[0]), peak(out[1]))}, audio pool {r.pool_peak()})")
 
 
@@ -1617,7 +2012,7 @@ def main():
     mods, ref = Path(sys.argv[1]), Path(sys.argv[2])
     only = sys.argv[3] if len(sys.argv) > 3 else None
     for name, fn in (("ui", test_ui), ("graph", test_graph), ("dynamics", test_dynamics), ("ducks", test_ducks),
-                     ("stress", test_stress), ("debounce", test_debounce),
+                     ("bus", test_bus), ("stress", test_stress), ("debounce", test_debounce),
                      ("project", test_project), ("play", test_play)):
         if only in (None, name):
             fn(mods, ref)

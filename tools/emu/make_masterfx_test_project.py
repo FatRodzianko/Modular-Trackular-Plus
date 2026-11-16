@@ -11,6 +11,7 @@
     python tools/emu/make_masterfx_test_project.py "<project>" "<out folder>" --synthfx-plugins
     python tools/emu/make_masterfx_test_project.py "<project>" "<out folder>" --masterfx-plugins
     python tools/emu/make_masterfx_test_project.py "<project>" "<out folder>" --masterfx-duck
+    python tools/emu/make_masterfx_test_project.py "<project>" "<out folder>" --masterfx-glue
 
 The project given is only read. In the copy:
 - project.mt: the new name, the voices given on the three synth parts, both sends at 60.
@@ -34,12 +35,17 @@ On and record 16 holds each part's effect settings, the rest of the source's mod
 slot's plugin file and knobs (and a Placement byte, 0: Post).
 --masterfx-plugins writes the Master FX plugin set (MASTERFX_PLUGIN_SET): mods.bin has Master FX On
 and record 4 holds the slots, version 1 (reverb and delay numbers, which today's release reads too) or
-version 2 (each slot's file and own knobs), the rest of the source's mods.bin kept.
+version 3 (each slot's file and own knobs, then the Ducks or Tracks set), the rest of the source's mods.bin
+kept.
 
 --masterfx-duck writes M4 (MASTERFX_DUCK): the source's sample instruments 1 and 3 (a kick and a closed hat
 in the source we use) on tracks 1 and 3, one held ACD Init voice on track 8, and record 4 with Room in the
 reverb slot and Ducker in the dynamics slot, the Ducks list on Master. The kick plays at the instrument's
 volume every 8 steps, so it is the Sidechain key's loud part and there are gaps to hear the duck recover.
+
+--masterfx-glue writes M5 (MASTERFX_GLUE): M4's kick, hat and held synth voice, and record 4 with Glue in the
+dynamics slot on Track 1 and Track 3 (the Tracks list), turned hard (MASTERFX_GLUE_KNOBS) so it is plain to hear
+that the drums are squashed and the synth isn't.
 
 --sound writes that file's last set. `A1 Master FX sound` is one voice of ACD Init with a short note every 16
 steps, so the gaps let the reverb and delay be heard, with no masterfx.bin. `R2 Real project sends` is the source
@@ -304,7 +310,7 @@ PLUGIN_LADDER = (
 
 # The Master FX plugin set (docs/mt/DEVICE_TEST_LADDER.md): name, voices, engine, and record 4: a
 # (reverb, delay) pair is version 1, which today's release reads too; three file names (reverb, delay,
-# dynamics) are version 2, with the dynamics slot's own knobs (None: the plugin's default).
+# dynamics) are version 3, with the dynamics slot's own knobs (None: the plugin's default).
 MASTERFX_PLUGIN_SET = (
     ("M1 8 ACD Shimmer BBD", (4, 2, 2), "ACD", (4, 2), ()),
     ("M2 8 ACD Shimmer BBD Glue", (4, 2, 2), "ACD", ("Shimmer.ptmfx", "BBD.ptmfx", "Glue.ptmfx"), ()),
@@ -316,20 +322,26 @@ DUCK_KICK = (0, 0, 8)                   # track, instrument (the file "1 ..."), 
 DUCK_HAT = (2, 2, 2, 40)                # track, instrument (the file "3 ..."), every 2 steps, volume
 DUCK_SYNTH_TRACK = 7
 MASTERFX_UNSET = struct.pack("<I", 0x7FC00000)    # masterfx.cpp's unset(): the plugin's default
+MASTERFX_OWN_KNOBS = 5
+# M5: Glue on the drums only. Its own knobs: Attack (step 20: 1 ms), Release (the default), Threshold
+# -30 dB, Ratio 10:1, Makeup +6 dB. The Tracks list: Track 1 and Track 3 (bits 0 and 2).
+MASTERFX_GLUE = ("M5 1 voice ACD Glue drums", ("", "", "Glue.ptmfx"))
+MASTERFX_GLUE_KNOBS = (20.0, None, -30.0, 10.0, 6.0)
+MASTERFX_GLUE_TRACKS = (1 << DUCK_KICK[0]) | (1 << DUCK_HAT[0])
 
 
-def masterfx_record(files, dynamics_knobs=()) -> bytes:
-    """Record 4 version 2 (masterfx.h's Settings): each slot's file (48 B) and two own knobs, the
-    dynamics slot's from dynamics_knobs; then the Ducks mask (none) and two reserved bytes. 172 B."""
+def masterfx_record(files, dynamics_knobs=(), ducks=0) -> bytes:
+    """Record 4 version 3 (masterfx.h's Settings): each slot's file (48 B) and five own knobs, the
+    dynamics slot's from dynamics_knobs; then the Ducks or Tracks mask and two reserved bytes. 208 B."""
     out = b""
     for slot, name in enumerate(files):
         knobs = tuple(dynamics_knobs) if slot == 2 else ()
-        knobs = knobs + (None,) * (2 - len(knobs))
+        knobs = knobs + (None,) * (MASTERFX_OWN_KNOBS - len(knobs))
         assert len(name) < 48
         out += name.encode("ascii").ljust(48, b"\0")
         out += b"".join(MASTERFX_UNSET if k is None else struct.pack("<f", k) for k in knobs)
-    out += bytes(4)
-    assert len(out) == 172
+    out += struct.pack("<H", ducks) + bytes(2)
+    assert len(out) == 208
     return out
 
 
@@ -355,28 +367,33 @@ def make_masterfx_plugins(source: Path, parent: Path) -> list:
         if isinstance(slots[0], int):
             old.write_bytes(masterfx_mods_file(old_bytes, 1, bytes(slots)))
         else:
-            old.write_bytes(masterfx_mods_file(old_bytes, 2, masterfx_record(slots, knobs)))
+            old.write_bytes(masterfx_mods_file(old_bytes, 3, masterfx_record(slots, knobs)))
         out.append(folder)
     return out
 
 
-def duck_pattern() -> bytes:
-    """The kick, the hat and the held synth voice of MASTERFX_DUCK."""
+def duck_pattern(synth: bool = True, drums: bool = True, drum_volume=None) -> bytes:
+    """The kick, the hat and the held synth voice of MASTERFX_DUCK (the rig leaves some out, or
+    turns the drums down to drum_volume so the mix doesn't clip)."""
     data = bytearray(pattern((0, 0, 0)))
 
     def step(track, at_step):
         return ce.PATTERN_HEADER + track * (1 + ce.STEPS * ce.STEP_V6) + 1 + at_step * ce.STEP_V6
-    track, instrument, every = DUCK_KICK
-    for s in range(0, LAST_STEP + 1, every):
-        data[step(track, s):step(track, s) + 2] = bytes((60, instrument))    # volume left unset: the instrument's
-    track, instrument, every, volume = DUCK_HAT
-    for s in range(0, LAST_STEP + 1, every):
-        at = step(track, s)
-        data[at:at + 2] = bytes((60, instrument))
-        data[at + STEP_VOLUME_AT] = volume
-    at = step(DUCK_SYNTH_TRACK, 0)
-    data[at:at + 2] = bytes((PART_NOTES[0][0], SYNTH_INSTRUMENTS))
-    data[at + STEP_VOLUME_AT] = STEP_VOLUME
+    if drums:
+        track, instrument, every = DUCK_KICK
+        for s in range(0, LAST_STEP + 1, every):
+            data[step(track, s):step(track, s) + 2] = bytes((60, instrument))    # volume left unset: the instrument's
+            if drum_volume is not None:
+                data[step(track, s) + STEP_VOLUME_AT] = drum_volume
+        track, instrument, every, volume = DUCK_HAT
+        for s in range(0, LAST_STEP + 1, every):
+            at = step(track, s)
+            data[at:at + 2] = bytes((60, instrument))
+            data[at + STEP_VOLUME_AT] = volume if drum_volume is None else drum_volume
+    if synth:
+        at = step(DUCK_SYNTH_TRACK, 0)
+        data[at:at + 2] = bytes((PART_NOTES[0][0], SYNTH_INSTRUMENTS))
+        data[at + STEP_VOLUME_AT] = STEP_VOLUME
     return bytes(data)
 
 
@@ -387,7 +404,21 @@ def make_masterfx_duck(source: Path, parent: Path) -> list:
         path.write_bytes(duck_pattern())
     old = folder / "mods.bin"
     old_bytes = old.read_bytes() if old.exists() else b""
-    old.write_bytes(masterfx_mods_file(old_bytes, 2, masterfx_record(files)))
+    old.write_bytes(masterfx_mods_file(old_bytes, 3, masterfx_record(files)))
+    return [folder]
+
+
+def make_masterfx_glue(source: Path, parent: Path, name: str = MASTERFX_GLUE[0], knobs=MASTERFX_GLUE_KNOBS,
+                       tracks: int = MASTERFX_GLUE_TRACKS, synth: bool = True, drums: bool = True,
+                       drum_volume=None) -> list:
+    """M5, or (for the rig) the same with other knobs or tracks, the synth or the drums left out, or
+    the drums quieter"""
+    folder = make(source, parent, name, (1, 0, 0), engine="ACD")
+    for path in (folder / "patterns").glob("pattern_*.mtp"):
+        path.write_bytes(duck_pattern(synth, drums, drum_volume))
+    old = folder / "mods.bin"
+    old_bytes = old.read_bytes() if old.exists() else b""
+    old.write_bytes(masterfx_mods_file(old_bytes, 3, masterfx_record(MASTERFX_GLUE[1], knobs, tracks)))
     return [folder]
 
 
@@ -531,15 +562,17 @@ def main() -> int:
     parser.add_argument("--synthfx-plugins", action="store_true")
     parser.add_argument("--masterfx-plugins", action="store_true")
     parser.add_argument("--masterfx-duck", action="store_true")
+    parser.add_argument("--masterfx-glue", action="store_true")
     args = parser.parse_args()
     try:
         if (args.ladder or args.engines or args.sound or args.synths or args.synthfx or args.synthfx_plugins
-                or args.masterfx_plugins or args.masterfx_duck):
+                or args.masterfx_plugins or args.masterfx_duck or args.masterfx_glue):
             maker = (make_ladder if args.ladder else make_engines if args.engines else make_sound if args.sound
                      else make_synthfx_ladder if args.synthfx
                      else make_plugin_ladder if args.synthfx_plugins
                      else make_masterfx_plugins if args.masterfx_plugins
                      else make_masterfx_duck if args.masterfx_duck
+                     else make_masterfx_glue if args.masterfx_glue
                      else lambda source, parent: make_engines(source, parent, SYNTHS_LADDER))
             for folder in maker(args.project, args.out):
                 print(f"Copy written: {folder}")

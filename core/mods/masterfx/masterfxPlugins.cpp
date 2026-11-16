@@ -124,6 +124,7 @@ void listInto(size_t* length, const char* file)
     copyText(e.file, sizeof(e.file), file);
     char path[sizeof(kDir) + kFileNameSize];
     PtmfxHeader h;
+    memset(&h, 0, sizeof(h)); // a version 1 file's header is shorter
     const size_t size = pathOf(file, path, sizeof(path)) ? io->read(path, reinterpret_cast<uint8_t*>(&h), sizeof(h))
                                                           : FileIo::kReadFailed;
     const char* why = nullptr;
@@ -131,10 +132,10 @@ void listInto(size_t* length, const char* file)
     {
         e.status = Status::readFailed;
     }
-    else if (size < sizeof(h) || !checkHeader(h, static_cast<uint32_t>(size), &why))
+    else if (size < PTMFX_V1_HEADER || !checkHeader(h, static_cast<uint32_t>(size), &why))
     {
-        e.status = size >= sizeof(h) && h.magic == PTMFX_MAGIC && sameText(why, "too big") ? Status::tooBig
-                                                                                            : Status::badFile;
+        e.status = size >= PTMFX_V1_HEADER && h.magic == PTMFX_MAGIC && sameText(why, "too big") ? Status::tooBig
+                                                                                                  : Status::badFile;
     }
     else
     {
@@ -154,13 +155,13 @@ void listInto(size_t* length, const char* file)
 
 // ---- the interrupt's ----------------------------------------------------------------------
 
-MT_PLUGINS_ISR bool guard(float* b)
+MT_PLUGINS_ISR bool guard(float* b, float limit)
 {
-    if (pluginkit::blockFine(b, PTMFX_BLOCK, kOutputLimit))
+    if (pluginkit::blockFine(b, PTMFX_BLOCK, limit))
     {
         return false;
     }
-    return pluginkit::fixBlock(b, PTMFX_BLOCK, kOutputLimit);
+    return pluginkit::fixBlock(b, PTMFX_BLOCK, limit);
 }
 
 constexpr float kFromQ15 = 1.0f / 32768.0f;
@@ -184,9 +185,15 @@ MT_PLUGINS_ISR void toQ15(const float* in, int16_t* out)
     }
 }
 
+
 } // namespace
 
 // ---- the header ---------------------------------------------------------------------------
+
+uint32_t headerSize(const PtmfxHeader& h)
+{
+    return h.format_version == 1u ? PTMFX_V1_HEADER : static_cast<uint32_t>(sizeof(PtmfxHeader));
+}
 
 bool checkHeader(const PtmfxHeader& h, uint32_t fileSize, const char** why)
 {
@@ -198,11 +205,13 @@ bool checkHeader(const PtmfxHeader& h, uint32_t fileSize, const char** why)
     {
         w = "not a .ptmfx";
     }
-    else if (h.format_version != PTMFX_VERSION)
+    else if (h.format_version != 1u && h.format_version != PTMFX_VERSION)
     {
         w = "another format version";
     }
-    else if ((h.flags & ~static_cast<uint32_t>(PTMFX_FLAG_FLOAT | PTMFX_FLAG_DUCK)) != 0)
+    else if ((h.flags & ~static_cast<uint32_t>(h.format_version == 1u ? PTMFX_FLAG_FLOAT | PTMFX_FLAG_DUCK
+                                                                       : PTMFX_FLAG_FLOAT | PTMFX_FLAG_DUCK |
+                                                                           PTMFX_FLAG_OWN_DYNAMICS | PTMFX_FLAG_BUS)) != 0)
     {
         w = "unknown flags";
     }
@@ -210,6 +219,19 @@ bool checkHeader(const PtmfxHeader& h, uint32_t fileSize, const char** why)
              (h.slot != PTMFX_SLOT_DYNAMICS || (h.flags & PTMFX_FLAG_FLOAT) == 0))
     {
         w = "ducking needs a float dynamics plugin";
+    }
+    else if ((h.flags & PTMFX_FLAG_BUS) != 0 && (h.slot != PTMFX_SLOT_DYNAMICS || (h.flags & PTMFX_FLAG_FLOAT) == 0 ||
+                                                 (h.flags & PTMFX_FLAG_DUCK) != 0))
+    {
+        w = "a bus needs a float dynamics plugin that doesn't duck";
+    }
+    else if ((h.flags & PTMFX_FLAG_OWN_DYNAMICS) != 0 && (h.slot != PTMFX_SLOT_DYNAMICS || h.num_params < 3))
+    {
+        w = "own Attack, Release and Threshold need a dynamics plugin with 3 knobs";
+    }
+    else if ((h.flags & PTMFX_FLAG_OWN_DYNAMICS) == 0 && h.num_params > PTMFX_V1_MAX_PARAMS)
+    {
+        w = "more than 2 knobs need own Attack, Release and Threshold";
     }
     else if (slot < PTMFX_SLOT_REVERB || slot > PTMFX_SLOT_DYNAMICS)
     {
@@ -219,8 +241,8 @@ bool checkHeader(const PtmfxHeader& h, uint32_t fileSize, const char** why)
     {
         w = "name or author";
     }
-    else if (h.num_params > PTMFX_MAX_PARAMS || h.reserved[0] != 0 || h.reserved[1] != 0 || h.reserved2[0] != 0 ||
-             h.reserved2[1] != 0 || h.reserved2[2] != 0)
+    else if (h.num_params > (h.format_version == 1u ? PTMFX_V1_MAX_PARAMS : PTMFX_MAX_PARAMS) || h.reserved[0] != 0 ||
+             h.reserved[1] != 0 || h.reserved2[0] != 0 || h.reserved2[1] != 0 || h.reserved2[2] != 0)
     {
         w = "knob count";
     }
@@ -229,7 +251,7 @@ bool checkHeader(const PtmfxHeader& h, uint32_t fileSize, const char** why)
     {
         w = "too big";
     }
-    else if (h.code_offset != sizeof(PtmfxHeader) || h.code_offset + h.code_size != fileSize)
+    else if (h.code_offset != headerSize(h) || h.code_offset + h.code_size != fileSize)
     {
         w = "file size";
     }
@@ -283,6 +305,82 @@ void forget()
     catalogLength = 0;
 }
 
+namespace
+{
+
+constexpr char kNewSuffix[] = ".new";
+
+// The file at path is exactly one a release shipped as name: its size and hash (read into the load
+// buffer, which nothing uses yet)
+bool shipped(const char* name, const char* path)
+{
+    const size_t size = io->read(path, env.loadBuffer, 0);
+    for (size_t i = 0; i < shippedCount(); i++)
+    {
+        const ShippedFile& s = shippedAt(i);
+        if (!sameText(s.name, name) || size != s.size || size > kMaxFile)
+        {
+            continue;
+        }
+        if (io->read(path, env.loadBuffer, size) == size &&
+            fileHash(env.loadBuffer, static_cast<uint32_t>(size)) == s.hash)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+// The file at path holds exactly f's bytes
+bool holds(const char* path, const PackFile& f)
+{
+    return f.size <= kMaxFile && io->read(path, env.loadBuffer, f.size) == f.size &&
+           memcmp(env.loadBuffer, f.data, f.size) == 0;
+}
+
+// One of the pack's files onto the card, at start: written if it's missing; put in place of the
+// one there if that is exactly a file a release shipped and not already this one; else left. The replacement is written
+// beside it first and read back, so a stop part way leaves the old file or the new one, and a
+// .new file the next start removes (the file is then missing, or still the old one).
+void writePackFile(const PackFile& f)
+{
+    char path[sizeof(kDir) + kFileNameSize];
+    char fresh[sizeof(kDir) + kFileNameSize + sizeof(kNewSuffix)];
+    if (!pathOf(f.name, path, sizeof(path)))
+    {
+        return;
+    }
+    copyText(fresh, sizeof(fresh), path);
+    pluginkit::appendText(fresh, sizeof(fresh), kNewSuffix);
+    if (io->exists(fresh))
+    {
+        io->remove(fresh); // the last start stopped part way through replacing this file
+    }
+    if (!io->exists(path))
+    {
+        io->write(path, f.data, f.size);
+        return;
+    }
+    if (env.loadBuffer == nullptr || holds(path, f) || !shipped(f.name, path))
+    {
+        return; // the pack's own already (a file a release kept as it was), or the user's
+    }
+    if (!io->write(fresh, f.data, f.size) || !holds(fresh, f))
+    {
+        io->remove(fresh);
+        return; // the old file stays
+    }
+    io->remove(path);
+    if (!io->rename(fresh, path))
+    {
+        // No rename here: the file written again in place, and the copy goes
+        io->write(path, f.data, f.size);
+        io->remove(fresh);
+    }
+}
+
+} // namespace
+
 void start(FileIo& fileIo, const Env& platform)
 {
     if (isStarted)
@@ -296,14 +394,9 @@ void start(FileIo& fileIo, const Env& platform)
 
     io->makeDir(kDir);
     inSafeMode = io->exists(kMarker); // the last run stopped while a new plugin ran
-    char path[sizeof(kDir) + kFileNameSize];
     for (size_t i = 0; i < packCount(); i++)
     {
-        const PackFile& f = packAt(i);
-        if (pathOf(f.name, path, sizeof(path)) && !io->exists(path))
-        {
-            io->write(path, f.data, f.size);
-        }
+        writePackFile(packAt(i));
     }
     isStarted = true;
     scan();
@@ -463,6 +556,11 @@ Status install(Slot slot)
 
     const PtmfxHeader* const h = reinterpret_cast<const PtmfxHeader*>(env.loadBuffer);
     memcpy(&s.header, h, sizeof(s.header));
+    if (h->format_version == 1u) // its header ends after 2 knobs: what follows is its code
+    {
+        memset(&s.header.params[PTMFX_V1_MAX_PARAMS], 0,
+               sizeof(PtmfxParam) * (PTMFX_MAX_PARAMS - PTMFX_V1_MAX_PARAMS));
+    }
     uint8_t* const code = env.code[slot];
     memcpy(code, env.loadBuffer + h->code_offset, h->code_size);
     env.syncCode(code, h->code_size);
@@ -693,9 +791,23 @@ bool ducks(Slot slot)
     return installed(slot) && (slots[slot].header.flags & PTMFX_FLAG_DUCK) != 0;
 }
 
+bool ownDynamics(Slot slot)
+{
+    return installed(slot) && (slots[slot].header.flags & PTMFX_FLAG_OWN_DYNAMICS) != 0;
+}
+
+bool bus(Slot slot)
+{
+    return installed(slot) && (slots[slot].header.flags & PTMFX_FLAG_BUS) != 0;
+}
+
 // ---- the interrupt ------------------------------------------------------------------------
 
-MT_PLUGINS_ISR Ran process(Slot slot, PtmfxBlock& b, float* gain)
+namespace
+{
+
+// process and processBus: isBus, the bus is already in the scratch's L and R
+MT_PLUGINS_ISR __attribute__((noinline)) Ran run(Slot slot, PtmfxBlock& b, float* gain, bool isBus)
 {
     if (static_cast<uint32_t>(slot) >= kSlots)
     {
@@ -733,7 +845,11 @@ MT_PLUGINS_ISR Ran process(Slot slot, PtmfxBlock& b, float* gain)
         b.fin = nullptr;
         b.fkey_left = nullptr;
         b.fkey_right = nullptr;
-        if (b.in != nullptr)
+        if (isBus)
+        {
+            // a bus plugin: the caller put the bus in L and R; no key
+        }
+        else if (b.in != nullptr)
         {
             toFloat(b.in, f + 2 * PTMFX_BLOCK);
             b.fin = f + 2 * PTMFX_BLOCK;
@@ -806,19 +922,35 @@ MT_PLUGINS_ISR Ran process(Slot slot, PtmfxBlock& b, float* gain)
     }
     else if (s.isFloat)
     {
-        const bool bad = guard(f) | guard(f + PTMFX_BLOCK);
+        const float limit = isBus ? kBusLimit : kOutputLimit;
+        const bool bad = guard(f, limit) | guard(f + PTMFX_BLOCK, limit);
         if (bad)
         {
             s.resetWanted = 1;
         }
-        toQ15(f, b.left);
-        toQ15(f + PTMFX_BLOCK, b.right);
+        if (!isBus) // a bus stays in the scratch for the mixer
+        {
+            toQ15(f, b.left);
+            toQ15(f + PTMFX_BLOCK, b.right);
+        }
     }
     if (gain != nullptr)
     {
         *gain = pluginkit::finite(g) ? (g < 0.0f ? 0.0f : (g > 1.0f ? 1.0f : g)) : 1.0f;
     }
     return Ran::ran;
+}
+
+} // namespace
+
+MT_PLUGINS_ISR Ran process(Slot slot, PtmfxBlock& b, float* gain)
+{
+    return run(slot, b, gain, false);
+}
+
+MT_PLUGINS_ISR Ran processBus(Slot slot, PtmfxBlock& b, float* gain)
+{
+    return run(slot, b, gain, true);
 }
 
 } // namespace plugins

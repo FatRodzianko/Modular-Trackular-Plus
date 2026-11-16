@@ -102,6 +102,11 @@ class CeFileIo : public FileIo
         }
     }
 
+    bool rename(const char* from, const char* to) override
+    {
+        return usable() && fileSystem->exists(from) && !fileSystem->exists(to) && fileSystem->rename(from, to);
+    }
+
     void makeDir(const char* path) override
     {
         if (usable() && !fileSystem->exists(path))

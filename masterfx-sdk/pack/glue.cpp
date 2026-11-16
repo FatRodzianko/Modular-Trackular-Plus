@@ -1,18 +1,24 @@
 // Modular-Trackular Plus: Master FX plugins (.ptmfx). SPDX-License-Identifier: MIT
 //
-// Glue: a bus compressor for the dynamics slot, in place of CE's limiter
+// Glue: a bus compressor for the dynamics slot, in place of CE's limiter, with its own Attack,
+// Release and Threshold in the Limiter page's first three columns (PTMFX_FLAG_OWN_DYNAMICS), and
+// Ratio and Makeup in columns 5 and 6. The Tracks list (PTMFX_FLAG_BUS) picks what it works on:
+// the master, or a set of tracks compressed together, the rest of the mix untouched
 // (tools/masterfx/build_pack.py builds it into the default pack).
 //
-// - The detector follows the louder side's peak (the two sides are linked, so the stereo image
-//   stays put), after a gentle high-pass so the lowest bass doesn't pump it. With CE's Sidechain
-//   list on a key, it follows the key instead.
-// - Every 8 frames, the gain for the level over CE's Threshold, by the Ratio with a soft knee 6 dB
-//   wide. The gain glides to it over those 8 frames.
-// - CE's Attack and Release are the detector's times, in ms.
-// - With a key, the key keeps its level, as with CE's limiter: out = key + gain * (master - key).
+// - The detector: each side through a gentle high-pass (about 35 Hz, so the lowest bass doesn't
+//   pump it), then the louder of the two (the sides are linked, so the stereo image stays put),
+//   its peak over each 8 frames.
+// - The gain computer, in log2 units: how far that peak is over the Threshold, turned down by the
+//   Ratio, with a soft knee 6 dB wide.
+// - Attack and Release smooth the turning down itself (not the level): it grows at the Attack's
+//   time and shrinks at the Release's. Each time is about 63 % of a step.
+// - The gain (with the Makeup) glides to the new value over the 8 frames.
 // - Makeup lifts the result. Nothing limits it after that: past full scale the host clips.
-// - It can duck chosen tracks instead of the master (PTMFX_FLAG_DUCK): then it fills the block's
-//   gain with makeup * gain for each frame, from the key.
+// - No key: the Tracks list is where CE's Sidechain list was.
+//
+// Attack and Release are lists of steps, one a jog-wheel click, about 12 % apart: Attack 0.1 ms to
+// 100 ms (20 a decade), Release 50 ms to 2 s (6 an octave, the last held at 2 s).
 //
 // The meter gets the block's mean gain, without the makeup. Float blocks; about 50 bytes of state
 // and none of the slot's memory.
@@ -24,23 +30,30 @@
 namespace
 {
 
-constexpr float kKnee = 1.0f;          // log2 units: 6 dB
-constexpr float kHighPass = 0.995f;    // the detector's one-pole high-pass, about 35 Hz
-constexpr uint32_t kHop = 8;           // frames per gain step
-constexpr float kLog2e = 1.44269504f;
+constexpr float kKnee = 1.0f;            // log2 units: 6 dB
+constexpr float kHighPass = 0.995f;      // the detector's one-pole high-pass, about 35 Hz
+constexpr uint32_t kHop = 8;             // frames per gain step
 constexpr float kMinLevel = 1.0e-9f;
+constexpr float kLog2PerDb = 0.16609640f; // 1 / 20log10(2)
+
+// The knobs
+constexpr uint32_t kAttack = 0, kRelease = 1, kThreshold = 2, kRatio = 3, kMakeup = 4;
+constexpr float kAttackSteps = 60.0f;    // 0.1 ms * 10^(step / 20): 0.1 to 100 ms
+constexpr float kAttackDefault = 40.0f;  // 10 ms
+constexpr float kReleaseSteps = 32.0f;   // 50 ms * 2^(step / 6), held at 2000 ms
+constexpr float kReleaseDefault = 12.0f; // 200 ms
+constexpr float kReleaseMost = 2000.0f;
 
 struct State
 {
     const PtmfxHost *host;
-    float slope;                       // 1 - 1 / ratio
-    float makeup;                      // linear
-    float attackMs, releaseMs, threshold; // CE's knobs as last seen
-    float attack, release;             // the detector's coefficients for them
+    float attack, release;               // the smoothing's coefficients per 8 frames
     float thresholdLog2;
-    float level;                       // the detector
-    float hpIn, hpOut;
-    float gain;
+    float slope;                         // 1 - 1 / ratio
+    float makeup;                        // linear
+    float hpInL, hpOutL, hpInR, hpOutR;
+    float reduction;                     // log2 units, the smoothed turning down
+    float gain;                          // makeup * 2^-reduction, as the last frame had it
 };
 
 inline float absf(float x)
@@ -85,38 +98,25 @@ inline float quickExp2(float x)
     return u.f * (1.0f + f * (0.6960656f + f * (0.2244943f + f * 0.0794402f)));
 }
 
-// A detector's coefficient for a time in ms: it covers about 63 % of a step in that time
-float coefficient(const PtmfxHost *host, float ms)
+float attackMs(const PtmfxHost *host, float step)
 {
-    if (!(ms > 0.05f))
-    {
-        ms = 0.05f;
-    }
-    return 1.0f - host->expf(-1.0f / (ms * 0.001f * host->sample_rate));
+    return 0.1f * host->powf(10.0f, step * (1.0f / 20.0f));
 }
 
-void follow(State *s, const PtmfxDynamicsKnobs *k)
+float releaseMs(const PtmfxHost *host, float step)
 {
-    if (k->attack != s->attackMs)
-    {
-        s->attackMs = k->attack;
-        s->attack = coefficient(s->host, k->attack);
-    }
-    if (k->release != s->releaseMs)
-    {
-        s->releaseMs = k->release;
-        s->release = coefficient(s->host, k->release);
-    }
-    if (k->threshold != s->threshold)
-    {
-        s->threshold = k->threshold;
-        const float t = k->threshold > 1.0e-5f ? k->threshold : 1.0e-5f;
-        s->thresholdLog2 = s->host->logf(t) * kLog2e;
-    }
+    const float ms = 50.0f * host->powf(2.0f, step * (1.0f / 6.0f));
+    return ms < kReleaseMost ? ms : kReleaseMost;
+}
+
+// The smoothing's coefficient for a time in ms, per 8 frames: about 63 % of a step in that time
+float coefficient(const PtmfxHost *host, float ms)
+{
+    return 1.0f - host->expf(-static_cast<float>(kHop) / (ms * 0.001f * host->sample_rate));
 }
 
 // How far to turn down, in log2 units, for a level `over` log2 units past the threshold
-inline float reduction(float over, float slope)
+inline float reductionFor(float over, float slope)
 {
     const float half = 0.5f * kKnee;
     if (over <= -half)
@@ -131,18 +131,35 @@ inline float reduction(float over, float slope)
     return slope * over;
 }
 
+void set(State *s, uint32_t index, float value)
+{
+    const PtmfxHost *host = s->host;
+    switch (index)
+    {
+        case kAttack: s->attack = coefficient(host, attackMs(host, value)); break;
+        case kRelease: s->release = coefficient(host, releaseMs(host, value)); break;
+        case kThreshold: s->thresholdLog2 = value * kLog2PerDb; break;
+        case kRatio: s->slope = 1.0f - 1.0f / (value < 1.0f ? 1.0f : value); break;
+        case kMakeup: s->makeup = host->powf(10.0f, value * 0.05f); break;
+        default: break;
+    }
+}
+
 } // namespace
 
 PTMFX_INFO = {
-    0, 0, PTMFX_FLAG_FLOAT | PTMFX_FLAG_DUCK, /* magic and version (the builder's), flags */
-    PTMFX_SLOT_DYNAMICS, 2, { 0, 0 },  /* slot, own knobs, reserved */
+    0, 0, PTMFX_FLAG_FLOAT | PTMFX_FLAG_OWN_DYNAMICS | PTMFX_FLAG_BUS, /* magic and version (the builder's), flags */
+    PTMFX_SLOT_DYNAMICS, 5, { 0, 0 },    /* slot, own knobs, reserved */
     "Glue", "MT+",
-    {},                                /* CE's Attack, Release and Threshold as they are */
+    {},                                  /* CE's labels: its own knobs take those columns */
     sizeof(State),
-    0, 0, 0, 0, 0, 0, 0,               /* the code's place and the entries (the builder's) */
+    0, 0, 0, 0, 0, 0, 0,                 /* the code's place and the entries (the builder's) */
     { 0, 0, 0 },
     {
-        PTMFX_KNOB("Ratio", 1, 20, 4, 0.5, ":1", PTMFX_PARAM_FLOAT),
+        PTMFX_KNOB("Attack", 0, kAttackSteps, kAttackDefault, 1, "", PTMFX_PARAM_LIST),
+        PTMFX_KNOB("Release", 0, kReleaseSteps, kReleaseDefault, 1, "", PTMFX_PARAM_LIST),
+        PTMFX_KNOB("Threshold", -40, 0, -12, 0.5, "dB", PTMFX_PARAM_FLOAT),
+        PTMFX_KNOB("Ratio", 1, 10, 4, 0.1, ":1", PTMFX_PARAM_FLOAT),
         PTMFX_KNOB("Makeup", 0, 12, 0, 0.5, "dB", PTMFX_PARAM_FLOAT),
     },
 };
@@ -152,94 +169,106 @@ PTMFX_INIT(void *st, const PtmfxMemory *mem, const PtmfxHost *host)
     (void)mem;
     State *s = static_cast<State *>(st);
     s->host = host;
-    s->slope = 0.75f;
-    s->makeup = 1.0f;
-    s->attackMs = -1.0f;               // worked out on the first block
-    s->releaseMs = -1.0f;
-    s->threshold = -1.0f;
-    s->gain = 1.0f;
+    set(s, kAttack, kAttackDefault);     // the host sets every knob again before the first block
+    set(s, kRelease, kReleaseDefault);
+    set(s, kThreshold, -12.0f);
+    set(s, kRatio, 4.0f);
+    set(s, kMakeup, 0.0f);
+    s->gain = s->makeup;
 }
 
 PTMFX_SET_PARAM(void *st, uint32_t index, float value)
 {
-    State *s = static_cast<State *>(st);
-    if (index == 0)
-    {
-        s->slope = 1.0f - 1.0f / (value < 1.0f ? 1.0f : value);
-    }
-    else if (index == 1)
-    {
-        s->makeup = s->host->powf(10.0f, value * 0.05f);
-    }
+    set(static_cast<State *>(st), index, value);
 }
 
 PTMFX_RESET(void *st)
 {
     State *s = static_cast<State *>(st);
-    s->level = 0.0f;
-    s->hpIn = 0.0f;
-    s->hpOut = 0.0f;
-    s->gain = 1.0f;
+    s->hpInL = 0.0f;
+    s->hpOutL = 0.0f;
+    s->hpInR = 0.0f;
+    s->hpOutR = 0.0f;
+    s->reduction = 0.0f;
+    s->gain = s->makeup;
 }
 
-// The page's text: "4.0:1" and "+3.5 dB"
+// The page's text: "10.0 ms", "200 ms", "1.80 s", "-12.0 dB", "4.0:1" and "+3.5 dB"
 PTMFX_FORMAT(const PtmfxHost *host, uint32_t index, float value, char *out, uint32_t size)
 {
-    host->print(out, size, index == 0 ? "%.1f:1" : "+%.1f dB", value);
+    if (index == kAttack)
+    {
+        const float ms = attackMs(host, value);
+        host->print(out, size, ms < 1.0f ? "%.2f ms" : (ms < 99.95f ? "%.1f ms" : "%.0f ms"), ms);
+    }
+    else if (index == kRelease)
+    {
+        const float ms = releaseMs(host, value);
+        if (ms < 999.5f)
+        {
+            host->print(out, size, "%.0f ms", ms);
+        }
+        else
+        {
+            host->print(out, size, "%.2f s", ms * 0.001f);
+        }
+    }
+    else if (index == kThreshold)
+    {
+        host->print(out, size, "%.1f dB", value);
+    }
+    else if (index == kRatio)
+    {
+        host->print(out, size, "%.1f:1", value);
+    }
+    else
+    {
+        host->print(out, size, "+%.1f dB", value);
+    }
 }
 
 PTMFX_PROCESS(void *st, const PtmfxBlock *b)
 {
     State *s = static_cast<State *>(st);
-    const PtmfxDynamicsKnobs *k = static_cast<const PtmfxDynamicsKnobs *>(b->knobs);
-    follow(s, k);
-
     float *left = b->fleft;
     float *right = b->fright;
-    const bool keyed = b->fkey_left != nullptr && b->fkey_right != nullptr;
-    const float *keyLeft = keyed ? b->fkey_left : left;
-    const float *keyRight = keyed ? b->fkey_right : right;
-    float *out = b->gain;              // ducking tracks: the gain for them, frame by frame
 
-    float level = s->level, hpIn = s->hpIn, hpOut = s->hpOut, gain = s->gain;
+    float hpInL = s->hpInL, hpOutL = s->hpOutL, hpInR = s->hpInR, hpOutR = s->hpOutR;
+    float reduction = s->reduction, gain = s->gain;
     const float attack = s->attack, release = s->release, makeup = s->makeup;
+    const float threshold = s->thresholdLog2, slope = s->slope;
     float sum = 0.0f;
     for (uint32_t start = 0; start < b->frames; start += kHop)
     {
+        float peak = 0.0f;
         for (uint32_t i = start; i < start + kHop; i++)
         {
-            const float x = absf(keyLeft[i]) > absf(keyRight[i]) ? keyLeft[i] : keyRight[i];
-            hpOut = kHighPass * (hpOut + x - hpIn);
-            hpIn = x;
-            const float a = absf(hpOut);
-            level += (a > level ? attack : release) * (a - level);
+            hpOutL = kHighPass * (hpOutL + left[i] - hpInL);
+            hpInL = left[i];
+            hpOutR = kHighPass * (hpOutR + right[i] - hpInR);
+            hpInR = right[i];
+            const float l = absf(hpOutL);
+            const float r = absf(hpOutR);
+            const float a = l > r ? l : r;
+            peak = a > peak ? a : peak;
         }
-        const float over = quickLog2(level + kMinLevel) - s->thresholdLog2;
-        const float target = quickExp2(-reduction(over, s->slope));
-        const float step = (target - gain) * (1.0f / kHop);
+        const float target = reductionFor(quickLog2(peak + kMinLevel) - threshold, slope);
+        reduction += (target > reduction ? attack : release) * (target - reduction);
+        const float down = quickExp2(-reduction);
+        sum += down * static_cast<float>(kHop);
+        const float step = (makeup * down - gain) * (1.0f / kHop);
         for (uint32_t i = start; i < start + kHop; i++)
         {
             gain += step;
-            sum += gain;
-            if (out != nullptr)
-            {
-                out[i] = makeup * gain;
-            }
-            if (keyed)
-            {
-                left[i] = makeup * (keyLeft[i] + gain * (left[i] - keyLeft[i]));
-                right[i] = makeup * (keyRight[i] + gain * (right[i] - keyRight[i]));
-            }
-            else
-            {
-                left[i] = makeup * gain * left[i];
-                right[i] = makeup * gain * right[i];
-            }
+            left[i] *= gain;
+            right[i] *= gain;
         }
     }
-    s->level = level;
-    s->hpIn = hpIn;
-    s->hpOut = hpOut;
+    s->hpInL = hpInL;
+    s->hpOutL = hpOutL;
+    s->hpInR = hpInR;
+    s->hpOutR = hpOutR;
+    s->reduction = reduction;
     s->gain = gain;
     return sum * (1.0f / PTMFX_BLOCK);
 }

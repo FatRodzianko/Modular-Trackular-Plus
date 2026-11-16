@@ -32,8 +32,10 @@ extern "C" {
 #endif
 
 #define PTMFX_MAGIC         0x464D5450u     /* "PTMF", little-endian */
-#define PTMFX_VERSION       1u
-#define PTMFX_MAX_PARAMS    2u              /* the plugin's own knobs */
+#define PTMFX_VERSION       2u
+#define PTMFX_MAX_PARAMS    5u              /* the plugin's own knobs */
+#define PTMFX_V1_HEADER     240u            /* format version 1's header: still loaded */
+#define PTMFX_V1_MAX_PARAMS 2u              /* and its own knobs */
 #define PTMFX_MAX_LABELS    6u              /* CE's knobs on the slot's page */
 #define PTMFX_BLOCK         128u            /* frames per process() call */
 #define PTMFX_RATE          44100.0f
@@ -59,6 +61,13 @@ enum
     PTMFX_FLAG_FLOAT = 0x0001,              /* float blocks (+-1.0) instead of CE's 16-bit ones */
     PTMFX_FLAG_DUCK  = 0x0002,              /* dynamics, with FLOAT: fills PtmfxBlock.gain, so the
                                                host can duck chosen tracks by it (see PtmfxBlock) */
+    PTMFX_FLAG_OWN_DYNAMICS = 0x0004,       /* dynamics, 3 own knobs or more: own knobs 0, 1 and 2
+                                               take the Limiter page's Attack, Release and Threshold
+                                               columns (CE's knobs aren't shown); 3 and 4 go in the
+                                               columns before Back */
+    PTMFX_FLAG_BUS   = 0x0008,              /* dynamics, with FLOAT, not with DUCK: works on a group
+                                               of tracks the Limiter page's Tracks list picks (see
+                                               PtmfxBlock) */
 };
 
 /* A knob's display */
@@ -83,7 +92,11 @@ typedef struct __attribute__((packed, aligned(4)))
     char    unit[4];                        /* up to 3 characters, after the value */
 } PtmfxParam;
 
-/* The file's header: 240 bytes, then the code. The plugin fills in the first part (PTMFX_INFO);
+/* Where the own knobs show: the Reverb and Limiter pages have the two columns before Back for
+ * knobs 0 and 1 (with PTMFX_FLAG_OWN_DYNAMICS, knobs 3 and 4, after Attack, Release and Threshold);
+ * the Delay page has none. A knob the page has no column for plays at its default. */
+
+/* The file's header: 336 bytes, then the code (format version 1's was 240, with 2 knobs). The plugin fills in the first part (PTMFX_INFO);
  * the builder fills in magic, version, the code's place and the entries' offsets (from the
  * code's start; Thumb bit clear). */
 typedef struct __attribute__((packed, aligned(4)))
@@ -184,7 +197,13 @@ typedef struct
  *             the master. Then left and right hold a copy of the key (as is the key), the host
  *             throws away what the plugin leaves in them, and the plugin writes into gain[i], for
  *             each frame, the factor it would apply to the master there (its makeup included);
- *             the host multiplies the chosen tracks by it. */
+ *             the host multiplies the chosen tracks by it.
+ *   PTMFX_FLAG_BUS: with tracks chosen in the Tracks list, left and right hold their sum (as CE's
+ *             tracks mixer gets them, before its saturation and the reverb and delay returns)
+ *             instead of the master; the plugin works on it in place as it would on the master,
+ *             and the host adds what the plugin left to the other tracks' sum before CE's
+ *             saturation. The other tracks and the sends aren't touched. Held within +-11.0.
+ *             With the Tracks list on Master, it gets the master as usual. */
 typedef struct
 {
     int16_t       *left;
@@ -220,10 +239,10 @@ typedef void  (*PtmfxFormat)(const PtmfxHost *host, uint32_t index, float value,
 
 #ifdef __cplusplus
 static_assert(sizeof(PtmfxParam) == 32, "PtmfxParam is 32 bytes");
-static_assert(sizeof(PtmfxHeader) == 240, "PtmfxHeader is 240 bytes");
+static_assert(sizeof(PtmfxHeader) == 336, "PtmfxHeader is 336 bytes");
 #else
 _Static_assert(sizeof(PtmfxParam) == 32, "PtmfxParam is 32 bytes");
-_Static_assert(sizeof(PtmfxHeader) == 240, "PtmfxHeader is 240 bytes");
+_Static_assert(sizeof(PtmfxHeader) == 336, "PtmfxHeader is 336 bytes");
 #endif
 
 /* ---- for plugins ---------------------------------------------------------------------- */

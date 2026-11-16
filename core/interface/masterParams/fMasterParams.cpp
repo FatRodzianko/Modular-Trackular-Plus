@@ -565,6 +565,13 @@ static void functEncoder(int16_t value)
     }
     else if (MP->isLimiterScreen)
     {
+#if MT_HAS_MASTERFX // MT: a column with the plugin's own knob (an own-dynamics plugin's 0 to 2 too)
+        if (mods::masterfx::ownKnobAt(mods::masterfx::kDynamics, MP->selectedPlaceLimiter) >= 0)
+        {
+            changeMasterfxKnob(mods::masterfx::kDynamics, MP->selectedPlaceLimiter, value);
+        }
+        else
+#endif
         switch (MP->selectedPlaceLimiter)
         {
             case 0: changeLimiterAttack(value); break;
@@ -836,6 +843,13 @@ static void functUp()
     }
     else if (MP->isLimiterScreen)
     {
+#if MT_HAS_MASTERFX // MT: a column with the plugin's own knob (an own-dynamics plugin's 0 to 2 too)
+        if (mods::masterfx::ownKnobAt(mods::masterfx::kDynamics, MP->selectedPlaceLimiter) >= 0)
+        {
+            changeMasterfxKnob(mods::masterfx::kDynamics, MP->selectedPlaceLimiter, 1);
+        }
+        else
+#endif
         switch (MP->selectedPlaceLimiter)
         {
             case 0: changeLimiterAttack(1); break;
@@ -962,6 +976,13 @@ static void functDown()
     }
     else if (MP->isLimiterScreen)
     {
+#if MT_HAS_MASTERFX // MT: a column with the plugin's own knob (an own-dynamics plugin's 0 to 2 too)
+        if (mods::masterfx::ownKnobAt(mods::masterfx::kDynamics, MP->selectedPlaceLimiter) >= 0)
+        {
+            changeMasterfxKnob(mods::masterfx::kDynamics, MP->selectedPlaceLimiter, -1);
+        }
+        else
+#endif
         switch (MP->selectedPlaceLimiter)
         {
             case 0: changeLimiterAttack(-1); break;
@@ -1089,6 +1110,13 @@ static void functDelete()
     }
     else if (MP->isLimiterScreen)
     {
+#if MT_HAS_MASTERFX // MT: a column with the plugin's own knob (an own-dynamics plugin's 0 to 2 too)
+        if (mods::masterfx::ownKnobAt(mods::masterfx::kDynamics, MP->selectedPlaceLimiter) >= 0)
+        {
+            setDefaultMasterfxKnob(mods::masterfx::kDynamics, MP->selectedPlaceLimiter);
+        }
+        else
+#endif
         switch (MP->selectedPlaceLimiter)
         {
             case 0: setDefaultLimiterAttack(); break;
@@ -2503,11 +2531,12 @@ static void changeMasterfxDynamics(int16_t value)
 
 static void changeMasterfxKnob(uint8_t slot, uint8_t place, int16_t value)
 {
-    const uint8_t knob = place - 5;
-    if (knob >= mods::masterfx::ownKnobs(slot))
+    const int at = mods::masterfx::ownKnobAt(slot, place);
+    if (at < 0)
     {
         return;
     }
+    const uint8_t knob = static_cast<uint8_t>(at);
     mods::masterfx::stepOwnKnob(slot, knob, value);
     mods::masterfxKnobEdited();
     MP->showMasterfxOwnKnob(slot, knob);
@@ -2515,11 +2544,12 @@ static void changeMasterfxKnob(uint8_t slot, uint8_t place, int16_t value)
 
 static void setDefaultMasterfxKnob(uint8_t slot, uint8_t place)
 {
-    const uint8_t knob = place - 5;
-    if (knob >= mods::masterfx::ownKnobs(slot))
+    const int at = mods::masterfx::ownKnobAt(slot, place);
+    if (at < 0)
     {
         return;
     }
+    const uint8_t knob = static_cast<uint8_t>(at);
     mods::masterfx::defaultOwnKnob(slot, knob);
     mods::masterfxKnobEdited();
     MP->showMasterfxOwnKnob(slot, knob);
@@ -2529,7 +2559,7 @@ static void functSelectMasterfxKnob(uint8_t n, uint8_t state)
 {
     const uint8_t slot = MP->isLimiterScreen ? mods::masterfx::kDynamics : mods::masterfx::kReverb;
     const uint8_t place = n; // the button under column 5 or 6
-    if (state != buttonPress || place < 5 || place - 5 >= mods::masterfx::ownKnobs(slot))
+    if (state != buttonPress || place < 5 || mods::masterfx::ownKnobAt(slot, place) < 0)
     {
         return;
     }
