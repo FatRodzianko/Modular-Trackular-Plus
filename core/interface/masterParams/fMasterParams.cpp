@@ -68,7 +68,7 @@ static void functSelectLimiterRelease();
 static void functSelectLimiterThreshold();
 static void functSelectLimiterSidechain();
 #if MT_HAS_MASTERFX // MT:
-static void functSelectLimiterDucks();
+static void functSelectLimiterSidechain3();
 #endif
 static void functLimiterCancel();
 // equalizer
@@ -580,11 +580,11 @@ static void functEncoder(int16_t value)
             case 0: changeLimiterAttack(value); break;
             case 1: changeLimiterRelease(value); break;
             case 2: changeLimiterTreshold(value); break;
-#if MT_HAS_MASTERFX // MT: the Ducks list in column 3
+#if MT_HAS_MASTERFX // MT: a ducking plugin's Sidechain list in column 3
             case 3:
-                if (MP->masterfxDucksColumn() == 3)
+                if (MP->masterfxSidechainColumn() == 3)
                 {
-                    MP->moveMasterfxDucks(interfaceGlobals.invertValForList ? -value : value);
+                    changeLimiterSidechain(interfaceGlobals.invertValForList ? -value : value);
                 }
                 break;
 #endif
@@ -658,8 +658,8 @@ static void functLeft()
     }
     else if (MP->isLimiterScreen)
     {
-#if MT_HAS_MASTERFX // MT: column 3 is a place with the Ducks list in it
-        if (MP->selectedPlaceLimiter == 4 && MP->masterfxDucksColumn() == 3)
+#if MT_HAS_MASTERFX // MT: column 3 is a place with the Sidechain list in it
+        if (MP->selectedPlaceLimiter == 4 && MP->masterfxSidechainColumn() == 3)
             MP->selectedPlaceLimiter = 3;
         else
 #endif
@@ -735,8 +735,8 @@ static void functRight()
     }
     else if (MP->isLimiterScreen)
     {
-#if MT_HAS_MASTERFX // MT: column 3 is a place with the Ducks list in it
-        if (MP->selectedPlaceLimiter == 2 && MP->masterfxDucksColumn() == 3)
+#if MT_HAS_MASTERFX // MT: column 3 is a place with the Sidechain list in it
+        if (MP->selectedPlaceLimiter == 2 && MP->masterfxSidechainColumn() == 3)
             MP->selectedPlaceLimiter = 3;
         else
 #endif
@@ -876,11 +876,11 @@ static void functUp()
             case 0: changeLimiterAttack(1); break;
             case 1: changeLimiterRelease(1); break;
             case 2: changeLimiterTreshold(1); break;
-#if MT_HAS_MASTERFX // MT: the Ducks list in column 3
+#if MT_HAS_MASTERFX // MT: a ducking plugin's Sidechain list in column 3
             case 3:
-                if (MP->masterfxDucksColumn() == 3)
+                if (MP->masterfxSidechainColumn() == 3)
                 {
-                    MP->moveMasterfxDucks(-1);
+                    changeLimiterSidechain(-1);
                 }
                 break;
 #endif
@@ -1017,11 +1017,11 @@ static void functDown()
             case 0: changeLimiterAttack(-1); break;
             case 1: changeLimiterRelease(-1); break;
             case 2: changeLimiterTreshold(-1); break;
-#if MT_HAS_MASTERFX // MT: the Ducks list in column 3
+#if MT_HAS_MASTERFX // MT: a ducking plugin's Sidechain list in column 3
             case 3:
-                if (MP->masterfxDucksColumn() == 3)
+                if (MP->masterfxSidechainColumn() == 3)
                 {
-                    MP->moveMasterfxDucks(1);
+                    changeLimiterSidechain(1);
                 }
                 break;
 #endif
@@ -1159,11 +1159,11 @@ static void functDelete()
             case 0: setDefaultLimiterAttack(); break;
             case 1: setDefaultLimiterRelease(); break;
             case 2: setDefaultLimiterTreshold(); break;
-#if MT_HAS_MASTERFX // MT: the Ducks list back to the master
+#if MT_HAS_MASTERFX // MT: a ducking plugin's Sidechain list in column 3
             case 3:
-                if (MP->masterfxDucksColumn() == 3)
+                if (MP->masterfxSidechainColumn() == 3)
                 {
-                    MP->clearMasterfxDucks();
+                    setDefaultLimiterSidechain();
                 }
                 break;
 #endif
@@ -1510,7 +1510,7 @@ void cMasterParams::switchToLimiterScreen()
 #if MT_HAS_MASTERFX // MT: the plugin's own knobs, and a ducking plugin's Ducks list
     ip->setButtonObj(interfaceButton5, functSelectMasterfxKnob);
     ip->setButtonObj(interfaceButton6, functSelectMasterfxKnob);
-    ip->setButtonObj(interfaceButton3, buttonPress, functSelectLimiterDucks);
+    ip->setButtonObj(interfaceButton3, buttonPress, functSelectLimiterSidechain3);
 #endif
 
     keyboardManager.deactivateKeyboard();
@@ -1699,7 +1699,8 @@ static void functSelectLimiterThreshold()
 
 static void functSelectLimiterSidechain()
 {
-#if MT_HAS_MASTERFX // MT: the Tracks list in the column: a press on it marks the item under the cursor
+#if MT_HAS_MASTERFX // MT: the Ducks or Tracks list in the column: a press on it marks the item under
+                    // the cursor
     if (MP->masterfxDucksColumn() == 4)
     {
         if (MP->selectedPlaceLimiter == 4)
@@ -1727,17 +1728,23 @@ static void functSelectLimiterSidechain()
     MP->refreshLimiterFrame();
 }
 
-#if MT_HAS_MASTERFX // MT: the Ducks list in column 3: a press selects it, and on it marks the item
-                    // under the cursor
-static void functSelectLimiterDucks()
+#if MT_HAS_MASTERFX // MT: a ducking plugin's Sidechain list in column 3: CE's button 4, in its place
+static void functSelectLimiterSidechain3()
 {
-    if (MP->masterfxDucksColumn() != 3)
+    if (MP->masterfxSidechainColumn() != 3)
     {
         return;
     }
     if (MP->selectedPlaceLimiter == 3)
     {
-        MP->toggleMasterfxDuck();
+        mtProject.values.limiterSidechain++;
+        if (mtProject.values.limiterSidechain > LIMITER_SIDECHAIN_MAX)
+            mtProject.values.limiterSidechain = LIMITER_SIDECHAIN_MIN;
+
+        engine.setLimiterSidechain(mtProject.values.limiterSidechain);
+        newFileManager.setProjectStructChanged();
+        MP->showLimiterSidechain();
+        return;
     }
     MP->selectedPlaceLimiter = 3;
     MP->refreshLimiterFrame();

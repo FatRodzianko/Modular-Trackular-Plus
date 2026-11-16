@@ -268,16 +268,19 @@ strList masterfxDynamicsList;
 bool masterfxMovedPingpong = false;
 
 // The Limiter page's Ducks list: its rows, the marked ones (CE's list colours them, as the file
-// browser's), the cursor, whether it is up and in which column. A ducking plugin's is in column 3,
-// in the Delay page's PingPong list (moved as the Master page moves it; showDelayScreen moves it
-// back); a bus plugin's Tracks list is in column 4, in CE's Sidechain list's control.
+// browser's), the cursor, and whether it is up. It is always in column 4. A ducking plugin's comes
+// after the source: CE's Sidechain list moves to column 3, and the Ducks list is the Delay page's
+// PingPong list (moved as the Master page moves it; showDelayScreen moves it back). A bus plugin
+// has no key: its Tracks list is in CE's Sidechain list's control.
 strList masterfxDucksList;
 uint8_t masterfxDuckMarks[mods::masterfx::kDuckItems];
 uint8_t masterfxDuckCursor = 0;
 bool masterfxDucksUp = false;
-uint8_t masterfxDucksAt = 4;
-// The Gain Reduce meter's column, set as the Limiter page opens: 7, above Back, when the Ducks list
-// takes column 3. Column 7's bar then has the meter's style, which resizeBarControl gives back.
+bool masterfxDucksInSidechain = false; // the Tracks list, in CE's Sidechain list's control
+uint8_t masterfxSidechainListAt = 4;   // CE's Sidechain list's column: CE's 4, or 3 before the Ducks list
+// The Gain Reduce meter's column, set as the Limiter page opens: 7, above Back, for a ducking
+// plugin, whose Sidechain list takes column 3. Column 7's bar then has the meter's style, which
+// resizeBarControl gives back.
 uint8_t masterfxMeterAt = 3;
 bool masterfxMeterStyled = false;
 
@@ -313,8 +316,10 @@ const char* masterfxChoiceText(uint8_t slot)
 }
 
 // A page's title and CE's knobs' labels (column i is label i) for the slot's plugin. Stock keeps
-// CE's words; a missing plugin keeps CE's labels and says so in the title.
-void showMasterfxWords(TitleBar* bar, const hControl* labels, uint8_t slot, const char* word)
+// CE's words; a missing plugin keeps CE's labels and says so in the title. A plugin that doesn't
+// name a knob gets `plain`'s word for it, when given.
+void showMasterfxWords(TitleBar* bar, const hControl* labels, uint8_t slot, const char* word,
+                       const char* const* plain = nullptr)
 {
     namespace pl = mods::masterfx::plugins;
     const char* title = mods::masterfx::pageTitle(slot, word);
@@ -330,6 +335,10 @@ void showMasterfxWords(TitleBar* bar, const hControl* labels, uint8_t slot, cons
     for (uint32_t i = 0; i < pl::kLabels[slot]; i++)
     {
         const char* text = pl::label(static_cast<pl::Slot>(slot), i);
+        if (text == nullptr && plain != nullptr)
+        {
+            text = plain[i];
+        }
         if (text != nullptr)
         {
             display.setControlText(labels[i], text);
@@ -393,7 +402,11 @@ void cMasterParams::showMasterfxDelayWords()
 
 void cMasterParams::showMasterfxLimiterWords()
 {
-    showMasterfxWords(titleBar, label, mods::masterfx::kDynamics, "Limiter");
+    // CE's LimiterAtt, LimiterRls and LimiterThr name the stock limiter: a plugin's page doesn't
+    // say Limiter
+    static const char* const kPlain[mods::masterfx::plugins::kLabels[mods::masterfx::kDynamics]] = {
+        "Attack", "Release", "Threshold"};
+    showMasterfxWords(titleBar, label, mods::masterfx::kDynamics, "Limiter", kPlain);
 }
 
 // Columns 5 and 6 are empty on CE's Reverb and Limiter pages; an own-dynamics plugin's first three
@@ -449,7 +462,16 @@ bool cMasterParams::masterfxDucksShown()
 
 uint8_t cMasterParams::masterfxDucksColumn()
 {
-    return masterfxDucksUp ? masterfxDucksAt : 0;
+    return masterfxDucksUp ? 4 : 0;
+}
+
+uint8_t cMasterParams::masterfxSidechainColumn()
+{
+    if (masterfxMeterAt == 7)
+    {
+        return 3;
+    }
+    return masterfxDucksInSidechain && masterfxDucksUp ? 0 : 4;
 }
 
 uint8_t cMasterParams::masterfxMeterColumn()
@@ -457,7 +479,7 @@ uint8_t cMasterParams::masterfxMeterColumn()
     return masterfxMeterAt;
 }
 
-// A ducking plugin's Limiter page: the Ducks list has column 3, so the Gain Reduce meter is in
+// A ducking plugin's Limiter page: the Sidechain list has column 3, so the Gain Reduce meter is in
 // column 7's bar, above Back, labelled "Gain Reduce" over "Back"
 void cMasterParams::showMasterfxLimiterMeter()
 {
@@ -480,17 +502,18 @@ void cMasterParams::showMasterfxLimiterMeter()
     showLimiterGainReduce();
 }
 
-// The Ducks list (a ducking plugin's, in column 3) or the Tracks list (a bus plugin's, in column 4):
-// the same set
+// The Ducks list (a ducking plugin's, after CE's Sidechain list) or the Tracks list (a bus
+// plugin's): the same set, in column 4
 void cMasterParams::showMasterfxDucks(bool show)
 {
     const bool tracks = mods::masterfx::canBus();
     show = show && (mods::masterfx::canDuck() || tracks);
     if (!show)
     {
-        if (masterfxDucksUp && masterfxDucksAt == 4) // CE's list as it was
+        if (masterfxDucksUp && masterfxDucksInSidechain) // CE's list as it was
         {
             masterfxDucksUp = false;
+            masterfxDucksInSidechain = false;
             display.setControlData(limiterSidechainList, &limiterSidechainData);
             display.setControlText(label[4], "Sidechain");
             showLimiterSidechain();
@@ -510,21 +533,26 @@ void cMasterParams::showMasterfxDucks(bool show)
     masterfxDucksList.selectTab = masterfxDuckMarks;
     masterfxDucksList.selectionActive = 0;
     masterfxDucksUp = true;
-    masterfxDucksAt = tracks ? 4 : 3;
+    masterfxDucksInSidechain = tracks;
     if (tracks)
     {
         display.setControlData(limiterSidechainList, &masterfxDucksList);
     }
     else
     {
-        display.setControlPosition(delayPingpongEnableList, (800 / 8) * 3 + 2, -1);
+        // the source first: CE's Sidechain list in column 3 (showLimiterScreen moved it), then
+        // what it turns down
+        display.setControlText(label[3], "Sidechain");
+        display.setControlValue(label[3], 1);
+        display.refreshControl(label[3]);
+        display.setControlPosition(delayPingpongEnableList, (800 / 8) * 4 + 2, -1);
         masterfxMovedPingpong = true;
         display.setControlData(delayPingpongEnableList, &masterfxDucksList);
         display.setControlColors(delayPingpongEnableList, display.getTheme().activeListColors);
         display.setControlShow(delayPingpongEnableList);
     }
-    display.setControlText(label[masterfxDucksAt], tracks ? "Tracks" : "Ducks");
-    display.setControlValue(label[masterfxDucksAt], 1);
+    display.setControlText(label[4], tracks ? "Tracks" : "Ducks");
+    display.setControlValue(label[4], 1);
     moveMasterfxDucks(0);
 }
 
@@ -540,11 +568,11 @@ void cMasterParams::moveMasterfxDucks(int16_t by)
     {
         masterfxDuckMarks[i] = mods::masterfx::ducked(i) ? 1 : 0;
     }
-    const hControl list = masterfxDucksAt == 4 ? limiterSidechainList : delayPingpongEnableList;
+    const hControl list = masterfxDucksInSidechain ? limiterSidechainList : delayPingpongEnableList;
     display.setControlValue(list, masterfxDuckCursor);
     display.refreshControl(list);
-    display.setControlText2(label[masterfxDucksAt], mods::masterfx::ducksText());
-    display.refreshControl(label[masterfxDucksAt]);
+    display.setControlText2(label[4], mods::masterfx::ducksText());
+    display.refreshControl(label[4]);
 }
 
 void cMasterParams::toggleMasterfxDuck()
@@ -1024,16 +1052,24 @@ void cMasterParams::showReverbDiffusion()
 // limiter
 void cMasterParams::showLimiterScreen()
 {
-#if MT_HAS_MASTERFX // MT: the page opens on CE's Sidechain list; a ducking plugin's meter above Back
+#if MT_HAS_MASTERFX // MT: the page opens on CE's Sidechain list; a ducking plugin's Sidechain list
+                    // in column 3 and its meter above Back
     if (masterfxDucksUp)
     {
         masterfxDucksUp = false;
-        if (masterfxDucksAt == 4)
+        if (masterfxDucksInSidechain)
         {
+            masterfxDucksInSidechain = false;
             display.setControlData(limiterSidechainList, &limiterSidechainData);
         }
     }
     masterfxMeterAt = (mods::masterfx::canDuck() && !mods::masterfx::canBus()) ? 7 : 3;
+    const uint8_t sidechainAt = masterfxMeterAt == 7 ? 3 : 4;
+    if (sidechainAt != masterfxSidechainListAt) // only when it moves: with the mod Off, CE's calls only
+    {
+        display.setControlPosition(limiterSidechainList, (800 / 8) * sidechainAt + 2, -1);
+        masterfxSidechainListAt = sidechainAt;
+    }
 #endif
     display.setControlHide(delayPingpongEnableList);
     display.setControlHide(delaySyncEnableList);
@@ -1117,7 +1153,7 @@ void cMasterParams::showLimiterScreen()
     showMasterfxLimiterMeter();
     frameData.placesCount = showMasterfxOwnKnobs(mods::masterfx::kDynamics, frameData.placesCount);
     if (selectedPlaceLimiter >= frameData.placesCount ||
-        (selectedPlaceLimiter == 3 && masterfxDucksColumn() != 3))
+        (selectedPlaceLimiter == 3 && masterfxSidechainColumn() != 3))
     {
         selectedPlaceLimiter = 0;
     }
@@ -1277,18 +1313,21 @@ void cMasterParams::showLimiterGainReduce()
 
 void cMasterParams::showLimiterSidechain()
 {
-#if MT_HAS_MASTERFX // MT: the Tracks list is in the column
-    if (masterfxDucksColumn() == 4)
+#if MT_HAS_MASTERFX // MT: the Tracks list is in the control; a ducking plugin's Sidechain in column 3
+    const uint8_t sidechainColumn = masterfxSidechainColumn();
+    if (sidechainColumn == 0)
     {
         moveMasterfxDucks(0);
         return;
     }
+#else
+    const uint8_t sidechainColumn = 4;
 #endif
     display.setControlValue(limiterSidechainList, mtProject.values.limiterSidechain);
     display.refreshControl(limiterSidechainList);
 
-    display.setControlText2(label[4], limiterSidechainListTxt[mtProject.values.limiterSidechain]);
-    display.refreshControl(label[4]);
+    display.setControlText2(label[sidechainColumn], limiterSidechainListTxt[mtProject.values.limiterSidechain]);
+    display.refreshControl(label[sidechainColumn]);
 }
 
 // EQ

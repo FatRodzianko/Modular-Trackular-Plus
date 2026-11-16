@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="480" viewBox="0 0 800 480" font-family="'Roboto Mono', 'DejaVu Sans Mono', Consolas, monospace">
-<title>Limiter: Glue</title><desc>Glue's page: its own Attack, Release and Threshold, the Tracks list on Master, Ratio and Makeup</desc>
+<title>Glue</title><desc>Glue's page: its own Attack, Release and Threshold, the Tracks list on Master, Ratio and Makeup</desc>
 <defs><linearGradient id="shadow" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0A0A0A"/><stop offset="1" stop-color="#000000"/></linearGradient><linearGradient id="barShade" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000000"/><stop offset="1" stop-color="#080808"/></linearGradient></defs>
 <rect x="0" y="0" width="800" height="480" fill="#000000"/>
 <rect x="0" y="0" width="800" height="28" fill="#080808"/>
 <line x1="0" y1="28.5" x2="800" y2="28.5" stroke="#FFFFFF" stroke-width="1"/>
-<text class="val" x="9" y="13" font-size="17" font-weight="700" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Limiter: Glue</text>
+<text class="val" x="9" y="13" font-size="17" font-weight="700" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Glue</text>
 <rect x="1" y="425" width="797" height="54" fill="#0A0A0A"/>
 <line x1="100.5" y1="438.5" x2="100.5" y2="479" stroke="#777777" stroke-width="1"/>
 <line x1="200.5" y1="438.5" x2="200.5" y2="479" stroke="#777777" stroke-width="1"/>

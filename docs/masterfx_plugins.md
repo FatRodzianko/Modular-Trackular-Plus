@@ -342,20 +342,23 @@ Master FX mod on:
   that isn't on the card reads `Missing` in the list and under the column; the slot's page title
   names the file.
 - **The slot's page** (the Reverb, Delay or Limiter button) is CE's, with the plugin's labels in
-  place of CE's where it gives them. Its title says what plays: `Reverb: Shimmer`,
-  `Limiter: Glue (bypassed)`, `Limiter: Missing: Gone.ptmfx`.
+  place of CE's where it gives them. A Limiter plugin that gives none gets `Attack`, `Release`
+  and `Threshold`, not CE's `LimiterAtt`, `LimiterRls` and `LimiterThr`: a plugin's page doesn't
+  say Limiter. The title says what plays: `Reverb: Shimmer`; a Limiter plugin's name alone,
+  `Glue (bypassed)`; `Limiter: Missing: Gone.ptmfx`.
 - **Own knobs** sit in columns 5 and 6 of the Reverb and Limiter pages, and with
   `PTMFX_FLAG_OWN_DYNAMICS` in the Limiter page's columns 0 to 2 too: the label, the text (the
   plugin's `format()`, else the value and the unit), and a bar. The buttons under the columns
   pick them, the encoder and Up/Down move one step a tick, and Delete puts a knob back to its
   default. The Delay page has no free column: a delay plugin's own knobs stay at the project's
   values, or their defaults, so give a delay plugin defaults that work.
-- **The Ducks list** (section 3.4): in column 3 of the Limiter page, always up while a plugin
-  with `PTMFX_FLAG_DUCK` plays; CE's Sidechain list stays in column 4, and CE's Gain Reduce meter
-  moves above Back (labelled `Gain Reduce` over `Back`). It lists Master, Track 1 to 8 and
-  Synth 1 to 3. The button under the column selects it, then marks or clears the item under the
-  cursor (Master clears them all), Delete goes back to Master, and the column's label says
-  `Master`, the one track, or `3 tracks`.
+- **The Ducks list** (section 3.4): in column 4 of the Limiter page, always up while a plugin
+  with `PTMFX_FLAG_DUCK` plays. The source comes first: CE's Sidechain list moves to column 3,
+  with CE's button behaviour there, and CE's Gain Reduce meter moves above Back (labelled
+  `Gain Reduce` over `Back`). It lists Master, Track 1 to 8 and Synth 1 to 3. The button under
+  the column selects it, then marks or clears the item under the cursor (Master clears them
+  all), Delete goes back to Master, and the column's label says `Master`, the one track, or
+  `3 tracks`.
 - **The Tracks list** (section 3.5) is in column 4, in CE's Sidechain list's place, always up,
   while a plugin with `PTMFX_FLAG_BUS` plays (a bus plugin has no key). It lists the same items
   and works the same way; Gain Reduce stays in column 3.

@@ -360,8 +360,16 @@ const char* pageTitle(uint8_t slot, const char* word)
     }
     if (ours(slot))
     {
-        snprintf(titleText, sizeof(titleText), "%s: %s%s", word, choiceName(slot),
-                 bypassed(slot) ? " (bypassed)" : "");
+        // a dynamics plugin isn't the stock limiter: its page has its name alone
+        if (slot == kDynamics)
+        {
+            snprintf(titleText, sizeof(titleText), "%s%s", choiceName(slot), bypassed(slot) ? " (bypassed)" : "");
+        }
+        else
+        {
+            snprintf(titleText, sizeof(titleText), "%s: %s%s", word, choiceName(slot),
+                     bypassed(slot) ? " (bypassed)" : "");
+        }
         return titleText;
     }
     if (missing(slot))

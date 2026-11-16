@@ -774,6 +774,32 @@ own column.
   that the two-line Gain Reduce over Back label reads well, the page's real display bytes, and the
   meter moving above Back.
 
+### Sidechain before Ducks, and no "Limiter" on a plugin's page (2026-11-16)
+
+The user's corrections to the layout above: the source comes before what it turns down, so CE's
+Sidechain list is column 3 and the Ducks list column 4; and a plugin that isn't the stock limiter
+doesn't say "Limiter" in its controls.
+
+- With a ducking plugin, `showLimiterScreen` moves CE's Sidechain list to column 3 (its position
+  is set each time the page opens: column 4 otherwise), and the Ducks list (the moved PingPong
+  list) is column 4. Column 3's button is CE's Sidechain button in its place
+  (`functSelectLimiterSidechain3`), and the encoder, Up/Down and Delete do CE's Sidechain changes
+  there; column 4's button, encoder, Up/Down and Delete work the Ducks list, as they work Glue's
+  Tracks list. `masterfxSidechainColumn()` says where CE's list is: 3, 4, or 0 when a bus plugin's
+  Tracks list has its control.
+- A Limiter plugin that doesn't name CE's knobs gets "Attack", "Release" and "Threshold"
+  (`showMasterfxLimiterWords`), and a Limiter plugin's page title is its name alone ("Compressor",
+  "Glue (bypassed)"). Stock keeps CE's words and "Master Limiter"; a missing file's title still
+  reads "Limiter: Missing: …", as CE's limiter is what plays then. The Master page's column
+  heading "Limiter" is CE's slot heading for every choice, and stays.
+- The plugins and the pack aren't changed.
+- What ran (before CE's ed51301): the host tests, 0 failures; the rig's ui section 121 pass (mod
+  Off still makes exactly the reference build's display calls: the Sidechain list moves only when
+  its column changes) and ducks 42 pass (CE's Sidechain button, encoder and Delete in column 3, read
+  from `setLimiterSidechain` as the rig's project has no track names; the page 6,996 bytes of
+  8,172); `check_mockups` 0 failures. Not run, by the user's choice: the release tier, which waits
+  for the CE merge.
+
 ### Not checked
 
 - Anything on the unit: the sound of Glue and Compressor, the cost in cycles, the pack replaced on a

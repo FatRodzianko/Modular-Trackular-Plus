@@ -14,7 +14,9 @@ them as it does through CE's, synths included.
   new version of it. A file you changed, or one of your own, is left alone.
 - CE's knobs stay CE's. A plugin can give them its own names on the slot's page, and add up to two
   knobs of its own on the Reverb and Limiter pages. A Limiter plugin can also have its own knobs in
-  place of CE's **LimiterAtt**, **LimiterRls** and **LimiterThr** (Glue does).
+  place of CE's limiter knobs (Glue does). With a plugin in the Limiter slot, nothing on the page
+  says Limiter: CE's **LimiterAtt**, **LimiterRls** and **LimiterThr** read **Attack**,
+  **Release** and **Threshold**, and the title is the plugin's name.
 - The choices are saved with the project: each slot's file and its own knobs, and the Ducks or
   Tracks list. **Project Settings → Master FX** has the same three lists.
 - Some plugins cost more CPU than CE's effects. With 8 synth voices, Shimmer and BBD together use
@@ -43,7 +45,8 @@ under them.*
 
 Press the button under **Reverb**, **Delay** or **Limiter** to open that slot's page. It is CE's
 page. The title says what plays, and the plugin's names for CE's knobs replace CE's where it has
-them. Shimmer calls Size, Damping and Diffusion **Decay**, **Tone** and **Shimmer**:
+them. Shimmer calls Size, Damping and Diffusion **Decay**, **Tone** and **Shimmer**. On the Limiter
+page the title is the plugin's name alone, such as **Compressor**:
 
 ![The Reverb page with Shimmer: the title Reverb: Shimmer, and the columns Decay, Tone, Predelay, Shimmer and Line in](img/masterfx-reverb.svg)
 
@@ -60,9 +63,10 @@ Compressor has **Ratio** and **Makeup**:
 2. Turn the jog wheel, or press Up or Down, to change it one step at a time.
 3. Press **Delete** to set it back to the plugin's default.
 
-![The Limiter page with Compressor: the title Limiter: Compressor, CE's LimiterAtt, LimiterRls and LimiterThr, the Ducks list on Master, the Sidechain list, then Ratio 4.0:1, Makeup +0.0 dB and Gain Reduce over Back, Ratio framed](img/masterfx-knobs.svg)
+![The Limiter page with Compressor: the title Compressor; Attack, Release and Threshold; the Sidechain list on Disable, then the Ducks list on Master; Ratio 4.0:1, Makeup +0.0 dB, and Gain Reduce over Back; Ratio framed](img/masterfx-knobs.svg)
 
-*The Limiter page with Compressor, Ratio selected. Marked: the title and Compressor's own knobs.*
+*The Limiter page with Compressor, Ratio selected. Marked: the title, Attack, Release and Threshold
+(CE's knobs, named without Limiter), and Compressor's own knobs.*
 
 The Delay page has no free column, so a delay plugin's own knobs keep their defaults.
 
@@ -71,9 +75,10 @@ The Delay page has no free column, so a delay plugin's own knobs keep their defa
 A Limiter plugin that can duck (Compressor can) turns chosen tracks down by its gain, instead of the
 whole master. It follows the key you pick in CE's **Sidechain** list, for example the kick's track.
 
-1. On the Limiter page, pick the key in the **Sidechain** list.
-2. Press the button under **Ducks**, the column before **Sidechain**, to select the **Ducks** list:
-   **Master**, **Track 1** to **Track 8** and **Synth 1** to **Synth 3**.
+1. On the Limiter page, pick the key in the **Sidechain** list, the column after **Threshold**. Its
+   button works as on CE's Limiter page: the first press selects the list, the next ones step it.
+2. Press the button under **Ducks**, the next column, to select the **Ducks** list: what the key
+   turns down. It lists **Master**, **Track 1** to **Track 8** and **Synth 1** to **Synth 3**.
 3. Move the cursor with the jog wheel or Up and Down, and press the button under **Ducks** to mark
    or unmark the item under it. Marked items are red.
 4. Under the column is what is ducked: **Master**, the one track, or the number of tracks.
@@ -82,10 +87,10 @@ whole master. It follows the key you pick in CE's **Sidechain** list, for exampl
 With a plugin that can duck, the **Gain Reduce** meter is above **Back**: the label there says
 **Gain Reduce** over **Back**, and the button still goes back.
 
-![The Limiter page with Compressor: the Ducks list with Track 3 and Synth 1 in red and the cursor on Synth 1, 2 tracks under it; the Sidechain list on Track 1; Ratio and Makeup; the Gain Reduce meter above Back](img/masterfx-ducks.svg)
+![The Limiter page with Compressor: the Sidechain list on Track 1, then the Ducks list with Track 3 and Synth 1 in red and the cursor on Synth 1, 2 tracks under it; Ratio and Makeup; the Gain Reduce meter above Back](img/masterfx-ducks.svg)
 
 *Track 1 (the kick) as the key, Track 3 and Synth 1 marked: the kick turns those two down and leaves
-the rest of the mix alone. Marked: the Ducks list and its column, and the Gain Reduce meter above
+the rest of the mix alone. Marked: the Sidechain and Ducks columns, and the Gain Reduce meter above
 Back.*
 
 The Ducks list is there only while a plugin that can duck plays in the Limiter slot. A track's sends
@@ -98,7 +103,7 @@ were, **Gain Reduce**, the **Tracks** list, then **Ratio** and **Makeup**. Chang
 press the button under it, turn the jog wheel or press Up or Down, and **Delete** sets it back to
 Glue's default.
 
-![Glue's page: the title Limiter: Glue; Attack 10.0 ms, Release 200 ms, Threshold -12.0 dB, Gain Reduce, the Tracks list on Master, Ratio 4.0:1 and Makeup +0.0 dB, Attack framed](img/masterfx-glue.svg)
+![Glue's page: the title Glue; Attack 10.0 ms, Release 200 ms, Threshold -12.0 dB, Gain Reduce, the Tracks list on Master, Ratio 4.0:1 and Makeup +0.0 dB, Attack framed](img/masterfx-glue.svg)
 
 *Glue on the master, as a new project has it. Marked: the title, Glue's own Attack, Release and
 Threshold, the Tracks list and its Ratio and Makeup.*
@@ -282,12 +287,12 @@ put, and it pays little attention to the lowest bass.
 
 | Knob | What it changes | Range | Default |
 |---|---|---|---|
-| LimiterAtt (CE's) | How fast it turns down when the level rises. | 0.001 s to 1.000 s | 0.100 s |
-| LimiterRls (CE's) | How fast it comes back up when the level falls. | 0.001 s to 1.000 s | 0.001 s |
-| LimiterThr (CE's) | The level it starts turning down at; the change starts gently, 3 dB below it. | up to 0.00 dB | −6.00 dB |
-| Ducks | Master: it turns the whole mix down. Marked tracks: the key turns only those down (see [Duck chosen tracks](#duck-chosen-tracks)). | Master, Track 1 to Track 8, Synth 1 to Synth 3 | Master |
+| Attack (CE's LimiterAtt) | How fast it turns down when the level rises. | 0.001 s to 1.000 s | 0.100 s |
+| Release (CE's LimiterRls) | How fast it comes back up when the level falls. | 0.001 s to 1.000 s | 0.001 s |
+| Threshold (CE's LimiterThr) | The level it starts turning down at; the change starts gently, 3 dB below it. | up to 0.00 dB | −6.00 dB |
 | Sidechain (CE's) | Disable: it follows the mix. Anything else: it follows that (the key), and the key keeps its own level. | Disable, the eight tracks, Line in L, Line in R, Synth 1 to Synth 3 | Disable |
-| Ratio | How strongly it turns down past LimiterThr: 1.0:1 does nothing, 20.0:1 is nearly a limiter. | 1.0:1 to 20.0:1, in 0.5 steps | 4.0:1 |
+| Ducks | Master: it turns the whole mix down. Marked tracks: the key turns only those down (see [Duck chosen tracks](#duck-chosen-tracks)). | Master, Track 1 to Track 8, Synth 1 to Synth 3 | Master |
+| Ratio | How strongly it turns down past Threshold: 1.0:1 does nothing, 20.0:1 is nearly a limiter. | 1.0:1 to 20.0:1, in 0.5 steps | 4.0:1 |
 | Makeup | Lifts the result. Nothing limits it after that: past full scale the sound clips. | +0.0 dB to +12.0 dB, in 0.5 dB steps | +0.0 dB |
 
 Gain Reduce, above Back, shows how far it turns down, without the Makeup.

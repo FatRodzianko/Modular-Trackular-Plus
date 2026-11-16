@@ -140,9 +140,9 @@ def limiter_page(title: str, title_kind: str, words, column4, own=(), place: int
                  first=((10, "0.100s"), (0, "0.001s"), (92, "-6.00 dB")), column3=None) -> Screen:
     """showLimiterScreen: Attack, Release, Threshold (CE's, with the plugin's words, or the plugin's
     own knobs in their place), Gain Reduce, column 4 (CE's Sidechain list or Glue's Tracks list), the
-    plugin's own knobs in 5 and 6, Back. With column3 (a ducking plugin's Ducks list,
-    showMasterfxDucks), the Gain Reduce meter is column 7's bar, labelled Gain Reduce over Back
-    (showMasterfxLimiterMeter)"""
+    plugin's own knobs in 5 and 6, Back. With column3 (a ducking plugin: CE's Sidechain list moved
+    to column 3, before the Ducks list in column 4, showMasterfxDucks), the Gain Reduce meter is
+    column 7's bar, labelled Gain Reduce over Back (showMasterfxLimiterMeter)"""
     s = Screen(title)
     s.title_bar(title, title_kind=title_kind)
     s.bottom_bar()
@@ -175,6 +175,8 @@ def limiter_page(title: str, title_kind: str, words, column4, own=(), place: int
 
 
 CE_LIMITER = ("LimiterAtt", "LimiterRls", "LimiterThr")
+# showMasterfxLimiterWords: a plugin that doesn't name CE's knobs gets these, not CE's LimiterAtt...
+PLUGIN_LIMITER = ("Attack", "Release", "Threshold")
 # compressor.cpp: Ratio 4 of 1-20 by 0.5 (step 6 of 38), Makeup 0 of 0-12
 COMPRESSOR_KNOBS = (("Ratio", 15, "4.0:1"), ("Makeup", 0, "+0.0 dB"))
 SIDECHAIN_OFF = (SIDECHAIN, 0, SIDECHAIN_KINDS, (), "Sidechain", "Disable", "lbl")
@@ -212,27 +214,30 @@ def main() -> None:
     write("masterfx-reverb.svg", s, "The Reverb page with Shimmer: the title names it, and its words "
                                      "Decay, Tone and Shimmer replace Size, Damping and Diffusion")
 
-    # 3. the Limiter page with Compressor: its own knobs in columns 5 and 6, Ratio selected; the
-    # Ducks list in column 3, the Gain Reduce meter above Back
-    s = limiter_page("Limiter: Compressor", "val", CE_LIMITER, SIDECHAIN_OFF, COMPRESSOR_KNOBS, place=5,
-                     column3=DUCKS_MASTER)
+    # 3. the Limiter page with Compressor: its own knobs in columns 5 and 6, Ratio selected; CE's
+    # Sidechain list in column 3, the Ducks list in 4, the Gain Reduce meter above Back
+    s = limiter_page("Compressor", "val", PLUGIN_LIMITER, DUCKS_MASTER, COMPRESSOR_KNOBS, place=5,
+                     column3=SIDECHAIN_OFF)
     s.mark(0, 0, 800, 28, pad=0)
     mark_column(s, 5, 2)
-    write("masterfx-knobs.svg", s, "The Limiter page with Compressor: its own knobs Ratio and Makeup in "
+    for i in (0, 1, 2):
+        s.mark(COL * i + 3, 428, COL - 6, 48)
+    write("masterfx-knobs.svg", s, "The Limiter page with Compressor: its name as the title, Attack, "
+                                    "Release and Threshold, and its own knobs Ratio and Makeup in "
                                     "columns 5 and 6")
 
-    # 4. the Ducks list in column 3: Track 3 and Synth 1 marked, the kick's Track 1 as the key; the
-    # Gain Reduce meter above Back
+    # 4. the kick's Track 1 as the key in column 3, then the Ducks list in column 4: Track 3 and
+    # Synth 1 marked; the Gain Reduce meter above Back
     ducks = (DUCKS, 9, None, (3, 9), "Ducks", "2 tracks", "val")
-    s = limiter_page("Limiter: Compressor", "val", CE_LIMITER, SIDECHAIN_KICK, COMPRESSOR_KNOBS, place=3,
-                     column3=ducks)
-    mark_column(s, 3)
+    s = limiter_page("Compressor", "val", PLUGIN_LIMITER, ducks, COMPRESSOR_KNOBS, place=4,
+                     column3=SIDECHAIN_KICK)
+    mark_column(s, 3, 2)
     mark_column(s, 7)
     write("masterfx-ducks.svg", s, "The Limiter page's Ducks list: Track 3 and Synth 1 marked, so "
                                     "the key turns those two down instead of the master")
 
     # 5. Glue's page on the master: its own Attack, Release and Threshold, Tracks, Ratio and Makeup
-    s = glue_page("Limiter: Glue", 0, (), "Master", 0)
+    s = glue_page("Glue", 0, (), "Master", 0)
     s.mark(0, 0, 800, 28, pad=0)
     mark_column(s, 0, 3)
     mark_column(s, 4, 3)
@@ -240,7 +245,7 @@ def main() -> None:
                                    "on Master, Ratio and Makeup")
 
     # 6. Glue on the drums: Track 1, 2 and 3 marked in the Tracks list
-    s = glue_page("Limiter: Glue", 3, (1, 2, 3), "3 tracks", 4)
+    s = glue_page("Glue", 3, (1, 2, 3), "3 tracks", 4)
     mark_column(s, 4)
     write("masterfx-glue-tracks.svg", s, "Glue's Tracks list: Track 1, 2 and 3 marked, so only those "
                                           "three are compressed, together")
