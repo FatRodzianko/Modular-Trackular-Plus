@@ -43,6 +43,8 @@ CACHE = ROOT / "build" / "test_cache.json"
 SYNTHFX_RIG = ROOT / "build" / "emu" / "synthfx_rig.axf"
 SYNTHFX_PACK = ROOT / "build" / "synthfx" / "pack"
 LEVEL_A = ROOT / "build" / "emu" / "synths_level_a.axf"
+# DCO6's engine alone (tools/synths/dco6_level_a/build.sh, in WSL), against its Python model
+DCO6_LEVEL_A = ROOT / "build" / "emu" / "dco6_level_a.axf"
 # The Synth FX device test's plugins (tools/synthfx/device/build.sh, in WSL too): the SDK's examples
 # and the guard tests, which test_synthfx.py's guards and the hang's boot put on the card
 SYNTHFX_CARD = ROOT / "build" / "device" / "synthfx_card" / "SynthFX"
@@ -130,6 +132,9 @@ def jobs_for(args, projects):
         # the simulator's clock on synthetic code, no firmware (docs/mt/SIMULATOR_STAGE1.md 2.4)
         Job("sim kernel", e / "test_sim_kernel.py"),
         Job("synths", e / "test_synths.py", mods, inputs=[mods]),
+        Job("dco6", e / "test_dco6.py", mods, inputs=[mods, ROOT / "build" / "Synths"]),
+        Job("dco6 level a", e / "test_dco6_dsp.py", DCO6_LEVEL_A,
+            inputs=[DCO6_LEVEL_A, ROOT / "tools" / "synths" / "dco6_proto.py"]),
         Job("synthfx", e / "test_synthfx.py", mods, ref, "--before", SYNTHFX_BEFORE,
             inputs=both + (SYNTHFX_BEFORE, SYNTHFX_CARD)),
         Job("synthfx page", e / "test_synthfx_page.py", mods, ref, inputs=both),

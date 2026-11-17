@@ -1,16 +1,16 @@
 # Modular-Trackular mods. SPDX-License-Identifier: MIT
 """DCO6 prototype: per-voice instructions in CE's real synth host, beside WAVE and PHASE.
 
-PROTOTYPE MEASUREMENT for docs/mt/VA_SYNTH_PLAN.md, not a test. The full build's start-up and audio
+A measurement for docs/mt/VA_SYNTH_PLAN.md, not a test (Level B's cost check is test_dco6.py's). The full build's start-up and audio
 graph (sound_rig.py), CE's factory engines on the fake card, and our three engines (DCO6 from
 core/mods/synths/psyn/build, WAVE and PHASE as the Synths mod ships them). One part gets all 8
 voices; notes go in through Synth::triggerTestNote. Counted: every instruction inside the engine's
 own .psyn image (its render, the bridge, isActive), per block, after the attack. The host's share
 (InstrumentImpl, mixing) and the closed engines aren't counted.
 
-Unison: the prototype has no host hook, so a voice takes its place in the stack from its own index
-(index % Unison). Sending each note Unison times fills the stacks as the hook would: the render
-work per voice is the same, the hook's note-on work (a few hundred instructions a note) isn't in it.
+Unison goes through the host hook (InstrumentImpl::mtUnisonNoteOn), so each note is sent once and
+takes a stack. Only the engine's own image is counted, so the hook's note-on work (in the firmware,
+not the image) isn't in the figures.
 
     python tools/emu/measure_dco6.py build/emu/TrackerPlus_MT_rig.axf [--wav out_dir]
 """
@@ -97,10 +97,10 @@ def main():
         ("DCO6 heavy, 8 notes", DCO6, CHORD, tuple((EP[k], v) for k, v in HEAVY.items())),
     ]
     for u in (1, 2, 4, 8):
-        notes = [n for n in CHORD[: 8 // u] for _ in range(u)]
+        notes = list(CHORD[: 8 // u])
         params = ((EP["unison"], float(u)), (EP["detune"], 12.0), (EP["width"], 0.5))
         cases.append((f"DCO6 Unison {u}, {8 // u} notes", DCO6, notes, params))
-    cases.append(("DCO6 heavy, Unison 8", DCO6, [60] * 8,
+    cases.append(("DCO6 heavy, Unison 8", DCO6, [60],
                   tuple((EP[k], v) for k, v in HEAVY.items()) + ((EP["unison"], 8.0), (EP["detune"], 25.0))))
     print(f"{'case':34s} {'voices':>6s} {'insns/block':>12s} {'worst':>9s} {'per voice':>10s} {'peak':>6s} {'L-R':>6s}")
     for name, engine, notes, params in cases:

@@ -81,7 +81,7 @@ float noValue()
 inline bool sidesAlike(const polysynth::Patch* patch)
 {
 #if MT_HAS_SYNTHS
-    return synths::ownsLayout(patch->getMetadata().instrumentTypeId);
+    return synths::sidesAlike(patch->getMetadata().instrumentTypeId);
 #else
     (void)patch;
     return false;
@@ -133,7 +133,7 @@ void convertOldPatches()
     {
         polysynth::Patch& patch = synth.getPatch(part);
         const int type = patch.getMetadata().instrumentTypeId;
-        if (!synths::ownsLayout(type))
+        if (!synths::sidesAlike(type)) // WAVE and PHASE: the only ones with the old parameters
         {
             continue;
         }

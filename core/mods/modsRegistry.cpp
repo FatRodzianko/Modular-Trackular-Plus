@@ -127,7 +127,7 @@ constexpr std::array<ModDescriptor, kBuiltModCount> kMods{ {
 #if MT_HAS_SYNTHS
   {
     .id = Mod::synths,
-    .name = "Synths",            // WAVE and PHASE: the switch only shows them in the picker
+    .name = "Synths",            // WAVE, PHASE and DCO6: the switch only shows them in the picker
     .record = synths::kRecord,
     .recordVersion = synths::kRecordVersion,
     .init = nullptr,

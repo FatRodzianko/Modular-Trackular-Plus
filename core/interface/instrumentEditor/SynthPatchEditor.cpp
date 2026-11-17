@@ -13,7 +13,7 @@
 #include "util_string.h"
 
 #include "mtAudioEngine.h"
-#if MT_HAS_SYNTHS // MT: WAVE's and PHASE's tiles and controls
+#if MT_HAS_SYNTHS // MT: our engines' tiles and controls
 #include "synths/synthsMod.h"
 #endif
 #if MT_HAS_SYNTHFX // MT: Synth FX's rows
@@ -1253,7 +1253,7 @@ void cInstrumentEditor::changeSynthPatchParamValue(int16_t value)
 
     getSynth()->setPatchDirty(syntPartIdx);
 
-#if MT_HAS_SYNTHS // MT: WAVE's and PHASE's LFO Sync redisplays other controls: the list again
+#if MT_HAS_SYNTHS // MT: our engines' LFO Sync redisplays other controls: the list again
     bool mtRebuild = false;
     if (!isMacroSelected())
     {
@@ -1745,7 +1745,7 @@ void cInstrumentEditor::showSynthPatchSection(bool refreshList)
                     sectionImgList[idx] = kBitmapGear;
                 }
 
-#if MT_HAS_SYNTHS // MT: WAVE's and PHASE's tiles show their sections' short names
+#if MT_HAS_SYNTHS // MT: our engines' tiles show their sections' short names
                 if (mods::synths::ownsLayout(metadata.instrumentTypeId) && !section.shortName.empty())
                 {
                     shortName = section.shortName.c_str();

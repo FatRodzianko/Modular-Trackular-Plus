@@ -135,6 +135,10 @@ class InstrumentImpl final
 
     void handleMidiCC(const MidiEvent::Data::ControlChange& controlChange);
     void handleNoteOn(const MidiEvent& event, int sourceId);
+#ifndef MT_NO_MODS
+    // MT: Unison, for an engine mtUnisonLookup names (PolySynth/mtUnison.h); false: CE's way
+    bool mtUnisonNoteOn(const MidiEvent& event, int sourceId);
+#endif
     void handleNoteOff(const MidiEvent& event, int sourceId);
     void handleAftertouch(const MidiEvent::Data::Note& note, int sourceId);
 

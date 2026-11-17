@@ -90,6 +90,9 @@ endif
 ifeq ($(PRODUCT), TrackerPlus)
 DEFINES:=$(DEFINES) -DPRODUCT_TRACKER_PLUS
 endif
+# MT: the build's own defines too, as core's and the platform's take them: -DMT_NO_MODS leaves out
+# Modular-Trackular's one hook here (Unison, include/PolySynth/mtUnison.h), so that build stays CE's
+DEFINES:=$(DEFINES) $(CUSTOM_DEFINES)
 
 COMPILER_OPTIONS=-Wall -Wextra -Werror -c -fno-builtin -fno-common -ffunction-sections -fdata-sections -ffreestanding -fsingle-precision-constant -ffast-math
 CPP_OPTIONS=-std=c++20 -includecstdint -felide-constructors -includecstdint -Wno-psabi

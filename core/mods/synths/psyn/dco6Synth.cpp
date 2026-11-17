@@ -1,10 +1,10 @@
 // Modular-Trackular mods. SPDX-License-Identifier: MIT
 //
-// DCO6: a virtual-analog synth after the Juno-106's design (../d6Engine.h), as a .psyn plugin.
-// PROTOTYPE for docs/mt/VA_SYNTH_PLAN.md: built to measure the voice in the sound rig and to give
-// the mockups their labels. Not in the Synths mod yet, and the unison hook in CE's host isn't
-// built: without it a voice takes its unison place from its own index (index % Unison), so a test
-// that sends a note Unison times stacks the voices as the hook would.
+// DCO6: a virtual-analog synth after the Juno-106's design (../d6Engine.h), as a .psyn plugin
+// (docs/mt/VA_SYNTH_PLAN.md). Built by psyn/Makefile; the Synths mod (../synthsMod.h) has its
+// type id. Unison needs the MT hook in CE's host (InstrumentImpl::mtUnisonNoteOn), which gives a
+// note to a stack of voices and tells each member its place through Unison Place, a parameter in
+// no section. Without the hook (a build without the Synths mod) every voice plays alone.
 
 #include "psyn/psyn_cpp_bridge.h"
 #include "PolySynth/sdk/SynthVoiceSDK.h"
@@ -23,7 +23,7 @@ using namespace mtsynth;
 using Curve = Patch::Metadata::Param::Curve;
 using sdk::EditorElement;
 
-constexpr int kDco6TypeId = 66;
+constexpr int kDco6TypeId = 66;                     /* as in ../synthsMod.h and psyn/Makefile */
 
 enum class Dco6ParamId : int
 {
@@ -204,14 +204,12 @@ class Dco6Voice : public sdk::CustomSynthVoice<Dco6Voice, Dco6ParamId>
 
     void onNoteOn(const InstrumentVoiceContext& ctx, note_t note, float, bool) final
     {
-        uint32_t size, slot;
+        /* the host hook's place, set before each note-on: slot + 16 * size; 0 without it: alone */
+        uint32_t size = 1, slot = 0;
         const uint32_t place = static_cast<uint32_t>(clampf(p[DP_UNI_PLACE], 0.0f, 255.0f));
-        if (place >= 16) {                          /* the host hook's: slot + 16 * size */
+        if (place >= 16 && (place >> 4) <= 8 && (place & 15u) < (place >> 4)) {
             size = place >> 4;
             slot = place & 15u;
-        } else {                                    /* prototype: from the voice's index */
-            size = list_pick(p[DP_UNISON] - 1.0f, 8) + 1;
-            slot = eng.index % size;
         }
         d6_note_on(&eng, p, note, slot, size, lfoHz(p[DP_LFO_RATE], p[DP_LFO_SYNC] > 0.5f, ctx.tempo));
     }

@@ -408,6 +408,15 @@ def type_ids():
         check(got == (e, e, e) and h["code_name"] == name and h["type_id_wave"] == 0,
               f"{name}.psyn: type id {got[0]} (Tracker), {h['type_id_wave']} (the Polyend Synth: dynamic); "
               f"synthsMod.h {got[1]}, synthsSdk.h {got[2]}")
+    # DCO6 (tools/emu/test_dco6.py has its Level B): its own source has the id, not synthsSdk.h
+    h = psyn_header(files["DCO6.psyn"])
+    src = (REPO / "core/mods/synths/psyn/dco6Synth.cpp").read_text()
+    in_mod = re.search(r"constexpr int kDco6TypeId = (\d+);", mod)
+    in_src = re.search(r"constexpr int kDco6TypeId = (\d+);", src)
+    got = (h["type_id_play_tracker"], in_mod and int(in_mod.group(1)), in_src and int(in_src.group(1)))
+    check(got == (66, 66, 66) and h["code_name"] == "DCO6" and h["type_id_wave"] == 0,
+          f"DCO6.psyn: type id {got[0]} (Tracker), {h['type_id_wave']} (the Polyend Synth: dynamic); "
+          f"synthsMod.h {got[1]}, dco6Synth.cpp {got[2]}")
 
 
 def main() -> int:

@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="480" viewBox="0 0 800 480" font-family="'Roboto Mono', 'DejaVu Sans Mono', Consolas, monospace">
-<title>DCO6: Oscillator</title><desc>PLAN MOCKUP: DCO6's Oscillator section in the patch editor, Init patch</desc>
+<title>DCO6: Oscillator</title><desc>DCO6's Oscillator section in the patch editor, Init patch</desc>
 <defs><linearGradient id="shadow" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0A0A0A"/><stop offset="1" stop-color="#000000"/></linearGradient><linearGradient id="barShade" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000000"/><stop offset="1" stop-color="#080808"/></linearGradient></defs>
 <rect x="0" y="0" width="800" height="480" fill="#000000"/>
 <rect x="0" y="0" width="800" height="28" fill="#080808"/>

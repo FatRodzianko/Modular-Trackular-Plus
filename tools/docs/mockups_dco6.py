@@ -1,10 +1,11 @@
 # Modular-Trackular mods. SPDX-License-Identifier: MIT
-"""DCO6's mockups for the plan (docs/mt/VA_SYNTH_PLAN.md): the synth picker and every section of its
-patch editor, with the unison and Vintage controls in use.
+"""DCO6's mockups for the Synths user page (docs/mods/synths.md): the synth picker and every section of
+its patch editor, with the HPF, unison and Vintage controls in use.
 
-PLAN MOCKUPS: DCO6 is a prototype. Names, lists, defaults and sections are the prototype's own
-(core/mods/synths/psyn/dco6Synth.cpp); values are formatted as its formatters do. The screens are CE's,
-drawn by tools/docs/mockups_synths.py's helpers (the same layout as the Synths mod's pictures).
+Names, lists, defaults and sections are the engine's own (core/mods/synths/psyn/dco6Synth.cpp); values
+are formatted as its formatters do. Voice Sleep is CE's row, which the host adds to the Voice section
+of an engine packed with idle sleep (synth/source/synths/PsynLoader.cpp). The screens are CE's, drawn
+by tools/docs/mockups_synths.py's helpers (the same layout as WAVE's and PHASE's pictures).
 
     python tools/docs/mockups_dco6.py
 """
@@ -58,7 +59,8 @@ def sections(unison=0, detune=0.0, width=0.5, vintage=0.0, hpf_hz=20.0, boost=0)
         ("Voice", "Voice", [
             P.pick("Unison", UNISONS, unison), P.num("Detune", cents(detune), detune, 0, 50),
             P.num("Width", percent(width, False), width), P.num("Vintage", percent(vintage, False), vintage),
-            P.num("Glide", seconds(0), 0, 0, 10), P.num("Volume", percent(1, False), 1)]),
+            P.num("Glide", seconds(0), 0, 0, 10), P.num("Volume", percent(1, False), 1),
+            P.pick("Voice Sleep", OFF_ON, 1)]),
     ]
 
 
@@ -66,21 +68,21 @@ MODELS = ["ACD", "FAT", "VAP", "WTFM", "PERC", "DIRT", "CHIP", "WAVE", "PHASE", 
 
 
 def main() -> None:
-    write("synths-dco6-picker.svg", synth_picker(9, MODELS, (9,)),
-          "PLAN MOCKUP: the Synth Parameters screen with DCO6 picked; DCO6 is marked")
+    write("synths-dco6-picker.svg", synth_picker(9, MODELS, (7, 8, 9)),
+          "The Synth Parameters screen with DCO6 picked; WAVE, PHASE and DCO6 are marked")
     init = sections()
     for i, (f, sel) in enumerate((("dco", 0), ("filter", 5), ("env", 4), ("lfo", 0), ("voice", 0))):
         write(f"synths-dco6-{f}.svg", patch_editor("DCO6", init, i, sel),
-              f"PLAN MOCKUP: DCO6's {init[i][0]} section in the patch editor, Init patch")
+              f"DCO6's {init[i][0]} section in the patch editor, Init patch")
     write("synths-dco6-hpf.svg", patch_editor("DCO6", sections(hpf_hz=240.0, boost=1), 1, 5),
-          "PLAN MOCKUP: DCO6's Filter section, HPF selected at 240 Hz, Bass Boost On")
+          "DCO6's Filter section, HPF selected at 240 Hz, Bass Boost On")
     stack = sections(unison=3, detune=12.0, width=0.5)
     write("synths-dco6-unison.svg", patch_editor("DCO6", stack, 4, 0),
-          "PLAN MOCKUP: DCO6's Voice section, Unison 4 picked, Detune 12 ct, Width 50 %")
+          "DCO6's Voice section, Unison 4 picked, Detune 12 ct, Width 50 %")
     write("synths-dco6-detune.svg", patch_editor("DCO6", stack, 4, 1),
-          "PLAN MOCKUP: DCO6's Voice section, Detune selected at 12 ct with Unison 4")
+          "DCO6's Voice section, Detune selected at 12 ct with Unison 4")
     write("synths-dco6-vintage.svg", patch_editor("DCO6", sections(vintage=0.25), 4, 3),
-          "PLAN MOCKUP: DCO6's Voice section, Vintage selected at 25 %")
+          "DCO6's Voice section, Vintage selected at 25 %")
 
 
 if __name__ == "__main__":

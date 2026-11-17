@@ -1,17 +1,20 @@
 # DCO6: a virtual-analog synth engine after the Juno-106 — plan
 
-Status: **approved 2026-11-17; build steps 1-2 done the same day.** The answers to
-[section 12](#12-decisions) are recorded there. The engine is finished and Level A passes
-([7.3](#73-level-a-the-c-engine-against-the-model)). The firmware steps (3 on) wait until the Synth FX
-update is merged into `modular`, so they run once, on the firmware that ships. Nothing is merged or
-committed.
+Status: **approved 2026-11-17; build steps 1-6 done the same day** (steps 1-2 committed in 297c342,
+3-6 not yet committed). The answers to [section 12](#12-decisions) are recorded there. Step 7 (the
+release tier, the device ladder, the merge into `modular`) hasn't started: it waits for your OK on
+the device image. Nothing is merged.
 
 What exists:
 - a Python model of the voice that renders listening examples, and is Level A's reference;
-- the engine and its `.psyn` build, run in the sound rig beside CE's engines for its CPU cost;
+- the engine and its `.psyn` build (`make psyn` stages `DCO6.psyn` into `build/Synths`);
 - Level A: the engine on Arm in the emulator, 61 checks against the model, and 8 planted faults;
-- mockups of every screen, in `docs/mods/img/synths-dco6-*.svg` (picker, dco, filter, hpf, env, lfo,
-  voice, unison, detune, vintage), drawn by `tools/docs/mockups_dco6.py`.
+- the Synths mod's registration (type id 66, the picker, the `ownsLayout`/`sidesAlike` split) and
+  the unison hook in CE's host ([5.1](#51-the-host-hook));
+- Level B, `tools/emu/test_dco6.py`: 16 checks through CE's host on a full build;
+- the user page's DCO6 section (`docs/mods/synths.md`) and its mockups in
+  `docs/mods/img/synths-dco6-*.svg`, drawn by `tools/docs/mockups_dco6.py` from the firmware's
+  strings.
 
 [Section 13](#13-what-was-measured-estimated-and-not-checked) says what was measured, what was only
 estimated, and what wasn't checked.
@@ -322,6 +325,34 @@ filter run every sample. Gain is set so that one Init note plays about −20 dBF
 - **Vintage** applies to each member on its own, so even at Detune 0 a Vintage stack isn't
   phase-locked.
 
+### 5.1 The host hook
+
+Built in step 4 (2026-11-17), in CE's open host, `synth/source/instrument/InstrumentImpl.cpp`:
+- `InstrumentImpl::handleNoteOn` first offers the note to `mtUnisonNoteOn`. That asks
+  `polysynth::mtUnisonLookup` (`synth/include/PolySynth/mtUnison.h`) whether the part's engine has
+  a Unison parameter. The pointer is null in CE's builds; the Synths mod sets it in `Synth::init`
+  (the main loop) to `mods::synths::unisonParams`, which names DCO6's Unison (27) and Unison Place
+  (33). For any other engine it returns false and CE's own allocation runs, unchanged.
+- The synth library is built once for the product, without core's mod switches, so the hook is a
+  pointer rather than an `#if MT_HAS_SYNTHS`. It is compiled out under `MT_NO_MODS`: `synth/makefile`
+  now passes `CUSTOM_DEFINES` on, and the `MT_NO_MODS` image is byte for byte the last commit's.
+- The stack is `clamp(round(Unison), 1, voices)`; the part's voices split into `voices / stack`
+  groups of neighbours. A group is picked as CE picks a voice: one with no voice sounding; else
+  none holding a note and the same last note; else none holding, the oldest; else the oldest.
+- Each member gets, in order, its place (`16 × stack + slot`, straight to the voice, not the patch),
+  the Velocity macro, the note-on, and CE's bookkeeping (`noteSourceIds`, `ticksSinceNoteOn`).
+  Note-offs need nothing new: each member holds the note's source id, so CE's own note-off reaches
+  all of them.
+- Our engines take the hook even at Unison Off, so a stale place can't stay on a voice.
+- In the interrupt, it allocates nothing and calls nothing that blocks: a few loops over at most 8
+  voices. Level B checks no malloc in a note-on.
+- The plugin reads the place at note-on only. Without the hook (a place under 16) every voice
+  plays alone, as before.
+
+CE's macro destination lists show every parameter, Unison Place included; the user page says to
+leave it unassigned. A macro on it changes nothing a note-on doesn't set again, except the Velocity
+macro, which the hook applies after the place (reasoned, not tested).
+
 ## 6. Vintage (slop)
 
 One control, 0-100 %, scales everything below linearly. The 100 % figures are this plan's
@@ -590,10 +621,15 @@ and 8 voices.
 
 Floors from `tools/mem_budget.py` on the same image:
 
-| Region | Free now | Floor | DCO6 engine | Host hook (estimate) |
+| Region | Free before | Floor | DCO6 engine | Host hook (estimate) |
 |---|---|---|---|---|
 | ITCM | 39,808 | 1,024 | 0 | +300 to 600 B: `InstrumentImpl`'s code is placed in ITCM by the linker script |
 | DTCM | 4,136 | 4,096 | 0 | 0: no static state; the hook keeps nothing between notes but what `InstrumentImpl` (on the heap) already has |
+
+**Measured on step 5's build** (`mem_budget.py` on this branch's mods build): ITCM 38,560 free
+(`mtUnisonNoteOn` is 1,124 B, in ITCM), DTCM 4,128 (8 B: the hook's pointer and its alignment),
+OCRAM 9,556, SDRAM 610,824 (unchanged), flash 14.96 MB. All above their floors. `unisonParams` is
+26 B of flash.
 | SDRAM (mods' 1 MiB) | 610,824 | 262,144 | 0 | 0 |
 | Flash | 14.96 MB | 1 MiB | 0 | under 1 KB (tables, hook) |
 | `.psyn` arena (SDRAM, CE's) | 1,920 KB shared by loaded engines | — | 45,912 B image + 368 B per voice (2,944 B at 8) | — |
@@ -617,13 +653,16 @@ For comparison, WAVE's image is 523,088 B (its wavetables) and PHASE's 49,048 B.
 4. **The cost is 27 % above WAVE on Init, 52 % on the heavy patch.** Within what the unit has run (VAP and DIRT cost more on the
    unit), but not yet measured there.
 5. **Unison changed mid-note.** Sounding stacks keep their old place until their next note.
-   Harmless, but it needs a test.
+   Harmless; Level B's `changed` checks it.
 6. **Synth FX's stereo check** ([3.2](#32-stereo-for-width)). If it's missed, DCO6's right side
-   is lost under Synth FX, silently. A named test covers it.
+   is lost under Synth FX, silently. `sidesAlike` is WAVE and PHASE only, and `test_synthfx.py`'s
+   `wave_off_and_mono` checks DCO6's slots get two channels.
 7. **Patch stability** ([3.6](#36-patches)). Once released, ids and ranges are frozen.
-8. **The rig's image is from the Master FX branch,** not a fresh build of this branch. Its synth
-   code is identical to `modular`'s, so the counts carry over, but the build stage rebuilds and
-   re-measures.
+8. **The rig's image was from the Master FX branch** for steps 1-2. Step 5 re-measured on a fresh
+   build of this branch: 18,916 own-code instructions per voice on Init against 18,915.
+9. **ITCM and DTCM.** The hook took 1,124 B of ITCM (the estimate was 300-600 B: the linker puts
+   all of `InstrumentImpl` there) and 8 B of DTCM (the pointer). DTCM is now 32 B above its floor
+   (4,128 free, floor 4,096); the next mod that needs DTCM has to find it.
 
 ## 10. Build steps
 
@@ -641,18 +680,24 @@ Each step ends with its tests passing, and nothing is committed without your OK.
    the Python model, plus the checks in [section 11](#11-test-plan). Done 2026-11-17, with the
    planted faults ([7.3](#73-level-a-the-c-engine-against-the-model)). Not yet in
    `tools/run_tests.py`'s tiers: step 3 adds it with the Synths mod.
-3. **The Synths mod.**
-   - The type id 66 in `synthsMod.h` and `pickerShows`.
-   - `ownsLayout` (tiles) split from a new `sidesAlike` (Synth FX).
-   - `psyn/Makefile`'s DCO6 target with idle sleep.
-   - `make psyn` stages it into `build/Synths`.
-   - The release zip's list.
-4. **The unison hook** in `synth/source/instrument/InstrumentImpl.cpp`, under `MT_HAS_SYNTHS`: the
-   group allocation, the place parameter and Velocity for every member.
-5. **Level B** in `test_synths.py` (or a `test_dco6.py` beside it), through CE's host. See
-   [section 11](#11-test-plan).
-6. **The user page** `docs/mods/synths.md` (an DCO6 section with every control from section 4) and
-   the mockups, regenerated from the final strings. The README's Synths row.
+3. **The Synths mod.** Done 2026-11-17, not committed.
+   - The type id 66 in `synthsMod.h` and `pickerShows`; DCO6 appended to `kSynthTypes`, so WAVE
+     and PHASE keep their places (7 and 8) in saved projects and DCO6 is 9.
+   - `ownsLayout` (tiles) split from a new `sidesAlike` (Synth FX's mono, and its conversion of
+     old WAVE and PHASE effects, which must never touch DCO6's parameters 62-71).
+   - `psyn/Makefile`'s DCO6 target with idle sleep; `make psyn` stages it into `build/Synths`,
+     which CI zips for the release.
+   - Config's two Synths descriptions name DCO6.
+   - The host tests (`core/mods/tests`): 14 suites, 0 failures; `test_registry` checks the
+     picker, `ownsLayout`, `sidesAlike` and `unisonParams`.
+   - Level A and Level B are jobs in `tools/run_tests.py`'s quick tier (`dco6 level a`, `dco6`).
+4. **The unison hook** ([5.1](#51-the-host-hook)). Done 2026-11-17, not committed.
+5. **Level B**, `tools/emu/test_dco6.py`. Done 2026-11-17, not committed: 16 checks, 0 failures.
+   With the hook's pointer cleared, 7 of its 8 unison checks fail, so they test the hook.
+6. **The user page** `docs/mods/synths.md`: a DCO6 section with every control, its label, range
+   and default, and the cost. The mockups were redrawn from the final strings, with CE's Voice
+   Sleep row the host adds; `check_mockups.py`: 54 images, 0 failures. The README's Synths row,
+   install step and build note, and Synth FX's intro. Done 2026-11-17, not committed.
 7. **Release tier** (`tools/run_tests.py --tier release`), then the device ladder with the projects
    below, then the merge checklist into `modular` and a `synths-1.x` tag.
 
@@ -763,26 +808,40 @@ otherwise, the plan's recommendation stands:
   PHASE's own instructions at 8 voices sounding, Unison 1, 2, 4 and 8, re-measured on the step 1
   build. Also the first build's output against the model (correlation 0.9995).
 - DCO6's image and voice sizes, from the build.
-- The firmware's memory floors, by `mem_budget.py` on that image.
+- The firmware's memory, by `mem_budget.py` on step 5's build ([8.2](#82-memory)).
+- Step 5, on fresh builds of this branch (mods and `MT_NO_MODS`), after Synth FX 1.1's merge:
+  - Level B (`test_dco6.py`): 16 checks, 0 failures: Init values through the host, notes,
+    the polyphony table, Unison changed while held, Velocity on every member, stereo, the SDK's
+    rules in note-ons and the interrupt, 30 engine switches, the switch Off, patch save and load,
+    own-code cost, 1,500 blocks of stress. With the hook off, 7 of its 8 unison checks fail.
+  - `test_synths.py`: 36 checks, 0 failures; `test_sound_rig.py` (CE's engines, mods build
+    against `MT_NO_MODS`, sample for sample): 0 failures.
+  - `test_synthfx.py`, with DCO6 in `wave_off_and_mono` (its slots get two channels): 146 of 147,
+    the one failure a missing input (the guard plugins' card); `--only guards` with the main
+    checkout's card (built 2026-11-12, before the last change to `tools/synthfx/device` on
+    2026-11-14): 7 of 7.
+  - The `MT_NO_MODS` image against the last commit's (297c342's tree with c2df9d4's merge): all
+    6,771 loaded sections byte for byte.
+  - `check_mockups.py`: 54 images, 0 failures.
+  - The host tests: 14 suites, 0 failures.
 
 **Estimated:**
 - DCO6's Profiler reading on the unit (section 8.1).
-- The hook's ITCM, flash and note-on cost.
+- The hook's note-on cost in instructions (a few loops over at most 8 voices; not counted).
 - The aliasing options' cost (decision 7).
 
 **Not checked:**
 - **Device:** anything on the unit.
-- **Not built:** the host hook, the Synths mod's changes (picker, tiles, Synth FX's check, the
-  `psyn/Makefile` target), the user page.
 - **Not run:**
-  - patch save and load;
-  - Level B (beyond the smoke run in the rig); Level A isn't in `run_tests.py`'s tiers yet;
-  - the release tier;
-  - the boot rig with DCO6;
-  - a fresh firmware build of this branch.
-- **Not checked by Level A:** the plugin wrapper (`dco6Synth.cpp`): its parameter specs, LFO Sync's
-  tempo path, and how it hands parameters to the engine. Level A calls the engine directly. Only
-  the rig runs the wrapper so far.
+  - the release tier, and the quick tier as a whole (this worktree lacks the Master FX packs, the
+    Synth FX rig and the older builds those jobs compare with); the jobs above were run on their own;
+  - the boot rig with DCO6 projects, and the device projects themselves (not made yet);
+  - Level A since step 2 (the engine, `d6Engine.h`, hasn't changed since).
+- **Not tested, only reasoned:** a macro assigned to Unison Place ([5.1](#51-the-host-hook)); MIDI
+  in to a DCO6 part with Unison (it reaches the same `handleNoteOn`); two DCO6 parts with the same
+  LFO rate and shape in Free (they share one LFO; see [6.4](#64-the-lfo)).
+- **Shown, not fixed:** Attack's 5 ms default shows as "0.00 s" (the SDK's time formatter has two
+  decimals); the user page says so.
 - **Analysis:** LFO Free between two DCO6 parts with the same rate and shape (they share one LFO;
   see [6.4](#64-the-lfo)). Not tested, only reasoned.
 - **Sources:** the 106 facts beyond Roland's pages: the envelope ranges, the Bass Boost's corner and

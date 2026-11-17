@@ -295,6 +295,30 @@ void testSynthsPicker()
         ceShown = ceShown && pickerShows(false, id, false) && pickerShows(true, id, false);
     }
     check(ceShown, "CE's engines and plugins are shown either way");
+
+    // DCO6: in the picker as WAVE and PHASE are; its tiles too; but its two sides are its own
+    // (Synth FX keeps both), it has none of the old effect parameters, and it has Unison
+    check(pickerShows(true, synths::kDco6TypeId, false) && !pickerShows(false, synths::kDco6TypeId, false) &&
+            pickerShows(false, synths::kDco6TypeId, true),
+          "DCO6: shown with Synths On, hidden Off unless it is the part's own");
+    check(synths::ownsLayout(synths::kWaveTypeId) && synths::ownsLayout(synths::kPhaseTypeId) &&
+            synths::ownsLayout(synths::kDco6TypeId) && !synths::ownsLayout(4) && !synths::ownsLayout(100),
+          "the tiles' short names: WAVE, PHASE and DCO6, none of CE's");
+    check(synths::sidesAlike(synths::kWaveTypeId) && synths::sidesAlike(synths::kPhaseTypeId) &&
+            !synths::sidesAlike(synths::kDco6TypeId) && !synths::sidesAlike(4),
+          "sides alike (Synth FX's mono, the old effects): WAVE and PHASE only");
+    int unison = -1;
+    int place = -1;
+    const bool dco6 = synths::unisonParams(synths::kDco6TypeId, unison, place);
+    bool others = false;
+    for (int id : { 1, 2, 4, 5, 6, 7, 8, 11, synths::kWaveTypeId, synths::kPhaseTypeId, 100 })
+    {
+        int u = -1;
+        int pl = -1;
+        others = others || synths::unisonParams(id, u, pl);
+    }
+    check(dco6 && unison == 27 && place == 33 && !others,
+          "Unison in the host: DCO6 only, with Unison (27) and Unison Place (33)");
 #endif
 }
 
