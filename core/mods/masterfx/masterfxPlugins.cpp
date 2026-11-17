@@ -11,6 +11,7 @@
 
 #include "masterfxPlugins.h"
 #include "plugins/pluginKit.h"
+#include "plugins/pluginPack.h"
 
 #include <cstring>
 
@@ -319,75 +320,19 @@ void forget()
 namespace
 {
 
-constexpr char kNewSuffix[] = ".new";
-
-// The file at path is exactly one a release shipped as name: its size and hash (read into the load
-// buffer, which nothing uses yet)
-bool shipped(const char* name, const char* path)
-{
-    const size_t size = io->read(path, env.loadBuffer, 0);
-    for (size_t i = 0; i < shippedCount(); i++)
-    {
-        const ShippedFile& s = shippedAt(i);
-        if (!sameText(s.name, name) || size != s.size || size > kMaxFile)
-        {
-            continue;
-        }
-        if (io->read(path, env.loadBuffer, size) == size &&
-            fileHash(env.loadBuffer, static_cast<uint32_t>(size)) == s.hash)
-        {
-            return true;
-        }
-    }
-    return false;
-}
-
-// The file at path holds exactly f's bytes
-bool holds(const char* path, const PackFile& f)
-{
-    return f.size <= kMaxFile && io->read(path, env.loadBuffer, f.size) == f.size &&
-           memcmp(env.loadBuffer, f.data, f.size) == 0;
-}
-
-// One of the pack's files onto the card, at start: written if it's missing; put in place of the
-// one there if that is exactly a file a release shipped and not already this one; else left. The replacement is written
-// beside it first and read back, so a stop part way leaves the old file or the new one, and a
-// .new file the next start removes (the file is then missing, or still the old one).
+// One of the pack's files onto the card, at start (pluginPack.h): written if missing, put in place
+// of a file a release shipped (kShipped) that nobody changed, else left. The load buffer is free.
 void writePackFile(const PackFile& f)
 {
     char path[sizeof(kDir) + kFileNameSize];
-    char fresh[sizeof(kDir) + kFileNameSize + sizeof(kNewSuffix)];
+    static_assert(sizeof(path) + sizeof(pluginkit::kNewSuffix) - 1 <= pluginkit::kPackPathSize,
+                  "a pack file's path with .new fits");
     if (!pathOf(f.name, path, sizeof(path)))
     {
         return;
     }
-    copyText(fresh, sizeof(fresh), path);
-    pluginkit::appendText(fresh, sizeof(fresh), kNewSuffix);
-    if (io->exists(fresh))
-    {
-        io->remove(fresh); // the last start stopped part way through replacing this file
-    }
-    if (!io->exists(path))
-    {
-        io->write(path, f.data, f.size);
-        return;
-    }
-    if (env.loadBuffer == nullptr || holds(path, f) || !shipped(f.name, path))
-    {
-        return; // the pack's own already (a file a release kept as it was), or the user's
-    }
-    if (!io->write(fresh, f.data, f.size) || !holds(fresh, f))
-    {
-        io->remove(fresh);
-        return; // the old file stays
-    }
-    io->remove(path);
-    if (!io->rename(fresh, path))
-    {
-        // No rename here: the file written again in place, and the copy goes
-        io->write(path, f.data, f.size);
-        io->remove(fresh);
-    }
+    const pluginkit::PackCard card = { *io, env.loadBuffer, kMaxFile, shippedList(), shippedCount() };
+    pluginkit::writePackFile(card, path, f.name, f.data, f.size);
 }
 
 } // namespace

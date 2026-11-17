@@ -6,8 +6,9 @@ Two effect slots, **FX1** then **FX2**, on each synth part, for every engine: CE
 
 - Turn it on in **Project Settings → Mods → Synth FX** (for new projects: **Config → Mods**).
 - The firmware writes its default pack to `/SynthFX/` when a file is missing: Overdrive, Distortion,
-  Bit Crusher, Chorus, Flanger and Phaser ([what each one does](#the-default-plugins)). Anyone can
-  build more: [docs/synthfx_plugins.md](../synthfx_plugins.md).
+  Bit Crusher, Chorus, Flanger and Phaser ([what each one does](#the-default-plugins)). When a new
+  release fixes one of them, it replaces the old file if you haven't changed it; a file you changed
+  is left alone. Anyone can build more: [docs/synthfx_plugins.md](../synthfx_plugins.md).
 - The slots belong to the part, not the patch. Loading another patch keeps them, and they are saved
   with the project.
 - A slot runs on the part after the engine. On PERC the effects reach the main output, not its sends.

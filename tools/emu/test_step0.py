@@ -123,6 +123,7 @@ class FakeSd:
             "getFileSizeEPv": self.size_of_handle,
             "getFileSizeEPKc": self.size_of_path,
             "listDirContents": self.list_dir,
+            "rename": self.rename,
         }
         self.vtable = m.alloc(4 * slots, 4)
         for i in range(slots):
@@ -156,6 +157,15 @@ class FakeSd:
 
     def remove(self):
         return int(self.files.pop(self.m.cstr(self.m.arg(1)), None) is not None)
+
+    def rename(self):
+        # CE's FileSystemImpl::rename is SD.rename (SdFat): the file moves; false if it isn't
+        # there or the new name is taken (the mods' CeFileIo::rename checks both first)
+        old, new = self.m.cstr(self.m.arg(1)), self.m.cstr(self.m.arg(2))
+        if old not in self.files or new in self.files:
+            return 0
+        self.files[new] = self.files.pop(old)
+        return 1
 
     def open_file(self):
         # std::tuple<bool, FileHandle> openFile(path, mode, FileHandle*): returned in

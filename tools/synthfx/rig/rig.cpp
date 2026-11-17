@@ -6,6 +6,7 @@
 // SDRAM as on the unit. The host table, the clock and the cache sync are the test's (stubs
 // whose addresses it writes into rig_hooks before rig_start).
 
+#include "modsBuild.h" // the shim's: MT_SHIPPED_FOR_TESTS
 #include "synthfxPlugins.h"
 
 #include <cr_section_macros.h>
@@ -78,8 +79,19 @@ extern "C" {
 __NOINIT(EXTERNAL_RAM) CardFile rig_files[kFiles];
 __NOINIT(EXTERNAL_RAM) alignas(4) uint8_t rig_card[kCardSize];
 uint32_t rig_card_used;
-uint32_t rig_writes, rig_removes, rig_dirs, rig_lists;
+uint32_t rig_writes, rig_removes, rig_dirs, rig_lists, rig_renames;
 uint32_t rig_fail_writes;
+uint32_t rig_no_rename;   // the card can't rename
+uint32_t rig_short_fresh; // writes of a .new file come out a byte short (as a full card would)
+
+// A shipped table in place of the firmware's (synthfxPack.cpp's shippedForTests), filled by the
+// test, then rig_set_shipped
+struct RigShipped
+{
+    char name[48];
+    uint32_t size, hash;
+};
+RigShipped rig_shipped_in[4];
 
 // The test's stubs (Thumb addresses), and the budget
 struct
@@ -124,6 +136,10 @@ class Card : public FileIo
     bool write(const char* path, const uint8_t* data, size_t size) override
     {
         rig_writes++;
+        if (rig_short_fresh && endsWith(path, ".new") && size > 0)
+        {
+            size--;
+        }
         if (rig_fail_writes || rig_card_used + size > kCardSize || length(path) >= sizeof(CardFile::path))
         {
             return false;
@@ -153,6 +169,17 @@ class Card : public FileIo
         {
             f->used = 0;
         }
+    }
+    bool rename(const char* from, const char* to) override
+    {
+        CardFile* f = find(from);
+        if (rig_no_rename || f == nullptr || find(to) != nullptr || length(to) >= sizeof(CardFile::path))
+        {
+            return false;
+        }
+        rig_renames++;
+        memcpy(f->path, to, length(to) + 1);
+        return true;
     }
     void makeDir(const char*) override { rig_dirs++; }
     bool exists(const char* path) override { return find(path) != nullptr; }
@@ -224,9 +251,32 @@ extern "C" {
 void rig_forget()
 {
     plugins::forget();
+    plugins::shippedForTests(nullptr, 0);
     memset(rig_files, 0, sizeof(rig_files));
-    rig_card_used = rig_writes = rig_removes = rig_dirs = rig_lists = rig_fail_writes = 0;
+    rig_card_used = rig_writes = rig_removes = rig_dirs = rig_lists = rig_renames = rig_fail_writes = 0;
+    rig_no_rename = rig_short_fresh = 0;
 }
+
+// A power-up with the card as it is: the runtime forgets, the counters start again
+void rig_power_up()
+{
+    plugins::forget();
+    rig_writes = rig_removes = rig_dirs = rig_lists = rig_renames = 0;
+}
+
+// rig_shipped_in's first count in place of the firmware's table; 0: the firmware's own
+void rig_set_shipped(uint32_t count)
+{
+    static plugins::ShippedFile table[sizeof(rig_shipped_in) / sizeof(rig_shipped_in[0])];
+    count = count < sizeof(table) / sizeof(table[0]) ? count : sizeof(table) / sizeof(table[0]);
+    for (uint32_t i = 0; i < count; i++)
+    {
+        table[i] = { rig_shipped_in[i].name, rig_shipped_in[i].size, rig_shipped_in[i].hash };
+    }
+    plugins::shippedForTests(count != 0 ? table : nullptr, count);
+}
+
+uint32_t rig_shipped_count() { return plugins::shippedCount(); }
 
 void rig_start()
 {

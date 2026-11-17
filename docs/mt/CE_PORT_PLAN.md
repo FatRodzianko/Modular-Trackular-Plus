@@ -1722,6 +1722,80 @@ it, and copy it to the card. WAVE and PHASE use the same two slots.
     measured on the unit at the built-in effects' cost; the plugins' own cost is the checker's
     (under 5 % of a block each); PHASE's voices are S4's. Optional, not needed for done: S4 with
     plugins, a 10-minute play.
+- **The pack over an older card (synthfx-1.1, 2026-11-17).** Until now the firmware wrote a pack
+  file only when it was missing, so a card that got an earlier release's file kept it for ever and a
+  fix to a default plugin never reached it. Now it works as Master FX 2.1's pack does, with the
+  same code.
+  - **What earlier releases shipped:** every tag that has the mod (`CE_20261113`, `modular-1.0`,
+    `masterfx-2.0`, `modular-1.1`, `CE_20261115`, `CE_20261116`, `masterfx-2.1`) carries the same
+    six files as today, byte for byte (name, size and FNV-1a of each, read from `synthfxPack.inc` at
+    each tag). Phase 1's build (`42a415e`) had a different Overdrive, Distortion and Bit Crusher,
+    but no release shipped it and it never ran on the unit. So the shipped table is empty; the
+    mechanism is there for the next change to a pack file, which adds the file it replaces to
+    `SHIPPED` in `tools/synthfx/build_pack.py`.
+  - **Design** (`core/mods/plugins/pluginPack.h`, header only, shared with Master FX, whose own
+    copy in `masterfxPlugins.cpp` it replaces): at start, in the main loop (`mods::init`, or
+    `mods::update` when the mod is turned on later), for each pack file:
+    - missing: written;
+    - already this pack's: left;
+    - byte for byte one an earlier release shipped (name, size and FNV-1a in `kShipped`,
+      `synthfxPack.inc`, generated from `SHIPPED`): replaced;
+    - anything else (changed by the user, or the user's own): left alone.
+    A file goes in as `<name>.new`, which is read back, then the old one is removed and the new one
+    renamed (`FileIo::rename`, CE's `FileSystem::rename`). A card that can't rename gets it written
+    in place, the `.new` kept until that reads back right. A bad read-back removes the `.new` and
+    keeps the old file (or none). A `.new` found at the start is removed first; if it held this
+    pack's file whole, the file it was putting in is put in again. So a power cut at any step leaves
+    the old file, the new one, or none, which the next start writes. Two changes from Master FX
+    2.1's writer, both for power cuts, and both now in Master FX too: a missing file also goes in
+    through a `.new` (before, it was written in place, and a cut part way left a half file that every
+    later start kept as the user's); and a whole `.new` finishes the replacement it was for (before,
+    a cut while writing in place on a card that can't rename left a half file the same way).
+    Nothing is read unless the table has the file's name, so a start reads no pack file back
+    today. Files are read back into the code pool, which is empty then: no plugin is loaded and no
+    instance exists for the interrupt to run.
+  - **Cost** (`mem_budget.py`, against Master FX 2.1's build): flash 440 B more (the shared writer,
+    used by both mods); DTCM 4,136 free, SDRAM 610,824, unchanged; ITCM 39,872 free, 64 B more,
+    from the link placing some of the synth library's `std::function` helpers in flash, nothing
+    the change runs. The diagnostic build's DTCM is 2,608, as in 2.1's diagnostic build. Boot: on
+    an up-to-date card, no extra reads (Master FX's start reads less than before: a pack file is
+    read back only when its name is in the table). Replacing a file costs a write and a read of it.
+  - **Tests (2026-11-17):**
+    - host tests, 14 suites, 0 failures. `test_synthfx_plugins` 123 checks (was 99): the pack
+      written as `.new` files and renamed; a start reads no pack file back; a shipped file
+      replaced, written beside it, renamed, then left at the next start; a shipped file that is
+      already the pack's, the pack's file with a byte more, a changed file and the user's own file
+      left alone; a part `.new` removed (old file there, or missing); a whole `.new` beside a
+      half-written file put in again, and beside the pack's own file only removed; a card that
+      can't rename (replacing and missing); a copy that doesn't read back keeps the old file and
+      doesn't put in a missing one; a card that can't read keeps its files; the firmware's table
+      empty. `test_masterfx_plugins` 178 checks: the same writer's new resume and missing-file
+      cases, and its earlier replace checks with the whole pack on the card;
+    - `tools/synthfx/test_runtime.py` on the rig, 92 checks: section 8 runs the firmware's
+      runtime and `pluginPack.h` as built for the unit, with the rig's card (now able to rename,
+      to refuse renames and to write a `.new` short) and a test table in place of `kShipped`
+      (`MT_SHIPPED_FOR_TESTS`, in the rig's shim only): each rule above, the code pool loading and
+      running a plugin after it was used to read files back, and the firmware's table empty;
+    - `plant.py`: 6 new planted faults in `pluginPack.h` (the user's file overwritten, a shipped
+      file not replaced, the hash not checked, no read-back, a stray `.new` kept, a stopped
+      replacement not finished), all caught by the check meant for each. The old "user's file
+      overwritten" fault in `synthfxPlugins.cpp` is now the first of these;
+    - `build_pack.py --check` for both packs (the embedded copies match their sources);
+    - the emulator's shared fake card (`tools/emu/test_step0.py`'s `FakeSd`) had no rename: it
+      logged the call as unexpected and answered "failed", so `synthfx page`, which starts the
+      mod on an empty card, failed its "only expected file calls" check with six renames. The
+      firmware's `FileSystemImpl::rename` is `SD.rename` (SdFat): the file moves, and it fails if
+      the file isn't there or the name is taken (`CeFileIo::rename` checks both first). `FakeSd`
+      now does that, as `boot_rig.py`'s card already did;
+    - `run_tests.py --tier release` with the diagnostic build and the usual project: 0 failed of
+      50 run, 3 cached from the same firmware (`synthfx plugins`, `synthfx pack`, `masterfx
+      pack`). Among them: the Synth FX page, `synthfx`, every Master FX section, boot and
+      preempt (held, worst, tracklen, synthfx, synthfx hang), cost, send leak, the simulator.
+    - `mem_budget.py`: full build above every floor (above).
+  - **Not checked:** a replacement on the unit's card [unit; nothing to replace yet, the table is
+    empty, and Master FX 2.1's replacement of 2.0's pack ran on the unit through the same
+    `CeFileIo::rename`]; a power cut part way [analysis and the host and rig cases above]; a card
+    that refuses renames [host and rig only; CE's FAT rename fails only on a card error].
 
 ## 4. Order and why
 

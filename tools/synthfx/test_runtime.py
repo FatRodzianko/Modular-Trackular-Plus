@@ -22,6 +22,12 @@ what the host did to it and misbehaves on request.
 6. The start marker: written with the first plugin, removed after 5 s; found at start, a
    project's plugins are skipped until the user picks one and it settles.
 7. Cost: the runtime's own instructions per block around a plugin.
+8. The pack over an older card (core/mods/plugins/pluginPack.h, with the rig's shipped table in
+   place of the firmware's): a file a release shipped replaced through a .new and a rename, then
+   left; a file the user changed, and the user's own, left; a stray .new removed (a part one,
+   or a whole one beside a half-written file, which is put in again); a card that can't rename;
+   a copy that doesn't read back leaves the old file; the code pool, used to read files back,
+   still loads plugins after; the firmware's table (none yet).
 
 Planted faults (tools/synthfx/rig/plant.py) build the rig with one mistake each and expect this
 test to fail.
@@ -302,8 +308,9 @@ def start(rig: Rig) -> None:
     check(rig.counter("rig_dirs") >= 1, "start: the folder made")
     files = pack_files()
     same = [f for f in PACK if rig.file(f"/SynthFX/{f}") == files[f]]
-    check(len(same) == 6 and rig.counter("rig_writes") == 6,
-          f"start: the pack written onto an empty card, each file as built ({len(same)} of 6)")
+    check(len(same) == 6 and rig.counter("rig_writes") == 6 and rig.counter("rig_renames") == 6 and
+          not any(rig.file(f"/SynthFX/{f}.new") for f in PACK),
+          f"start: the pack written onto an empty card as .new files, renamed, each as built ({len(same)} of 6)")
     cat = rig.catalog()
     check([c[0] for c in cat] == PACK and all(c[2] == "ok" for c in cat) and
           [c[1] for c in cat] == ["Overdrive", "Distortion", "Bit Crusher", "Chorus", "Flanger", "Phaser"],
@@ -717,6 +724,102 @@ def cost(rig: Rig) -> None:
         rig.call("rig_destroy", i)
 
 
+# ---- 8. the pack over an older card -----------------------------------------------------------
+
+def fnv1a(data: bytes) -> int:
+    h = 2166136261
+    for b in data:
+        h = ((h ^ b) * 16777619) & 0xFFFFFFFF
+    return h
+
+
+def pack_update(rig: Rig) -> None:
+    files = pack_files()
+    chorus = files["Chorus.ptsfx"]
+    old = bytearray(chorus)
+    old[8:40] = b"Old Chorus".ljust(32, b"\0")       # stands in for a release's Chorus
+    old = bytes(old)
+    path, fresh = "/SynthFX/Chorus.ptsfx", "/SynthFX/Chorus.ptsfx.new"
+    m = rig.m
+
+    def shipped(entries: list[tuple[str, int, int]]) -> None:
+        for i, (name, size, h) in enumerate(entries):
+            m.write(m.addr("rig_shipped_in") + 56 * i, name.encode().ljust(48, b"\0") + struct.pack("<2I", size, h))
+        rig.call("rig_set_shipped", len(entries))
+
+    table = [("Chorus.ptsfx", len(old), fnv1a(old)), ("Phaser.ptsfx", 10, 0x12345678)]
+
+    def card(extra: dict[str, bytes | None], drop: tuple[str, ...] = ()) -> None:
+        """A card with the pack as a release wrote it, then extra (None: no such file)"""
+        cf = {f"/SynthFX/{f}": d for f, d in files.items() if f"/SynthFX/{f}" not in drop}
+        cf.update({p: d for p, d in extra.items() if d is not None})
+        for p in [p for p, d in extra.items() if d is None]:
+            cf.pop(p, None)
+        rig.fresh(cf)
+        shipped(table)
+
+    # A file a release shipped: written beside it, read back, renamed in place; then left
+    card({path: old})
+    rig.start()
+    check(rig.file(path) == chorus and rig.file(fresh) is None, "update: a shipped file becomes the pack's, no .new left")
+    check(rig.counter("rig_writes") == 1 and rig.counter("rig_renames") == 1,
+          f"update: one write, beside it, and one rename ({rig.counter('rig_writes')}, {rig.counter('rig_renames')})")
+    cat = rig.catalog()
+    check(len(cat) == 6 and cat[3] == ("Chorus.ptsfx", "Chorus", "ok"), f"update: listed as the pack's Chorus {cat[3:4]}")
+    i, s = rig.create("Chorus.ptsfx")
+    ok, lo, ro = rig.process(i, rnd(7, B, 0.5), None, 1, True) if i >= 0 else (0, None, None)
+    check(i >= 0 and ok == 1 and np.all(np.isfinite(lo)) and np.all(np.isfinite(ro)),
+          f"update: the code pool, used to read files back, loads and runs a plugin after ({s})")
+    rig.call("rig_power_up")
+    rig.start()
+    check(rig.counter("rig_writes") == 0 and rig.counter("rig_renames") == 0 and rig.file(path) == chorus,
+          "update: the next start leaves it")
+
+    # The user's: changed (same size, a byte different), or their own file of another name
+    mine = bytearray(old)
+    mine[-1] ^= 1
+    card({path: bytes(mine), "/SynthFX/Mine.ptsfx": old})
+    rig.start()
+    check(rig.file(path) == bytes(mine) and rig.file("/SynthFX/Mine.ptsfx") == old and
+          rig.counter("rig_writes") == 0 and rig.counter("rig_renames") == 0,
+          "update: a changed file and the user's own file left alone")
+
+    # A start that stopped part way
+    card({fresh: b"\x01" * 100, path: old})
+    rig.start()
+    check(rig.file(fresh) is None and rig.file(path) == chorus, "update: a part .new removed, the old file then replaced")
+    card({fresh: b"\x01" * 100, path: None})
+    rig.start()
+    check(rig.file(fresh) is None and rig.file(path) == chorus, "update: a part .new removed, the missing file written")
+    card({fresh: chorus, path: old[:600]})
+    rig.start()
+    check(rig.file(fresh) is None and rig.file(path) == chorus,
+          "update: a whole .new beside a half-written file: put in again")
+    card({fresh: b"\x01" * 100, path: bytes(mine)})
+    rig.start()
+    check(rig.file(fresh) is None and rig.file(path) == bytes(mine),
+          "update: a stray .new beside the user's file removed, the user's file kept")
+
+    # A card that can't rename: in place, after the copy read back right
+    card({path: old})
+    m.w32(m.addr("rig_no_rename"), 1)
+    rig.start()
+    check(rig.file(path) == chorus and rig.file(fresh) is None and rig.counter("rig_renames") == 0,
+          "update: without rename, written in place, no .new left")
+
+    # The copy doesn't read back as written: the old file stays, a missing one isn't put in
+    card({path: old}, drop=("/SynthFX/Phaser.ptsfx",))
+    m.w32(m.addr("rig_short_fresh"), 1)
+    rig.start()
+    check(rig.file(path) == old and rig.file(fresh) is None, "update: a bad copy, the old file kept")
+    check(rig.file("/SynthFX/Phaser.ptsfx") is None and rig.file("/SynthFX/Phaser.ptsfx.new") is None,
+          "update: a missing file whose copy is bad isn't put in")
+
+    # The firmware's own table
+    rig.fresh()
+    check(rig.call("rig_shipped_count") == 0, "update: the firmware ships no older file yet (build_pack.py's SHIPPED)")
+
+
 def main() -> int:
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     axf = Path(args[0]) if args else ROOT / "build" / "emu" / "synthfx_rig.axf"
@@ -729,6 +832,7 @@ def main() -> int:
     guards(rig)
     marker(rig)
     cost(rig)
+    pack_update(rig)
     print(f"{checks} checks, {len(failures)} failed")
     for f in failures:
         print("  " + f)

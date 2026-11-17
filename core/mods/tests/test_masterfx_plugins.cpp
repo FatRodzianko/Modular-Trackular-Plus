@@ -532,6 +532,15 @@ void testStart()
     }
 }
 
+// The pack's files on the card, as a release wrote them
+void fillPack(FakeCard& card)
+{
+    for (size_t i = 0; i < plugins::packCount(); i++)
+    {
+        card.files[std::string("/MasterFX/") + plugins::packAt(i).name] = packBytes(i);
+    }
+}
+
 // The pack over files a release shipped: replaced when exactly one, else left
 void testReplace()
 {
@@ -548,6 +557,7 @@ void testReplace()
     const std::string fresh = path + ".new";
     {
         FakeCard card;
+        fillPack(card);
         card.files[path] = old;
         plugins::forget();
         plugins::start(card, testEnv());
@@ -575,6 +585,7 @@ void testReplace()
         };
         plugins::shippedForTests(kept, 1);
         FakeCard card;
+        fillPack(card);
         card.files[path] = same;
         plugins::forget();
         plugins::start(card, testEnv());
@@ -596,6 +607,7 @@ void testReplace()
         FakeCard card;
         std::vector<uint8_t> mine = old;
         mine[mine.size() - 1] ^= 1;
+        fillPack(card);
         card.files[path] = mine;
         plugins::forget();
         plugins::start(card, testEnv());
@@ -619,6 +631,27 @@ void testReplace()
         plugins::start(card, testEnv());
         check(card.files.count(fresh) == 0 && card.files[path] == packBytes(glue),
               "replace: a stray .new removed, then the old file replaced");
+    }
+    {
+        // A stop part way through writing in place: the .new whole, the file half written. Put in
+        // again, though the half file is no shipped one (pluginPack.h)
+        FakeCard card;
+        card.files[fresh] = packBytes(glue);
+        card.files[path] = std::vector<uint8_t>(old.begin(), old.begin() + 600);
+        plugins::forget();
+        plugins::start(card, testEnv());
+        check(card.files.count(fresh) == 0 && card.files[path] == packBytes(glue),
+              "replace: a whole .new and a half-written file: put in again");
+    }
+    {
+        // A missing file goes in through a .new too, so a stop never leaves half of one
+        FakeCard card;
+        plugins::forget();
+        plugins::start(card, testEnv());
+        check(std::find(card.writes.begin(), card.writes.end(), fresh) != card.writes.end() &&
+                std::find(card.writes.begin(), card.writes.end(), path) == card.writes.end() &&
+                card.files[path] == packBytes(glue),
+              "start: a missing file written as .new, then renamed");
     }
     {
         // A card that can't rename: written in place after the copy checked out

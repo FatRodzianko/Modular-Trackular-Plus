@@ -4,7 +4,9 @@
 // mod's own memory and run in the audio interrupt on a synth part's audio.
 //
 // The catalog: at start, the default pack (synthfxPack.inc) is written to /SynthFX/ for each
-// of its files that is missing, then every .ptsfx there is listed and its header checked. A
+// of its files that is missing, or that is exactly a file an earlier release shipped (kShipped;
+// core/mods/plugins/pluginPack.h, with the code pool, still empty, to read files back). Any
+// other file is left as it is. Then every .ptsfx there is listed and its header checked. A
 // plugin's code is loaded when a slot first picks it, into the code pool, and stays while any
 // instance uses it; each instance has its state in the instance pool. Neither pool moves a
 // block once given (the interrupt may be running it): first fit, holes reused.
@@ -32,6 +34,7 @@
 #define MODS_SYNTHFX_SYNTHFXPLUGINS_H_
 
 #include "modsFileIo.h"
+#include "plugins/pluginPack.h"
 #include "ptsfx.h"
 
 #include <cstddef>
@@ -169,6 +172,15 @@ struct PackFile
 };
 size_t packCount();
 const PackFile& packAt(size_t index);
+// The pack files a release shipped (kShipped, pluginPack.h): one on the card that is exactly one
+// of them is replaced by the pack's file of that name.
+using pluginkit::ShippedFile;
+using pluginkit::fileHash; // FNV-1a
+size_t shippedCount();
+const ShippedFile* shippedList(); // shippedCount() of them; null when none
+#if defined(MT_HOST_TEST) || defined(MT_SHIPPED_FOR_TESTS)
+void shippedForTests(const ShippedFile* list, size_t count); // in place of kShipped; null: kShipped
+#endif
 
 // Host tests and the emulator rig: forgets everything, as at power-up.
 void forget();
