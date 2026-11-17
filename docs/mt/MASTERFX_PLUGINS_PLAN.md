@@ -688,6 +688,10 @@ Branch `mod/masterfx-glue`, off `modular` at `250cd04` (Master FX 2.0, `masterfx
   new one renamed (written in place if the card can't rename); a bad read-back leaves the old
   file. A `.new` at the start is removed first, so a power cut at any step leaves the old file,
   the new file, or no file, which the next start writes.
+  - Since synthfx-1.1 (2026-11-17) this is `core/mods/plugins/pluginPack.h`, shared with Synth FX
+    (`CE_PORT_PLAN.md` 3.17, "The pack over an older card"). Two changes for power cuts: a missing
+    file goes in through a `.new` too, and a whole `.new` found at the start finishes the
+    replacement it was for. A pack file is read back only when its name is in `kShipped`.
 - **Glue's DSP** (`masterfx-sdk/pack/glue.cpp`, written for this): each side through a ~35 Hz
   one-pole high-pass for the detector, the louder side's peak over 8 frames, a log2 gain computer
   with a 6 dB soft knee, attack and release smoothing of the turning down, the gain glided over

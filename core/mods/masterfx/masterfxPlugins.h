@@ -6,9 +6,9 @@
 //
 // The catalog: at start, the default pack (masterfxPack.inc) is written to /MasterFX/ for each
 // of its files that is missing, or that is exactly a file an earlier release shipped (kShipped:
-// written as <file>.new, read back, then the old one removed and the new one renamed; a .new left
-// by a stop part way is removed at the next start, and the file written again). Any other file is
-// left as it is. Then every .ptmfx there is listed and its header checked.
+// pluginPack.h: written as <file>.new, read back, then renamed in place; a .new left by a stop
+// part way is removed at the next start, and the file put in again). Any other file is left as
+// it is. Then every .ptmfx there is listed and its header checked.
 //
 // One plugin a slot. Each slot owns fixed memory, given by the platform in Env: a code area
 // (ITCM on the unit) the plugin's code is copied into, its state (DTCM), and the slot's buffers
@@ -44,6 +44,7 @@
 #define MODS_MASTERFX_MASTERFXPLUGINS_H_
 
 #include "modsFileIo.h"
+#include "plugins/pluginPack.h"
 #include "ptmfx.h"
 
 #include <cstddef>
@@ -221,17 +222,13 @@ struct PackFile
 };
 size_t packCount();
 const PackFile& packAt(size_t index);
-// A pack file a release shipped (its size and FNV-1a): one on the card that is exactly that is
-// replaced by the pack's file of that name.
-struct ShippedFile
-{
-    const char* name;
-    uint32_t size;
-    uint32_t hash;
-};
+// The pack files a release shipped (kShipped, pluginPack.h): one on the card that is exactly one
+// of them is replaced by the pack's file of that name.
+using pluginkit::ShippedFile;
+using pluginkit::fileHash; // FNV-1a
 size_t shippedCount();
 const ShippedFile& shippedAt(size_t index);
-uint32_t fileHash(const uint8_t* data, uint32_t size); // FNV-1a
+const ShippedFile* shippedList(); // shippedCount() of them
 #ifdef MT_HOST_TEST
 void shippedForTests(const ShippedFile* list, size_t count); // in place of kShipped; null: kShipped
 #endif
