@@ -650,7 +650,12 @@ void setKnob(Slot slot, uint32_t knob, float value)
         return;
     }
     SlotState& s = slots[slot];
-    s.value[knob] = valueAt(*p, stepNearest(*p, value));
+    const float to = valueAt(*p, stepNearest(*p, value));
+    if (s.value[knob] == to)
+    {
+        return; // the plugin has it (or is sent it still): not sent its own value again
+    }
+    s.value[knob] = to;
     s.dirty[knob] = 1; // after the value: the interrupt clears this, then reads the value
 }
 

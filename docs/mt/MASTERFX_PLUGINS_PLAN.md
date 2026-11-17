@@ -847,10 +847,31 @@ and `TrackerPlus_MT_ce1116_diag` (the lockup recorder), all from this tree:
 - Not run: the MT_NO_MODS image against plain CE f25fb89 byte for byte (`modular`'s merge did
   that; 2.1 adds only `MT_HAS_MASTERFX` code).
 
+### On the unit (2026-11-16) and the knobs fix
+
+The recorder image on the unit, with M2, M3, M5 and M6 and 2.0's pack still on the card:
+- M2: 2.0's Glue replaced by the new one (Glue, Attack 10.0 ms, Release 200 ms, Threshold
+  -12.0 dB). 31 s played: average 32 %, slowest block 55 %, none over time, longest main loop gap
+  9 ms, free heap 76,004, max stack 7,201.
+- M5: Glue on 2 tracks, the Gain Reduce bar moving, Stock louder; 110 s, slowest 32 %. But Attack
+  read 10.0 ms, not the project's 1.0 ms (below).
+- M6: Compressor ducking Synth 1 on every kick; every label as listed, nothing says "Limiter", the
+  bar above Back moves; Sidechain Track 2 stops the ducking, Delete gives Disable, Track 1 brings it
+  back; Back and the page reopened keep the values. 101 s, slowest 33 %.
+- M3: GuardSlow bypassed, the note plays on; 38 s, slowest 17 %.
+- "Compressor" is too wide for the Master page's Limiter column (the title is fine).
+
+**The knobs fix.** `applySlot` returned early when the slot's plugin was already the project's file,
+so the next project with the same file (M2 then M5, both Glue) kept the last project's own knobs on
+the plugin: shown and played, while settings held the project's. In 2.0 too. Now `applyKnobs` sets
+the project's knobs in that case as well, and the default for one not set. `pl::setKnob` skips a
+value the plugin already has, so `apply()` from the page opening doesn't send a playing plugin its
+own values again. Main loop only, as before. The rig's dynamics check (the same file in the next
+project: 10.0, 1.0, then 10.0 ms) fails on the image before the fix and passes after.
+
 ### Not checked
 
-- Anything on the unit: the sound of Glue and Compressor, the cost in cycles, the pack replaced on a
-  real card, the Gain Reduce meter above Back, Back itself. The device list has each.
+- On the unit, after the knobs fix: M2 then M5 shows Attack 1.0 ms. The device list has it.
 - The cost with more than one bus track playing: estimated from the loop, measured with one.
 - The display bytes on the unit: the emulator's figure is an upper bound.
 - Glue's sound against a reference compressor: none was used; the rig checks what it does

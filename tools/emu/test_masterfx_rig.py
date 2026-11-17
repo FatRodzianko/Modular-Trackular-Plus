@@ -1119,6 +1119,31 @@ def test_dynamics(mods, ref):
               f"threshold down, side {side}: the held note turned down (peak {peak(a[side][128 * 20:])} against {peak(base[0][side][128 * 20:])})")
     check(gains[0] == gains[1] and 0.0 < gains[0] < 0.95, f"the meter: the plugin's gain on both objects {gains}")
 
+    # The next project with the same file: the plugin plays on and takes that project's own knobs.
+    # Before the fix (in 2.0 too, found on the unit 2026-11-16: M2 then M5) it kept the last
+    # project's, so M5's Glue showed and played Attack 10.0 ms, not its 1.0 ms. One not set goes back
+    # to the plugin's default.
+    g = graph(mods, "Glue.ptmfx")
+    m = g.m
+    text = m.alloc(32, 4)
+
+    def attack():
+        m.call(m.addr("_ZN4mods8masterfx11ownKnobTextEhhPcj"), DYNAMICS, 0, text, 32)
+        return m.read(text, 32).split(b"\0")[0].decode()
+
+    def plays_glue():
+        return slot_file(g, DYNAMICS) == "Glue.ptmfx" and m.r8(m.addr(ACTIVE_DYNAMICS)) == 1
+
+    first = attack()
+    set_dynamics(g, "Glue.ptmfx", (20.0,))
+    second = attack()
+    set_dynamics(g, "Glue.ptmfx")
+    third = attack()
+    check((first, second, third) == ("10.0 ms", "1.0 ms", "10.0 ms") and plays_glue(),
+          f"the same file in the next project: its own knobs, then the default again ({first}, {second}, {third})")
+    a, _ = phrase(g)
+    check(peak(a[0]) > 0 and not g.failures, "and it plays on")
+
     # Over silence (CE's 7482cc8): the master sends no block while it's silent, and the slot runs the
     # plugin on a zeroed one, so the plugin's level releases. The sound is cut at once
     # (Synth::silencePart, as a patch load does; a CUT step does the same to a sample track), with the

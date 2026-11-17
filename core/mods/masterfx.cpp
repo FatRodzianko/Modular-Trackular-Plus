@@ -696,6 +696,23 @@ void runCe(uint8_t slot)
     }
 }
 
+// The settings' own knobs on the slot's plugin: a saved value, else the plugin's default. A knob
+// already there isn't sent again (setKnob), so this is safe while the plugin plays.
+void applyKnobs(pl::Slot s, const SlotSetting& want)
+{
+    for (uint32_t k = 0; k < kOwnKnobs && k < pl::knobs(s); k++)
+    {
+        if (pluginkit::finite(want.knob[k]))
+        {
+            pl::setKnob(s, k, want.knob[k]); // held on the plugin's steps; settings keep the value
+        }
+        else
+        {
+            pl::resetKnob(s, k);
+        }
+    }
+}
+
 // The slot's plugin as settings and the switch say. Safe mode skips a plugin the user didn't
 // just pick.
 void applySlot(uint8_t slot, bool isOn)
@@ -707,6 +724,7 @@ void applySlot(uint8_t slot, bool isOn)
     const bool wantPlugin = isOn && want.file[0] != 0;
     if (wantPlugin && pl::installed(s) && sameText(pl::file(s), want.file))
     {
+        applyKnobs(s, want); // it plays on, with the last project's knobs until these are set
         return;
     }
     pl::Status status = pl::Status::missing;
@@ -726,17 +744,7 @@ void applySlot(uint8_t slot, bool isOn)
     }
     stop(slot);
     pl::install(s);
-    for (uint32_t k = 0; k < kOwnKnobs; k++)
-    {
-        if (k >= pl::knobs(s))
-        {
-            continue;
-        }
-        if (pluginkit::finite(want.knob[k]))
-        {
-            pl::setKnob(s, k, want.knob[k]); // held on the plugin's steps; settings keep the value
-        }
-    }
+    applyKnobs(s, want);
     runPlugin(slot);
 }
 
