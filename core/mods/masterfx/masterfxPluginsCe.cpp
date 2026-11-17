@@ -136,6 +136,12 @@ void startPlugins(FileIo& io)
 #ifdef PLATFORM_IMX // the tracks' stereo amplifiers, after their faders, are the destinations
     keyMuxes[0] = engine.getAudioOutput()->getLimiterSidechainMux(AudioOutput::OutputChannels::kLeft);
     keyMuxes[1] = engine.getAudioOutput()->getLimiterSidechainMux(AudioOutput::OutputChannels::kRight);
+    // the bus runs in CE's tracks mixer; its inputs are the destinations
+    static_assert(MixerAndFxs<audioEngine::kVoices>::kTracksAndSynthVoices == kBusInputs, "the tracks mixer's inputs");
+    busMixers[0] = engine.getMixerAndFx()->getTracksMixer(MixerAndFxChannelType::kLeft);
+    busMixers[1] = engine.getMixerAndFx()->getTracksMixer(MixerAndFxChannelType::kRight);
+    static_assert(plugins::kScratchFloats >= 2 * PTMFX_BLOCK, "the bus, left and right, in the scratch");
+    busFloats = scratch;
     for (uint8_t t = 0; t < 8; t++)
     {
         AudioVoice* voice = instrumentPlayer[t].getAudioVoice();

@@ -623,3 +623,270 @@ The questions as they were asked:
 
 The measurement sources (`mfx_plug.cpp`, `host_glue.cpp`, `dyn.c`, `measure*.py` and the build scripts)
 are in the session's shared notes folder, not in the repository.
+
+## 11. Master FX 2.1: Glue on chosen tracks, and Compressor (2026-11-15)
+
+Branch `mod/masterfx-glue`, off `modular` at `250cd04` (Master FX 2.0, `masterfx-2.0`).
+
+### What the user asked for
+
+- **Compressor:** 2.0's Glue renamed, the same behaviour and knobs: CE's Attack, Release and
+  Threshold and CE's Sidechain list; Ratio 1 to 20 by 0.5, Makeup 0 to 12; the Ducks list with
+  Shift + Sidechain (in its own column since 2026-11-16, below). `Compressor.ptmfx`, "Compressor" in the list.
+- **Glue:** a new bus compressor on the Limiter page: Attack 0.1 to 100 ms (10 ms), Release 50 ms
+  to 2 s (200 ms), Threshold -40 to 0 dB (-12 dB), CE's Gain Reduce, a Tracks list (Master,
+  Track 1 to 8, Synth 1 to 3; Master), Ratio 1:1 to 10:1 (4:1), Makeup 0 to +12 dB (0 dB), Back.
+  Only the chosen tracks are compressed, together. Ranges, not a few steps; Attack and Release
+  log-spaced, a step a jog-wheel click.
+- **The pack on the card:** a `/MasterFX` file byte for byte one a release shipped is replaced,
+  safely; any other file is left alone; a stray `.new` is removed at the start.
+- Not done, by the user's choice: plugin IDs, and converting 2.0's projects (the firmware still
+  reads their records).
+
+### Design
+
+- **Format version 2** (`ptmfx.h`): the header is 336 bytes, with 5 own knobs (`params` at 176);
+  version 1 (240 bytes, 2 knobs) is still read. New flags: `PTMFX_FLAG_OWN_DYNAMICS` (0x4: knobs
+  0 to 2 in the Limiter page's columns 0 to 2, 3 and 4 in columns 5 and 6; needs 3 knobs or more,
+  and more than 2 need it) and `PTMFX_FLAG_BUS` (0x8: dynamics, with `FLOAT`, not with `DUCK`).
+  The builder and `checkHeader` refuse the rest.
+- **Record 4 version 3** (`masterfx.h`): 208 bytes, 3 × (48 B file + 5 knobs) + the Ducks or
+  Tracks set + 2 reserved. Version 2 (172 bytes, and the 168-byte one from before the ducks) is
+  read, its two knobs as knobs 0 and 1. A dynamics choice sets the set back to the master.
+- **The bus** (`core/libs/Audio/mixer.cpp`, `masterfxDsp.cpp`): it runs in CE's tracks mixer
+  (`AudioMixer<11>`, inputs 0 to 7 the sample tracks, 8 to 10 the synth parts, the same numbers as
+  the ducks' destinations). With a bus plugin, a set and `busLive`, the left object's `update`
+  (an MT: hook, `if constexpr` on the size, so only this mixer has it) takes both objects' blocks,
+  sums the chosen inputs into the bus and the rest into the mix (CE's `applyGainThenAdd`, the
+  mixer's own gains), runs the plugin on the bus (`busRun`), adds the bus back and saturates with
+  CE's `saturate` and the project's type, as CE's sum would be. The right object then finds no
+  blocks and sends nothing. The limiter passes the master through, sets `busLive` (the bus starts a
+  pass later, with the limiter's knobs in `busKnobs`) and shows the plugin's gain. No memory of
+  its own: the bus is summed as floats straight into the plugins' float scratch (exact: sums of
+  16-bit samples, scaled by a power of two), the mix on the stack a side at a time (512 B, as
+  CE's own mixer update has; the unit's max stack reading is about 7.8 KB of 20 KB), and the
+  blocks are held in a 2 × 11 pointer array until the mix is made. A bus's float output is held
+  within ±11 (the mixer's 11 inputs at full scale), not ±4.
+  - A second version kept the bus and the mix in 2 KB of DTCM `.noinit`. CE's merge of
+    `ed51301` takes DTCM free to 4,680 on its own, so that would have put the normal build under
+    the 4,096 floor.
+  - A first version took the bus at the panning amplifiers and put the master back at the limiter
+    as master − bus + the plugin's bus. That is only right where CE's mixers are linear: CE's
+    tracks mixer and dry mix mixer both saturate with the project's type, and Saturate is ×1.5 at
+    low level in each, so a real project's drums reached the master about 2.2 times what the bus
+    held, and Glue on them did too little. Found by the rig's project check (a booted project);
+    the graph rig's synth checks had passed. CE's mixer update is in flash (its `AUDIO_CORE_RAM` doesn't reach the template's
+    instances), and the hook is with it.
+- **The page** (`gMasterParams.cpp`, `fMasterParams.cpp`): an `OWN_DYNAMICS` plugin's knobs take
+  CE's Attack, Release and Threshold columns (`showMasterfxLimiterColumn`, the four limiter
+  branches through `ownKnobAt`); the Tracks list is the Ducks list's control, always up, labelled
+  "Tracks". No new controls, so the display list grows by the texts only: Glue's page 5,840 B of
+  8,172 (upper bound), Compressor's 5,668 B.
+- **The pack's replacement** (`writePackFile`): a missing file is written. A file that is already
+  this pack's is left. A file that is one of 2.0's (name, size and FNV-1a hash in `kShipped`,
+  `masterfxPack.inc`) is written beside it as `.new`, read back, then the old one removed and the
+  new one renamed (written in place if the card can't rename); a bad read-back leaves the old
+  file. A `.new` at the start is removed first, so a power cut at any step leaves the old file,
+  the new file, or no file, which the next start writes.
+- **Glue's DSP** (`masterfx-sdk/pack/glue.cpp`, written for this): each side through a ~35 Hz
+  one-pole high-pass for the detector, the louder side's peak over 8 frames, a log2 gain computer
+  with a 6 dB soft knee, attack and release smoothing of the turning down, the gain glided over
+  the 8 frames with the makeup. Attack step i is 0.1 · 10^(i/20) ms (0 to 60), Release step i is
+  50 · 2^(i/6) ms, held at 2 s (0 to 32).
+
+### Cost
+
+- **Memory** (`mem_budget.py`, against 2.0's build): DTCM 72 B more (7,840 → 7,768 free, floor
+  4,096), ITCM 224 B (48,256 → 48,032). Stack: up to about 600 B more in the tracks mixer while a
+  bus runs.
+- **CPU** (`compare_cost.py`, instructions a block on the sound rig with 4 voices, against
+  `d9a6795`; instructions aren't cycles):
+
+  | Choice | Update | Today | 2.1 | Change |
+  | :--- | :--- | ---: | ---: | ---: |
+  | Compressor, no key | limiter | 14,570 | 16,511 | +13.3 % |
+  | Compressor, a key | limiter | 20,984 | 18,420 | -12.2 % |
+  | Glue on the master | limiter | 14,570 | 15,256 | +4.7 % |
+  | Glue on the master | tracks mixer | 15,897 | 15,903 | +0.0 % |
+  | Glue on Synth 1 | limiter + tracks mixer | 30,467 | 31,653 | +3.9 % |
+  | Stock, or no bus | amplifiers | 3,360 | 3,586 | +6.7 % (as 2.0) |
+
+  Glue's DSP alone: 6,155 instructions at most (`check_ptmfx.py`), 1,632 B of code, 48 B of state.
+  The bus on top of Glue on the master: 494 instructions with Synth 1 in it, about 0.03 % of a
+  block. Each further track that plays adds about 1,000 (a bus track is copied, then added as
+  floats, where a mix track is added once), estimated from the loop, not measured: all 11 would be
+  about 10,500, 0.6 %. The hook is in flash, as CE's mixer is; its cache misses on the unit aren't
+  in these counts.
+
+### Tests
+
+All on the build from this branch before CE's `ed51301` came in (`250cd04` base); rerun after that
+merge as below.
+
+- **Host tests:** `test_masterfx` 104 and `test_masterfx_plugins` 174 pass; the other host tests 0
+  failures.
+- **`check_ptmfx.py`:** 10 passed: the pack's and the SDK's examples load, version 2 headers and the
+  flags' rules, each plugin's worst block (Glue 6,155 instructions).
+- **The rig (`test_masterfx_rig.py`):** ui 115, graph 33, dynamics 25, ducks 36 and bus 53 pass. The bus
+  section: on Hard Clip, Glue that changes nothing leaves the master exactly as it was, and +6 dB
+  on the drums or on Synth 1 is the master plus that part again, sample for sample; on Saturate
+  (a real project's), the same against CE's Saturate curve, exactly; the project's own knobs squash
+  the drums; M5 as the device project makes it plays with the bus live. The bus section wasn't in
+  `run_tests.py`'s tiers; it is now.
+- **`compare_cost.py`:** 0 failed (the table above).
+- **`mem_budget.py`:** above its floors: DTCM 7,768 free (the diagnostic build 6,240), ITCM 48,032.
+- **The release tier** (`run_tests.py --tier release`, with the diagnostic build and a real project):
+  38 of 39 passed. `masterfx play` failed on its M2 load check, which held the output within 3 dB of
+  Stock. That was written for 2.0's Glue on CE's knobs (now Compressor). M2's Glue is the new one at
+  its defaults (-12 dB, 4:1, no makeup), and it turned that 8-voice mix, peaking at -1.5 dBFS, down
+  by 3.2 dB: a compressor at those settings does that, the firmware is right. The check is now that
+  Glue only turns the mix down, by less than the 9 dB 4:1 above -12 dB takes off a full-scale peak.
+  Rerun with the new check: 49 pass (-3.2 dB both sides).
+- **The user page:** its labels, ranges and defaults checked against `glue.cpp`, `compressor.cpp`,
+  `gMasterParams.cpp` and `masterfx.cpp`. Glue's two mockups had the figure's name in the screen's
+  title bar; it is "Limiter: Glue" now, as the firmware and the ui rig have it.
+
+### The Ducks list's own column (2026-11-16)
+
+The user's request: on Compressor's page the column above Back was empty; put the Gain Reduce meter
+there, still labelled "Gain Reduce" and with "Back" at the bottom, so the Ducks list can have its
+own column.
+
+- With a ducking plugin (`canDuck`, not a bus plugin), `showLimiterScreen`'s MT: hooks put the
+  Ducks list in column 3, in the Delay page's PingPong list (moved there as the Master page moves it
+  for the Limiter choices; `showDelayScreen` moves it back), always up. CE's Sidechain list stays in
+  column 4, and Shift + its button is CE's again. The Gain Reduce meter is column 7's bar, CE's
+  meter style; label 7 says "Gain Reduce" over "Back" (its two lines), and button 7 is still Back.
+  `resizeBarControl` gives column 7's bar CE's style back on the next page. The cover goes off,
+  as Ratio and Makeup fill columns 5 and 6.
+- Column 3 is a place: Left and Right stop on it, the encoder and Up/Down move the cursor, Delete
+  clears, and the button under it selects it, then marks. A new `setButtonObj` for button 3 on the
+  Limiter page; it does nothing without the Ducks list there.
+- Glue (a bus plugin) is as before: Gain Reduce in column 3, the Tracks list in column 4.
+- The plugins aren't changed: the pack is byte for byte the tested one (`Compressor.ptmfx`
+  included), so the pack's replacement and its hashes don't change.
+- The tested state before this is commit `be7827f`, also the local branch
+  `backup/masterfx-2.1-glue5`.
+- What ran on this build (before CE's ed51301): the host tests, every suite 0 failures; the rig's
+  ui section 120 pass, ducks 38 pass (rewritten for column 3); the release tier with the diag
+  build, 0 failed of 39 run; `check_mockups` 0 failures; `mem_budget` DTCM 7,760 bytes free (8 less
+  than before), diag DTCM 6,232, ITCM 48,032. What didn't: the unit. On the unit, still to check:
+  that the two-line Gain Reduce over Back label reads well, the page's real display bytes, and the
+  meter moving above Back.
+
+### Sidechain before Ducks, and no "Limiter" on a plugin's page (2026-11-16)
+
+The user's corrections to the layout above: the source comes before what it turns down, so CE's
+Sidechain list is column 3 and the Ducks list column 4; and a plugin that isn't the stock limiter
+doesn't say "Limiter" in its controls.
+
+- With a ducking plugin, `showLimiterScreen` moves CE's Sidechain list to column 3 (its position
+  is set each time the page opens: column 4 otherwise), and the Ducks list (the moved PingPong
+  list) is column 4. Column 3's button is CE's Sidechain button in its place
+  (`functSelectLimiterSidechain3`), and the encoder, Up/Down and Delete do CE's Sidechain changes
+  there; column 4's button, encoder, Up/Down and Delete work the Ducks list, as they work Glue's
+  Tracks list. `masterfxSidechainColumn()` says where CE's list is: 3, 4, or 0 when a bus plugin's
+  Tracks list has its control.
+- A Limiter plugin that doesn't name CE's knobs gets "Attack", "Release" and "Threshold"
+  (`showMasterfxLimiterWords`), and a Limiter plugin's page title is its name alone ("Compressor",
+  "Glue (bypassed)"). Stock keeps CE's words and "Master Limiter"; a missing file's title still
+  reads "Limiter: Missing: …", as CE's limiter is what plays then. The Master page's column
+  heading "Limiter" is CE's slot heading for every choice, and stays.
+- The plugins and the pack aren't changed.
+- What ran (before CE's ed51301): the host tests, 0 failures; the rig's ui section 121 pass (mod
+  Off still makes exactly the reference build's display calls: the Sidechain list moves only when
+  its column changes) and ducks 42 pass (CE's Sidechain button, encoder and Delete in column 3, read
+  from `setLimiterSidechain` as the rig's project has no track names; the page 6,996 bytes of
+  8,172); `check_mockups` 0 failures. Not run, by the user's choice: the release tier, which waits
+  for the CE merge.
+
+### modular with CE f25fb89 merged in (2026-11-16)
+
+`modular` (`6301640`: CE's `ed51301`, `cc53303` and `f25fb89` merged, 23 CE commits) merged into
+this branch. Each CE change against what 2.1 adds:
+
+- **The bus hook (fixed).** CE's 7482cc8 rewrote the mixer: with `AUDIO_NULL_IS_SILENCE` (on, in
+  `AudioStream.h`) `AudioMixer::update` calls `AudioMixerBase::mix`, and the old update is under
+  `#else`. git merged 2.1's MT: hook into the `#else` branch only, with no conflict, so Glue on
+  chosen tracks would have done nothing. The hook is now in the built update too, and
+  `modsBusUpdate` sets an input's `previousMultiplier` when it has no block, as CE's `mix()` does
+  (its gain ramp is finished; `isInputSilenced` reads it). The rest of `modsBusUpdate` already
+  takes a missing block as silence and sends nothing on a side with none, as `mix()` does; the
+  plugin still runs on a silent bus. `nm`: `AudioMixer<11>::modsBusUpdate<11>()` is in the image.
+- **The dynamics slot over silence:** `modular`'s `AudioEffectLimiter::modsUpdate` runs the plugin
+  on a zeroed block when the master sends none. Both of 2.1's dynamics plugins go through it: the
+  rig's silence check now runs Compressor and Glue (below), and `dynamicsProcess` still sets
+  `busLive` on every block.
+- **Settings in SDRAM** (`modular`'s DTCM fix): 2.1's 208-byte record is there too, emptied by
+  `masterfx::init`. Read and written in the main loop only, as before.
+- **The display lists** (ed51301): the Limiter page uses CE's controls only; the rig's upper bound
+  is as before (6,996 of 8,172 bytes on Compressor's page).
+- No other CE change touches 2.1's code.
+
+Tests changed, each for what the firmware does:
+- `test_masterfx_rig.py` dynamics: `modular`'s silence check was written for 2.0's Glue (2.1's
+  Compressor). It runs on Compressor as before, and on the new Glue with 350 silent blocks: Glue's
+  Release is 200 ms, and after 19 blocks it is still turning down (the next note 4.7 dB down; 2.6 dB
+  after 59 blocks with its fastest Release; 0.06 dB after 349), which a frozen level wouldn't do.
+- `compare_cost.py`: `modular`'s plain-CE Stock row and 2.1's Compressor and Glue rows together;
+  "each update runs" is now over 500 instructions, as CE's tracks mixer costs about 750 here.
+- `make_masterfx_test_project.py --masterfx-compressor` writes `M6 1 voice ACD Compressor duck`:
+  Compressor ducking Synth 1, CE's Sidechain on Track 1 and Threshold -20 dB in project.mt (0x4FB
+  and 0x128, from `cFileManager::writeProjectFileToFileStruct`). Booted and played in the emulator:
+  ducking live, the synth down to about 1 % on the kick and under 70 % for about 96 ms.
+
+What ran, on `TrackerPlus_MT_ce1116` (mods), `TrackerPlus_ref_ce1116` (MT_NO_MODS, the reference)
+and `TrackerPlus_MT_ce1116_diag` (the lockup recorder), all from this tree:
+- The build with -Werror; host tests, 14 suites, 0 failures; `check_mockups` 43 images, 0 failures.
+- `mem_budget.py`: DTCM 4,136 free (floor 4,096; `modular` alone 4,176), ITCM 39,808, SDRAM 610,824,
+  Flash 14,964,404.
+- The release tier: 53 jobs, 51 passed; the two failures were the tests above, which then passed.
+  The jobs that import the project maker ran before M6 was added to it (an added function only).
+- `verify_card.py` on M2, M3, M5 and M6 with the recorder image: Glue (Attack 10.0 ms: the new one)
+  in M2, Glue on the drums in M5, Compressor in M6, GuardSlow in M3; the titles without "Limiter".
+- Not run: the MT_NO_MODS image against plain CE f25fb89 byte for byte (`modular`'s merge did
+  that; 2.1 adds only `MT_HAS_MASTERFX` code).
+
+### On the unit (2026-11-16) and the knobs fix
+
+The recorder image on the unit, with M2, M3, M5 and M6 and 2.0's pack still on the card:
+- M2: 2.0's Glue replaced by the new one (Glue, Attack 10.0 ms, Release 200 ms, Threshold
+  -12.0 dB). 31 s played: average 32 %, slowest block 55 %, none over time, longest main loop gap
+  9 ms, free heap 76,004, max stack 7,201.
+- M5: Glue on 2 tracks, the Gain Reduce bar moving, Stock louder; 110 s, slowest 32 %. But Attack
+  read 10.0 ms, not the project's 1.0 ms (below).
+- M6: Compressor ducking Synth 1 on every kick; every label as listed, nothing says "Limiter", the
+  bar above Back moves; Sidechain Track 2 stops the ducking, Delete gives Disable, Track 1 brings it
+  back; Back and the page reopened keep the values. 101 s, slowest 33 %.
+- M3: GuardSlow bypassed, the note plays on; 38 s, slowest 17 %.
+- "Compressor" is too wide for the Master page's Limiter column (the title is fine).
+
+**The knobs fix.** `applySlot` returned early when the slot's plugin was already the project's file,
+so the next project with the same file (M2 then M5, both Glue) kept the last project's own knobs on
+the plugin: shown and played, while settings held the project's. In 2.0 too. Now `applyKnobs` sets
+the project's knobs in that case as well, and the default for one not set. `pl::setKnob` skips a
+value the plugin already has, so `apply()` from the page opening doesn't send a playing plugin its
+own values again. Main loop only, as before. The rig's dynamics check (the same file in the next
+project: 10.0, 1.0, then 10.0 ms) fails on the image before the fix and passes after.
+
+**Then on the unit:** M2 then M5 then M2 read Attack 10.0, 1.0, 10.0 ms; M5 played with no clicks.
+
+**Comp, the column's short name.** "Compressor" was wider than the Master page's Limiter column
+(cut there); the title and the list were fine. A plugin's 32-byte `name` may now hold a short name
+after its 0, for that column only: Compressor's is `"Compressor" "\0" "Comp"`. `listInto` keeps it
+after the name in the catalog entry; `choiceColumnName` gives it to `gMasterParams`'s column text;
+the list, the title and "(bypassed)" keep the whole name. No format change: 2.0's firmware and
+the builder read the name to its 0 and ignore the rest, so the file loads as before there. A card
+that ran a 2.1 test image has a `Compressor.ptmfx` without the short name (not in `SHIPPED`, so
+the firmware leaves it); no release shipped it. (A first try renamed the plugin to Comp, which
+changed the title too; the unit showed it, and it was taken back.)
+
+### Not checked
+
+- The short-name image on the unit: not needed. The unit has shown "Comp" in the Limiter column and
+  "Compressor" as the title (the two earlier images); this change only picks which goes where,
+  which the rig and verify_card read from the firmware itself.
+- The cost with more than one bus track playing: estimated from the loop, measured with one.
+- The display bytes on the unit: the emulator's figure is an upper bound.
+- Glue's sound against a reference compressor: none was used; the rig checks what it does
+  (squashes, lifts, leaves the rest), not how it sounds.

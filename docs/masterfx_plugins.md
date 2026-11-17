@@ -71,7 +71,8 @@ The SDK is [`masterfx-sdk/`](../masterfx-sdk/); the firmware's side is
 - **CE's knobs stay CE's.** Size, Damping, Predelay and Diffusion; PingPong, Sync, Rate, Time,
   Feedback and Filter; Attack, Release and Threshold stay in the project as on CE. The plugin
   reads them from the block every time and may rename their labels on the slot's page. It can
-  add up to two knobs of its own.
+  add up to two knobs of its own; a dynamics plugin can have five, three of them in place of
+  Attack, Release and Threshold on the page (section 3.6).
 - **Fast memory, given by the slot.** The code is copied into the slot's 8 KB area in ITCM, the
   state (up to 1 KB) is in DTCM, and the slot's buffers are CE's own: the reverb's 32 KB in fast
   RAM and 32 KB in SDRAM, the delay's three 512 KB lines, and 64 KB for the dynamics slot. A
@@ -80,12 +81,14 @@ The SDK is [`masterfx-sdk/`](../masterfx-sdk/); the firmware's side is
   between builds, so the builder compiles the code position independent and checks it by
   linking it twice at different addresses.
 - **Settings follow the project.** Each slot's file name and own knobs' values are in the
-  project's `mods.bin` (record 4), with the tracks the dynamics slot ducks. CE's fields aren't
-  touched, so the project still opens on stock CE.
+  project's `mods.bin` (record 4), with the dynamics slot's Ducks or Tracks list. CE's fields
+  aren't touched, so the project still opens on stock CE.
 - **The default pack.** Freeverb, Plate, Spring, Shimmer, "Gated" and Reverse (reverbs), Tape and
-  BBD (delays), and the Glue compressor (dynamics) are plugins too. The firmware carries a copy and
-  writes each pack file to `/MasterFX/` when it is missing there, so delete one to get the
-  firmware's copy back.
+  BBD (delays), and the compressors Glue and Compressor (dynamics) are plugins too. The firmware
+  carries a copy and writes each pack file to `/MasterFX/` when it is missing there, so delete
+  one to get the firmware's copy back. A pack file an earlier release wrote, still byte for byte
+  as it was shipped, is replaced by the new version (section 9.6); any other file of that name,
+  your own or one you changed, is left alone.
 
 ---
 
@@ -93,7 +96,7 @@ The SDK is [`masterfx-sdk/`](../masterfx-sdk/); the firmware's side is
 
 | File | Purpose |
 | :--- | :--- |
-| [`masterfx-sdk/ptmfx.h`](../masterfx-sdk/ptmfx.h) | The format: `PtmfxHeader` (240 bytes), `PtmfxParam` (32 bytes), the slots, the flags, `PtmfxHost`, `PtmfxMemory`, CE's knobs for each slot, `PtmfxBlock`, the entry types, and the `PTMFX_INFO`, `PTMFX_KNOB` and entry macros. The firmware's copy, `core/mods/masterfx/ptmfx.h`, is the same file (a host test checks). |
+| [`masterfx-sdk/ptmfx.h`](../masterfx-sdk/ptmfx.h) | The format: `PtmfxHeader` (336 bytes), `PtmfxParam` (32 bytes), the slots, the flags, `PtmfxHost`, `PtmfxMemory`, CE's knobs for each slot, `PtmfxBlock`, the entry types, and the `PTMFX_INFO`, `PTMFX_KNOB` and entry macros. The firmware's copy, `core/mods/masterfx/ptmfx.h`, is the same file (a host test checks). |
 | [`masterfx-sdk/ptmfx_builder.py`](../masterfx-sdk/ptmfx_builder.py) | Builds a plugin from C or C++ sources and refuses one that breaks the rules. Built on Synth FX's `ptsfx_builder.py`, itself adapted in part from CE's `editor-fx-sdk/ptfx_builder.py`. |
 | [`masterfx-sdk/ptmfx_support.c`](../masterfx-sdk/ptmfx_support.c) | `memset`, `memcpy` and `memmove`, linked into every plugin (the code has no C library). |
 | [`masterfx-sdk/examples/room.c`](../masterfx-sdk/examples/room.c) | A small reverb: float blocks, both of the reverb slot's memory areas, CE's four knobs and one own knob. |
@@ -160,8 +163,8 @@ as its page left them.
 - **The reverb's return,** as CE makes it: `send + (wet - send) * amount`. `input_gain` is CE's
   gain into the reverb.
 - **A key** is the Sidechain list's pick: a track after its fader, Line in L or R, or a synth
-  part. With a key, CE's limiter turns down everything but the key; Glue and the Ducker do the
-  same.
+  part. With a key, CE's limiter turns down everything but the key; Compressor and the Ducker
+  do the same.
 - **Float blocks** cost the host about 6,900 instructions a block for the conversions and the
   guard (section 9.4), 10,600 with a key: under 1 % of a block's time. After `process` they are
   converted back to 16 bits, held at full scale: nothing limits the output after a plugin, so
@@ -188,6 +191,38 @@ synth parts 1 to 3. While the list has any and a key is chosen:
 
 Without a key, or with no tracks in the list, the plugin runs on the master as usual and
 `b->gain` is null.
+
+### 3.5 A bus of chosen tracks (`PTMFX_FLAG_BUS`)
+
+A float dynamics plugin with `PTMFX_FLAG_BUS` can work on a group of tracks instead of the
+master, as a bus compressor on a drum group does. Its Limiter page has the Tracks list in the
+Sidechain list's column, always up (section 5): Master, sample tracks 1 to 8 and synth parts 1
+to 3. With Master, the plugin runs on the master as usual. With tracks in the list:
+
+- It runs in CE's tracks mixer, where the tracks and synth parts are summed, not on the master.
+  `fleft`/`fright` hold the chosen tracks' sum as that mixer gets them: after each track's volume
+  and panning, without the reverb and delay returns. With several loud tracks it can be past
+  ±1.0.
+- The plugin works on it in place, as it would on the master. The host adds what the plugin left
+  to the other tracks' sum, and CE's mixer saturates the total as it would its own sum (the
+  project's Saturation, Master 1/3). So the other tracks, the sends and the returns aren't
+  touched, and the result is the same whatever the Saturation.
+- There is no key: `fkey_left`/`fkey_right` are null and the Sidechain list isn't shown. `BUS`
+  and `DUCK` can't be set together.
+- When the bus starts (the list goes from Master to tracks), the limiter passes the master through
+  and the bus begins a block later. While it runs, the limiter passes the master through and its
+  meter shows the plugin's gain.
+- The output is guarded as any float block's (section 9.4), but held within ±11.0 (CE's mixer's
+  11 inputs at full scale) instead of ±4.0.
+
+### 3.6 Own Attack, Release and Threshold (`PTMFX_FLAG_OWN_DYNAMICS`)
+
+A dynamics plugin with `PTMFX_FLAG_OWN_DYNAMICS` has three to five own knobs. Knobs 0, 1 and 2
+take the Limiter page's first three columns, where CE's Attack, Release and Threshold are; knobs 3
+and 4 take columns 5 and 6, before Back. CE's three knobs stay in the project and in the block
+(`PtmfxDynamicsKnobs`), unchanged, and the page doesn't show them, so the plugin's `labels` for
+them aren't used. Without the flag a plugin has at most two own knobs. Glue uses it with Attack,
+Release and Threshold of its own ranges, Ratio and Makeup.
 
 ---
 
@@ -249,6 +284,10 @@ slot, the number of own knobs, two reserved bytes, the name, the author, the lab
 knobs, the state size, seven zeros (the builder fills in the code's place and the entries'
 offsets), three reserved words, and the own knobs.
 
+The name is shown in the slot's list and its page's title. A name too wide for the Master page's
+column (about 10 characters) can have a short one after it, for that column: `"Compressor\0Comp"`.
+Firmware before Master FX 2.1 ignores it.
+
 ### Step 2: Build it
 
 ```
@@ -307,20 +346,29 @@ Master FX mod on:
   that isn't on the card reads `Missing` in the list and under the column; the slot's page title
   names the file.
 - **The slot's page** (the Reverb, Delay or Limiter button) is CE's, with the plugin's labels in
-  place of CE's where it gives them. Its title says what plays: `Reverb: Shimmer`,
-  `Limiter: Glue (bypassed)`, `Limiter: Missing: Gone.ptmfx`.
-- **Own knobs** sit in columns 5 and 6 of the Reverb and Limiter pages: the label, the text (the
+  place of CE's where it gives them. A Limiter plugin that gives none gets `Attack`, `Release`
+  and `Threshold`, not CE's `LimiterAtt`, `LimiterRls` and `LimiterThr`: a plugin's page doesn't
+  say Limiter. The title says what plays: `Reverb: Shimmer`; a Limiter plugin's name alone,
+  `Glue (bypassed)`; `Limiter: Missing: Gone.ptmfx`.
+- **Own knobs** sit in columns 5 and 6 of the Reverb and Limiter pages, and with
+  `PTMFX_FLAG_OWN_DYNAMICS` in the Limiter page's columns 0 to 2 too: the label, the text (the
   plugin's `format()`, else the value and the unit), and a bar. The buttons under the columns
   pick them, the encoder and Up/Down move one step a tick, and Delete puts a knob back to its
   default. The Delay page has no free column: a delay plugin's own knobs stay at the project's
   values, or their defaults, so give a delay plugin defaults that work.
-- **The Ducks list** (section 3.4): on the Limiter page, Shift + the button under column 4 swaps
-  CE's Sidechain list for it, while a plugin with `PTMFX_FLAG_DUCK` plays. It lists Master,
-  Track 1 to 8 and Synth 1 to 3. The button marks or clears the item under the cursor (Master
-  clears them all), Delete goes back to Master, and the column's label says `Master`, the one
-  track, or `3 tracks`. Shift + the button again shows the Sidechain list; the page always
-  opens on it.
-- **A project stores** each slot's file name and its own knobs' values, and the Ducks list. A
+- **The Ducks list** (section 3.4): in column 4 of the Limiter page, always up while a plugin
+  with `PTMFX_FLAG_DUCK` plays. The source comes first: CE's Sidechain list moves to column 3,
+  with CE's button behaviour there, and CE's Gain Reduce meter moves above Back (labelled
+  `Gain Reduce` over `Back`). It lists Master, Track 1 to 8 and Synth 1 to 3. The button under
+  the column selects it, then marks or clears the item under the cursor (Master clears them
+  all), Delete goes back to Master, and the column's label says `Master`, the one track, or
+  `3 tracks`.
+- **The Tracks list** (section 3.5) is in column 4, in CE's Sidechain list's place, always up,
+  while a plugin with `PTMFX_FLAG_BUS` plays (a bus plugin has no key). It lists the same items
+  and works the same way; Gain Reduce stays in column 3.
+  Picking another plugin in the Limiter slot sets the Ducks or Tracks list back to Master.
+- **A project stores** each slot's file name and its own knobs' values, and the Ducks or Tracks
+  list. A
   file that is missing or refused plays Stock meanwhile, and the slot's title says why; it is
   looked for again when the project is next opened or the Master page next opens.
 - **A plugin stopped by the time guard** (section 9.4) reads `Bypassed` under the slot's column
@@ -329,8 +377,9 @@ Master FX mod on:
   Opening a project that uses the same plugin keeps the plugin that is installed, bypassed.
 - **Off,** every slot plays CE's effect, and the project's choices are kept.
 
-A card that has the pack from an earlier build keeps those files: the firmware only writes
-the pack files that are missing.
+A card that has the pack from an earlier release gets the new version of each file that is
+still as that release shipped it (section 9.6). A file you changed, or your own of that name,
+is kept.
 
 ---
 
@@ -340,9 +389,9 @@ the pack files that are missing.
 
 | Field | Limits |
 | :--- | :--- |
-| `flags` | `PTMFX_FLAG_FLOAT`, `PTMFX_FLAG_DUCK` (with `FLOAT`, dynamics only), or 0 |
+| `flags` | `PTMFX_FLAG_FLOAT`; `PTMFX_FLAG_DUCK` (with `FLOAT`, dynamics only); `PTMFX_FLAG_BUS` (with `FLOAT`, dynamics only, not with `DUCK`); `PTMFX_FLAG_OWN_DYNAMICS` (dynamics only, with 3 knobs or more); or 0 |
 | `slot` | `PTMFX_SLOT_REVERB`, `PTMFX_SLOT_DELAY` or `PTMFX_SLOT_DYNAMICS` |
-| `num_params` | 0 to 2 own knobs |
+| `num_params` | 0 to 2 own knobs; 3 to 5 with `PTMFX_FLAG_OWN_DYNAMICS` |
 | `name` | up to 31 characters; shown in the slot's list, under its column on the Master page (cut to the column's 94 px) and in the page's title |
 | `author` | up to 15 characters |
 | `labels` | one for each of CE's knobs on the slot's page, up to 11 characters; empty keeps CE's |
@@ -357,6 +406,8 @@ The code and its constants may be up to 8 KB.
 | :--- | :--- | :--- |
 | `PTMFX_FLAG_FLOAT` | `0x0001` | Float blocks (±1.0) instead of CE's 16-bit ones. The host converts in and out and guards the output (section 9.4). |
 | `PTMFX_FLAG_DUCK` | `0x0002` | A dynamics plugin with `FLOAT` that can duck chosen tracks: it fills `b->gain` when that is set (section 3.4). |
+| `PTMFX_FLAG_OWN_DYNAMICS` | `0x0004` | A dynamics plugin whose own knobs 0 to 2 take the Limiter page's Attack, Release and Threshold columns (section 3.6). |
+| `PTMFX_FLAG_BUS` | `0x0008` | A dynamics plugin with `FLOAT` that can work on a bus of chosen tracks, picked in the Tracks list (section 3.5). |
 
 ### 6.3 Labels
 
@@ -446,23 +497,24 @@ that needs a table brings it as constant data in its code.
 
 ## 8. The `.ptmfx` Binary Specification
 
-A `.ptmfx` file is the 240-byte header, then the code. Everything is little-endian.
+A `.ptmfx` file is the 336-byte header, then the code. Everything is little-endian. Format
+version 1's header was 240 bytes, with 2 knobs; the firmware still reads it.
 
-### 8.1 Header (`PtmfxHeader`, 240 bytes)
+### 8.1 Header (`PtmfxHeader`, 336 bytes)
 
 | Offset | Size | Field | Set by | Meaning |
 | ---: | ---: | :--- | :--- | :--- |
 | 0 | 4 | `magic` | builder | `0x464D5450` (`"PTMF"`) |
-| 4 | 2 | `format_version` | builder | 1 |
+| 4 | 2 | `format_version` | builder | 2 |
 | 6 | 2 | `flags` | plugin | `PTMFX_FLAG_*` |
 | 8 | 1 | `slot` | plugin | 1 reverb, 2 delay, 3 dynamics |
-| 9 | 1 | `num_params` | plugin | 0 to 2 |
+| 9 | 1 | `num_params` | plugin | 0 to 5 |
 | 10 | 2 | `reserved` | plugin | 0 |
-| 12 | 32 | `name` | plugin | ended by a 0 |
+| 12 | 32 | `name` | plugin | ended by a 0; then, if any, the short name for the Master page's column, ended by a 0 |
 | 44 | 16 | `author` | plugin | ended by a 0 |
 | 60 | 72 | `labels` | plugin | 6 labels of 12 bytes, each ended by a 0 |
 | 132 | 4 | `state_size` | plugin | bytes of state |
-| 136 | 4 | `code_offset` | builder | where the code starts in the file: 240 |
+| 136 | 4 | `code_offset` | builder | where the code starts in the file: 336 |
 | 140 | 4 | `code_size` | builder | up to 8 KB |
 | 144 | 4 | `init_offset` | builder | from the code's start, Thumb bit clear |
 | 148 | 4 | `set_param_offset` | builder | |
@@ -470,7 +522,7 @@ A `.ptmfx` file is the 240-byte header, then the code. Everything is little-endi
 | 156 | 4 | `reset_offset` | builder | |
 | 160 | 4 | `format_offset` | builder | `0xFFFFFFFF` (`PTMFX_NO_ENTRY`) if there is none |
 | 164 | 12 | `reserved2` | plugin | 0 |
-| 176 | 64 | `params` | plugin | 2 `PtmfxParam` of 32 bytes |
+| 176 | 160 | `params` | plugin | 5 `PtmfxParam` of 32 bytes |
 
 ### 8.2 Knob (`PtmfxParam`, 32 bytes)
 
@@ -486,10 +538,11 @@ A `.ptmfx` file is the 240-byte header, then the code. Everything is little-endi
 
 ### 8.3 What the firmware checks
 
-At listing and again when it reads a file (`checkHeader`): the magic and version; known flags,
-and `DUCK` only with `FLOAT` on a dynamics plugin; a slot from 1 to 3; a name and an author that
-end within their fields; every label ended, and none past the slot's columns; at most 2 knobs
-and the reserved fields 0; a state size from 1 byte to the slot's most and a code size from 1
+At listing and again when it reads a file (`checkHeader`): the magic and version 1 or 2; known
+flags (version 1: `FLOAT` and `DUCK` only), `DUCK` and `BUS` only with `FLOAT` on a dynamics
+plugin and not together, `OWN_DYNAMICS` only on a dynamics plugin with 3 knobs or more; a slot
+from 1 to 3; a name and an author that end within their fields; every label ended, and none
+past the slot's columns; at most 2 knobs (5 with `OWN_DYNAMICS`) and the reserved fields 0; a state size from 1 byte to the slot's most and a code size from 1
 byte to 8 KB; the code right after the header and ending at the file's end; every entry inside
 the code on an even offset; and every knob's label, display, range, step and default. A plugin
 that fails is listed with the reason and can't be picked. A file in the wrong slot's list is
@@ -507,6 +560,7 @@ refused when read.
 | the delay slot | audio interrupt, CE's delay object | `core/libs/Audio/effect_shortDelay.cpp`, `masterfxDsp.cpp` |
 | the dynamics slot | audio interrupt, `AudioEffectLimiter::update` (the left object runs the plugin once on both sides) | `core/libs/Audio/effect_limiter.cpp`, `masterfxDsp.cpp` |
 | ducked tracks | audio interrupt, `AudioAmplifier::update` on the tracks' and synth parts' panning amplifiers | `core/libs/Audio/amplifier.cpp`, `masterfxDsp.cpp` |
+| a bus of tracks | audio interrupt, `AudioMixer::update` of CE's tracks mixer (the left object runs the plugin once on both sides) | `core/libs/Audio/mixer.cpp`, `masterfxDsp.cpp` |
 | catalog, loader, guards | main loop; `process` and `cleared` in the interrupt | `core/mods/masterfx/masterfxPlugins.cpp`, `masterfxPluginsCe.cpp` |
 | choices, record, pages | main loop | `core/mods/masterfx.cpp`, hooks in `core/interface/masterParams/` |
 
@@ -547,7 +601,7 @@ A plugin is someone else's code in the audio interrupt, so the firmware watches 
   master through. It stays bypassed, even if a knob makes the plugin faster, until it is
   installed again (section 5).
 - **Output (float plugins).** NaN or infinity becomes 0, and the plugin is reset before its next
-  block. Anything beyond ±4 is held at ±4. Then the block goes back to 16 bits, held at full
+  block. Anything beyond ±4 is held at ±4 (±11 for a bus, section 3.5). Then the block goes back to 16 bits, held at full
   scale. A 16-bit plugin's output can't be either.
 - **The ducking gain** is held within 0 to 4; NaN becomes 1, and the plugin is reset.
 - **The meter's value** is held within 0 to 1; one that isn't a number reads as 1.
@@ -567,10 +621,20 @@ it. Their time still comes out of the same block.
 
 ### 9.5 Storage
 
-Each slot's file name (up to 47 characters) and own knobs' values, and the dynamics slot's
-Ducks list, are in the project's `mods.bin`, record 4, version 2. Version 1, from builds with
-the effects inside the firmware, is read and its choices mapped to the pack's files; so is
-1.2.0's `masterfx.bin`. CE's knobs stay in CE's own fields.
+Each slot's file name (up to 47 characters) and five own knobs' values, and the dynamics
+slot's Ducks or Tracks list, are in the project's `mods.bin`, record 4, version 3 (208 bytes).
+Version 2 (Master FX 2.0, two own knobs a slot) is read, its knobs as knobs 0 and 1. Version 1,
+from builds with the effects inside the firmware, is read and its choices mapped to the pack's
+files; so is 1.2.0's `masterfx.bin`. CE's knobs stay in CE's own fields.
+
+### 9.6 The default pack on the card
+
+At start the firmware goes through the pack it carries. A file missing from `/MasterFX/` is
+written. A file there that is byte for byte one an earlier release shipped (its size and FNV-1a
+hash, from the list in `masterfxPack.inc`), and isn't this release's, is replaced: the new file
+is written as `<name>.new` and read back, then the old one is removed and the new one renamed.
+If the read-back differs, the `.new` file is removed and the old file kept. A `.new` left by a
+power cut is removed at the next start. Any other file of that name is left alone.
 
 ---
 
@@ -615,12 +679,15 @@ whole block, at 600 MHz):
 | Reverse | reverb | 16-bit | 2,416 B | 752 B | 41,038 | 18.9 % | 2.4 % |
 | Tape | delay | 16-bit | 1,768 B | 100 B | 26,675 | 12.3 % | 1.5 % |
 | BBD | delay | 16-bit | 2,368 B | 224 B | 34,680 | 15.9 % | 2.0 % |
-| Glue | dynamics | float | 1,288 B | 52 B | 8,191 | 3.8 % | 0.5 % |
+| Glue | dynamics | float | 1,632 B | 48 B | 6,155 | 2.8 % | 0.4 % |
+| Compressor | dynamics | float | 1,288 B | 52 B | 8,191 | 3.8 % | 0.5 % |
 | Room (example) | reverb | float | 832 B | 132 B | 26,543 | 12.2 % | 1.5 % |
 | Ducker (example) | dynamics | float | 784 B | 40 B | 6,825 | 3.1 % | 0.4 % |
 
 The host adds about 6,900 instructions a block around a float plugin (10,600 for a dynamics
-plugin with a key), counted in the emulator, and a few dozen around a 16-bit one. The time
+plugin with a key), counted in the emulator, and a few dozen around a 16-bit one. A bus
+(section 3.5) adds about 500 more in CE's tracks mixer with one track, and about 1,000 for each
+further track that plays (estimated). The time
 guard doesn't count those.
 
 Instructions aren't cycles: the caches and SDRAM add to them on the unit, where the Profiler
@@ -670,8 +737,11 @@ of each kind (a write past the state, output that isn't a number, a gain left un
   `format()`, returns the meter's value, and fills the gain to duck chosen tracks.
 - **`pack/`:** the default pack. The reverbs and delays give the same output, bit for bit, as
   the effects that were inside the firmware before (`tools/masterfx/test_pack.py`), with
-  16-bit blocks. `glue.cpp` is a bus compressor with float blocks, Ratio and Makeup, a soft knee
-  and a linked stereo detector, and it can duck tracks.
+  16-bit blocks. `glue.cpp` is a bus compressor with float blocks, its own Attack, Release and
+  Threshold (`PTMFX_FLAG_OWN_DYNAMICS`), Ratio and Makeup, a soft knee and a linked stereo
+  detector, on the master or a bus of chosen tracks (`PTMFX_FLAG_BUS`). `compressor.cpp` (Master
+  FX 2.0's Glue) is a compressor with CE's Attack, Release and Threshold, Ratio and Makeup, and it
+  can duck tracks.
 
 ---
 
@@ -686,7 +756,7 @@ job is the same and differs where it isn't.
 | :--- | :--- | :--- | :--- | :--- |
 | What it is | a synth engine | an offline sample-editor effect | a real-time effect on a synth part | a master reverb, delay or dynamics effect |
 | Card folder | `/Synths/` | `/Effects/` | `/SynthFX/` | `/MasterFX/` |
-| Header | 128 bytes, magic and API version | 472 bytes, magic and version | 476 bytes, magic and version | 240 bytes, magic and version |
+| Header | 128 bytes, magic and API version | 472 bytes, magic and version | 476 bytes, magic and version | 336 bytes, magic and version |
 | Host table | `PsynHostApi` (versioned) | `PtfxHostApi` | `PtsfxHost` (versioned) | `PtmfxHost` (versioned) |
 | Code | relocated ELF (ABS32, MOVW/MOVT), `.data`/`.bss` and constructors allowed | position-independent | position-independent, no `.data`/`.bss` | position-independent, no `.data`/`.bss`, up to 8 KB |
 | Instances | one engine, voices as objects | one run on a buffer | one code copy, state per instance (up to 56) | one plugin a slot, three slots |

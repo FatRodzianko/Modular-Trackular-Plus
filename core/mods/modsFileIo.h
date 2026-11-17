@@ -26,6 +26,13 @@ class FileIo
     virtual bool write(const char* path, const uint8_t* data, size_t length) = 0;
     virtual void remove(const char* path) = 0;
     virtual void makeDir(const char* path) = 0;
+    // Renames a file; to must not exist. False if it can't (by default: not supported).
+    virtual bool rename(const char* from, const char* to)
+    {
+        (void)from;
+        (void)to;
+        return false;
+    }
 
     virtual bool exists(const char* path)
     {

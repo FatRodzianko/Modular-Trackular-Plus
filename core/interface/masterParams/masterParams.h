@@ -56,13 +56,21 @@ class cMasterParams : public ModuleBase
     void showMasterfxReverbWords();
     void showMasterfxDelayWords();
     void showMasterfxLimiterWords();
-    // A plugin's own knobs in columns 5 and 6 of its page; the places count it returns
+    // A plugin's own knobs in columns 5 and 6 of its page (an own-dynamics plugin's in 0 to 2 too);
+    // the places count it returns
     uint8_t showMasterfxOwnKnobs(uint8_t slot, uint8_t places);
     void showMasterfxOwnKnob(uint8_t slot, uint8_t knob);
+    bool showMasterfxLimiterColumn(uint8_t column); // shown if the column has an own knob
     // The time guard stopped a plugin: the page's words for it again
     void showMasterfxBypassed(uint8_t slot);
-    // The Limiter page's column 4: CE's Sidechain list, or the Ducks list (Shift + its button)
+    // The Limiter page's Ducks list, for a ducking plugin, in column 4 after CE's Sidechain list in
+    // column 3 (the Gain Reduce meter then above Back), or a bus plugin's Tracks list in column 4
+    // (CE's Sidechain list's control); always up for either
     bool masterfxDucksShown();
+    uint8_t masterfxDucksColumn();     // 4, 0 if it isn't up
+    uint8_t masterfxSidechainColumn(); // CE's Sidechain list's: 4, 3 before the Ducks list, 0 if not up
+    uint8_t masterfxMeterColumn(); // the Gain Reduce meter's column: 3, or 7 above Back
+    void showMasterfxLimiterMeter();
     void showMasterfxDucks(bool show);
     void moveMasterfxDucks(int16_t by);
     void toggleMasterfxDuck(); // the item under the cursor

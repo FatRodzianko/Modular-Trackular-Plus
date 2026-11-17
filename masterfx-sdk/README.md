@@ -28,7 +28,8 @@ masterfx-sdk/
 │   ├── room.c           # A small float reverb, both of the reverb slot's memory areas
 │   └── ducker.c         # A sidechain ducker for the dynamics slot; can duck chosen tracks
 └── pack/                # The default pack: Freeverb, Plate, Spring, Shimmer, "Gated",
-                         # Reverse, Tape, BBD and Glue (pack.cpp builds the reverbs and delays)
+                         # Reverse, Tape, BBD, Glue and Compressor (pack.cpp builds the
+                         # reverbs and delays)
 ```
 
 The tools that go with it are in `tools/masterfx/`: `check_ptmfx.py` (runs a plugin in the

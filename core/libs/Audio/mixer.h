@@ -29,6 +29,7 @@
 
 #include "AudioStream.h"
 #include "dspApplyGain.h"
+#include "modsBuild.h" // MT:
 #include "util_math.h"
 
 #ifdef AUDIO_NULL_IS_SILENCE
@@ -96,6 +97,10 @@ class AudioMixer : public AUDIO_MIXER_PARENT
 #endif
 
   private:
+#if MT_HAS_MASTERFX // MT: masterfx's bus plugin, in the tracks mixer (a template, so only it is built)
+    template<int N = mixerSize>
+    void modsBusUpdate();
+#endif
     SaturationType saturationType;
     int32_t multiplier[mixerSize];
     int32_t previousMultiplier[mixerSize];

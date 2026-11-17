@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Modular-Trackular Plus: Master FX plugins (.ptmfx). SPDX-License-Identifier: MIT
-"""Builds a Master FX plugin (.ptmfx) from C or C++ sources: the 240-byte header (ptmfx.h),
+"""Builds a Master FX plugin (.ptmfx) from C or C++ sources: the 336-byte header (ptmfx.h, format version 2),
 then the plugin's code, which the firmware copies into its slot's code area and calls in the
 audio interrupt.
 
@@ -36,17 +36,17 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 
 MAGIC = 0x464D5450
-VERSION = 1
-HEADER_SIZE = 240
+VERSION = 2
+HEADER_SIZE = 336
 PARAM_SIZE = 32
-MAX_PARAMS = 2
+MAX_PARAMS = 5
 MAX_LABELS = 6
 LABEL_SIZE = 12
 NO_ENTRY = 0xFFFFFFFF
 MAX_CODE = 8 * 1024            # a slot's code area
 SLOTS = {1: ("reverb", 1024, 4), 2: ("delay", 512, 6), 3: ("dynamics", 512, 3)}  # name, most state, CE labels
-FLAG_FLOAT, FLAG_DUCK = 0x0001, 0x0002
-FLAGS_KNOWN = FLAG_FLOAT | FLAG_DUCK
+FLAG_FLOAT, FLAG_DUCK, FLAG_OWN_DYNAMICS, FLAG_BUS = 0x0001, 0x0002, 0x0004, 0x0008
+FLAGS_KNOWN = FLAG_FLOAT | FLAG_DUCK | FLAG_OWN_DYNAMICS | FLAG_BUS
 DYNAMICS = 3
 ENTRIES = ("ptmfx_init", "ptmfx_set_param", "ptmfx_process", "ptmfx_reset")
 OPTIONAL = ("ptmfx_format",)
@@ -137,6 +137,10 @@ def check_header(h: bytearray) -> list[str]:
         errs.append(f"unknown flags {flags:#x}")
     elif flags & FLAG_DUCK and (slot != DYNAMICS or not flags & FLAG_FLOAT):
         errs.append("PTMFX_FLAG_DUCK needs a dynamics plugin with PTMFX_FLAG_FLOAT")
+    elif flags & FLAG_BUS and (slot != DYNAMICS or not flags & FLAG_FLOAT or flags & FLAG_DUCK):
+        errs.append("PTMFX_FLAG_BUS needs a dynamics plugin with PTMFX_FLAG_FLOAT, and not PTMFX_FLAG_DUCK")
+    elif flags & FLAG_OWN_DYNAMICS and (slot != DYNAMICS or nparams < 3):
+        errs.append("PTMFX_FLAG_OWN_DYNAMICS needs a dynamics plugin with 3 own knobs or more")
     if slot not in SLOTS:
         errs.append(f"slot {slot}: PTMFX_SLOT_REVERB, PTMFX_SLOT_DELAY or PTMFX_SLOT_DYNAMICS")
         return errs
@@ -155,6 +159,8 @@ def check_header(h: bytearray) -> list[str]:
             errs.append(f"label {i}: the {slot_name} page has {labels} of CE's knobs")
     if nparams > MAX_PARAMS:
         errs.append(f"{nparams} knobs: {MAX_PARAMS} at most")
+    elif nparams > 2 and not flags & FLAG_OWN_DYNAMICS:
+        errs.append(f"{nparams} knobs: 2 at most without PTMFX_FLAG_OWN_DYNAMICS")
     if not 0 < state_size <= most_state:
         errs.append(f"state_size {state_size}: 1 to {most_state} bytes for a {slot_name} plugin")
     for i in range(min(nparams, MAX_PARAMS)):

@@ -80,6 +80,29 @@ inline bool ducking(uint8_t destination)
 // A ducked track's block (one side), after its amplifier's own gain
 void duckBlock(int16_t* data);
 
+// ---- a bus plugin on chosen tracks ------------------------------------------------------
+// With a PTMFX_FLAG_BUS plugin in the dynamics slot and a set of tracks, the plugin works on the
+// sum of those tracks (the bus) in place of the master. It runs in CE's tracks mixer, where the
+// tracks' and synth parts' blocks are summed (its inputs 0 to 10 are the destinations): the left
+// mixer object takes both objects' blocks, sums the chosen inputs into the bus and the others into
+// the mix, the plugin works on the bus, and the mix + the plugin's bus goes through CE's
+// saturation as CE's sum would. So it is exact whatever the project's saturation. Sends and the
+// other tracks are untouched. The limiter passes the master through and shows the plugin's gain.
+// The bus is summed straight into the plugins' float scratch (no memory of its own), the mix on
+// the mixer's stack, a side at a time, as CE's mixer sums.
+constexpr uint8_t kBusInputs = kDuckDestinations; // CE's tracks mixer: 8 tracks, 3 synth parts
+extern uint16_t busMask;    // main loop: bit d is destination d in the bus; 0: the plugin on the master
+extern uint8_t busLive;     // the interrupt's: the limiter saw the bus last pass, so the mixer runs it
+extern void* busMixers[2];  // CE's tracks mixer objects, left and right (set at the plugins' start)
+// The bus, left then right, 128 floats each at 1.0 for full scale: the plugins' float scratch
+// (set at the plugins' start). The mixer writes it whole before busRun.
+extern float* busFloats;
+
+// The tracks mixer's left object, with busLive: the bus in busFloats through the plugin, in place
+// (left as it is if the plugin didn't run, held within +-11.0 if it did). The mixer then adds it
+// to the mix.
+void busRun();
+
 // One block of the stereo send, in place, through the reverb slot's plugin. The buffers are
 // its memory (given at start); a bypassed plugin returns silence.
 void reverbProcess(const ReverbKnobs& knobs,
@@ -98,8 +121,8 @@ bool delayProcess(const DelayKnobs& knobs,
                   int16_t* outRight);
 
 // One block of the stereo master, in place, through the dynamics slot's plugin, keyed by the
-// sidechain's blocks (null: no key). The gain for CE's meter (1.0 when it didn't run: then the
-// master passes through).
+// sidechain's blocks (null: no key). With a bus (above) the master passes through and the gain
+// is the bus's. The gain for CE's meter (1.0 when it didn't run: then the master passes through).
 float dynamicsProcess(const DynamicsKnobs& knobs,
                       int16_t* left,
                       int16_t* right,

@@ -95,14 +95,20 @@ if "_ZN4mods8tracklen12_GLOBAL__N_15tableE" in r.syms or any("tracklen" in n and
     out["track_length_patterns"] = len(lengths)
 
 # Master FX: what the Master page shows (masterfx.cpp's getters)
-if any("masterfx" in n and "choiceName" in n for n in r.syms):
+if any("masterfx" in n and "choiceNames" in n for n in r.syms):
     page = {}
+    column = [n for n in r.syms if "masterfx" in n and "choiceColumnName" in n]
     for slot, word in ((0, "Reverb"), (1, "Delay"), (2, "Limiter")):
-        name = cstr(m.call(sym("4mods8masterfx10choiceNameEh"), slot))
+        # the list's line the project picked, as the Master page's list reads it (choiceName itself
+        # may be inlined away)
+        names = m.call(sym("4mods8masterfx11choiceNamesEh"), slot)
+        name = cstr(m.r32(names + 4 * m.call(sym("4mods8masterfx6choiceEh"), slot)))
         w = m.alloc(16, 4)
         m.write(w, word.encode() + b"\0")
         title = cstr(m.call(sym("4mods8masterfx9pageTitleEhPKc"), slot, w))
         page[word] = {"choice": name, "title": title}
+        if column:
+            page[word]["column"] = cstr(m.call(r.syms[column[0]].addr, slot))
     out["master_page"] = page
     st = m.addr("_ZN4mods8masterfx8settingsE")
     out["limiter_own_knobs"] = list(struct.unpack("<2f", m.read(st + 56 * 2 + 48, 8)))

@@ -67,6 +67,9 @@ static void functSelectLimiterAttack();
 static void functSelectLimiterRelease();
 static void functSelectLimiterThreshold();
 static void functSelectLimiterSidechain();
+#if MT_HAS_MASTERFX // MT:
+static void functSelectLimiterSidechain3();
+#endif
 static void functLimiterCancel();
 // equalizer
 static void functSelectEqualizerBand(uint8_t n, uint8_t state);
@@ -565,14 +568,29 @@ static void functEncoder(int16_t value)
     }
     else if (MP->isLimiterScreen)
     {
+#if MT_HAS_MASTERFX // MT: a column with the plugin's own knob (an own-dynamics plugin's 0 to 2 too)
+        if (mods::masterfx::ownKnobAt(mods::masterfx::kDynamics, MP->selectedPlaceLimiter) >= 0)
+        {
+            changeMasterfxKnob(mods::masterfx::kDynamics, MP->selectedPlaceLimiter, value);
+        }
+        else
+#endif
         switch (MP->selectedPlaceLimiter)
         {
             case 0: changeLimiterAttack(value); break;
             case 1: changeLimiterRelease(value); break;
             case 2: changeLimiterTreshold(value); break;
+#if MT_HAS_MASTERFX // MT: a ducking plugin's Sidechain list in column 3
+            case 3:
+                if (MP->masterfxSidechainColumn() == 3)
+                {
+                    changeLimiterSidechain(interfaceGlobals.invertValForList ? -value : value);
+                }
+                break;
+#endif
             case 4:
-#if MT_HAS_MASTERFX // MT:
-                if (MP->masterfxDucksShown())
+#if MT_HAS_MASTERFX // MT: the Tracks list in column 4
+                if (MP->masterfxDucksColumn() == 4)
                 {
                     MP->moveMasterfxDucks(interfaceGlobals.invertValForList ? -value : value);
                     break;
@@ -640,6 +658,11 @@ static void functLeft()
     }
     else if (MP->isLimiterScreen)
     {
+#if MT_HAS_MASTERFX // MT: column 3 is a place with the Sidechain list in it
+        if (MP->selectedPlaceLimiter == 4 && MP->masterfxSidechainColumn() == 3)
+            MP->selectedPlaceLimiter = 3;
+        else
+#endif
         if (MP->selectedPlaceLimiter == 4)
             MP->selectedPlaceLimiter = 2;
         else if (MP->selectedPlaceLimiter > 0)
@@ -712,6 +735,11 @@ static void functRight()
     }
     else if (MP->isLimiterScreen)
     {
+#if MT_HAS_MASTERFX // MT: column 3 is a place with the Sidechain list in it
+        if (MP->selectedPlaceLimiter == 2 && MP->masterfxSidechainColumn() == 3)
+            MP->selectedPlaceLimiter = 3;
+        else
+#endif
         if (MP->selectedPlaceLimiter == 2)
             MP->selectedPlaceLimiter = 4;
         else if (MP->selectedPlaceLimiter < MP->frameData.placesCount - 1)
@@ -836,14 +864,29 @@ static void functUp()
     }
     else if (MP->isLimiterScreen)
     {
+#if MT_HAS_MASTERFX // MT: a column with the plugin's own knob (an own-dynamics plugin's 0 to 2 too)
+        if (mods::masterfx::ownKnobAt(mods::masterfx::kDynamics, MP->selectedPlaceLimiter) >= 0)
+        {
+            changeMasterfxKnob(mods::masterfx::kDynamics, MP->selectedPlaceLimiter, 1);
+        }
+        else
+#endif
         switch (MP->selectedPlaceLimiter)
         {
             case 0: changeLimiterAttack(1); break;
             case 1: changeLimiterRelease(1); break;
             case 2: changeLimiterTreshold(1); break;
+#if MT_HAS_MASTERFX // MT: a ducking plugin's Sidechain list in column 3
+            case 3:
+                if (MP->masterfxSidechainColumn() == 3)
+                {
+                    changeLimiterSidechain(-1);
+                }
+                break;
+#endif
             case 4:
-#if MT_HAS_MASTERFX // MT:
-                if (MP->masterfxDucksShown())
+#if MT_HAS_MASTERFX // MT: the Tracks list in column 4
+                if (MP->masterfxDucksColumn() == 4)
                 {
                     MP->moveMasterfxDucks(-1);
                     break;
@@ -962,14 +1005,29 @@ static void functDown()
     }
     else if (MP->isLimiterScreen)
     {
+#if MT_HAS_MASTERFX // MT: a column with the plugin's own knob (an own-dynamics plugin's 0 to 2 too)
+        if (mods::masterfx::ownKnobAt(mods::masterfx::kDynamics, MP->selectedPlaceLimiter) >= 0)
+        {
+            changeMasterfxKnob(mods::masterfx::kDynamics, MP->selectedPlaceLimiter, -1);
+        }
+        else
+#endif
         switch (MP->selectedPlaceLimiter)
         {
             case 0: changeLimiterAttack(-1); break;
             case 1: changeLimiterRelease(-1); break;
             case 2: changeLimiterTreshold(-1); break;
+#if MT_HAS_MASTERFX // MT: a ducking plugin's Sidechain list in column 3
+            case 3:
+                if (MP->masterfxSidechainColumn() == 3)
+                {
+                    changeLimiterSidechain(1);
+                }
+                break;
+#endif
             case 4:
-#if MT_HAS_MASTERFX // MT:
-                if (MP->masterfxDucksShown())
+#if MT_HAS_MASTERFX // MT: the Tracks list in column 4
+                if (MP->masterfxDucksColumn() == 4)
                 {
                     MP->moveMasterfxDucks(1);
                     break;
@@ -1089,14 +1147,29 @@ static void functDelete()
     }
     else if (MP->isLimiterScreen)
     {
+#if MT_HAS_MASTERFX // MT: a column with the plugin's own knob (an own-dynamics plugin's 0 to 2 too)
+        if (mods::masterfx::ownKnobAt(mods::masterfx::kDynamics, MP->selectedPlaceLimiter) >= 0)
+        {
+            setDefaultMasterfxKnob(mods::masterfx::kDynamics, MP->selectedPlaceLimiter);
+        }
+        else
+#endif
         switch (MP->selectedPlaceLimiter)
         {
             case 0: setDefaultLimiterAttack(); break;
             case 1: setDefaultLimiterRelease(); break;
             case 2: setDefaultLimiterTreshold(); break;
+#if MT_HAS_MASTERFX // MT: a ducking plugin's Sidechain list in column 3
+            case 3:
+                if (MP->masterfxSidechainColumn() == 3)
+                {
+                    setDefaultLimiterSidechain();
+                }
+                break;
+#endif
             case 4:
-#if MT_HAS_MASTERFX // MT: the Ducks list back to the master
-                if (MP->masterfxDucksShown())
+#if MT_HAS_MASTERFX // MT: the Tracks list back to the master
+                if (MP->masterfxDucksColumn() == 4)
                 {
                     MP->clearMasterfxDucks();
                     break;
@@ -1434,9 +1507,10 @@ void cMasterParams::switchToLimiterScreen()
     ip->setButtonObj(interfaceButton2, buttonPress, functSelectLimiterThreshold);
     ip->setButtonObj(interfaceButton4, buttonPress, functSelectLimiterSidechain);
     ip->setButtonObj(interfaceButton7, buttonPress, functLimiterCancel);
-#if MT_HAS_MASTERFX // MT: the plugin's own knobs
+#if MT_HAS_MASTERFX // MT: the plugin's own knobs, and a ducking plugin's Ducks list
     ip->setButtonObj(interfaceButton5, functSelectMasterfxKnob);
     ip->setButtonObj(interfaceButton6, functSelectMasterfxKnob);
+    ip->setButtonObj(interfaceButton3, buttonPress, functSelectLimiterSidechain3);
 #endif
 
     keyboardManager.deactivateKeyboard();
@@ -1625,16 +1699,9 @@ static void functSelectLimiterThreshold()
 
 static void functSelectLimiterSidechain()
 {
-#if MT_HAS_MASTERFX // MT: Shift switches the column between Sidechain and Ducks; in Ducks a press
-                    // on the column marks the item under the cursor
-    if (MP->buttons->isButtonPressed(interfaceButtonShift) && mods::masterfx::canDuck())
-    {
-        MP->showMasterfxDucks(!MP->masterfxDucksShown());
-        MP->selectedPlaceLimiter = 4;
-        MP->refreshLimiterFrame();
-        return;
-    }
-    if (MP->masterfxDucksShown())
+#if MT_HAS_MASTERFX // MT: the Ducks or Tracks list in the column: a press on it marks the item under
+                    // the cursor
+    if (MP->masterfxDucksColumn() == 4)
     {
         if (MP->selectedPlaceLimiter == 4)
         {
@@ -1660,6 +1727,29 @@ static void functSelectLimiterSidechain()
     MP->selectedPlaceLimiter = 4;
     MP->refreshLimiterFrame();
 }
+
+#if MT_HAS_MASTERFX // MT: a ducking plugin's Sidechain list in column 3: CE's button 4, in its place
+static void functSelectLimiterSidechain3()
+{
+    if (MP->masterfxSidechainColumn() != 3)
+    {
+        return;
+    }
+    if (MP->selectedPlaceLimiter == 3)
+    {
+        mtProject.values.limiterSidechain++;
+        if (mtProject.values.limiterSidechain > LIMITER_SIDECHAIN_MAX)
+            mtProject.values.limiterSidechain = LIMITER_SIDECHAIN_MIN;
+
+        engine.setLimiterSidechain(mtProject.values.limiterSidechain);
+        newFileManager.setProjectStructChanged();
+        MP->showLimiterSidechain();
+        return;
+    }
+    MP->selectedPlaceLimiter = 3;
+    MP->refreshLimiterFrame();
+}
+#endif
 
 static void functLimiterCancel()
 {
@@ -2503,11 +2593,12 @@ static void changeMasterfxDynamics(int16_t value)
 
 static void changeMasterfxKnob(uint8_t slot, uint8_t place, int16_t value)
 {
-    const uint8_t knob = place - 5;
-    if (knob >= mods::masterfx::ownKnobs(slot))
+    const int at = mods::masterfx::ownKnobAt(slot, place);
+    if (at < 0)
     {
         return;
     }
+    const uint8_t knob = static_cast<uint8_t>(at);
     mods::masterfx::stepOwnKnob(slot, knob, value);
     mods::masterfxKnobEdited();
     MP->showMasterfxOwnKnob(slot, knob);
@@ -2515,11 +2606,12 @@ static void changeMasterfxKnob(uint8_t slot, uint8_t place, int16_t value)
 
 static void setDefaultMasterfxKnob(uint8_t slot, uint8_t place)
 {
-    const uint8_t knob = place - 5;
-    if (knob >= mods::masterfx::ownKnobs(slot))
+    const int at = mods::masterfx::ownKnobAt(slot, place);
+    if (at < 0)
     {
         return;
     }
+    const uint8_t knob = static_cast<uint8_t>(at);
     mods::masterfx::defaultOwnKnob(slot, knob);
     mods::masterfxKnobEdited();
     MP->showMasterfxOwnKnob(slot, knob);
@@ -2529,7 +2621,7 @@ static void functSelectMasterfxKnob(uint8_t n, uint8_t state)
 {
     const uint8_t slot = MP->isLimiterScreen ? mods::masterfx::kDynamics : mods::masterfx::kReverb;
     const uint8_t place = n; // the button under column 5 or 6
-    if (state != buttonPress || place < 5 || place - 5 >= mods::masterfx::ownKnobs(slot))
+    if (state != buttonPress || place < 5 || mods::masterfx::ownKnobAt(slot, place) < 0)
     {
         return;
     }

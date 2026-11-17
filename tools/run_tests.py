@@ -146,7 +146,7 @@ def jobs_for(args, projects):
         Job("masterfx objects", e / "test_masterfx.py", mods, ref, *([args.rig] if args.rig else []),
             inputs=both + ((args.rig,) if args.rig else ())),
     ]
-    for section in ("ui", "graph", "dynamics", "ducks", "stress", "debounce", "project"):
+    for section in ("ui", "graph", "dynamics", "ducks", "bus", "stress", "debounce", "project"):
         jobs.append(Job(f"masterfx {section}", e / "test_masterfx_rig.py", mods, ref, section, inputs=both))
     if args.tier == "quick":
         return jobs

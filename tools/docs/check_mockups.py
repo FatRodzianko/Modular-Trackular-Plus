@@ -35,6 +35,8 @@ def literals() -> set[str]:
                 continue
             for s in LITERAL.findall(path.read_text(encoding="utf-8", errors="replace")):
                 found.add(s.replace('\\"', '"'))
+                # a literal with a 0 in it holds a string after each 0 too (a plugin's short name)
+                found.update(part.replace('\\"', '"') for part in s.split("\\0")[1:] if part)
     return found
 
 

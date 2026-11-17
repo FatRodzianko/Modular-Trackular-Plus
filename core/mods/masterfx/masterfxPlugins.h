@@ -5,7 +5,10 @@
 // and run in the audio interrupt in place of CE's effect.
 //
 // The catalog: at start, the default pack (masterfxPack.inc) is written to /MasterFX/ for each
-// of its files that is missing, then every .ptmfx there is listed and its header checked.
+// of its files that is missing, or that is exactly a file an earlier release shipped (kShipped:
+// written as <file>.new, read back, then the old one removed and the new one renamed; a .new left
+// by a stop part way is removed at the next start, and the file written again). Any other file is
+// left as it is. Then every .ptmfx there is listed and its header checked.
 //
 // One plugin a slot. Each slot owns fixed memory, given by the platform in Env: a code area
 // (ITCM on the unit) the plugin's code is copied into, its state (DTCM), and the slot's buffers
@@ -76,6 +79,8 @@ constexpr uint32_t kLabels[kSlots] = { 4, 6, 3 };  // CE's knobs on each slot's 
 
 constexpr uint32_t kOverBlocks = 8;
 constexpr float kOutputLimit = 4.0f;
+// A bus plugin's: the most CE's tracks mixer can sum (its 11 inputs at full scale)
+constexpr float kBusLimit = 11.0f;
 constexpr uint32_t kSettleMs = 5000;
 constexpr uint32_t kScratchFloats = 4 * PTMFX_BLOCK; // float plugins' blocks: L, R and two inputs
 constexpr float kMaxDuckGain = 4.0f;                  // a ducking gain is held within 0 to this (+12 dB)
@@ -117,7 +122,7 @@ struct Env
 struct CatalogEntry
 {
     char file[kFileNameSize];     // in kDir
-    char name[32];                // the header's, shown in the list
+    char name[32];                // the header's, shown in the list; then its short name, if any
     uint32_t size;                // the file's
     uint16_t flags;
     uint8_t slot;                 // PTMFX_SLOT_*, 0 if unreadable
@@ -127,7 +132,9 @@ struct CatalogEntry
 
 // Is this a plugin the host can run in a slot: its header and the file's size. why: a short
 // reason.
+// Format version 1 (240-byte header, 2 knobs) and version 2 (ptmfx.h) both load.
 bool checkHeader(const PtmfxHeader& header, uint32_t fileSize, const char** why);
+uint32_t headerSize(const PtmfxHeader& header);   // where the code starts
 
 // The start: the marker, the pack, the list. Again later: only the list.
 void start(FileIo& io, const Env& env);
@@ -186,6 +193,10 @@ int takeBypassed();
 bool bypassed(Slot slot);
 // The slot's plugin can duck chosen tracks (PTMFX_FLAG_DUCK)
 bool ducks(Slot slot);
+// Its own knobs 0 to 2 are the Limiter page's Attack, Release and Threshold (PTMFX_FLAG_OWN_DYNAMICS)
+bool ownDynamics(Slot slot);
+// It works on the tracks the Limiter page's Tracks list picks (PTMFX_FLAG_BUS)
+bool bus(Slot slot);
 
 // Audio interrupt. One block through the slot's plugin. block has the 16-bit pointers and the
 // knobs; the host fills the float ones for a float plugin. gain: the plugin's meter value.
@@ -196,6 +207,10 @@ enum class Ran : uint8_t
     bypassed,     // stopped by the time guard: the hook plays silence (reverb, delay) or the dry master
 };
 Ran process(Slot slot, PtmfxBlock& block, float* gain);
+// The same for a bus plugin (PTMFX_FLAG_BUS, so float) on a bus of tracks: the caller has put the
+// bus in Env::scratch (left, then right; summed, so it can be past 1.0), the plugin works on it
+// there, and its result is held within kBusLimit. Bypassed or not installed: the bus is kept.
+Ran processBus(Slot slot, PtmfxBlock& block, float* gain);
 
 // The firmware's copy of the default pack (masterfxPack.cpp)
 struct PackFile
@@ -206,6 +221,20 @@ struct PackFile
 };
 size_t packCount();
 const PackFile& packAt(size_t index);
+// A pack file a release shipped (its size and FNV-1a): one on the card that is exactly that is
+// replaced by the pack's file of that name.
+struct ShippedFile
+{
+    const char* name;
+    uint32_t size;
+    uint32_t hash;
+};
+size_t shippedCount();
+const ShippedFile& shippedAt(size_t index);
+uint32_t fileHash(const uint8_t* data, uint32_t size); // FNV-1a
+#ifdef MT_HOST_TEST
+void shippedForTests(const ShippedFile* list, size_t count); // in place of kShipped; null: kShipped
+#endif
 
 // Host tests and the emulator rig: forgets everything, as at power-up.
 void forget();

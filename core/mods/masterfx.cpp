@@ -47,10 +47,16 @@ using pluginkit::sameText;
 
 static_assert(kReverb == pl::kReverb && kDelay == pl::kDelay && kDynamics == pl::kDynamics && kSlots == pl::kSlots);
 static_assert(kFileSize == pl::kFileNameSize && kOwnKnobs == PTMFX_MAX_PARAMS);
-static_assert(sizeof(Settings) == 172, "the record's size");
+static_assert(sizeof(Settings) == 208, "the record's size");
 
 constexpr size_t kV1Size = 2;
-constexpr size_t kV2SlotsOnly = 168; // version 2 before the ducks were added (never released)
+// Version 2 (masterfx-2.0): two own knobs a slot. 168 bytes: before the ducks were added (never
+// released).
+constexpr size_t kV2OwnKnobs = 2;
+constexpr size_t kV2Slot = kFileSize + kV2OwnKnobs * sizeof(float);
+constexpr size_t kV2Size = kSlots * kV2Slot + 4;
+constexpr size_t kV2SlotsOnly = kSlots * kV2Slot;
+static_assert(kV2Size == 172 && kV2SlotsOnly == 168);
 
 // masterfx.bin from the 1.2.0 patch: magic, reverb, delay, two zero bytes, a checksum over
 // those four. Delay 3 was "Gated" before it moved to the reverbs: that plays the stock delay
@@ -98,6 +104,22 @@ Settings fromV1(uint8_t reverb, uint8_t delay)
     return s;
 }
 
+// Version 2's record: each slot's file and two knobs, then the ducks. The other knobs unset.
+Settings fromV2(const uint8_t* data, size_t length)
+{
+    Settings s = allStock();
+    for (size_t i = 0; i < kSlots; i++)
+    {
+        memcpy(s.slot[i].file, data + i * kV2Slot, kFileSize);
+        memcpy(s.slot[i].knob, data + i * kV2Slot + kFileSize, kV2OwnKnobs * sizeof(float));
+    }
+    if (length == kV2Size)
+    {
+        memcpy(&s.ducks, data + kSlots * kV2Slot, sizeof(s.ducks));
+    }
+    return s;
+}
+
 // The record as settings, Stock for a slot whose name isn't ended
 Settings fromRecord(const Store& store)
 {
@@ -112,12 +134,19 @@ Settings fromRecord(const Store& store)
     {
         return fromV1(data[0], data[1]);
     }
-    if (length != sizeof(Settings) && length != kV2SlotsOnly)
-    {
-        return allStock();
-    }
     Settings s = allStock();
-    memcpy(&s, data, length);
+    if (length == kV2Size || length == kV2SlotsOnly)
+    {
+        s = fromV2(data, length);
+    }
+    else if (length == sizeof(Settings))
+    {
+        memcpy(&s, data, length);
+    }
+    else
+    {
+        return s;
+    }
     s.ducks &= kDuckAll;
     s.reserved[0] = 0;
     s.reserved[1] = 0;
@@ -285,6 +314,19 @@ const char* choiceName(uint8_t slot)
     return slot < kSlots ? names[slot][chosen[slot]] : "";
 }
 
+const char* choiceColumnName(uint8_t slot)
+{
+    build();
+    if (slot >= kSlots || chosen[slot] == 0 || names[slot][chosen[slot]] == kMissingLine)
+    {
+        return choiceName(slot); // Stock, Missing
+    }
+    // a catalog entry's name (32 bytes): its short name follows the name's 0, if it has one
+    const char* name = names[slot][chosen[slot]];
+    const size_t at = pluginkit::textLength(name, 32) + 1u;
+    return at < 32 && name[at] != 0 ? name + at : name;
+}
+
 bool missing(uint8_t slot)
 {
     build();
@@ -304,6 +346,10 @@ void choose(uint8_t slot, uint8_t index)
     }
     SlotSetting& s = settings.slot[slot];
     stock(s);
+    if (slot == kDynamics)
+    {
+        settings.ducks = 0; // another plugin's set: back to the master
+    }
     if (index > 0)
     {
         copyText(s.file, sizeof(s.file), pl::slotAt(static_cast<pl::Slot>(slot), index - 1u)->file);
@@ -334,8 +380,16 @@ const char* pageTitle(uint8_t slot, const char* word)
     }
     if (ours(slot))
     {
-        snprintf(titleText, sizeof(titleText), "%s: %s%s", word, choiceName(slot),
-                 bypassed(slot) ? " (bypassed)" : "");
+        // a dynamics plugin isn't the stock limiter: its page has its name alone
+        if (slot == kDynamics)
+        {
+            snprintf(titleText, sizeof(titleText), "%s%s", choiceName(slot), bypassed(slot) ? " (bypassed)" : "");
+        }
+        else
+        {
+            snprintf(titleText, sizeof(titleText), "%s: %s%s", word, choiceName(slot),
+                     bypassed(slot) ? " (bypassed)" : "");
+        }
         return titleText;
     }
     if (missing(slot))
@@ -363,7 +417,35 @@ uint8_t ownKnobs(uint8_t slot)
         return 0;
     }
     const uint32_t n = pl::knobs(static_cast<pl::Slot>(slot));
-    return static_cast<uint8_t>(n < kOwnKnobs ? n : kOwnKnobs);
+    const uint32_t most = ownDynamics(slot) ? kOwnKnobs : kPageKnobs;
+    return static_cast<uint8_t>(n < most ? n : most);
+}
+
+bool ownDynamics(uint8_t slot)
+{
+    return slot == kDynamics && ours(slot) && pl::ownDynamics(pl::kDynamics);
+}
+
+uint8_t ownKnobColumn(uint8_t slot, uint8_t knob)
+{
+    if (ownDynamics(slot))
+    {
+        return static_cast<uint8_t>(knob < 3 ? knob : knob + 2); // 0 to 2, then 5 and 6
+    }
+    return static_cast<uint8_t>(5 + knob);
+}
+
+int ownKnobAt(uint8_t slot, uint8_t column)
+{
+    const uint8_t n = ownKnobs(slot);
+    for (uint8_t k = 0; k < n; k++)
+    {
+        if (ownKnobColumn(slot, k) == column)
+        {
+            return k;
+        }
+    }
+    return -1;
 }
 
 const char* ownKnobLabel(uint8_t slot, uint8_t knob)
@@ -435,6 +517,15 @@ bool canDuck()
 {
 #if defined(MT_HOST_TEST) || defined(PLATFORM_IMX)
     return ours(kDynamics) && pl::ducks(pl::kDynamics);
+#else
+    return false;
+#endif
+}
+
+bool canBus()
+{
+#if defined(MT_HOST_TEST) || defined(PLATFORM_IMX)
+    return ours(kDynamics) && pl::bus(pl::kDynamics);
 #else
     return false;
 #endif
@@ -574,6 +665,8 @@ void stop(uint8_t slot)
     else
     {
         activeDynamics = kDynamicsDry;
+        duckMask = 0; // applyDucks sets them again for the plugin that plays next
+        busMask = 0;
     }
 }
 
@@ -616,6 +709,23 @@ void runCe(uint8_t slot)
     }
 }
 
+// The settings' own knobs on the slot's plugin: a saved value, else the plugin's default. A knob
+// already there isn't sent again (setKnob), so this is safe while the plugin plays.
+void applyKnobs(pl::Slot s, const SlotSetting& want)
+{
+    for (uint32_t k = 0; k < kOwnKnobs && k < pl::knobs(s); k++)
+    {
+        if (pluginkit::finite(want.knob[k]))
+        {
+            pl::setKnob(s, k, want.knob[k]); // held on the plugin's steps; settings keep the value
+        }
+        else
+        {
+            pl::resetKnob(s, k);
+        }
+    }
+}
+
 // The slot's plugin as settings and the switch say. Safe mode skips a plugin the user didn't
 // just pick.
 void applySlot(uint8_t slot, bool isOn)
@@ -627,6 +737,7 @@ void applySlot(uint8_t slot, bool isOn)
     const bool wantPlugin = isOn && want.file[0] != 0;
     if (wantPlugin && pl::installed(s) && sameText(pl::file(s), want.file))
     {
+        applyKnobs(s, want); // it plays on, with the last project's knobs until these are set
         return;
     }
     pl::Status status = pl::Status::missing;
@@ -646,23 +757,14 @@ void applySlot(uint8_t slot, bool isOn)
     }
     stop(slot);
     pl::install(s);
-    for (uint32_t k = 0; k < kOwnKnobs; k++)
-    {
-        if (k >= pl::knobs(s))
-        {
-            continue;
-        }
-        if (pluginkit::finite(want.knob[k]))
-        {
-            pl::setKnob(s, k, want.knob[k]); // held on the plugin's steps; settings keep the value
-        }
-    }
+    applyKnobs(s, want);
     runPlugin(slot);
 }
 
 void applyDucks()
 {
     duckMask = (canDuck() ? settings.ducks : 0u) & kDuckAll;
+    busMask = (canBus() ? settings.ducks : 0u) & kDuckAll;
 }
 
 } // namespace

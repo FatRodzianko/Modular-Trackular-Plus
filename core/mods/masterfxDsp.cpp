@@ -39,6 +39,10 @@ AudioEffectLimiter* limiters[2] = {};
 uint16_t duckMask = 0;
 uint8_t duckLive = 0;
 AudioMux* keyMuxes[2] = {};
+uint16_t busMask = 0;
+uint8_t busLive = 0;
+void* busMixers[2] = {};
+float* busFloats = nullptr;
 
 namespace
 {
@@ -86,6 +90,29 @@ MFX_ITCM void duckCompute(const int16_t* keyLeft, const int16_t* keyRight)
     }
     duckFresh = 1;
 }
+
+DynamicsKnobs busKnobs; // CE's knobs as the limiter last saw them (set before busLive)
+float busGain = 1.0f;   // the bus plugin's meter value, for the limiter
+
+} // namespace
+
+// The tracks mixer, with busLive: the plugin on the bus, in place
+MFX_ITCM void busRun()
+{
+    float gain = 1.0f;
+    if (activeDynamics == 1)
+    {
+        DynamicsKnobs k = busKnobs;
+        k.keyOn = 0; // the Tracks list is in the Sidechain's column: no key
+        PtmfxBlock b;
+        blockFor(b, nullptr, nullptr, nullptr, &k);
+        plugins::processBus(plugins::kDynamics, b, &gain); // else the bus as it is
+    }
+    busGain = gain;
+}
+
+namespace
+{
 
 inline void silence(int16_t* left, int16_t* right)
 {
@@ -142,8 +169,22 @@ MFX_ITCM float dynamicsProcess(const DynamicsKnobs& knobs,
         duckLive = 0;
         duckFresh = 0;
         duckPrevValid = 0;
+        busLive = 0;
         return gain; // the main loop is changing the slot: the master as it is
     }
+    if (busMask != 0)
+    {
+        // The tracks mixer ran the bus this pass (if busLive was set); the master passes through
+        duckLive = 0;
+        busKnobs = knobs;
+        if (!busLive)
+        {
+            busGain = 1.0f;
+            busLive = 1; // the mixer runs it from the next pass
+        }
+        return busGain;
+    }
+    busLive = 0;
     if (duckMask != 0 && keyLeft != nullptr && keyRight != nullptr)
     {
         // Ducking tracks: this block's gain from this block's key, if no track asked for it yet;

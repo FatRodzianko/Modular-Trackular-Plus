@@ -3,7 +3,8 @@
 // masterfx: plugins from the card (/MasterFX/*.ptmfx, masterfx/masterfxPlugins.h) in CE's own
 // reverb, delay and limiter slots, chosen per project. Sends, returns, the Reverb, Delay and
 // Limiter pages and CE's knobs stay CE's; a plugin may rename CE's knobs and add two of its
-// own.
+// own. A dynamics plugin may instead have five: its own Attack, Release and Threshold in place of
+// CE's, and two more (PTMFX_FLAG_OWN_DYNAMICS).
 //
 // Off, Stock chosen, or the chosen file missing: CE's own effect runs and nothing here does.
 // Off keeps the project's choice, so On brings it back.
@@ -29,7 +30,7 @@ namespace masterfx
 {
 
 constexpr uint8_t kRecord = static_cast<uint8_t>(Mod::masterfx) + 1;
-constexpr uint8_t kRecordVersion = 2;
+constexpr uint8_t kRecordVersion = 3;
 
 // The slots, as masterfx/masterfxPlugins.h numbers them
 constexpr uint8_t kReverb = 0;
@@ -38,7 +39,8 @@ constexpr uint8_t kDynamics = 2;
 constexpr size_t kSlots = 3;
 
 constexpr size_t kFileSize = 48;    // a plugin's file name with its 0
-constexpr size_t kOwnKnobs = 2;
+constexpr size_t kOwnKnobs = 5;      // a slot's own knobs kept in the record
+constexpr size_t kPageKnobs = 2;     // shown in columns 5 and 6 (all but an own-dynamics plugin's)
 
 // Version 1's choices (masterfx-1.x and 1.2.0's masterfx.bin): an index into each list, 0 is
 // Stock. Each maps to the default pack's file, made from the same DSP.
@@ -56,8 +58,8 @@ struct SlotSetting
     float knob[kOwnKnobs];
 };
 
-// What the dynamics slot ducks: bit d is destination d (0 to 7 the sample tracks, 8 to 10 the
-// synth parts); 0 is the master, as CE.
+// What the dynamics slot ducks, or for a bus plugin the tracks it works on: bit d is destination
+// d (0 to 7 the sample tracks, 8 to 10 the synth parts); 0 is the master, as CE.
 constexpr uint8_t kDuckTracks = 8;
 constexpr uint8_t kDuckSynths = 3;
 constexpr uint16_t kDuckAll = (1u << (kDuckTracks + kDuckSynths)) - 1u;
@@ -96,6 +98,7 @@ uint8_t choiceCount(uint8_t slot);
 const char* const* choiceNames(uint8_t slot);
 uint8_t choice(uint8_t slot);                // the project's, in that list
 const char* choiceName(uint8_t slot);
+const char* choiceColumnName(uint8_t slot); // the Master page's column: the plugin's short name, if it has one
 // The user's pick in the list: the file goes into settings (its own knobs at the plugin's
 // defaults). Doesn't apply it.
 void choose(uint8_t slot, uint8_t index);
@@ -111,8 +114,12 @@ bool bypassed(uint8_t slot);
 // A slot whose plugin the time guard has stopped since the last call, or -1.
 int takeBypassed();
 
-// The plugin's own knobs, in the page's columns 5 and 6. 0 when nothing of ours plays.
+// The plugin's own knobs: in the page's columns 5 and 6, or for an own-dynamics plugin 0 to 2
+// (its Attack, Release and Threshold, in place of CE's) and 5 and 6. 0 when nothing of ours plays.
 uint8_t ownKnobs(uint8_t slot);
+bool ownDynamics(uint8_t slot);                         // knobs 0 to 2 are in CE's columns 0 to 2
+uint8_t ownKnobColumn(uint8_t slot, uint8_t knob);      // the page's column for the knob
+int ownKnobAt(uint8_t slot, uint8_t column);            // the knob in a column, or -1
 const char* ownKnobLabel(uint8_t slot, uint8_t knob);
 void ownKnobText(uint8_t slot, uint8_t knob, char* out, size_t size);
 uint8_t ownKnobPercent(uint8_t slot, uint8_t knob);  // its step as 0 to 100, for the bar
@@ -132,6 +139,12 @@ bool ducked(uint8_t item);           // item 0: the master
 // the caller stores the record (mods::masterfxKnobEdited).
 void toggleDuck(uint8_t item);
 const char* ducksText();             // "Master", "Track 3", "Synth 1" or "3 tracks"
+
+// The Limiter page's Tracks list, column 4, while a bus plugin plays (PTMFX_FLAG_BUS, on the
+// Tracker+): the same set as the Ducks list (ducked, toggleDuck and ducksText), the tracks the
+// plugin compresses together. The master: all of it, as a plugin without the flag. Picking another
+// dynamics plugin sets it back to the master.
+bool canBus();
 
 // Main loop only. Makes the effects that play match settings and the switch. Does nothing until
 // started(). A plugin's own knobs are set from settings; one that settings leave unset plays at

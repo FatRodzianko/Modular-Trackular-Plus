@@ -1,8 +1,8 @@
 # Modular-Trackular mods. SPDX-License-Identifier: MIT
 """Master FX's cost against today's release, in instructions a block, on the emulated Cortex-M7: CE's
-own reverb, delay and limiter objects' update() and the panning amplifiers' (where ducking runs),
-each counted whole per block (the slot's hook, the runtime and the plugin inside it), on the sound
-rig's graph with a synth part playing 4 voices into both sends.
+own reverb, delay and limiter objects' update(), the panning amplifiers' (where ducking runs) and
+the tracks mixer's (where a bus runs), each counted whole per block (the slot's hook, the runtime and
+the plugin inside it), on the sound rig's graph with a synth part playing 4 voices into both sends.
 
     python tools/masterfx/compare_cost.py <plugin firmware .axf> <masterfx-1.x firmware .axf>
         [--reference <plain CE .axf>] [--blocks N]
@@ -11,16 +11,19 @@ The masterfx-1.x firmware is today's release, d9a6795 built with `make plus EDIT
 reverbs and delays are built in. Each choice runs on both firmwares where both have it; the dynamics
 slot's plugins only on the plugin firmware, against CE's limiter on today's. Code hooks cover only
 ITCM and flash, never the .psyn pool where the closed engines run (the rig's guard checks), and
-count nothing outside the four update functions.
+count nothing outside the five update functions.
 
 Stock is measured against the plain CE build of the same CE commit (--reference, MT_NO_MODS) when
 one is given: since CE's cc53303 its delay and limiter cost about 27 % less than on the CE that
 masterfx-1.x is built on, so Stock can no longer match today's release both ways.
 
 Limits: Stock on both the same to within 1 %; each pack reverb or delay within 2 % of the built-in
-effect it replaces, or PACK_SLACK more, whichever allows more; Glue's whole limiter update no more than 1.5 times CE's limiter's, without a key
-and with one; the amplifiers with nothing ducked no more than AMPLIFIER_SLACK over today's (all of
-them together, a block).
+effect it replaces, or PACK_SLACK more, whichever allows more; Compressor's whole limiter update no
+more than 1.5 times CE's limiter's, without a key and with one, and Glue's on the master the same;
+the amplifiers with nothing ducked no more than AMPLIFIER_SLACK over today's (all of them together, a
+block) and the tracks mixer no more than MIXER_SLACK; with Synth 1 in Glue's bus, the limiter and the
+tracks mixer together (the plugin runs in the mixer) no more than 1.5 times CE's limiter plus today's
+mixer, and BUS_SLACK more.
 Instructions aren't cycles: the unit's caches and SDRAM add to all of them, and the Profiler is the
 measure there.
 """
@@ -34,7 +37,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools" / "emu"))
 from masterfx_runtime import has_plugins  # noqa: E402
-from test_masterfx_rig import Graph, limiter_knobs, set_dynamics, set_mod  # noqa: E402
+from test_masterfx_rig import DUCKS_AT, SETTINGS, Graph, limiter_knobs, set_dynamics, set_mod  # noqa: E402
 from unicorn.arm_const import UC_ARM_REG_LR  # noqa: E402
 
 UPDATES = {
@@ -42,11 +45,20 @@ UPDATES = {
     "delay": "_ZN21AudioEffectShortDelay6updateEv",
     "limiter": "_ZN18AudioEffectLimiter6updateEv",
     "amplifiers": "_ZN14AudioAmplifier6updateEv",
+    "mixer": "_ZN10AudioMixerILi11EE6updateEv",     # CE's tracks mixer, left and right
 }
 OPEN_CODE = ((0x00000000, 0x0007FFFF), (0x60000000, 0x61FFFFFF))   # ITCM and flash
 HOT = 6000                          # CE's Threshold knob, under the notes' peak: the limiter works
 KEY = 1                             # CE's Sidechain list: sample track 1 (silent here, but a key)
 AMPLIFIER_SLACK = 500               # instructions a block: the ducking hook's test in every amplifier
+MIXER_SLACK = 100                   # the bus hook's test in the tracks mixer's two objects
+# the bus's own work in the tracks mixer, over CE's sum: clearing the bus and adding the plugin's bus
+# back (2 x 128 samples each), and a bus track copied then added as floats where a mix track is
+# added once. Measured 2026-11-15 with Synth 1 in it: the limiter and the mixer together 494 over
+# Glue on the master. Each further track that plays adds about 1,000 (its copy and float add on
+# both sides), an estimate from the loop; the graph plays one part.
+BUS_SLACK = 2000
+SYNTH_1 = 1 << 8                    # the Tracks list's Synth 1: the graph's synth part
 # instructions a block, 0.06 % of one: the pack's DSP is masterfx-1.x's source, built as a plugin
 # (inside a struct, its state through the Env's pointer). BBD measured 746 over today's (+2.1 %).
 PACK_SLACK = 1000
@@ -64,7 +76,7 @@ def check(ok: bool, what: str) -> None:
 
 
 class Counted(Graph):
-    """The graph with the four update functions counted, block by block"""
+    """The graph with the five update functions counted, block by block"""
 
     def __init__(self, axf):
         super().__init__(axf, 60, 60)
@@ -104,10 +116,13 @@ class Counted(Graph):
         return {k: self.counts[k] / blocks for k in UPDATES}
 
 
-def run(axf: Path, reverb=0, delay=0, dynamics=None, threshold=32767, key=0, blocks=40, plain=False) -> dict[str, float]:
+def run(axf: Path, reverb=0, delay=0, dynamics=None, threshold=32767, key=0, blocks=40, plain=False,
+        tracks=0) -> dict[str, float]:
     g = Counted(axf)
     if not plain:                   # plain CE has no mod settings: its Stock is all it has
         set_mod(g, True, reverb, delay)
+    if tracks:
+        g.m.write(g.m.addr(SETTINGS) + DUCKS_AT, tracks.to_bytes(2, "little"))   # the Tracks list
     if dynamics is not None:
         set_dynamics(g, dynamics)
     limiter_knobs(g, threshold, key)
@@ -148,9 +163,14 @@ def main() -> int:
         if slot == "amplifiers":    # the ducking hook's test, with nothing ducked: a few hundred
             row("Stock", stock_mine, stock_today, slot, 1.0, AMPLIFIER_SLACK)
             continue
+        if slot == "mixer":         # the bus hook's test
+            row("Stock", stock_mine, stock_today, slot, 1.0, MIXER_SLACK)
+            continue
         row("Stock", stock_mine, stock_today, slot, 1.01)
         check(stock_today[slot] / max(stock_mine[slot], 1) <= 1.01, f"Stock: {slot} no cheaper than {base} either")
-    check(min(stock_mine.values()) > 1000, "each update runs (the counts aren't empty)")
+    # Since CE's 7482cc8 the tracks mixer sums only the blocks that come (about 750 instructions
+    # here), so each update over 500, not 1,000
+    check(min(stock_mine.values()) > 500, f"each update runs (the counts aren't empty: {min(stock_mine.values()):,.0f} at least)")
 
     print("-- the reverbs and delays --", flush=True)
     for i, name in REVERBS.items():
@@ -162,10 +182,24 @@ def main() -> int:
     for key, label in ((0, "no key"), (KEY, "a key")):
         today = run(a.today, threshold=HOT, key=key, blocks=n)
         mine_stock = run(a.plugins, dynamics="", threshold=HOT, key=key, blocks=n)
-        glue = run(a.plugins, dynamics="Glue.ptmfx", threshold=HOT, key=key, blocks=n)
+        compressor = run(a.plugins, dynamics="Compressor.ptmfx", threshold=HOT, key=key, blocks=n)
         row(f"Stock limiter, {label}", mine_stock, stock(threshold=HOT, key=key, blocks=n), "limiter", 1.01)
-        row(f"Glue, {label}", glue, today, "limiter", 1.5)
-        row(f"Glue, {label}", glue, today, "amplifiers", 1.0, AMPLIFIER_SLACK)
+        row(f"Compressor, {label}", compressor, today, "limiter", 1.5)
+        row(f"Compressor, {label}", compressor, today, "amplifiers", 1.0, AMPLIFIER_SLACK)
+    today = run(a.today, threshold=HOT, blocks=n)
+    glue = run(a.plugins, dynamics="Glue.ptmfx", threshold=HOT, blocks=n)
+    row("Glue on the master", glue, today, "limiter", 1.5)
+    row("Glue on the master", glue, today, "amplifiers", 1.0, AMPLIFIER_SLACK)
+    row("Glue on the master", glue, today, "mixer", 1.0, MIXER_SLACK)
+    bus = run(a.plugins, dynamics="Glue.ptmfx", threshold=HOT, blocks=n, tracks=SYNTH_1)
+    row("Glue on Synth 1", bus, today, "amplifiers", 1.0, AMPLIFIER_SLACK)
+    both = "limiter + mixer"
+    bus[both] = bus["limiter"] + bus["mixer"]
+    today[both] = today["limiter"] + today["mixer"]
+    rows.append(("Glue on Synth 1", both, today[both], bus[both]))
+    check(bus[both] <= 1.5 * today["limiter"] + today["mixer"] + BUS_SLACK,
+          f"Glue on Synth 1: limiter + mixer {bus[both]:,.0f} against 1.5 x today's limiter "
+          f"{today['limiter']:,.0f} + today's mixer {today['mixer']:,.0f} + {BUS_SLACK}")
 
     print("\n| Choice | Update | Today | Plugin firmware | Change |")
     print("| :--- | :--- | ---: | ---: | ---: |")

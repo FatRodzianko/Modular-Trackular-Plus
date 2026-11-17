@@ -58,21 +58,23 @@ struct PackWant
     uint8_t knobs;
 };
 
-// masterfx-1.x's effects (Q15, CE's knobs only), then the glue compressor (float, can duck tracks,
+// masterfx-1.x's effects (Q15, CE's knobs only), then Glue (float, a bus, its own Attack, Release
+// and Threshold, Ratio and Makeup) and Compressor (masterfx-2.0's Glue: float, can duck tracks,
 // Ratio and Makeup)
 const PackWant kPackWant[] = {
     { "Freeverb.ptmfx", "Freeverb", PTMFX_SLOT_REVERB, 0, 0 }, { "Plate.ptmfx", "Plate", PTMFX_SLOT_REVERB, 0, 0 },
     { "Spring.ptmfx", "Spring", PTMFX_SLOT_REVERB, 0, 0 },     { "Shimmer.ptmfx", "Shimmer", PTMFX_SLOT_REVERB, 0, 0 },
     { "Gated.ptmfx", "\"Gated\"", PTMFX_SLOT_REVERB, 0, 0 },   { "Reverse.ptmfx", "Reverse", PTMFX_SLOT_REVERB, 0, 0 },
     { "Tape.ptmfx", "Tape", PTMFX_SLOT_DELAY, 0, 0 },          { "BBD.ptmfx", "BBD", PTMFX_SLOT_DELAY, 0, 0 },
-    { "Glue.ptmfx", "Glue", PTMFX_SLOT_DYNAMICS, PTMFX_FLAG_FLOAT | PTMFX_FLAG_DUCK, 2 },
+    { "Glue.ptmfx", "Glue", PTMFX_SLOT_DYNAMICS, PTMFX_FLAG_FLOAT | PTMFX_FLAG_OWN_DYNAMICS | PTMFX_FLAG_BUS, 5 },
+    { "Compressor.ptmfx", "Compressor", PTMFX_SLOT_DYNAMICS, PTMFX_FLAG_FLOAT | PTMFX_FLAG_DUCK, 2 },
 };
 constexpr size_t kPackSize = sizeof(kPackWant) / sizeof(kPackWant[0]);
 
 void testHeader()
 {
     using plugins::checkHeader;
-    check(plugins::packCount() == kPackSize, "pack: nine files");
+    check(plugins::packCount() == kPackSize, "pack: ten files");
     for (size_t i = 0; i < plugins::packCount() && i < kPackSize; i++)
     {
         const plugins::PackFile& f = plugins::packAt(i);
@@ -80,6 +82,8 @@ void testHeader()
         const char* why = "unset";
         check(checkHeader(h, f.size, &why) && why == nullptr, std::string("pack: passes the check: ") + f.name);
         check(strcmp(f.name, kPackWant[i].file) == 0, std::string("pack: in masterfx-1.x's order: ") + f.name);
+        check(h.format_version == PTMFX_VERSION && h.code_offset == sizeof(PtmfxHeader),
+              std::string("pack: format version 2: ") + f.name);
         check(strcmp(h.name, kPackWant[i].name) == 0, std::string("pack: its name: ") + f.name);
         check(h.slot == kPackWant[i].slot, std::string("pack: its slot: ") + f.name);
         check(h.flags == kPackWant[i].flags && h.num_params == kPackWant[i].knobs,
@@ -101,8 +105,36 @@ void testHeader()
     const Plant plants[] = {
         { "magic", [](PtmfxHeader& h) { h.magic ^= 1; }, 0 },
         { "a .ptsfx's magic", [](PtmfxHeader& h) { h.magic = 0x58465350u; }, 0 },
-        { "version", [](PtmfxHeader& h) { h.format_version = 2; }, 0 },
-        { "an unknown flag", [](PtmfxHeader& h) { h.flags |= 0x0004; }, 0 },
+        { "version 3", [](PtmfxHeader& h) { h.format_version = 3; }, 0 },
+        { "version 0", [](PtmfxHeader& h) { h.format_version = 0; }, 0 },
+        { "an unknown flag", [](PtmfxHeader& h) { h.flags |= 0x0010; }, 0 },
+        { "a reverb on a bus", [](PtmfxHeader& h) { h.flags = PTMFX_FLAG_FLOAT | PTMFX_FLAG_BUS; }, 0 },
+        { "a Q15 bus",
+          [](PtmfxHeader& h) { h.slot = PTMFX_SLOT_DYNAMICS; h.state_size = 64; h.flags = PTMFX_FLAG_BUS; }, 0 },
+        { "a bus that ducks",
+          [](PtmfxHeader& h) {
+              h.slot = PTMFX_SLOT_DYNAMICS;
+              h.state_size = 64;
+              h.flags = PTMFX_FLAG_FLOAT | PTMFX_FLAG_BUS | PTMFX_FLAG_DUCK;
+          },
+          0 },
+        { "a reverb with own dynamics",
+          [](PtmfxHeader& h) {
+              h.flags = PTMFX_FLAG_OWN_DYNAMICS;
+              h.num_params = 3;
+              h.params[1] = h.params[0];
+              h.params[2] = h.params[0];
+          },
+          0 },
+        { "own dynamics with 2 knobs",
+          [](PtmfxHeader& h) {
+              h.slot = PTMFX_SLOT_DYNAMICS;
+              h.state_size = 64;
+              h.flags = PTMFX_FLAG_OWN_DYNAMICS;
+              h.num_params = 2;
+              h.params[1] = h.params[0];
+          },
+          0 },
         { "a reverb that ducks", [](PtmfxHeader& h) { h.flags = PTMFX_FLAG_FLOAT | PTMFX_FLAG_DUCK; }, 0 },
         { "a Q15 dynamics plugin that ducks",
           [](PtmfxHeader& h) { h.slot = PTMFX_SLOT_DYNAMICS; h.state_size = 64; h.flags = PTMFX_FLAG_DUCK; }, 0 },
@@ -111,7 +143,21 @@ void testHeader()
         { "an empty name", [](PtmfxHeader& h) { h.name[0] = 0; }, 0 },
         { "a name without its 0", [](PtmfxHeader& h) { memset(h.name, 'x', sizeof(h.name)); }, 0 },
         { "an author without its 0", [](PtmfxHeader& h) { memset(h.author, 'x', sizeof(h.author)); }, 0 },
-        { "3 knobs", [](PtmfxHeader& h) { h.num_params = 3; }, 0 },
+        { "3 knobs without own dynamics",
+          [](PtmfxHeader& h) {
+              h.num_params = 3;
+              h.params[1] = h.params[0];
+              h.params[2] = h.params[0];
+          },
+          0 },
+        { "6 knobs",
+          [](PtmfxHeader& h) {
+              h.slot = PTMFX_SLOT_DYNAMICS;
+              h.state_size = 64;
+              h.flags = PTMFX_FLAG_OWN_DYNAMICS;
+              h.num_params = 6;
+          },
+          0 },
         { "reserved bytes", [](PtmfxHeader& h) { h.reserved[1] = 1; }, 0 },
         { "reserved words", [](PtmfxHeader& h) { h.reserved2[2] = 1; }, 0 },
         { "no state", [](PtmfxHeader& h) { h.state_size = 0; }, 0 },
@@ -164,6 +210,37 @@ void testHeader()
     check(checkHeader(h, f.size, nullptr), "header: a dynamics plugin with two own knobs");
     h.flags = PTMFX_FLAG_FLOAT | PTMFX_FLAG_DUCK;
     check(checkHeader(h, f.size, nullptr), "header: a float dynamics plugin that ducks");
+    h.flags = PTMFX_FLAG_FLOAT | PTMFX_FLAG_BUS | PTMFX_FLAG_OWN_DYNAMICS;
+    h.num_params = 5;
+    for (uint32_t k = 2; k < 5; k++)
+    {
+        h.params[k] = h.params[1];
+    }
+    check(checkHeader(h, f.size, nullptr), "header: a float bus with own dynamics and five knobs");
+    h.flags = PTMFX_FLAG_OWN_DYNAMICS;
+    h.num_params = 3;
+    check(checkHeader(h, f.size, nullptr), "header: own dynamics with three knobs, Q15, no bus");
+
+    // Format version 1 (masterfx-2.0's files): a 240-byte header with two knobs, then the code
+    PtmfxHeader v1 = good;
+    v1.format_version = 1;
+    v1.code_offset = PTMFX_V1_HEADER;
+    const uint32_t v1Size = PTMFX_V1_HEADER + v1.code_size;
+    check(plugins::headerSize(v1) == PTMFX_V1_HEADER && plugins::headerSize(good) == sizeof(PtmfxHeader),
+          "header: where version 1's and 2's code starts");
+    check(checkHeader(v1, v1Size, nullptr), "header: version 1 loads");
+    PtmfxHeader bad1 = v1;
+    bad1.code_offset = sizeof(PtmfxHeader);
+    check(!checkHeader(bad1, sizeof(PtmfxHeader) + v1.code_size, nullptr),
+          "header: version 1 with version 2's offset refused");
+    bad1 = v1;
+    bad1.slot = PTMFX_SLOT_DYNAMICS;
+    bad1.state_size = 64;
+    bad1.flags = PTMFX_FLAG_FLOAT | PTMFX_FLAG_BUS;
+    check(!checkHeader(bad1, v1Size, nullptr), "header: version 1 with version 2's flags refused");
+    bad1 = v1;
+    bad1.num_params = 3;
+    check(!checkHeader(bad1, v1Size, nullptr), "header: version 1 with 3 knobs refused");
 }
 
 // ---- the start and the catalog ------------------------------------------------------------
@@ -196,6 +273,17 @@ class FakeCard : public FileIo
     }
     void makeDir(const char* path) override { dirs.push_back(path); }
     bool exists(const char* path) override { return files.count(path) != 0; }
+    bool rename(const char* from, const char* to) override
+    {
+        if (!canRename || files.count(from) == 0 || files.count(to) != 0)
+        {
+            return false;
+        }
+        renames.push_back(std::string(from) + ">" + to);
+        files[to] = files[from];
+        files.erase(from);
+        return true;
+    }
     size_t list(const char* dir, const char* suffix, char* names, size_t count, size_t nameSize) override
     {
         std::vector<std::string> found;
@@ -224,9 +312,22 @@ class FakeCard : public FileIo
     }
 
     std::map<std::string, std::vector<uint8_t>> files;
-    std::vector<std::string> writes, removed, dirs;
+    std::vector<std::string> writes, removed, dirs, renames;
     bool failReads = false;
+    bool canRename = true;
     int reads = 0;
+};
+
+// A card whose writes of a .new file come out a byte short (as a full card would)
+class ShortCard : public FakeCard
+{
+  public:
+    bool write(const char* path, const uint8_t* data, size_t length) override
+    {
+        const std::string p(path);
+        const bool fresh = p.size() > 4 && p.compare(p.size() - 4, 4, ".new") == 0;
+        return FakeCard::write(path, data, fresh && length > 0 ? length - 1 : length);
+    }
 };
 
 uint32_t nowMs = 0;
@@ -326,8 +427,14 @@ void testStart()
               "the reverb's list: the six reverbs");
         check(slotFiles(plugins::kDelay) == std::vector<std::string>({ "Tape.ptmfx", "BBD.ptmfx" }),
               "the delay's list: Tape and BBD");
-        check(slotFiles(plugins::kDynamics) == std::vector<std::string>({ "Glue.ptmfx" }),
-              "the dynamics list: Glue");
+        check(slotFiles(plugins::kDynamics) == std::vector<std::string>({ "Glue.ptmfx", "Compressor.ptmfx" }),
+              "the dynamics list: Glue, then Compressor");
+        const plugins::CatalogEntry* comp = plugins::slotAt(plugins::kDynamics, 1);
+        check(comp != nullptr && std::string(comp->name) == "Compressor" &&
+                std::string(comp->name + strlen(comp->name) + 1) == "Comp",
+              "Compressor: its name, then its short name Comp for the Master page's column");
+        const plugins::CatalogEntry* glue = plugins::slotAt(plugins::kDynamics, 0);
+        check(glue != nullptr && glue->name[strlen(glue->name) + 1] == 0, "Glue: no short name");
         check(plugins::slotAt(plugins::kDelay, 2) == nullptr, "a list's end");
         check(!plugins::safeMode(), "start: no marker, no safe mode");
         check(plugins::catalogFind("Nope.ptmfx") == -1 && plugins::catalogFind("BBD.ptmfx") == 7,
@@ -425,6 +532,131 @@ void testStart()
     }
 }
 
+// The pack over files a release shipped: replaced when exactly one, else left
+void testReplace()
+{
+    const size_t glue = 8; // Glue.ptmfx in the pack
+    check(strcmp(plugins::packAt(glue).name, "Glue.ptmfx") == 0, "replace: Glue's place in the pack");
+    const std::vector<uint8_t> old = renamed(9, "Old Glue"); // stands in for masterfx-2.0's Glue
+    const plugins::ShippedFile shipped[] = {
+        { "Glue.ptmfx", static_cast<uint32_t>(old.size()),
+          plugins::fileHash(old.data(), static_cast<uint32_t>(old.size())) },
+        { "Plate.ptmfx", 10, 0x12345678u },
+    };
+    plugins::shippedForTests(shipped, 2);
+    const std::string path = "/MasterFX/Glue.ptmfx";
+    const std::string fresh = path + ".new";
+    {
+        FakeCard card;
+        card.files[path] = old;
+        plugins::forget();
+        plugins::start(card, testEnv());
+        check(card.files[path] == packBytes(glue), "replace: a shipped file becomes the pack's");
+        check(card.files.count(fresh) == 0, "replace: no .new left");
+        check(std::find(card.writes.begin(), card.writes.end(), fresh) != card.writes.end() &&
+                std::find(card.writes.begin(), card.writes.end(), path) == card.writes.end(),
+              "replace: written beside it, not over it");
+        check(card.renames == std::vector<std::string>({ fresh + ">" + path }), "replace: then renamed in place");
+        check(entryOf("Glue.ptmfx").status == Status::ok && strcmp(entryOf("Glue.ptmfx").name, "Glue") == 0,
+              "replace: listed as the new Glue");
+        card.writes.clear();
+        card.renames.clear();
+        plugins::forget();
+        plugins::start(card, testEnv());
+        check(card.writes.empty() && card.renames.empty(), "replace: the next start leaves it");
+    }
+    {
+        // A release that kept a file as it was: shipped before, and this pack's too. Left as it is,
+        // not written again at every start
+        const std::vector<uint8_t> same = packBytes(glue);
+        const plugins::ShippedFile kept[] = {
+            { "Glue.ptmfx", static_cast<uint32_t>(same.size()),
+              plugins::fileHash(same.data(), static_cast<uint32_t>(same.size())) },
+        };
+        plugins::shippedForTests(kept, 1);
+        FakeCard card;
+        card.files[path] = same;
+        plugins::forget();
+        plugins::start(card, testEnv());
+        check(card.files[path] == same && card.renames.empty() &&
+                std::find(card.writes.begin(), card.writes.end(), fresh) == card.writes.end() &&
+                std::find(card.writes.begin(), card.writes.end(), path) == card.writes.end(),
+              "replace: a shipped file that is already the pack's isn't written again");
+        // This pack's file with more after it: not the pack's, and not a shipped one either
+        std::vector<uint8_t> longer = same;
+        longer.push_back(0);
+        card.files[path] = longer;
+        plugins::forget();
+        plugins::start(card, testEnv());
+        check(card.files[path] == longer && card.renames.empty(), "replace: the pack's file with more after it left alone");
+        plugins::shippedForTests(shipped, 2);
+    }
+    {
+        // The same size, other bytes: the user's
+        FakeCard card;
+        std::vector<uint8_t> mine = old;
+        mine[mine.size() - 1] ^= 1;
+        card.files[path] = mine;
+        plugins::forget();
+        plugins::start(card, testEnv());
+        check(card.files[path] == mine && card.renames.empty(), "replace: a changed file left alone");
+    }
+    {
+        // A stop part way: the old one gone, the .new there
+        FakeCard card;
+        card.files[fresh] = std::vector<uint8_t>(100, 1);
+        plugins::forget();
+        plugins::start(card, testEnv());
+        check(card.files.count(fresh) == 0 && card.files[path] == packBytes(glue),
+              "replace: a stray .new removed, the missing file written");
+    }
+    {
+        // A stop part way: the .new half written, the old one still there
+        FakeCard card;
+        card.files[fresh] = std::vector<uint8_t>(100, 1);
+        card.files[path] = old;
+        plugins::forget();
+        plugins::start(card, testEnv());
+        check(card.files.count(fresh) == 0 && card.files[path] == packBytes(glue),
+              "replace: a stray .new removed, then the old file replaced");
+    }
+    {
+        // A card that can't rename: written in place after the copy checked out
+        FakeCard card;
+        card.canRename = false;
+        card.files[path] = old;
+        plugins::forget();
+        plugins::start(card, testEnv());
+        check(card.files[path] == packBytes(glue) && card.files.count(fresh) == 0,
+              "replace: without rename, in place");
+    }
+    {
+        // The copy doesn't read back as written: the old one stays
+        ShortCard card;
+        card.files[path] = old;
+        plugins::forget();
+        plugins::start(card, testEnv());
+        check(card.files[path] == old && card.files.count(fresh) == 0, "replace: a bad copy, the old file kept");
+    }
+    plugins::shippedForTests(nullptr, 0);
+
+    // What the firmware ships: masterfx-2.0's nine files, each a pack file's name
+    check(plugins::shippedCount() == 9, "shipped: masterfx-2.0's nine files");
+    bool named = true;
+    for (size_t i = 0; i < plugins::shippedCount(); i++)
+    {
+        const plugins::ShippedFile& s = plugins::shippedAt(i);
+        bool found = false;
+        for (size_t j = 0; j < plugins::packCount(); j++)
+        {
+            const plugins::PackFile& f = plugins::packAt(j);
+            found = found || strcmp(s.name, f.name) == 0;
+        }
+        named = named && found;
+    }
+    check(named, "shipped: each is a pack file's name");
+}
+
 void testMarker()
 {
     FakeCard card;
@@ -462,6 +694,7 @@ int main()
 {
     testHeader();
     testStart();
+    testReplace();
     testMarker();
     testHeaderCopy();
     printf("masterfx plugins: %d checks, %d failures\n", checks, failures);
