@@ -192,7 +192,8 @@ def masterfx_file(reverb: int, delay: int) -> bytes:
 
 # In the order of Synth::kSynthTypes, which project.mt's synthType counts in. WAVE and PHASE are the
 # Synths mod's, after CE's seven in mod builds (core/synth/Synth.h).
-ENGINES = ("ACD", "FAT", "VAP", "WTFM", "PERC", "DIRT", "CHIP", "WAVE", "PHASE")
+# kSynthTypes' order (core/synth/Synth.h): project.mt stores a part's engine by its place here
+ENGINES = ("ACD", "FAT", "VAP", "WTFM", "PERC", "DIRT", "CHIP", "WAVE", "PHASE", "DCO6")
 # Voices a part allows where it's below 8: the patch's own limit, read on the rig through
 # Synth::getMaxVoiceCount. The UI never saves more, but project.mt is written here byte for byte, and CE
 # clamps a stored count on open only when the part's engine changes: a count above the limit runs above

@@ -209,6 +209,26 @@ against today's release). None of
 them has a clock, so the time guard's reading there is instructions taken as cycles. GuardHang isn't
 run on the unit: the emulator covers the marker, and Synth FX's `G2` showed the recorder's restart.
 
+## The DCO6 set: the Synths mod's third engine, and Unison
+
+`python tools/emu/make_dco6_test_projects.py <mods.axf> "<project>" build/device/dco6/Projects` writes
+them: all three parts on DCO6, every voice held. E1 to E3 have no patch files, so the firmware starts
+the parts on DCO6's Init. E4's and E5's patches are written by the firmware in the sound rig
+(`Synth::savePatchToWorkspace`) and loaded back there before they go in. The firmware is a mod build
+with `DCO6.psyn` in the card's `Synths` folder. Lightest first; stop at the first problem.
+
+| Project | Voices | Patch | What it isolates |
+|---|---|---|---|
+| `E1 1 voice DCO6 Init` | 1 | Init | The engine itself |
+| `E2 4 voices DCO6 Init` | 4 | Init | |
+| `E3 8 voices DCO6 Init` | 4 + 2 + 2 | Init | 8 voices, the limit (18,900 instructions a voice in the emulator; WAVE 14,900) |
+| `E4 8 DCO6 Unison 4` | 8 on Synth 1 | Unison 4, Detune +25 ct, Width 100 % | The unison hook in CE's host, in the interrupt: 2 stacks of 4, stereo |
+| `E5 8 voices DCO6 heavy` | 4 + 2 + 2 | all four sources, HPF 80 Hz, Bass Boost, Resonance 70 %, Vintage 100 %, the Random Smooth LFO on cutoff | The heaviest patch (22,700 a voice) |
+
+E4's four held notes make two stacks (each note takes a stack of four; the third and fourth take the
+first two's), so all 8 voices sound, and the sound is wide. Its log line is the hook's first run on
+the unit: note-ons there run in the audio interrupt.
+
 ## What a firmware comes with
 
 Each one handed over says what ran, what didn't, and the risk to the unit.
