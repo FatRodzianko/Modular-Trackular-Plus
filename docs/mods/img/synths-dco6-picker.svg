@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="480" viewBox="0 0 800 480" font-family="'Roboto Mono', 'DejaVu Sans Mono', Consolas, monospace">
+<title>Synth Parameters 1/2, DCO6 picked</title><desc>PLAN MOCKUP: the Synth Parameters screen with DCO6 picked; DCO6 is marked</desc>
+<defs><linearGradient id="shadow" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0A0A0A"/><stop offset="1" stop-color="#000000"/></linearGradient><linearGradient id="barShade" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000000"/><stop offset="1" stop-color="#080808"/></linearGradient></defs>
+<rect x="0" y="0" width="800" height="480" fill="#000000"/>
+<rect x="0" y="0" width="800" height="28" fill="#080808"/>
+<line x1="0" y1="28.5" x2="800" y2="28.5" stroke="#FFFFFF" stroke-width="1"/>
+<text class="lbl" x="9" y="13" font-size="17" font-weight="700" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">Synth Parameters 1/2</text>
+<text class="val" x="790" y="13" font-size="17" font-weight="700" fill="#FFFFFF" text-anchor="end" dominant-baseline="central" xml:space="preserve">Synth 1 (DCO6)</text>
+<text class="val" x="280" y="13" font-size="17" font-weight="700" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">  0m:00s </text>
+<rect x="375.8" y="7" width="12" height="12" fill="#FFFFFF"/>
+<text class="val" x="398.2" y="13" font-size="17" font-weight="700" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">P1.000</text>
+<rect x="101" y="29" width="97" height="394" fill="#0A0A0A"/>
+<rect x="101" y="413" width="97" height="12" fill="url(#shadow)"/>
+<rect x="111" y="40" width="77" height="369" fill="#080808"/>
+<rect x="111" y="40" width="8" height="369" fill="url(#barShade)"/>
+<rect x="112" y="224" width="75" height="184" fill="#FFFFFF"/>
+<rect x="201" y="29" width="97" height="394" fill="#0A0A0A"/>
+<rect x="201" y="413" width="97" height="12" fill="url(#shadow)"/>
+<rect x="211" y="40" width="77" height="369" fill="#080808"/>
+<rect x="211" y="40" width="8" height="369" fill="url(#barShade)"/>
+<rect x="212" y="113" width="75" height="295" fill="#FFFFFF"/>
+<rect x="301" y="29" width="97" height="394" fill="#0A0A0A"/>
+<rect x="301" y="413" width="97" height="12" fill="url(#shadow)"/>
+<rect x="311" y="40" width="77" height="369" fill="#080808"/>
+<rect x="311" y="40" width="8" height="369" fill="url(#barShade)"/>
+<rect x="401" y="29" width="97" height="394" fill="#0A0A0A"/>
+<rect x="401" y="413" width="97" height="12" fill="url(#shadow)"/>
+<rect x="411" y="40" width="77" height="369" fill="#080808"/>
+<rect x="411" y="40" width="8" height="369" fill="url(#barShade)"/>
+<rect x="412" y="408" width="75" height="0" fill="#FFFFFF"/>
+<rect x="501" y="29" width="97" height="394" fill="#0A0A0A"/>
+<rect x="501" y="413" width="97" height="12" fill="url(#shadow)"/>
+<rect x="511" y="40" width="77" height="369" fill="#080808"/>
+<rect x="511" y="40" width="8" height="369" fill="url(#barShade)"/>
+<rect x="512" y="408" width="75" height="0" fill="#FFFFFF"/>
+<rect x="601" y="29" width="197" height="394" fill="#0A0A0A"/>
+<rect x="601" y="413" width="197" height="12" fill="url(#shadow)"/>
+<text class="lbl" x="625" y="50" font-size="17" font-weight="700" fill="#777777" text-anchor="start" dominant-baseline="central" xml:space="preserve">Patch:</text>
+<text class="lbl" x="625" y="70" font-size="17" font-weight="300" fill="#777777" text-anchor="start" dominant-baseline="central" xml:space="preserve">Init</text>
+<rect x="1" y="29" width="97" height="394" fill="#0A0A0A"/>
+<rect x="1" y="413" width="97" height="12" fill="url(#shadow)"/>
+<rect x="4" y="276" width="91" height="27" fill="none" stroke="#FFFFFF" stroke-width="1"/>
+<clipPath id="clip39"><rect x="14" y="33" width="74" height="270"/></clipPath>
+<g clip-path="url(#clip39)">
+<text class="val" x="14" y="46.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">ACD</text>
+<text class="val" x="14" y="73.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">FAT</text>
+<text class="val" x="14" y="100.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">VAP</text>
+<text class="val" x="14" y="127.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">WTFM</text>
+<text class="val" x="14" y="154.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">PERC</text>
+<text class="val" x="14" y="181.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">DIRT</text>
+<text class="val" x="14" y="208.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">CHIP</text>
+<text class="val" x="14" y="235.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">WAVE</text>
+<text class="val" x="14" y="262.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">PHASE</text>
+<text class="val" x="14" y="289.5" font-size="14" font-weight="300" fill="#FFFFFF" text-anchor="start" dominant-baseline="central" xml:space="preserve">DCO6</text>
+</g>
+<rect x="1" y="31" width="97" height="391" fill="none" stroke="#CD1818" stroke-width="1.5"/>
+<rect x="1" y="425" width="797" height="54" fill="#0A0A0A"/>
+<line x1="100.5" y1="438.5" x2="100.5" y2="479" stroke="#777777" stroke-width="1"/>
+<line x1="200.5" y1="438.5" x2="200.5" y2="479" stroke="#777777" stroke-width="1"/>
+<line x1="300.5" y1="438.5" x2="300.5" y2="479" stroke="#777777" stroke-width="1"/>
+<line x1="400.5" y1="438.5" x2="400.5" y2="479" stroke="#777777" stroke-width="1"/>
+<line x1="500.5" y1="438.5" x2="500.5" y2="479" stroke="#777777" stroke-width="1"/>
+<line x1="600.5" y1="438.5" x2="600.5" y2="479" stroke="#777777" stroke-width="1"/>
+<line x1="700.5" y1="438.5" x2="700.5" y2="479" stroke="#777777" stroke-width="1"/>
+<text class="lbl" x="50" y="451" font-size="14" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="central" xml:space="preserve">Model</text>
+<text class="lbl" x="150" y="441" font-size="14" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="central" xml:space="preserve">Polyphony</text>
+<text class="val" x="150" y="461" font-size="17" font-weight="300" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central" xml:space="preserve">4</text>
+<text class="lbl" x="250" y="441" font-size="14" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="central" xml:space="preserve">Gain</text>
+<text class="val" x="250" y="461" font-size="17" font-weight="300" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central" xml:space="preserve">-9.00 dB</text>
+<text class="lbl" x="350" y="441" font-size="14" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="central" xml:space="preserve">Panning</text>
+<text class="val" x="350" y="461" font-size="17" font-weight="300" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central" xml:space="preserve">0 </text>
+<text class="lbl" x="450" y="441" font-size="14" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="central" xml:space="preserve">Reverb send</text>
+<text class="val" x="450" y="461" font-size="17" font-weight="300" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central" xml:space="preserve">-inf dB</text>
+<text class="lbl" x="550" y="441" font-size="14" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="central" xml:space="preserve">Delay send</text>
+<text class="val" x="550" y="461" font-size="17" font-weight="300" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central" xml:space="preserve">-inf dB</text>
+<text class="lbl" x="650" y="441" font-size="14" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="central" xml:space="preserve">Load</text>
+<text class="lbl" x="650" y="461" font-size="14" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="central" xml:space="preserve">Patch</text>
+<text class="lbl" x="750" y="441" font-size="14" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="central" xml:space="preserve">Edit</text>
+<text class="lbl" x="750" y="461" font-size="14" font-weight="400" fill="#777777" text-anchor="middle" dominant-baseline="central" xml:space="preserve">Patch</text>
+<rect x="3" y="275" width="93" height="29" rx="3" fill="none" stroke="#2F9BFF" stroke-width="2.5" stroke-dasharray="7 4"/>
+</svg>
