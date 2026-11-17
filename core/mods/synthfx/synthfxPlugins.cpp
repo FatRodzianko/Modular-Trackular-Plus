@@ -11,6 +11,7 @@
 
 #include "synthfxPlugins.h"
 #include "plugins/pluginKit.h"
+#include "plugins/pluginPack.h"
 #include "synthfxPool.h"
 
 #include <cstring>
@@ -353,13 +354,18 @@ void start(FileIo& fileIo, const Env& platform)
 
     io->makeDir(kDir);
     inSafeMode = io->exists(kMarker); // the last run stopped while a new plugin ran
+    // The pack (pluginPack.h). The code pool reads files back: nothing is loaded into it yet, and
+    // no instance exists for the interrupt to run.
     char path[sizeof(kDir) + kFileNameSize];
+    static_assert(sizeof(path) + sizeof(pluginkit::kNewSuffix) - 1 <= pluginkit::kPackPathSize,
+                  "a pack file's path with .new fits");
+    const pluginkit::PackCard card = { *io, env.codePool, kCodePoolSize, shippedList(), shippedCount() };
     for (size_t i = 0; i < packCount(); i++)
     {
         const PackFile& f = packAt(i);
-        if (pathOf(f.name, path, sizeof(path)) && !io->exists(path))
+        if (pathOf(f.name, path, sizeof(path)))
         {
-            io->write(path, f.data, f.size);
+            pluginkit::writePackFile(card, path, f.name, f.data, f.size);
         }
     }
     isStarted = true;

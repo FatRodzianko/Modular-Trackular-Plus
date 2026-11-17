@@ -631,10 +631,11 @@ files; so is 1.2.0's `masterfx.bin`. CE's knobs stay in CE's own fields.
 
 At start the firmware goes through the pack it carries. A file missing from `/MasterFX/` is
 written. A file there that is byte for byte one an earlier release shipped (its size and FNV-1a
-hash, from the list in `masterfxPack.inc`), and isn't this release's, is replaced: the new file
-is written as `<name>.new` and read back, then the old one is removed and the new one renamed.
-If the read-back differs, the `.new` file is removed and the old file kept. A `.new` left by a
-power cut is removed at the next start. Any other file of that name is left alone.
+hash, from the list in `masterfxPack.inc`), and isn't this release's, is replaced. Any other file
+of that name is left alone. A file goes in (missing or replacing) as `<name>.new`, which is read
+back, then the old one is removed and the new one renamed. If the read-back differs, the `.new`
+file is removed and the old file kept. A `.new` left by a power cut is removed at the next start,
+and the file put in again. Synth FX uses the same code (`core/mods/plugins/pluginPack.h`).
 
 ---
 

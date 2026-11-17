@@ -2,7 +2,7 @@
 //
 // Host tests for the Synth FX plugins' runtime, the parts that don't run a plugin's code: the
 // pools (synthfxPool.h), the header check, the start (the folder, the pack written where it
-// is missing, the start marker), the catalog, safe mode, the firmware's copy of ptsfx.h. A
+// is missing or replacing a file a release shipped, the start marker), the catalog, safe mode, the firmware's copy of ptsfx.h. A
 // plugin's code is Arm: making instances, knobs, process() and the guards are tested on the
 // emulated Cortex-M7 (tools/synthfx/test_runtime.py). Build and run with
 // `make -C core/mods/tests`.
@@ -191,6 +191,17 @@ class FakeCard : public FileIo
     }
     void makeDir(const char* path) override { dirs.push_back(path); }
     bool exists(const char* path) override { return files.count(path) != 0; }
+    bool rename(const char* from, const char* to) override
+    {
+        if (!canRename || files.count(from) == 0 || files.count(to) != 0)
+        {
+            return false;
+        }
+        renames.push_back(std::string(from) + ">" + to);
+        files[to] = files[from];
+        files.erase(from);
+        return true;
+    }
     size_t list(const char* dir, const char* suffix, char* names, size_t count, size_t nameSize) override
     {
         std::vector<std::string> found;
@@ -219,9 +230,22 @@ class FakeCard : public FileIo
     }
 
     std::map<std::string, std::vector<uint8_t>> files;
-    std::vector<std::string> writes, removed, dirs;
+    std::vector<std::string> writes, removed, dirs, renames;
     bool failReads = false;
+    bool canRename = true;
     int reads = 0;
+};
+
+// A card whose writes of a .new file come out a byte short (as a full card would)
+class ShortCard : public FakeCard
+{
+  public:
+    bool write(const char* path, const uint8_t* data, size_t length) override
+    {
+        const std::string p(path);
+        const bool fresh = p.size() > 4 && p.compare(p.size() - 4, 4, ".new") == 0;
+        return FakeCard::write(path, data, fresh && length > 0 ? length - 1 : length);
+    }
 };
 
 uint32_t nowMs = 0;
@@ -281,7 +305,8 @@ void testStart()
         plugins::start(card, testEnv());
         check(plugins::started(), "start: started");
         check(card.dirs.size() == 1 && card.dirs[0] == "/SynthFX", "start: the folder made");
-        check(card.writes.size() == 6, "start: the pack written to an empty card");
+        check(card.writes.size() == 6 && card.renames.size() == 6,
+              "start: the pack written to an empty card, each as .new, then renamed");
         bool same = true;
         for (size_t i = 0; i < plugins::packCount(); i++)
         {
@@ -310,6 +335,15 @@ void testStart()
         card.writes.clear();
         plugins::start(card, testEnv());
         check(card.writes.empty(), "start again: nothing written");
+        // A start after a power-up: the pack's files are left, and not read back (none is in
+        // kShipped): one read each, the list's header
+        card.writes.clear();
+        card.renames.clear();
+        card.reads = 0;
+        plugins::forget();
+        plugins::start(card, testEnv());
+        check(card.writes.empty() && card.renames.empty(), "start: the pack's own files left");
+        check(card.reads == 6, "start: no pack file read back, only the list's headers");
     }
     {
         // Some of the pack there, one changed by the user: left as it is
@@ -390,6 +424,187 @@ void testStart()
     }
 }
 
+// ---- the pack over files a release shipped (pluginPack.h) ----------------------------------
+
+std::vector<uint8_t> renamed(size_t i, const char* name)
+{
+    std::vector<uint8_t> b = packBytes(i);
+    char* n = reinterpret_cast<char*>(b.data()) + 8; // the header's name
+    memset(n, 0, 32);
+    strncpy(n, name, 31);
+    return b;
+}
+
+// The pack's files on the card, as a release wrote them
+void fillPack(FakeCard& card)
+{
+    for (size_t i = 0; i < plugins::packCount(); i++)
+    {
+        card.files[std::string("/SynthFX/") + plugins::packAt(i).name] = packBytes(i);
+    }
+}
+
+bool wrote(const FakeCard& card, const std::string& path)
+{
+    return std::find(card.writes.begin(), card.writes.end(), path) != card.writes.end();
+}
+
+void testReplace()
+{
+    const size_t chorus = 3;
+    check(strcmp(plugins::packAt(chorus).name, "Chorus.ptsfx") == 0, "replace: Chorus's place in the pack");
+    const std::vector<uint8_t> old = renamed(chorus, "Old Chorus"); // stands in for a release's Chorus
+    const plugins::ShippedFile shipped[] = {
+        { "Chorus.ptsfx", static_cast<uint32_t>(old.size()),
+          plugins::fileHash(old.data(), static_cast<uint32_t>(old.size())) },
+        { "Phaser.ptsfx", 10, 0x12345678u },
+    };
+    plugins::shippedForTests(shipped, 2);
+    const std::string path = "/SynthFX/Chorus.ptsfx";
+    const std::string fresh = path + ".new";
+    {
+        FakeCard card;
+        fillPack(card);
+        card.files[path] = old;
+        plugins::forget();
+        plugins::start(card, testEnv());
+        check(card.files[path] == packBytes(chorus), "replace: a shipped file becomes the pack's");
+        check(card.files.count(fresh) == 0, "replace: no .new left");
+        check(card.writes == std::vector<std::string>({ fresh }), "replace: written beside it, not over it, only it");
+        check(card.renames == std::vector<std::string>({ fresh + ">" + path }), "replace: then renamed in place");
+        check(entryOf("Chorus.ptsfx").status == Status::ok && strcmp(entryOf("Chorus.ptsfx").name, "Chorus") == 0,
+              "replace: listed as the pack's Chorus");
+        card.writes.clear();
+        card.renames.clear();
+        plugins::forget();
+        plugins::start(card, testEnv());
+        check(card.writes.empty() && card.renames.empty(), "replace: the next start leaves it");
+    }
+    {
+        // A release that kept a file as it was: shipped before, and this pack's too. Left, not
+        // written again at every start
+        const std::vector<uint8_t> same = packBytes(chorus);
+        const plugins::ShippedFile kept[] = {
+            { "Chorus.ptsfx", static_cast<uint32_t>(same.size()),
+              plugins::fileHash(same.data(), static_cast<uint32_t>(same.size())) },
+        };
+        plugins::shippedForTests(kept, 1);
+        FakeCard card;
+        fillPack(card);
+        card.files[path] = same;
+        plugins::forget();
+        plugins::start(card, testEnv());
+        check(card.files[path] == same && card.renames.empty() && !wrote(card, fresh) && !wrote(card, path),
+              "replace: a shipped file that is already the pack's isn't written again");
+        // This pack's file with more after it: not the pack's, and not a shipped one either
+        std::vector<uint8_t> longer = same;
+        longer.push_back(0);
+        card.files[path] = longer;
+        plugins::forget();
+        plugins::start(card, testEnv());
+        check(card.files[path] == longer && card.renames.empty(),
+              "replace: the pack's file with more after it left alone");
+        plugins::shippedForTests(shipped, 2);
+    }
+    {
+        // The same size, other bytes: the user's
+        FakeCard card;
+        fillPack(card);
+        std::vector<uint8_t> mine = old;
+        mine[mine.size() - 1] ^= 1;
+        card.files[path] = mine;
+        plugins::forget();
+        plugins::start(card, testEnv());
+        check(card.files[path] == mine && card.renames.empty() && !wrote(card, fresh),
+              "replace: a changed file left alone");
+        // A shipped file's bytes under another name: the user's own
+        card.files["/SynthFX/Mine.ptsfx"] = old;
+        plugins::forget();
+        plugins::start(card, testEnv());
+        check(card.files["/SynthFX/Mine.ptsfx"] == old && card.renames.empty(),
+              "replace: the user's own file left alone");
+    }
+    for (bool whole : { false, true })
+    {
+        // A stop part way: the old one gone, the .new there (whole, or not)
+        FakeCard card;
+        card.files[fresh] = whole ? packBytes(chorus) : std::vector<uint8_t>(100, 1);
+        plugins::forget();
+        plugins::start(card, testEnv());
+        check(card.files.count(fresh) == 0 && card.files[path] == packBytes(chorus),
+              whole ? "replace: a whole stray .new removed, the missing file written"
+                    : "replace: a part .new removed, the missing file written");
+    }
+    {
+        // A stop part way: the .new half written, the old one still there
+        FakeCard card;
+        card.files[fresh] = std::vector<uint8_t>(100, 1);
+        card.files[path] = old;
+        plugins::forget();
+        plugins::start(card, testEnv());
+        check(card.files.count(fresh) == 0 && card.files[path] == packBytes(chorus),
+              "replace: a stray .new removed, then the old file replaced");
+    }
+    {
+        // A stop part way through writing in place (a card that can't rename): the .new whole, the
+        // file half written. Put in again, though the half file is no shipped one
+        FakeCard card;
+        card.files[fresh] = packBytes(chorus);
+        card.files[path] = std::vector<uint8_t>(old.begin(), old.begin() + 600);
+        plugins::forget();
+        plugins::start(card, testEnv());
+        check(card.files.count(fresh) == 0 && card.files[path] == packBytes(chorus),
+              "replace: a whole .new and a half-written file: put in again");
+        // A whole .new beside the pack's own file (stopped after writing in place): only removed
+        card.files[fresh] = packBytes(chorus);
+        card.writes.clear();
+        plugins::forget();
+        plugins::start(card, testEnv());
+        check(card.files.count(fresh) == 0 && card.files[path] == packBytes(chorus) && card.writes.empty(),
+              "replace: a whole .new beside the pack's file: removed, nothing written");
+    }
+    {
+        // A card that can't rename: written in place after the copy checked out, the copy then gone
+        FakeCard card;
+        card.canRename = false;
+        card.files[path] = old;
+        plugins::forget();
+        plugins::start(card, testEnv());
+        check(card.files[path] == packBytes(chorus) && card.files.count(fresh) == 0,
+              "replace: without rename, in place");
+        card.files.erase(path);
+        plugins::forget();
+        plugins::start(card, testEnv());
+        check(card.files[path] == packBytes(chorus) && card.files.count(fresh) == 0,
+              "replace: without rename, a missing file written in place");
+    }
+    {
+        // The copy doesn't read back as written: the old one stays; a missing one stays missing
+        // (the next start tries again), never a short file in its place
+        ShortCard card;
+        card.files[path] = old;
+        plugins::forget();
+        plugins::start(card, testEnv());
+        check(card.files[path] == old && card.files.count(fresh) == 0, "replace: a bad copy, the old file kept");
+        check(card.files.count("/SynthFX/Phaser.ptsfx") == 0 && card.files.count("/SynthFX/Phaser.ptsfx.new") == 0,
+              "start: a missing file whose copy is bad isn't put in");
+    }
+    {
+        // A card that can't read: nothing replaced, and nothing written over what is there
+        FakeCard card;
+        card.files[path] = old;
+        card.failReads = true;
+        plugins::forget();
+        plugins::start(card, testEnv());
+        check(card.files[path] == old && card.renames.empty() && card.files.count(fresh) == 0,
+              "replace: a card that can't read keeps its files");
+    }
+    plugins::shippedForTests(nullptr, 0);
+
+    // What the firmware ships: no release's file differs from today's pack (build_pack.py's SHIPPED)
+    check(plugins::shippedCount() == 0 && plugins::shippedList() == nullptr, "shipped: none yet");
+}
+
 void testMarker()
 {
     FakeCard card;
@@ -429,6 +644,7 @@ int main()
     testPool();
     testHeader();
     testStart();
+    testReplace();
     testMarker();
     testHeaderCopy();
     printf("synthfx plugins: %d checks, %d failures\n", checks, failures);

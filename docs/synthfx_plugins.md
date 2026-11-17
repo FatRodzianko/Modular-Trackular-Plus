@@ -79,7 +79,9 @@ The SDK is [`synthfx-sdk/`](../synthfx-sdk/); the firmware's side is
   settings, so each part's slots are stored in the project's `mods.bin` (record 16).
 - **The default pack.** Overdrive, Distortion, Bit Crusher, Chorus, Flanger and Phaser are
   plugins too. The firmware carries a copy and writes each pack file to `/SynthFX/` when it
-  is missing there, so delete one to get the firmware's copy back.
+  is missing there, so delete one to get the firmware's copy back. A pack file an earlier
+  release wrote, still byte for byte as it was shipped, is replaced by the new version (section
+  9.6); any other file of that name, your own or one you changed, is left alone.
 
 ---
 
@@ -118,7 +120,8 @@ them. `format` is optional.
 
 ### 3.2 Lifecycle order
 
-1. **Catalog.** At start the firmware writes the missing pack files, lists every `.ptsfx` in
+1. **Catalog.** At start the firmware writes the missing pack files (and replaces old ones an
+   earlier release shipped, section 9.6), lists every `.ptsfx` in
    `/SynthFX/` (up to 64) and checks each header and file size. A file that fails stays in
    the list with the reason.
 2. **Load.** When a slot first picks a plugin, its code is read into the code pool and the
@@ -287,8 +290,9 @@ CE's Load WAV instead; its label says which.
   project to keep that. It happens with the mod on or off, and is heard once the mod is on.
 - **Off,** the slots are bypassed and kept.
 
-A card that has the pack from an earlier build keeps those files: the firmware only writes
-the pack files that are missing.
+A card that has the pack from an earlier release gets the new version of each file that is
+still as that release shipped it (section 9.6). A file you changed, or your own of that name,
+is kept.
 
 ---
 
@@ -471,6 +475,17 @@ Each part's two slots (the file name and every knob's value) are in the project'
 converted. Version 3 still has a Placement byte for each slot: it is written 0 and read as
 Post. Nothing goes in the patch, so a patch keeps working on stock CE.
 
+### 9.6 The default pack on the card
+
+At start the firmware goes through the pack it carries (the same code as Master FX's,
+`core/mods/plugins/pluginPack.h`). A file missing from `/SynthFX/` is written. A file there that
+is byte for byte one an earlier release shipped (its size and FNV-1a hash, from the list in
+`synthfxPack.inc`), and isn't this release's, is replaced. Any other file of that name is left
+alone. A file goes in as `<name>.new`, which is read back, then the old one is removed and the
+new one renamed; if the read-back differs, the `.new` is removed and the old file kept. A `.new`
+left by a power cut is removed at the next start, and the file put in again. So far every
+release has shipped the same six files, so the list is empty.
+
 ---
 
 ## 10. Real-Time Audio, CPU & Memory Guidelines
@@ -577,7 +592,7 @@ is in the last column; its guide says why it differs.
 | Guards | CE's 2.1 ms synth limit | none needed (main loop) | time, output and start marker, inside CE's limit | time, output and start marker |
 | File I/O for the plugin | `read_file`, `load_wav_file` (outside the audio thread) | file parameters | none | none |
 | Builder | `psyn_builder.py` from an ELF | `ptfx_builder.py` | `ptsfx_builder.py` (from `ptfx_builder.py`) | `ptmfx_builder.py` (from `ptsfx_builder.py`) |
-| Shipped | CE's `polyend-tracker-ce-synths` build and `PolyendTracker_CE_Synths.zip` | CE's `polyend-tracker-ce-effects` build and `PolyendTracker_CE_Effects.zip` | the default pack is in the firmware, written when missing | the default pack is in the firmware, written when missing |
+| Shipped | CE's `polyend-tracker-ce-synths` build and `PolyendTracker_CE_Synths.zip` | CE's `polyend-tracker-ce-effects` build and `PolyendTracker_CE_Effects.zip` | the default pack is in the firmware, written when missing or as an older release shipped it | the default pack is in the firmware, written when missing or as an older release shipped it |
 
 Why the differences:
 

@@ -24,12 +24,16 @@ OUT = ROOT / "build" / "emu" / "plant_rig"
 TEST = ROOT / "tools" / "synthfx" / "test_runtime.py"
 F = "synthfxPlugins.cpp"
 KIT = ROOT / "core" / "mods" / "plugins"
-KIT_FILE = "pluginKit.h"
-KIT_FAULTS = {"guard: NaN let through", "guard: no clamp", "header: a default between steps passed"}
+# The faults in the shared kit, and the file each is in
+KIT_FAULTS = {"guard: NaN let through": "pluginKit.h", "guard: no clamp": "pluginKit.h",
+              "header: a default between steps passed": "pluginKit.h"}
+KIT_FAULTS.update({name: "pluginPack.h" for name in (
+    "pack: the user's file overwritten", "pack: a shipped file not replaced", "pack: the hash not checked",
+    "pack: the copy not read back", "pack: a stray .new kept", "pack: a stopped replacement not finished")})
 
 # (name, where: rig or host, old text, new text, a check that must fail: a substring of its line)
-# The fault goes in synthfxPlugins.cpp, or in the shared kit (core/mods/plugins/pluginKit.h) for
-# the names in KIT_FAULTS.
+# The fault goes in synthfxPlugins.cpp, or in the shared kit (core/mods/plugins/pluginKit.h or
+# pluginPack.h) for the names in KIT_FAULTS.
 FAULTS = [
     ("guard: NaN let through", "rig", "return nan0 + nan1 == 0.0f && ", "return ", "NaN: becomes 0"),
     ("guard: no clamp", "rig", "__builtin_fmaxf(peak0, peak1) <= limit;", "__builtin_fmaxf(peak0, peak1) <= 1000.0f;",
@@ -52,8 +56,22 @@ FAULTS = [
     ("state not zeroed", "rig", "    memset(in.state, 0, p.header->state_size);\n", "", "state zeroed"),
     ("code freed with an instance left", "rig", "if (p.users > 0 && --p.users == 0)", "if (p.users > 0 && (p.users = 0) == 0)",
      "the code stays"),
-    ("start: the user's file overwritten", "rig", "pathOf(f.name, path, sizeof(path)) && !io->exists(path)",
-     "pathOf(f.name, path, sizeof(path))", "a file already there left alone"),
+    ("pack: the user's file overwritten", "rig", "        if (!resume && !packdetail::wasShipped(c, path, name))",
+     "        if (false)", "left alone"),
+    ("pack: a shipped file not replaced", "rig", "        named = sameText(c.shipped[i].name, name);",
+     "        named = false;", "a shipped file becomes the pack's"),
+    ("pack: the hash not checked", "rig", "fileHash(c.buffer, static_cast<uint32_t>(size)) == s.hash", "true",
+     "a changed file and the user's own file left alone"),
+    ("pack: the copy not read back", "rig",
+     "    if (!c.io.write(fresh, data, size) || !packdetail::holds(c, fresh, data, size))",
+     "    if (!c.io.write(fresh, data, size))", "a bad copy, the old file kept"),
+    ("pack: a stray .new kept", "rig",
+     "        resume = packdetail::holds(c, fresh, data, size); // the last start stopped while putting it in\n"
+     "        c.io.remove(fresh);\n",
+     "        resume = packdetail::holds(c, fresh, data, size); // the last start stopped while putting it in\n",
+     "a stray .new beside the user's file"),
+    ("pack: a stopped replacement not finished", "rig", "resume = packdetail::holds(c, fresh, data, size);",
+     "resume = false;", "a whole .new beside a half-written file"),
     ("marker: never removed", "rig", "        io->remove(kMarker);\n", "", "marker: removed after 5 s"),
     ("safe mode ignored", "rig", "if (fromProject && inSafeMode)", "if (fromProject && inSafeMode && false)",
      "a project's plugin skipped"),
@@ -93,7 +111,7 @@ def main() -> int:
         copy = work / "synthfx"
         shutil.copytree(SRC, copy)
         shutil.copytree(KIT, work / "plugins")
-        target = work / "plugins" / KIT_FILE if name in KIT_FAULTS else copy / F
+        target = work / "plugins" / KIT_FAULTS[name] if name in KIT_FAULTS else copy / F
         text = target.read_text(encoding="utf-8")
         if text.count(old) != 1:
             print(f"FAULT TEXT NOT FOUND ONCE: {name}")
