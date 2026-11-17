@@ -304,7 +304,7 @@ __NOINIT(EXTERNAL_RAM) char masterfxChoiceFit[mods::masterfx::kSlots][32];
 
 const char* masterfxChoiceText(uint8_t slot)
 {
-    const char* text = mods::masterfx::bypassed(slot) ? "Bypassed" : mods::masterfx::choiceName(slot);
+    const char* text = mods::masterfx::bypassed(slot) ? "Bypassed" : mods::masterfx::choiceColumnName(slot);
     constexpr uint32_t kSecondLine = controlStyleFont2; // as showMasterValues sets it
     const strFont* font = &fonts[((kSecondLine >> 8) & 15) - 1];
     const uint16_t fit = getMaxTextLengthThatFitSpecificWidth(font, text, 800 / 8 - 6);

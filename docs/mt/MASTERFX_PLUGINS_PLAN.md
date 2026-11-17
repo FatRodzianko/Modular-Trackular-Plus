@@ -869,9 +869,23 @@ value the plugin already has, so `apply()` from the page opening doesn't send a 
 own values again. Main loop only, as before. The rig's dynamics check (the same file in the next
 project: 10.0, 1.0, then 10.0 ms) fails on the image before the fix and passes after.
 
+**Then on the unit:** M2 then M5 then M2 read Attack 10.0, 1.0, 10.0 ms; M5 played with no clicks.
+
+**Comp, the column's short name.** "Compressor" was wider than the Master page's Limiter column
+(cut there); the title and the list were fine. A plugin's 32-byte `name` may now hold a short name
+after its 0, for that column only: Compressor's is `"Compressor" "\0" "Comp"`. `listInto` keeps it
+after the name in the catalog entry; `choiceColumnName` gives it to `gMasterParams`'s column text;
+the list, the title and "(bypassed)" keep the whole name. No format change: 2.0's firmware and
+the builder read the name to its 0 and ignore the rest, so the file loads as before there. A card
+that ran a 2.1 test image has a `Compressor.ptmfx` without the short name (not in `SHIPPED`, so
+the firmware leaves it); no release shipped it. (A first try renamed the plugin to Comp, which
+changed the title too; the unit showed it, and it was taken back.)
+
 ### Not checked
 
-- On the unit, after the knobs fix: M2 then M5 shows Attack 1.0 ms. The device list has it.
+- The short-name image on the unit: not needed. The unit has shown "Comp" in the Limiter column and
+  "Compressor" as the title (the two earlier images); this change only picks which goes where,
+  which the rig and verify_card read from the firmware itself.
 - The cost with more than one bus track playing: estimated from the loop, measured with one.
 - The display bytes on the unit: the emulator's figure is an upper bound.
 - Glue's sound against a reference compressor: none was used; the rig checks what it does

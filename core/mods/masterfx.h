@@ -98,6 +98,7 @@ uint8_t choiceCount(uint8_t slot);
 const char* const* choiceNames(uint8_t slot);
 uint8_t choice(uint8_t slot);                // the project's, in that list
 const char* choiceName(uint8_t slot);
+const char* choiceColumnName(uint8_t slot); // the Master page's column: the plugin's short name, if it has one
 // The user's pick in the list: the file goes into settings (its own knobs at the plugin's
 // defaults). Doesn't apply it.
 void choose(uint8_t slot, uint8_t index);

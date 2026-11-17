@@ -122,7 +122,7 @@ struct Env
 struct CatalogEntry
 {
     char file[kFileNameSize];     // in kDir
-    char name[32];                // the header's, shown in the list
+    char name[32];                // the header's, shown in the list; then its short name, if any
     uint32_t size;                // the file's
     uint16_t flags;
     uint8_t slot;                 // PTMFX_SLOT_*, 0 if unreadable

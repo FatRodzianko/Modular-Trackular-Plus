@@ -604,7 +604,8 @@ def limiter_page(mods, ref):
     set_mod(p.r, True, 0, 0)
     set_dynamics(p.r, "Compressor.ptmfx")
     p.start()
-    p.take_log()
+    names = [e[2] for e in p.take_log() if e[0] == "text2" and e[2] and e[2].startswith("Comp")]
+    check(names[-1:] == ["Comp"], f"Compressor: the Limiter column says its short name, Comp ({names})")
     stored = []
     p.r.watch(m.addr("_ZN4mods7project11markChangedEv"), lambda mm: stored.append(1))
     p.press("limiter")
@@ -612,7 +613,7 @@ def limiter_page(mods, ref):
     titles = [e[1] for e in log if e[0] == "title"]
     final, second = last(log, "text"), last(log, "text2")
     label0 = label0_of(final, second)
-    check(titles[-1] == "Compressor", f"Compressor: the page's title, without Limiter ({titles[-1]})")
+    check(titles[-1] == "Compressor", f"Compressor: the page's title, its whole name, without Limiter ({titles[-1]})")
     said = [final[label0 + i] for i in range(3)]
     check(said == ["Attack", "Release", "Threshold"], f"Compressor: CE's knobs without Limiter in their names ({said})")
     # the page's last words (CE sets its own first, the hook replaces them before the frame is drawn)

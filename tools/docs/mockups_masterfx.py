@@ -263,6 +263,14 @@ def main() -> None:
     write("masterfx-missing.svg", s, "The Master page with the project's Limiter plugin missing from "
                                       "the card: Missing in the list and under the column")
 
+    # 9. Compressor picked: the list says Compressor, the column its short name, Comp
+    # (masterfx::choiceColumnName; compressor.cpp's name "Compressor\0Comp")
+    s = master_page("Master FX: a short name under the column", (4, 2, 2),
+                    texts=["Shimmer", "BBD", "Comp"], place=3)
+    s.mark(COL * 3 + 3, 428, COL - 6, 48)
+    write("masterfx-comp.svg", s, "The Master page with Compressor picked in the Limiter list: the "
+                                   "column under it says its short name, Comp")
+
 
 if __name__ == "__main__":
     main()

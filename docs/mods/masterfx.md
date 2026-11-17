@@ -34,7 +34,13 @@ marks what the mod adds or changes. The font is close to the unit's, not the sam
    silent for a moment while its memory is cleared.
 
 Each list has **Stock**, then the slot's plugins on the card by their names, the default pack first.
-Under each column is what plays. A name too long for the column is cut.
+Under each column is what plays. A name too long for the column is cut, or a plugin gives a short
+one there: Compressor shows as **Comp**.
+
+![The Master page with Shimmer, BBD and Compressor picked: the Limiter list says Compressor, and the text under the Limiter column says Comp](img/masterfx-comp.svg)
+
+*Compressor picked in the Limiter list. Marked: the text under the Limiter column, its short name
+Comp. The Limiter page's title still says Compressor.*
 
 ![The Master page with Master FX on: the Reverb list with Shimmer, the Delay list with BBD and the Limiter list with Glue, the Reverb column framed](img/masterfx-master.svg)
 

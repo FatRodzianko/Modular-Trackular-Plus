@@ -284,6 +284,10 @@ slot, the number of own knobs, two reserved bytes, the name, the author, the lab
 knobs, the state size, seven zeros (the builder fills in the code's place and the entries'
 offsets), three reserved words, and the own knobs.
 
+The name is shown in the slot's list and its page's title. A name too wide for the Master page's
+column (about 10 characters) can have a short one after it, for that column: `"Compressor\0Comp"`.
+Firmware before Master FX 2.1 ignores it.
+
 ### Step 2: Build it
 
 ```
@@ -506,7 +510,7 @@ version 1's header was 240 bytes, with 2 knobs; the firmware still reads it.
 | 8 | 1 | `slot` | plugin | 1 reverb, 2 delay, 3 dynamics |
 | 9 | 1 | `num_params` | plugin | 0 to 5 |
 | 10 | 2 | `reserved` | plugin | 0 |
-| 12 | 32 | `name` | plugin | ended by a 0 |
+| 12 | 32 | `name` | plugin | ended by a 0; then, if any, the short name for the Master page's column, ended by a 0 |
 | 44 | 16 | `author` | plugin | ended by a 0 |
 | 60 | 72 | `labels` | plugin | 6 labels of 12 bytes, each ended by a 0 |
 | 132 | 4 | `state_size` | plugin | bytes of state |

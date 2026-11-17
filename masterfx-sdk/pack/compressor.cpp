@@ -137,7 +137,7 @@ inline float reduction(float over, float slope)
 PTMFX_INFO = {
     0, 0, PTMFX_FLAG_FLOAT | PTMFX_FLAG_DUCK, /* magic and version (the builder's), flags */
     PTMFX_SLOT_DYNAMICS, 2, { 0, 0 },  /* slot, own knobs, reserved */
-    "Compressor", "MT+",
+    "Compressor\0Comp", "MT+",         /* Comp: the short name, for the Master page's column */
     {},                                /* CE's Attack, Release and Threshold as they are */
     sizeof(State),
     0, 0, 0, 0, 0, 0, 0,               /* the code's place and the entries (the builder's) */

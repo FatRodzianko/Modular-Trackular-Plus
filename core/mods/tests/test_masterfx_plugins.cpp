@@ -429,6 +429,12 @@ void testStart()
               "the delay's list: Tape and BBD");
         check(slotFiles(plugins::kDynamics) == std::vector<std::string>({ "Glue.ptmfx", "Compressor.ptmfx" }),
               "the dynamics list: Glue, then Compressor");
+        const plugins::CatalogEntry* comp = plugins::slotAt(plugins::kDynamics, 1);
+        check(comp != nullptr && std::string(comp->name) == "Compressor" &&
+                std::string(comp->name + strlen(comp->name) + 1) == "Comp",
+              "Compressor: its name, then its short name Comp for the Master page's column");
+        const plugins::CatalogEntry* glue = plugins::slotAt(plugins::kDynamics, 0);
+        check(glue != nullptr && glue->name[strlen(glue->name) + 1] == 0, "Glue: no short name");
         check(plugins::slotAt(plugins::kDelay, 2) == nullptr, "a list's end");
         check(!plugins::safeMode(), "start: no marker, no safe mode");
         check(plugins::catalogFind("Nope.ptmfx") == -1 && plugins::catalogFind("BBD.ptmfx") == 7,

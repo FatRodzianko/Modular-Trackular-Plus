@@ -107,7 +107,9 @@ typedef struct __attribute__((packed, aligned(4)))
     uint8_t    slot;                        /* PTMFX_SLOT_* */
     uint8_t    num_params;                  /* 0 to PTMFX_MAX_PARAMS */
     uint8_t    reserved[2];
-    char       name[32];                    /* shown in the slot's list */
+    char       name[32];                    /* shown in the slot's list and title; after its 0 an
+                                             * optional short name for the Master page's column,
+                                             * also ended by a 0 (older firmware ignores it) */
     char       author[16];
     /* The labels of CE's knobs on the slot's page, in the page's order, as this plugin uses
      * them; an empty one keeps CE's. Index i is the page's column i. Reverb: Size, Damping,

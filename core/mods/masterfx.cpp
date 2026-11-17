@@ -314,6 +314,19 @@ const char* choiceName(uint8_t slot)
     return slot < kSlots ? names[slot][chosen[slot]] : "";
 }
 
+const char* choiceColumnName(uint8_t slot)
+{
+    build();
+    if (slot >= kSlots || chosen[slot] == 0 || names[slot][chosen[slot]] == kMissingLine)
+    {
+        return choiceName(slot); // Stock, Missing
+    }
+    // a catalog entry's name (32 bytes): its short name follows the name's 0, if it has one
+    const char* name = names[slot][chosen[slot]];
+    const size_t at = pluginkit::textLength(name, 32) + 1u;
+    return at < 32 && name[at] != 0 ? name + at : name;
+}
+
 bool missing(uint8_t slot)
 {
     build();

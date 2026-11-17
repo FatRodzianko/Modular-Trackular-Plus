@@ -145,6 +145,17 @@ void listInto(size_t* length, const char* file)
         e.slot = h.slot;
         e.knobs = h.num_params;
         copyText(e.name, sizeof(e.name), h.name);
+        // A short name for the Master page's column may follow the name's 0 (ptmfx.h): kept there,
+        // when it is ended within the field (the rest of e is 0)
+        const size_t at = pluginkit::textLength(e.name, sizeof(e.name)) + 1u;
+        if (at < sizeof(e.name))
+        {
+            const size_t n = pluginkit::textLength(h.name + at, sizeof(h.name) - at);
+            if (n < sizeof(h.name) - at)
+            {
+                memcpy(e.name + at, h.name + at, n);
+            }
+        }
     }
     if (e.status != Status::ok)
     {
