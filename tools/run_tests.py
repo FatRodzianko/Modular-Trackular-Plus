@@ -191,6 +191,10 @@ def jobs_for(args, projects):
                                 "--preempt", "3000,120000", "--preempt-play", play_gaps, inputs=[axf, folder]))
         jobs.append(Job("send leak", e / "test_send_leak.py", mods, ref, projects["held"],
                         inputs=[mods, ref, projects["held"]]))
+        # A project's own synth patches, opened and copied by CE's code with its backslash paths
+        synths = ROOT / "build" / "Synths"
+        jobs.append(Job("project patches", e / "test_project_patches.py", mods, args.project, synths,
+                        inputs=[mods, Path(args.project), synths]))
         # The simulator (docs/mt/SIMULATOR_STAGE1.md): the whole firmware on a virtual clock, booting as
         # the unit boots with the audio interrupt on; then an 800 BPM song of 48 patterns that must play
         # through its pattern loads, with the card mods at work. Placeholder card timing: this compares

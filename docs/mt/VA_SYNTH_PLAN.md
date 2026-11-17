@@ -1,9 +1,9 @@
 # DCO6: a virtual-analog synth engine after the Juno-106 — plan
 
 Status: **approved 2026-11-17; build steps 1-6 done the same day** (steps 1-2 committed in 297c342,
-3-6 not yet committed). The answers to [section 12](#12-decisions) are recorded there. Step 7 (the
-release tier, the device ladder, the merge into `modular`) hasn't started: it waits for your OK on
-the device image. Nothing is merged.
+3-6 in 430c998). The answers to [section 12](#12-decisions) are recorded there. Step 7: the release
+tier has run and the device image and projects are made; the device run and the merge into
+`modular` are next. Nothing is merged.
 
 What exists:
 - a Python model of the voice that renders listening examples, and is Level A's reference;
@@ -700,6 +700,30 @@ Each step ends with its tests passing, and nothing is committed without your OK.
    install step and build note, and Synth FX's intro. Done 2026-11-17, not committed.
 7. **Release tier** (`tools/run_tests.py --tier release`), then the device ladder with the projects
    below, then the merge checklist into `modular` and a `synths-1.x` tag.
+   - Release tier, 2026-11-17, on this branch's mods build, its `MT_NO_MODS` build as the reference,
+     the recorder build as `--diag`, and the usual source project: 55 of 55 passed, 0 failed. Its inputs were
+     built from this branch (the Synth FX rig, both packs, whose `--check` passed, and both guard
+     cards); the two older firmwares it compares with (`p1`, `d9a6795`) and WAVE and PHASE's Level A
+     come from the last release run.
+   - The device image: the recorder build (`MT_LOCKUP_RECORDER`). `mem_budget`: DTCM 2,608 free,
+     under the 4,096 floor, as every recorder build has been (the recorder takes 1,512 B); the
+     normal build has 4,128. Level B on it: 16 of 16.
+   - The DCO6 set, E1 to E5 (`DEVICE_TEST_LADDER.md`), by `tools/emu/make_dco6_test_projects.py`.
+     Each opened in the boot rig with the recorder build and played 200 blocks, no failures. E4's
+     and E5's patches opened with their values only once they were put in the Workspace by hand:
+     CE copies a project's patches with a `\` in the path, which FatFs on the unit takes as a
+     separator (`ff.c`, `IsSeparator`) but the rigs' fake card didn't, so no rig had ever opened
+     a project's own synth patches. The boot rig with E3: deepest stack 7,808 B, as before.
+   - Fixed in the rigs: the fake card now finds a path as FatFs does (`test_step0.card_path`: `/` and
+     `\` both separators, runs of them as one, no leading one needed). E4 then opens with its own
+     patch on all three parts, through CE's open. `tools/emu/test_project_patches.py` (release job
+     "project patches") checks the open and the save's copy; with the old exact matching it fails 3
+     of 4. The boot tests' "held", "worst" and "tracklen" projects keep the source project's
+     patches, which now reach the Workspace on open, where before every part was on Init. Looked at
+     for "held": parts 1 and 3 open the source's files byte for byte; part 2's file is for another
+     engine than project.mt sets, and CE's open replaces it with that engine's Init (its own code,
+     whatever the card). The release tier with the fix: 52 run, 0 failed, 4 cached from the run
+     before (jobs that don't use the fake card).
 
 ## 11. Test plan
 
