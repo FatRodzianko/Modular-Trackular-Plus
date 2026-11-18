@@ -655,7 +655,7 @@ def calls_of(r):
 
 
 def wave_off_and_mono(mods):
-    """WAVE and PHASE: Off is dry, On the slots play, and the part goes in mono"""
+    """WAVE and PHASE: Off is dry, On the slots play, and the part goes in mono; DCO6 doesn't"""
     for e, name in ((WAVE, "WAVE"), (PHASE, "PHASE")):
         slots = [(0, "Distortion", (100, 50, 0)), (1, "Phaser", (50, 50, 50, 50))]
         _, dry = play(mods, e, on=False, blocks=25)
@@ -669,8 +669,9 @@ def wave_off_and_mono(mods):
         check(on[0][tail:] != dry[0][tail:] and stereo(on[0][tail:], on[1][tail:]) and not stereo(*dry)
               and rules_ok(r), f"{name}: Synth FX On, the slots play (the Phaser makes the part stereo; dry, "
                                f"its sides are alike)")
-    # in mono: FX1's process calls take one channel on WAVE and PHASE, two on PERC
-    for e, name, want in ((WAVE, "WAVE", 1), (PHASE, "PHASE", 1), (PERC, "PERC", 2)):
+    # in mono: FX1's process calls take one channel on WAVE and PHASE, two on PERC and on DCO6 (66), our
+    # stereo engine, whose Init sides are alike but whose Unison Width isn't: it mustn't go in mono
+    for e, name, want in ((WAVE, "WAVE", 1), (PHASE, "PHASE", 1), (PERC, "PERC", 2), (66, "DCO6", 2)):
         r = Rig(mods)
         calls, _ = calls_of(r)
         r.set_instrument(0, e)

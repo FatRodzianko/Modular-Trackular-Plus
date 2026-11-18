@@ -1,7 +1,7 @@
 # Synth FX
 
 Two effect slots, **FX1** then **FX2**, on each synth part, for every engine: CE's eight, and the
-[Synths](synths.md) mod's WAVE and PHASE. Each slot runs one plugin, a `.ptsfx` file from the card's
+[Synths](synths.md) mod's WAVE, PHASE and DCO6. Each slot runs one plugin, a `.ptsfx` file from the card's
 `/SynthFX/` folder.
 
 - Turn it on in **Project Settings → Mods → Synth FX** (for new projects: **Config → Mods**).

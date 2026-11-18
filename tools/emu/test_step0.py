@@ -97,13 +97,105 @@ def test_menu(m: Machine) -> None:
 
 
 # -- 2. Settings files through FileSystem -----------------------------------------------------
+def card_path(path: str) -> str:
+    """A path as FatFs on the unit finds it. CE's FileSystemImpl hands paths to FatFs as they are
+    (platforms/imx/sdmmc/sd: f_open, f_stat, f_mkdir, f_unlink, f_rename, f_opendir), and FatFs's
+    follow_path and create_name (platforms/imx/fatfs/source/ff.c) take '/' and '\\' both as a
+    separator (IsSeparator), skip a run of them as one, and ignore one at the end. A path with or
+    without a leading one starts at the root: FF_FS_RPATH is 2, so one without starts at the current
+    folder, and nothing calls f_chdir, so that is the root. Written as "Workspace/0.patch".
+    Not modeled: FatFs matches names without regard to case, and "." and ".." step through folders."""
+    return "/".join(part for part in path.replace("\\", "/").split("/") if part)
+
+
+class CardFiles(dict):
+    """The fake card's files, keyed by card_path: every spelling of a path that finds a file on the
+    unit finds the same one here, from the firmware's stubs and the tests alike."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+        self.update(*args, **kwargs)
+
+    def __setitem__(self, key, value):
+        super().__setitem__(card_path(key), value)
+
+    def __getitem__(self, key):
+        return super().__getitem__(card_path(key))
+
+    def __delitem__(self, key):
+        super().__delitem__(card_path(key))
+
+    def __contains__(self, key):
+        return isinstance(key, str) and super().__contains__(card_path(key))
+
+    def get(self, key, default=None):
+        return super().get(card_path(key), default)
+
+    def pop(self, key, *default):
+        return super().pop(card_path(key), *default)
+
+    def setdefault(self, key, default=None):
+        return super().setdefault(card_path(key), default)
+
+    def update(self, *args, **kwargs):
+        for key, value in dict(*args, **kwargs).items():
+            self[key] = value
+
+    def copy(self):
+        return CardFiles(self)
+
+
+class CardDirs(set):
+    """The fake card's folders, as card_path writes them"""
+
+    def __init__(self, items=()):
+        super().__init__(card_path(p) for p in items)
+
+    def add(self, path):
+        super().add(card_path(path))
+
+    def discard(self, path):
+        super().discard(card_path(path))
+
+    def remove(self, path):
+        super().remove(card_path(path))
+
+    def __contains__(self, path):
+        return isinstance(path, str) and super().__contains__(card_path(path))
+
+    def update(self, *others):
+        for other in others:
+            super().update(card_path(p) for p in other)
+
+    def __ior__(self, other):
+        self.update(other)
+        return self
+
+
 class FakeSd:
-    """Files and folders, served through stubs placed in a FileSystem vtable."""
+    """Files and folders, served through stubs placed in a FileSystem vtable. Paths are matched as
+    FatFs matches them (card_path), whoever writes them and however they are assigned."""
+
+    @property
+    def files(self) -> CardFiles:
+        return self._files
+
+    @files.setter
+    def files(self, value) -> None:
+        self._files = value if isinstance(value, CardFiles) else CardFiles(value)
+
+    @property
+    def dirs(self) -> CardDirs:
+        return self._dirs
+
+    @dirs.setter
+    def dirs(self, value) -> None:
+        self._dirs = value if isinstance(value, CardDirs) else CardDirs(value)
 
     def __init__(self, m: Machine):
         self.m = m
-        self.files: dict[str, bytes] = {}
-        self.dirs: set[str] = set()
+        self.files = CardFiles()
+        self.dirs = CardDirs()
         self.handles: dict[int, list] = {}   # id -> [path, mode, position]
         self.next_handle = 0x100
         self.unexpected: list[str] = []
@@ -214,14 +306,14 @@ class FakeSd:
         FileSystemImpl's: up to count names, packed into names, each at most maxNameLen long, sorted;
         kFiles (1) only, the files directly in dir."""
         m = self.m
-        folder = m.cstr(m.arg(1)).strip("/")
+        folder = card_path(m.cstr(m.arg(1)))
         kind, names, room, longest, count_at, entries = (m.arg(2), m.arg(4), m.arg(5), m.arg(6), m.arg(7),
                                                          m.arg(8))
         want = m.r32(count_at)
         found = []
         if kind == 1:
             for path in self.files:
-                head, _, name = path.strip("/").rpartition("/")
+                head, _, name = path.rpartition("/")
                 if head == folder and name and self.list_filters.get(folder, lambda n: True)(name):
                     found.append(name)
         n = 0

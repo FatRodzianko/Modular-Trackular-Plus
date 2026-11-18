@@ -160,7 +160,7 @@ cMenuItem melProjectSynthfx(menuProjectMods, "Synth FX", projectSynthfxDesc, men
 #endif
 
 #if MT_HAS_SYNTHS
-const char projectSynthsDesc[] = { "Synths for this project: WAVE (wavetable) and PHASE (phase distortion) "
+const char projectSynthsDesc[] = { "Synths for this project: WAVE (wavetable), PHASE (phase distortion) and DCO6 (virtual analog) "
                                    "in the synth model picker. Off hides them; a part already playing one "
                                    "keeps it. " };
 const strItemTypeListTextWithAction projectSynthsSetup{
@@ -501,7 +501,7 @@ cMenuItem melModsSynthfx(menuMods, "Synth FX", modsSynthfxDesc, menuTypeItemList
 
 #if MT_HAS_SYNTHS
 const char modsSynthsDesc[] = { "Whether new projects start with Synths on. Each project has its own "
-                                "switch in Project Settings > Mods. Synths: the WAVE and PHASE synth "
+                                "switch in Project Settings > Mods. Synths: the WAVE, PHASE and DCO6 synth "
                                 "models. " };
 const strItemTypeListTextWithAction modsSynthsSetup{
     &mods::defaults[static_cast<size_t>(mods::Mod::synths)], 2, onOffStateTexts, mods::defaultsChanged };

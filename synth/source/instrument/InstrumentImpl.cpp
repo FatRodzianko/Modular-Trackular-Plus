@@ -1,5 +1,9 @@
 #include "InstrumentImpl.h"
 
+#ifndef MT_NO_MODS
+#include "PolySynth/mtUnison.h" // MT: Unison
+#endif
+
 #include "PolyUtil/math.h"
 #include "PolyUtil/misc.h"
 
@@ -539,8 +543,156 @@ void InstrumentImpl::handleAftertouch(const MidiEvent::Data::Note& note, int sou
     }
 }
 
+#ifndef MT_NO_MODS
+// MT: Unison (Modular-Trackular, PolySynth/mtUnison.h). Null unless the Synths mod sets it: every
+// note then goes CE's way. MT_NO_MODS (the plain-CE build) leaves all of this out.
+MtUnisonLookup mtUnisonLookup = nullptr;
+
+/**
+ * MT: a note for an engine with Unison takes a stack of voices (docs/mt/VA_SYNTH_PLAN.md 3.1).
+ * The stack is min(Unison, voices). The voices make floor(voices / stack) groups of consecutive
+ * voices, and the ones left over never get a note. A group is picked as findVoiceForNote picks
+ * a voice, each step over whole groups, so a stack is never split:
+ * 1. no member playing;
+ * 2. no member holding a note, and the first one last played this note;
+ * 3. no member holding a note, the longest since its note-on;
+ * 4. the longest since its note-on.
+ * Each member is told its place (slot + 16 * stack) through the engine's place parameter, then
+ * gets the Velocity and the note, as handleNoteOn does for one voice. Runs in the audio
+ * interrupt: nothing is allocated. Returns false, changing nothing, for every other engine.
+ */
+bool InstrumentImpl::mtUnisonNoteOn(const MidiEvent& event, int sourceId)
+{
+    int unisonParam = -1;
+    int placeParam = -1;
+    if (mtUnisonLookup == nullptr || patchAssigned == nullptr ||
+        !mtUnisonLookup(patchAssigned->getMetadata().instrumentTypeId, unisonParam, placeParam))
+    {
+        return false;
+    }
+    const int paramCount = static_cast<int>(std::ssize(patchAssigned->getMetadata().params));
+    const int voiceCount = static_cast<int>(std::ssize(voices));
+    if (voiceCount == 0 || unisonParam < 0 || unisonParam >= paramCount || placeParam < 0 ||
+        placeParam >= paramCount)
+    {
+        return false;
+    }
+
+    const float unison = patchAssigned->getParamFinalValue(unisonParam).value_or(1.0f);
+    const int stack = std::clamp(static_cast<int>(unison + 0.5f), 1, voiceCount);
+    const int groups = voiceCount / stack;
+    const uint8_t newNote = event.data.note.note;
+
+    auto noneActive = [this, stack](int g)
+    {
+        for (int m = 0; m < stack; m++)
+        {
+            if (voices[(g * stack) + m].voice->isActive())
+            {
+                return false;
+            }
+        }
+        return true;
+    };
+    auto noneHolding = [this, stack](int g)
+    {
+        for (int m = 0; m < stack; m++)
+        {
+            if (voices[(g * stack) + m].voice->handlesAnyNote())
+            {
+                return false;
+            }
+        }
+        return true;
+    };
+    auto age = [this, stack](int g)
+    {
+        int ticks = 0;
+        for (int m = 0; m < stack; m++)
+        {
+            ticks = std::max(ticks, voices[(g * stack) + m].ticksSinceNoteOn);
+        }
+        return ticks;
+    };
+
+    int pick = -1;
+    for (int g = 0; g < groups && pick < 0; g++)
+    {
+        if (noneActive(g))
+        {
+            pick = g;
+        }
+    }
+    for (int g = 0; g < groups && pick < 0; g++)
+    {
+        if (noneHolding(g) && voices[g * stack].voice->getLastNote() == newNote)
+        {
+            pick = g;
+        }
+    }
+    // 3, else 4: the first of the longest since its note-on (max_element's choice in CE's)
+    auto oldest = [groups, &noneHolding, &age](bool holdingNone)
+    {
+        int best = -1;
+        int bestAge = -1;
+        for (int g = 0; g < groups; g++)
+        {
+            if ((!holdingNone || noneHolding(g)) && age(g) > bestAge)
+            {
+                bestAge = age(g);
+                best = g;
+            }
+        }
+        return best;
+    };
+    if (pick < 0)
+    {
+        pick = oldest(true);
+    }
+    if (pick < 0)
+    {
+        pick = oldest(false);
+    }
+
+    const auto velocity = static_cast<Patch::paramvalue_t>(event.data.note.velocity) *
+                          Patch::kMaxMacroValue / MidiEvent::Data::Note::kMaxVelocity;
+    for (int m = 0; m < stack; m++)
+    {
+        const int voiceIdx = (pick * stack) + m;
+        auto& voice = voices[voiceIdx];
+        voice.voice->onParamChange(placeParam, static_cast<Patch::paramvalue_t>((16 * stack) + m));
+        patchAssigned->setMacroValue(*Patch::SystemMacroId::kVelocity, velocity, voiceIdx);
+        voice.voice->onMidiEvent({ getTempo() }, event);
+
+        auto& noteSourceIds = voice.noteSourceIds;
+        if (noteSourceIds.size() == decltype(voice.noteSourceIds)::capacity())
+        {
+            noteSourceIds.erase(noteSourceIds.begin());
+        }
+        noteSourceIds.push_back(sourceId);
+        voice.ticksSinceNoteOn = 0;
+    }
+    if (voices[0].voice->hasPostProcess())
+    {
+        postProcessTailing = true;
+        silentPostBlocks = 0;
+    }
+    for (auto& voice : voices)
+    {
+        voice.ticksSinceNoteOn++;
+    }
+    return true;
+}
+#endif // MT_NO_MODS
+
 void InstrumentImpl::handleNoteOn(const MidiEvent& event, int sourceId)
 {
+#ifndef MT_NO_MODS
+    if (mtUnisonNoteOn(event, sourceId)) // MT: Unison
+    {
+        return;
+    }
+#endif
     auto& voice = findVoiceForNote(event.data.note.note);
     int voiceIdx = static_cast<int>(std::distance(voices.data(), &voice));
 

@@ -12,7 +12,7 @@
 #include "mtAudioEngine.h"
 #include "util_math.h"
 #include "util_string.h"
-#if MT_HAS_SYNTHS // MT: Synths: the picker shows WAVE and PHASE only with the mod on
+#if MT_HAS_SYNTHS // MT: Synths: the picker shows our engines (WAVE, PHASE, DCO6) only with the mod on
 #include "mods.h"
 #include "synths/synthsMod.h"
 #endif
@@ -31,7 +31,7 @@ static std::vector<char*> synthModelNamesPtrs;
 
 static cInstrumentEditor* IE = &instrumentEditor;
 
-#if MT_HAS_SYNTHS // MT: Synths Off: the picker's rows leave out WAVE and PHASE, unless the part has one
+#if MT_HAS_SYNTHS // MT: Synths Off: the picker's rows leave out our engines, unless the part has one
 static constexpr size_t kMtPickerRows = 128;
 __NOINIT(EXTERNAL_RAM) static uint16_t mtPickerModel[kMtPickerRows]; // row -> index into getSynthTypes()
 static size_t mtPickerCount;
@@ -516,7 +516,7 @@ void cInstrumentEditor::changeSynthModel(int16_t value)
           clamp<int>(mtProject.values.synthPart[syntPartIdx].synthType + value, 0, modelMaxValue);
     }
 
-#if MT_HAS_SYNTHS // MT: Synths Off: the step goes over the picker's rows, past WAVE and PHASE
+#if MT_HAS_SYNTHS // MT: Synths Off: the step goes over the picker's rows, past our engines
     mtPickerBuild(previousSynthType);
     if (mtPickerCount > 0)
     {
@@ -944,7 +944,7 @@ void cInstrumentEditor::showSynthParamsScreen()
     modelListData.start = mtProject.values.synthPart[syntPartIdx].synthType;
     modelListData.length = modelCount;
     modelListData.linesCount = std::min<uint16_t>(modelCount, 14);
-#if MT_HAS_SYNTHS // MT: Synths Off: WAVE and PHASE hidden
+#if MT_HAS_SYNTHS // MT: Synths Off: our engines hidden
     mtPickerShow(mtProject.values.synthPart[syntPartIdx].synthType);
 #endif
     modelListData.rowHeight = 0;
@@ -1033,7 +1033,7 @@ void cInstrumentEditor::showSynthParamsScreen()
 
 void cInstrumentEditor::showSynthModel(uint8_t synthPart)
 {
-#if MT_HAS_SYNTHS // MT: Synths Off: the rows again (leaving WAVE or PHASE takes its row away)
+#if MT_HAS_SYNTHS // MT: Synths Off: the rows again (leaving one of ours takes its row away)
     mtPickerShow(mtProject.values.synthPart[synthPart].synthType);
     display.setControlData(modelListControl, &modelListData);
     display.setControlValue(modelListControl, modelListData.start);

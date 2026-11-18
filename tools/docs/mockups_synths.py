@@ -291,9 +291,9 @@ def write(name: str, screen: Screen, desc: str) -> None:
     print("wrote", OUT / name)
 
 
-# the Model list: CE's kSynthTypes order (core/synth/Synth.h), WAVE and PHASE at 7 and 8; the
+# the Model list: CE's kSynthTypes order (core/synth/Synth.h), WAVE, PHASE and DCO6 at 7, 8 and 9; the
 # release's Synths zip has no other engines (CE dropped GRAIN); each row is the engine's code name
-MODELS = ["ACD", "FAT", "VAP", "WTFM", "PERC", "DIRT", "CHIP", "WAVE", "PHASE"]
+MODELS = ["ACD", "FAT", "VAP", "WTFM", "PERC", "DIRT", "CHIP", "WAVE", "PHASE", "DCO6"]
 
 # which parameter each page selects: a list shows its choices in column 8
 WAVE_SELECT = [0, 2, 2, 2, 1, 2, 1, 0]
@@ -303,8 +303,8 @@ P_FILES = ["dco", "dcw", "dca", "dcwenv", "dcoenv", "lfo", "matrix", "voice"]
 
 
 def main() -> None:
-    write("synths-picker.svg", synth_picker(7, MODELS, (7, 8)),
-          "The Synth Parameters screen with WAVE picked; WAVE and PHASE are marked")
+    write("synths-picker.svg", synth_picker(7, MODELS, (7, 8, 9)),
+          "The Synth Parameters screen with WAVE picked; WAVE, PHASE and DCO6 are marked")
     for i, f in enumerate(FILES):
         write(f"synths-wave-{f}.svg", patch_editor("WAVE", WAVE, i, WAVE_SELECT[i]),
               f"WAVE's {WAVE[i][0]} in the patch editor")

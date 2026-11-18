@@ -30,6 +30,10 @@
 #include "fileManager.h"
 #include "interruptsControl.h"
 #include "mtStructs.h"
+#if MT_HAS_SYNTHS // MT: Unison in CE's host for DCO6 (core/mods/synths/synthsMod.h)
+#include "PolySynth/mtUnison.h"
+#include "synths/synthsMod.h"
+#endif
 #include <cctype>
 #include <cstring>
 #include <numeric>
@@ -92,6 +96,9 @@ Synth::~Synth() = default;
 void Synth::init(Platform* platform, std::function<tiny_optional<float>()> getTempo)
 {
     s_psynRamPoolOffset = 0;
+#if MT_HAS_SYNTHS // MT: before any note: the host's note-on asks it in the audio interrupt
+    polysynth::mtUnisonLookup = &mods::synths::unisonParams;
+#endif
     synth = polysynth::Synth::createSynth(
       [](size_t size) -> void*
       {
