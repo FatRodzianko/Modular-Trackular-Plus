@@ -1,9 +1,9 @@
 # DCO6: a virtual-analog synth engine after the Juno-106 — plan
 
-Status: **approved 2026-11-17; build steps 1-6 done the same day** (steps 1-2 committed in 297c342,
-3-6 in 430c998). The answers to [section 12](#12-decisions) are recorded there. Step 7: the release
-tier has run and the device image and projects are made; the device run and the merge into
-`modular` are next. Nothing is merged.
+Status: **done 2026-11-17, merged into `modular` as `synths-1.1`.** Approved and built the same day
+(steps 1-2 in 297c342, 3-6 in 430c998, the device projects in 542375d). The answers to
+[section 12](#12-decisions) are recorded there. Step 7: the release tier passed, the device run
+passed (E1 to E5), and the merge went through the checklist.
 
 What exists:
 - a Python model of the voice that renders listening examples, and is Level A's reference;
@@ -608,7 +608,10 @@ figures for them are end to end, on the unit, from the Profiler (`MASTERFX_PORT_
 | DIRT | 63-66 % | 83 % |
 | WAVE (S5, `CE_PORT_PLAN.md`) | 35 % | 44 % (50 % in another run) |
 
-**Estimate, not measured:** DCO6 at 8 voices sounding is about 32,000 instructions a block more
+**Measured on the unit since** (step 7): 8 voices on Init average 27-29 %, slowest 40-48 %;
+the heavy patch 31-32 % and 44-46 %.
+
+**Estimate, before it was measured:** DCO6 at 8 voices sounding is about 32,000 instructions a block more
 than WAVE on Init, and 62,000 more on the heavy patch. At the old device ratio of about 3,800
 instructions per point, that's roughly +8.5 points on Init (an average near 43-48 % and a slowest
 near 52-58 % on the S5 kind of project) and +16 on the heavy patch (near 51-56 % and 60-66 %). That's under VAP and
@@ -724,6 +727,22 @@ Each step ends with its tests passing, and nothing is committed without your OK.
      engine than project.mt sets, and CE's open replaces it with that engine's Init (its own code,
      whatever the card). The release tier with the fix: 52 run, 0 failed, 4 cached from the run
      before (jobs that don't use the fake card).
+   - On the unit, 2026-11-17, the recorder build, E1 to E5 in order, each played two to five times
+     (18 plays, 0 to 38 s each). No lockup or fault, 0 blocks over time in any play, the synth
+     never over its limit. Free heap 68,740 B at the least, max stack 8,053 B (of 20,480), longest
+     main loop gap 26 ms. E4 sounds wide, and changing Width while it plays is heard at once.
+
+     | Project | Average | Slowest |
+     |---|---|---|
+     | E1, 1 voice, Init | 13 % | 17-24 % |
+     | E2, 4 voices, Init | 18-19 % | 23-28 % |
+     | E3, 8 voices, Init | 27-29 % | 40-48 % |
+     | E4, 8 voices, Unison 4 | 24-25 % | 37-40 % |
+     | E5, 8 voices, heavy patch | 31-32 % | 44-46 % |
+
+     The last play, 43 blocks at 2 % (most likely stopped before the notes sounded), is left out of E5's row.
+     Under the estimate in 8.1, and near WAVE's 8 voices (S5: 35 %, 44 %), on a different project.
+     Not measured: the Profiler's figure with all 8 voices, and DCO6 with Synth FX or Master FX on.
 
 ## 11. Test plan
 
