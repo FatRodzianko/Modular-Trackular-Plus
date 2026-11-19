@@ -25,7 +25,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from machine import Machine  # noqa: E402
-from test_step0 import FakeSd, menu_item_named  # noqa: E402
+from test_step0 import FakeSd, menu_item, menu_item_named  # noqa: E402
 
 HUMANIZE_ID = 1
 RECORD_ID = HUMANIZE_ID + 1
@@ -43,10 +43,6 @@ def check(cond: bool, name: str, detail: str = "") -> None:
     print(("PASS " if cond else "FAIL ") + name + (f" ({detail})" if detail and not cond else ""))
     if not cond:
         failures += 1
-
-
-def menu_item(m: Machine, group: str, index: int) -> int:
-    return m.r32(m.r32(m.addr(group) + 12) + 4 * index)
 
 
 class Rig:

@@ -81,13 +81,13 @@ const uint32_t DELAY_MEMORY_SIZE = (3 * 512 * 1024);               // 1,5 MB
 const uint32_t REVERB_MEMORY_SIZE = 32768;                         // 32 KB
 const uint32_t SHARED_SCRATCH_MEMORY_SIZE = 768 * 1024; // 768 KB shared external scratch (.scratch_memory)
 
-const uint32_t EDIT_BUFF_SIZE = (15 * 256 * 1024); // 3,75 MB
-
 #ifdef PLATFORM_IMX
-constexpr int SAMPLE_CHANNELS = 2;
+const uint32_t EDIT_BUFF_SIZE = (15 * 256 * 1024); // 3,75 MB
 #else
-constexpr int SAMPLE_CHANNELS = 1;
+const uint32_t EDIT_BUFF_SIZE = (15 * 128 * 1024); // 1,875 MB (~22.3s stereo on MK66)
 #endif
+
+constexpr int SAMPLE_CHANNELS = 2;
 
 const uint32_t EDIT_BUFF_OFFSET = SAMPLE_MEMORY_SIZE - (2 * SAMPLE_CHANNELS * EDIT_BUFF_SIZE);
 
@@ -1022,6 +1022,15 @@ enum NumberingMode
     kNumberingModeDefault = kDecimalWithStepsFrom1,
 };
 
+enum NoteDisplayMode
+{
+    kNoteDisplayOriginal,
+    kNoteDisplayTraditional,
+
+    kNoteDisplayModeCount,
+    kNoteDisplayModeDefault = kNoteDisplayOriginal,
+};
+
 struct strMtConfig
 {
     struct strConfigHeader
@@ -1125,6 +1134,7 @@ struct strMtConfig
         uint8_t font;
         uint8_t previewVolume;
         uint8_t recThreshold;
+        uint8_t noteDisplayMode;
     } general;
 
     struct strInterfaceState
@@ -1285,6 +1295,19 @@ const char mtNotes[128][5] = {
     "G7",  "G#7", "A7",  "A#7", "B7",   "C8",  "C#8",  "D8",  "D#8", "E8",   "F8",  "F#8", "G8",
     "G#8", "A8",  "A#8", "B8",  "C9",   "C#9", "D9",   "D#9", "E9",  "F9",   "F#9", "G9",  "G#9",
     "A9",  "A#9", "B9",  "C10", "C#10", "D10", "D#10", "E10", "F10", "F#10", "G10"
+};
+
+const char mtNotesTraditional[128][5] = {
+    "C-0",  "C#0", "D-0",  "D#0", "E-0",  "F-0",  "F#0",  "G-0",  "G#0", "A-0",  "A#0", "B-0",  "C-1",
+    "C#1",  "D-1", "D#1",  "E-1", "F-1",  "F#1",  "G-1",  "G#1", "A-1",  "A#1", "B-1",  "C-2",  "C#2",
+    "D-2",  "D#2", "E-2",  "F-2", "F#2",  "G-2",  "G#2",  "A-2", "A#2",  "B-2", "C-3",  "C#3",  "D-3",
+    "D#3",  "E-3", "F-3",  "F#3", "G-3",  "G#3",  "A-3",  "A#3", "B-3",  "C-4", "C#4",  "D-4",  "D#4",
+    "E-4",  "F-4", "F#4",  "G-4", "G#4",  "A-4",  "A#4",  "B-4", "C-5",  "C#5", "D-5",  "D#5",  "E-5",
+    "F-5",  "F#5", "G-5",  "G#5", "A-5",  "A#5",  "B-5",  "C-6", "C#6",  "D-6", "D#6",  "E-6",  "F-6",
+    "F#6",  "G-6", "G#6",  "A-6", "A#6",  "B-6",  "C-7",  "C#7", "D-7",  "D#7", "E-7",  "F-7",  "F#7",
+    "G-7",  "G#7", "A-7",  "A#7", "B-7",  "C-8",  "C#8",  "D-8", "D#8",  "E-8", "F-8",  "F#8",  "G-8",
+    "G#8",  "A-8", "A#8",  "B-8", "C-9",  "C#9",  "D-9",  "D#9", "E-9",  "F-9", "F#9",  "G-9",  "G#9",
+    "A-9",  "A#9", "B-9",  "C-10", "C#10", "D-10", "D#10", "E-10", "F-10", "F#10", "G-10"
 };
 
 const char mtVolumes[48][4] = {

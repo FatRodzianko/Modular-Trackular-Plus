@@ -102,6 +102,8 @@ Full details in [`docs/modular_effects_system.md`](modular_effects_system.md).
     * `TrackerPlus` (Tracker+)
     * `TrackerMini` (Tracker Mini)
   * **31-Character Maximum on Original Tracker**: `PlatformImpl::runBootloader()` ([`platforms/mk66/source/PlatformImpl.cpp`](../platforms/mk66/source/PlatformImpl.cpp) / [`platforms/imx/source/PlatformImpl.cpp`](../platforms/imx/source/PlatformImpl.cpp)) writes the selected `.ptf` filename to `/Firmware/_fwinfo`. The Original Tracker's on-chip bootloader reads `/Firmware/_fwinfo` into a 32-byte `char[32]` buffer. Filenames of 32+ characters overwrite the trailing `\0` byte and cause garbage symbols on the bootloader flashing screen. Always keep `.ptf` filenames `<= 31` characters.
+* **Reading Text Files from SD (`SdTextFile`)**:
+  * Use [`SdTextFile`](../core/include/SdTextFile.h) ([`core/source/SdTextFile.cpp`](../core/source/SdTextFile.cpp)) when reading SD text/JSON/wordlist files instead of duplicating `FileSystem::openFile` + leading-`/` fallback + `closeFile` boilerplate: `SdTextFile::openWithFallback()` retries without a leading `/`, `SdTextFile::readAll()` reads and null-terminates into a caller buffer (used by `ThemeManager`), `SdTextFile::readRandomWord()` samples a word from a wordlist file using a 96-byte stack buffer (`mtRandomNameGenerator`), and `SdScopedFile` provides RAII `closeFile()` cleanup.
 
 ---
 
@@ -112,7 +114,7 @@ All three devices share the same `core/` codebase and are differentiated at comp
 | Target Scope | Preprocessor Condition | Matching Hardware & Typical Use Case |
 | :--- | :--- | :--- |
 | **IMX Only** (Tracker+ & Mini) | `#ifdef PLATFORM_IMX` | `600 MHz` Cortex-M7, `64 MB` SDRAM, stereo samples (`SAMPLE_CHANNELS == 2`), 16 tracks. |
-| **MK66 Only** (Original Tracker) | `#ifndef PLATFORM_IMX` | `180 MHz` Cortex-M4F, `16 MB` SDRAM, mono samples (`SAMPLE_CHANNELS == 1`), 16 tracks. |
+| **MK66 Only** (Original Tracker) | `#ifndef PLATFORM_IMX` | `180 MHz` Cortex-M4F, `16 MB` SDRAM, stereo samples (`SAMPLE_CHANNELS == 2`), 16 tracks. |
 | **Tracker Mini Only** | `#ifdef TRACKER_MINI` | Handheld controls (`interfaceButtonMiniMiddle`, D-pad, battery gauge, internal mic, no pad grid). |
 | **Desktop Form Factor** (Original & Plus) | `#ifndef TRACKER_MINI` | Shared desktop hardware: 48 RGB silicone pads, rotary jog-wheel, FM radio, line/mic inputs. |
 | **Tracker+ Exclusively** | `#if defined(PLATFORM_IMX) && !defined(TRACKER_MINI)` | Features requiring both the IMX CPU/RAM and the 48-pad desktop interface. |

@@ -592,7 +592,7 @@ is in the last column; its guide says why it differs.
 | Guards | CE's 2.1 ms synth limit | none needed (main loop) | time, output and start marker, inside CE's limit | time, output and start marker |
 | File I/O for the plugin | `read_file`, `load_wav_file` (outside the audio thread) | file parameters | none | none |
 | Builder | `psyn_builder.py` from an ELF | `ptfx_builder.py` | `ptsfx_builder.py` (from `ptfx_builder.py`) | `ptmfx_builder.py` (from `ptsfx_builder.py`) |
-| Shipped | CE's `polyend-tracker-ce-synths` build and `PolyendTracker_CE_Synths.zip` | CE's `polyend-tracker-ce-effects` build and `PolyendTracker_CE_Effects.zip` | the default pack is in the firmware, written when missing or as an older release shipped it | the default pack is in the firmware, written when missing or as an older release shipped it |
+| Shipped | CE's `polyend-tracker-ce-sd-card` build and `PolyendTracker_CE_Synths.zip` | CE's `polyend-tracker-ce-sd-card` build and `PolyendTracker_CE_Effects.zip` | the default pack is in the firmware, written when missing or as an older release shipped it | the default pack is in the firmware, written when missing or as an older release shipped it |
 
 Why the differences:
 

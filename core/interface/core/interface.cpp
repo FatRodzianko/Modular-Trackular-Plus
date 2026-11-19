@@ -224,6 +224,7 @@ void Interface::doStartTasks()
     interfaceGlobals.currentFirmwareBuild = platform->getSystemInfo()->buildId;
 
     ThemeManager::init(platform);
+    randomNameGenerator.init(platform->getFileSystem());
     refreshThemeAndFontMenuOptions();
 
     songTimer.initControls();
@@ -246,7 +247,7 @@ void Interface::doStartTasks()
     display.processDisplayUpdateImmediate();
 
     engine.setHeadphonesVolume(mtConfig.audioCodecConfig.volume);
-    engine.setLineInOutType(mtConfig.general.lineInOutType);
+    engine.setLineInOutType(AudioStereoToMono::OutSignalType::stereo);
     engine.setPreviewVolume(mtConfig.general.previewVolume);
 }
 

@@ -801,7 +801,6 @@ void cSampleEditor::noteOffHandle(uint8_t channel,
 
 bool cSampleEditor::isCurrentSampleStereo()
 {
-#ifdef PLATFORM_IMX
     if (confirmedDataIsChanged && currentEffect != nullptr)
     {
         if (currentEffectIdx == editorEffectModular &&
@@ -822,7 +821,6 @@ bool cSampleEditor::isCurrentSampleStereo()
             }
         }
     }
-#endif
     return newFileManager.isInstrumentStereo(mtProject.values.lastUsedInstrument);
 }
 

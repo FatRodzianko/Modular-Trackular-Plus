@@ -32,36 +32,50 @@ def check(cond: bool, name: str, detail: str = "") -> None:
 
 
 # -- 1. Config menu ---------------------------------------------------------------------------
-# cMenuGroup: type@0, parentMenu@4, childsCount@8, childs@12, childsNames@16,
-# childsValues@20, groupName@24, selectedItem@28, slotsUsed@29, slot@30
+# cMenuGroup since CE's 01c190b/ca039dc keeps its children in std::vectors (begin, end, capacity),
+# configMenu.h: type@0, parentMenu@4, childs@8, childsNames@20, childsValues@32, groupName@44,
+# selectedItem@48, slot@49 (52 bytes, as the image's symbols say)
 # cMenuItem:  type@0, itemName@4, itemDesc@8, itemType@12, itemSetup@16
 MENU_TYPE_GROUP = 1
 MENU_TYPE_ITEM_LABEL = 5
+GROUP_CHILDS = 8
+GROUP_NAMES = 20
 EXPECTED_GROUPS = ["Project Settings", "General", "MIDI", "USB", "Metronome", "Firmware",
                    "Mods", "Info"]
 
 
+def group_children(m: Machine, a: int) -> list:
+    """A group's children (cMenuGroup::childs), in order"""
+    return [m.r32(p) for p in range(m.r32(a + GROUP_CHILDS), m.r32(a + GROUP_CHILDS + 4), 4)]
+
+
+def group_names(m: Machine, a: int) -> list:
+    """The names the group lists for its children (cMenuGroup::childsNames)"""
+    return [m.cstr(m.r32(p)) for p in range(m.r32(a + GROUP_NAMES), m.r32(a + GROUP_NAMES + 4), 4)]
+
+
+def menu_item(m: Machine, group: str, index: int) -> int:
+    return group_children(m, m.addr(group))[index]
+
+
 def menu_item_named(m: Machine, group: str, name: str) -> int:
     """A group's item by its name, wherever other mods' lines have put it."""
-    a = m.addr(group)
-    items = (m.r32(m.r32(a + 12) + 4 * i) for i in range(m.r8(a + 8)))
-    return next(i for i in items if m.cstr(m.r32(i + 4)) == name)
+    return next(i for i in group_children(m, m.addr(group)) if m.cstr(m.r32(i + 4)) == name)
 
 
 def test_menu(m: Machine) -> None:
     m.call(m.addr("_GLOBAL__sub_I_menuBase"))
 
     base = m.addr("menuBase")
-    count, used = m.r8(base + 8), m.r8(base + 29)
-    names_ptr = m.r32(base + 16)
-    names = [m.cstr(m.r32(names_ptr + 4 * i)) for i in range(min(count, used))]
-    check(count == 8 and used == 8, "Config has 8 top-level groups", f"count {count}, used {used}")
+    children, names = group_children(m, base), group_names(m, base)
+    check(len(children) == 8 and len(names) == 8, "Config has 8 top-level groups",
+          f"{len(children)} children, {len(names)} names")
     check(names == EXPECTED_GROUPS, "Mods sits just before Info", str(names))
 
     mods = m.addr("menuMods")
-    check(m.r32(base + 12 + 0) != 0 and m.r32(m.r32(base + 12) + 4 * 6) == mods,
-          "slot 6 is the menuMods object")
-    item = m.r32(m.r32(mods + 12))
+    check(len(children) > 6 and children[6] == mods, "slot 6 is the menuMods object")
+    mods_children = group_children(m, mods)
+    item = mods_children[0]
     check(m.cstr(m.r32(item + 4)) == "Mods in build", "first item: Mods in build")
     check(m.r32(item + 12) == MENU_TYPE_ITEM_LABEL, "item is a label")
     built = m.cstr(m.r32(m.r32(item + 16)))
@@ -69,28 +83,26 @@ def test_menu(m: Machine) -> None:
     if not built.isdigit():
         return
     built = int(built)
-    check(m.r8(mods + 8) == 1 + built and m.r8(mods + 29) == 1 + built,
-          "Mods holds the count and one item per mod",
-          f"count {m.r8(mods + 8)}, used {m.r8(mods + 29)}, mods {built}")
+    check(len(mods_children) == 1 + built and len(group_names(m, mods)) == 1 + built,
+          "Mods holds the count and one item per mod", f"{len(mods_children)} items, mods {built}")
 
     project = m.addr("menuProject")
-    count, used = m.r8(project + 8), m.r8(project + 29)
-    check(count == 14 and used == 14, "Project Settings has CE's 10 items plus Mods, Global Swing, Humanize and Master FX",
-          f"count {count}, used {used}")
+    project_children = group_children(m, project)
+    check(len(project_children) == 14 and len(group_names(m, project)) == 14,
+          "Project Settings has CE's 10 items plus Mods, Global Swing, Humanize and Master FX",
+          f"{len(project_children)} items")
     project_mods = m.addr("menuProjectMods")
-    check(m.r32(m.r32(project + 12) + 4 * 10) == project_mods,
-          "after CE's items comes the Mods group")
-    check(m.cstr(m.r32(m.r32(project + 16) + 4 * 10)) == "Mods", "its name")
-    check(m.r32(m.r32(project + 12) + 4 * 11) == m.addr("menuProjectSwing")
-          and m.r32(m.r32(project + 12) + 4 * 12) == m.addr("menuProjectHumanize")
-          and m.r32(m.r32(project + 12) + 4 * 13) == m.addr("menuProjectMasterfx"),
+    check(project_children[10:11] == [project_mods], "after CE's items comes the Mods group")
+    check(group_names(m, project)[10:11] == ["Mods"], "its name")
+    check(project_children[11:14] == [m.addr("menuProjectSwing"), m.addr("menuProjectHumanize"),
+                                      m.addr("menuProjectMasterfx")],
           "then Global Swing, Humanize and Master FX")
     check(m.r32(project_mods) == MENU_TYPE_GROUP and m.r32(project_mods + 4) == project,
           "a group inside Project Settings")
-    check(m.r8(project_mods + 8) == built + 1 and m.r8(project_mods + 29) == built + 1,
-          "Project Settings -> Mods holds one item per mod and Defaults",
-          f"count {m.r8(project_mods + 8)}, used {m.r8(project_mods + 29)}")
-    item = m.r32(m.r32(project_mods + 12) + 4 * built)
+    pm_children = group_children(m, project_mods)
+    check(len(pm_children) == built + 1 and len(group_names(m, project_mods)) == built + 1,
+          "Project Settings -> Mods holds one item per mod and Defaults", f"{len(pm_children)} items")
+    item = pm_children[built]
     check(m.cstr(m.r32(item + 4)) == "Defaults", "last item: Defaults")
     check(m.r32(item + 12) == MENU_TYPE_ITEM_LABEL, "item is a label")
     check(m.cstr(m.r32(m.r32(item + 16))) == "Config > Mods", "label points at Config -> Mods")

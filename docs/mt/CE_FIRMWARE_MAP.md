@@ -254,15 +254,15 @@ in file-transfer mode. `handleFileTransferMode` swaps the class and resets the b
 
 ## 15. Memory budget
 
-Exact, from the ELF, with `tools/mem_budget.py`, on `modular` `5b40785` (CE `f25fb89`, Synths 1.1)
-with the heap trim (below), 2026-11-18. "Mods" is the release mod build, every mod in, with the 1 MiB
+Exact, from the ELF, with `tools/mem_budget.py`, on the merge of CE `922bba0` into `modular`
+(Synths 1.1, the heap trim below), 2026-11-18. "Mods" is the release mod build, every mod in, with the 1 MiB
 taken from sample memory.
 
 | Region | Size | Plain CE free | Mods free | Floor | Notes |
 | --- | --- | --- | --- | --- | --- |
-| Flash | 16,580,608 | 15,111,044 | 14,962,532 | 1 MiB | 1.2.0 images up to 8 MB flashed whole |
-| ITCM | 131,064 | 68,728 | 38,560 | 1,024 | closed libs, audio code, masterfx's 5,584 |
-| DTCM unreserved | gap | 11,048 | 5,152 | 4,096 | heap end to stack base; 4,128 before the trim; the recorder (diag) build has 3,632 |
+| Flash | 16,580,608 | 15,122,612 | 14,974,156 | 1 MiB | 1.2.0 images up to 8 MB flashed whole |
+| ITCM | 131,064 | 68,216 | 38,048 | 1,024 | closed libs, audio code, masterfx's 5,584 |
+| DTCM unreserved | gap | 10,608 | 4,616 | 4,096 | heap end to stack base; 5,152 before CE 922bba0 (its stereo mirror in each voice and the menus' vectors took 536), 4,128 before the trim; the recorder (diag) build has 3,088 |
 | OCRAM | 32,768 | 9,556 | 9,556 | 1,024 | mods stay out |
 | SDRAM unreserved | 67,108,864 | 21,048 | 610,824 | 256 KiB | the pool takes all the rest in plain CE |
 
