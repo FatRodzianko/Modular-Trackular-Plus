@@ -268,7 +268,7 @@ class MasterPage:
         setControlShow sets, by doing it."""
         m, r = self.m, self.r
         size = m.sym("display").size
-        heap = (r.heap_base, r.heap_base + 138_752)
+        heap = (r.heap_base, r.heap_base + r.heap_size)
         for off in range(0, size, 4):
             if heap[0] <= m.r32(self.display + off) < heap[1]:
                 self.table = self.display + off

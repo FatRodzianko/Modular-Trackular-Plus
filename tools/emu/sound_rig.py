@@ -44,7 +44,7 @@ SYNTHS_FALLBACK = (REPO / "synth" / "prebuilt", REPO / "synth-plugin-sdk" / "bui
 FACTORY_SYNTHS = ("ACD", "DIRT", "FAT", "PERC", "VAP", "WTFM")  # synth/prebuilt; CE dropped GRAIN (CE 26baedf)
 OWN_SYNTHS = ("WAVE", "PHASE", "DCO6")        # ours, open: core/mods/synths/psyn
 PSYN_HEADER = 128
-HEAP_SIZE = 138_752                 # CE's fixed heap
+HEAP_SIZE = 138_752                 # CE's fixed heap; a build's own is in its ELF (heap_size)
 BLOCK = 128
 BLOCK_MS = 3                        # the fake clock's step per block: 128 samples at 44.1 kHz
 PATCH_SIZE = 255
@@ -319,11 +319,17 @@ class SoundRig:
         index = 1 if "_sbrk_r" in self.syms else 0
         name = "_sbrk_r" if index else "_sbrk"
 
+        # The build's own heap: mods builds take 1 KB off CE's (platforms/imx/makefile, _MtHeapTrim).
+        # The firmware's _sbrk (libcr_newlib_nohost) refuses a break at or past _pvHeapLimit
+        # (__check_heap_overflow), and CE's Profiler::init takes the heap to that limit at every boot.
+        self.heap_size = (self.syms["_pvHeapLimit"].addr - self.syms["_pvHeapStart"].addr
+                          if "_pvHeapLimit" in self.syms and "_pvHeapStart" in self.syms else HEAP_SIZE)
+
         def sbrk(mm):
             increase = mm.arg(index)
             old = self.heap_brk
-            if old + increase > self.heap_base + HEAP_SIZE:
-                self.failures.append(f"heap over its {HEAP_SIZE} bytes")
+            if old + increase >= self.heap_base + self.heap_size:
+                self.failures.append(f"heap over its {self.heap_size} bytes")
                 return 0xFFFFFFFF
             self.heap_brk += increase
             self.heap_peak = max(self.heap_peak, self.heap_brk - self.heap_base)

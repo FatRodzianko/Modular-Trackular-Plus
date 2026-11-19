@@ -332,7 +332,8 @@ SECTIONS
     } > QSPI_FLASH
 
     /* Reserve and place Heap within memory map */
-    _HeapSize = 0x21E00;
+    /* MT: mods builds pass _MtHeapTrim (makefile); docs/mt/CE_FIRMWARE_MAP.md section 15 */
+    _HeapSize = 0x21E00 - (DEFINED(_MtHeapTrim) ? _MtHeapTrim : 0);
     .heap :  ALIGN(4)
     {
         _pvHeapStart = .;
