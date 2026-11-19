@@ -71,6 +71,15 @@ else
 $(error Invalid PRODUCT value $(PRODUCT))
 endif
 
+# MT: a mods build (Tracker+ without MT_NO_MODS, as core/mods/modsBuild.h) gives 1 KB of CE's
+# heap to the free DTCM between the heap and the stack. docs/mt/CE_FIRMWARE_MAP.md section 15.
+MT_LDFLAGS :=
+ifeq ($(PRODUCT), PLUS)
+ifeq ($(findstring MT_NO_MODS,$(CUSTOM_DEFINES)),)
+MT_LDFLAGS := -Xlinker --defsym=_MtHeapTrim=0x400
+endif
+endif
+
 COMPILER_OPTIONS+=-fno-common -g -mcpu=cortex-m7 -mfpu=fpv5-sp-d16 -mfloat-abi=hard -mthumb -D__NEWLIB__ -fstack-usage -specs=nano.specs -Wall -c -ffunction-sections -fdata-sections -ffreestanding -fno-builtin
 ifdef DEBUG
 COMPILER_OPTIONS+=-Og -DDEBUG
@@ -99,7 +108,7 @@ $(OBJ_DIR)/%.o: %.S config/config.h
 	$(TOOLCHAIN)gcc -c -x assembler-with-cpp -mcpu=cortex-m7 -mfpu=fpv5-sp-d16 -mfloat-abi=hard -mthumb $(DEFINES) $(INCLUDES) -g -o "$@" "$<"
  
 $(TARGET): $(OBJS_SORTED)
-	@$(TOOLCHAIN)c++ -L ./linker -L ./linker/$(TARGET) -L ./3rdparty/math -L ${POLYSYNTH_DIR}/build-IMX-TrackerPlus -L${TRACKER_DIR}/build-IMX-$(PRODUCT) -Xlinker --defsym=__rtc_localtime=0 -Xlinker -print-memory-usage -Xlinker --gc-sections -mcpu=cortex-m7 -mfpu=fpv5-sp-d16 -mfloat-abi=hard -mthumb -nostdlib -T linkerScript.ld -u _printf_float -o "$(BUILD_DIR)/$(TARGET).axf" $(OBJS_SORTED) $(LIBS)
+	@$(TOOLCHAIN)c++ -L ./linker -L ./linker/$(TARGET) -L ./3rdparty/math -L ${POLYSYNTH_DIR}/build-IMX-TrackerPlus -L${TRACKER_DIR}/build-IMX-$(PRODUCT) -Xlinker --defsym=__rtc_localtime=0 $(MT_LDFLAGS) -Xlinker -print-memory-usage -Xlinker --gc-sections -mcpu=cortex-m7 -mfpu=fpv5-sp-d16 -mfloat-abi=hard -mthumb -nostdlib -T linkerScript.ld -u _printf_float -o "$(BUILD_DIR)/$(TARGET).axf" $(OBJS_SORTED) $(LIBS)
 	@$(MAKE) --no-print-directory post-build
 	
 # Main rules

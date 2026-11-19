@@ -254,22 +254,32 @@ in file-transfer mode. `handleFileTransferMode` swaps the class and resets the b
 
 ## 15. Memory budget
 
-Exact, from the ELF, with `tools/mem_budget.py`, on CE `f25fb89` (2026-11-16). "Mods" is the release
-mod build, every mod in, with the 1 MiB taken from sample memory.
+Exact, from the ELF, with `tools/mem_budget.py`, on `modular` `5b40785` (CE `f25fb89`, Synths 1.1)
+with the heap trim (below), 2026-11-18. "Mods" is the release mod build, every mod in, with the 1 MiB
+taken from sample memory.
 
 | Region | Size | Plain CE free | Mods free | Floor | Notes |
 | --- | --- | --- | --- | --- | --- |
-| Flash | 16,580,608 | 15,111,060 | 14,971,044 | 1 MiB | 1.2.0 images up to 8 MB flashed whole |
-| ITCM | 131,064 | 68,728 | 40,096 | 1,024 | closed libs, audio code, masterfx's 5,584 |
-| DTCM unreserved | gap | 11,048 | 4,176 | 4,096 | heap end to stack base; the recorder (diag) build has 2,648 |
+| Flash | 16,580,608 | 15,111,044 | 14,962,532 | 1 MiB | 1.2.0 images up to 8 MB flashed whole |
+| ITCM | 131,064 | 68,728 | 38,560 | 1,024 | closed libs, audio code, masterfx's 5,584 |
+| DTCM unreserved | gap | 11,048 | 5,152 | 4,096 | heap end to stack base; 4,128 before the trim; the recorder (diag) build has 3,632 |
 | OCRAM | 32,768 | 9,556 | 9,556 | 1,024 | mods stay out |
-| SDRAM unreserved | 67,108,864 | 21,048 | 611,336 | 256 KiB | the pool takes all the rest in plain CE |
+| SDRAM unreserved | 67,108,864 | 21,048 | 610,824 | 256 KiB | the pool takes all the rest in plain CE |
+
+**Heap trim (mods builds only).** `platforms/imx/makefile` passes `--defsym=_MtHeapTrim=0x400` to
+the link of a Tracker+ build without `MT_NO_MODS` (the same rule as `core/mods/modsBuild.h`), and
+`linkerScript.ld` takes it off `_HeapSize`: the heap is 137,728 instead of 138,752, and the 1,024
+bytes join the DTCM gap. Plain CE and Tracker Mini link exactly as before (the plain image is byte
+for byte the same, but for the build date). The mods' own variables stay where they are; nothing
+moves to the heap. The cost is 1,024 bytes less for CE's `malloc`, where running out hangs the unit. With
+the trim, the lowest free heap on the unit is 60,336 B (3 PERC voices, the 2026-11-18 reading below).
+Made for the Resample port (`docs/mt/RESAMPLE_PORT_PLAN.md` section 12).
 
 Mods use 31,616 bytes of SDRAM so far: `projectBuffer` 10,496, `configBuffer` 512, Color Song
 12,144, Variable Track Length 8,443 and alignment.
 
-**DTCM layout** (mods): `.data` 6,120, `.bss` about 123 KB, `.noinit` 32,768 (reverb), heap
-138,752 fixed (`_HeapSize`), free gap 15,480, stack 20,480 at 0x20053000–0x20058000. The
+**DTCM layout** (mods, an older reading): `.data` 6,120, `.bss` about 123 KB, `.noinit` 32,768 (reverb), heap
+138,752 fixed (`_HeapSize`; 137,728 in mods builds since the trim), free gap 15,480, stack 20,480 at 0x20053000–0x20058000. The
 `.heap2stackfill` reservation of 20,480 is a linker check, not memory in use. About 1.8 KB
 before `.bss` (0x200068F0–0x20007000) is alignment padding for the buffer `.bss` starts with.
 
@@ -335,7 +345,27 @@ A fix for CE, checked on a scratch `MT_NO_MODS` build only: in `updateToSettings
 `setInstrumentType`, clamp the part to `getMaxVoiceCount` whatever the engine was before. With it, the
 out-of-spec `F5` opened after `F2` leaves 53,952 B. Only a hand-made `project.mt` reaches this.
 
-**Heap:** 138,752 fixed. A failed malloc hangs the unit, so this is the one with a hard edge.
+**Device reading, 2026-11-18, heap trim (`modular` `5b40785` with the trim),** recorder build
+`TrackerPlus_MT_heap1k_diag.ptf`, Master FX Off: 20 plays, no lockup or fault, 0 blocks over time,
+the synth never over its limit, max stack 7,733. The projects are matched to the log lines by their
+voices and pool peak, which the rig reads the same.
+
+| Project | Average | Slowest | Main loop gap | Free heap | Rig, same image |
+| --- | --- | --- | --- | --- | --- |
+| `E3 8 voices DCO6 Init` | 29 % | 41-47 % | 9 ms | 72,636 B | 74,096 B |
+| `N6 3 voices PERC` | 8-17 % | 22-28 % | 22 ms | 60,336 B | 61,864 B |
+| `N7 8 voices DIRT` | 33-38 % | 45-56 % | 10 ms | 72,204 B | 73,840 B |
+
+The lowest free heap on the unit is now 60,336 B, on PERC, with the trim's 1,024 B already taken
+(51,936 B on 2026-11-11 for 3 PERC voices, before CE's 1620e85 rebuilt the factory engines). The rig
+reads 1.5 to 1.6 KB high, as in `PAST_FAILURES.md`'s calibration. `N7` was 63-66 % average and 83 %
+slowest on 2026-11-08 and is about half that now; that's CE's rebuilt DIRT or its silence work, not
+looked into (the engine is a black box) and nothing to do with the trim.
+
+**Heap:** 138,752 fixed (137,728 in mods builds, the trim above). At every boot CE's
+`Profiler::init` allocates until `malloc` fails and frees it all, so `sbrk` reaches the limit and
+the free heap Config and the recorder show (`mallinfo().fordblks`) is all of the heap's free bytes:
+the trim reads about 1 KB lower. A failed malloc hangs the unit, so this is the one with a hard edge.
 About 58 KB is in use with a project open, and 1.2.0 measured at least 42 KB free. In the
 emulator the break pointer reached 23,968 after the static constructors and 67,112 by the time
 `engine.init` stopped on a null codec. That's a high-water mark, not bytes in use.
