@@ -1,6 +1,7 @@
 # resample on CE: build plan
 
-Status: on `modular` `CE_20261119` (`71b4a8c`) since 2026-11-19 ([section 13](#13-catch-up-to-ce_20261119)), rebased
+Status: on `modular` `CE_20261120` (`ff9b46a`) since 2026-11-20 ([section 14](#14-catch-up-to-ce_20261120)), on
+`CE_20261119` (`71b4a8c`) from 2026-11-19 ([section 13](#13-catch-up-to-ce_20261119)), rebased
 onto `5b40785` on 2026-11-17 before that ([section 12](#12-rebase-onto-5b40785)).
 Step 1 is committed (2026-11-19, on `modular` `5c331c1`, which adds the 1 KB heap trim). Step 2 is committed (2026-11-20, on `CE_20261119`). Step 0's results ([section 11](#11-step-0-results)) and
 every test run before the rebase come from `c32fee7` and the old rigs, and are to be run again.
@@ -744,3 +745,33 @@ libstdc++ locale data from DTCM, and `instrumentPlayer` grows 256 bytes. The hea
 **Ran on the merge, 2026-11-19:** plain CE and mods builds from a fresh tree; the host tests; the quick
 tier, 25 of 25 pass (`test_resample.py` 15 checks). Not run: the release tier (step 1 has no recorder
 hook), step 0 again (still to do, section 12).
+
+## 14. Catch-up to CE_20261120
+
+On 2026-11-20, after step 2, this branch merged `modular` at `CE_20261120` (`ff9b46a`, CE's `main` up
+to `cf8bd7b`): 10 CE commits, all file manager and file browser fixes. No conflict, and none of step 1's
+or step 2's files is touched.
+
+**What changed, and why the design doesn't care:**
+- **Sample import (941471d)** closes the gap a failed import left in sample memory. Resample doesn't
+  import: the recorder's Save & Load goes through `RecordingSave`, which is unchanged, and then reloads
+  the samples as CE does (4.4).
+- **The autosave stops (c22d528, bf17231)** before a browse, an export, an SD preview or a firmware
+  list, and its stop loop ends when a sample save fails. All main loop; Resample calls none of them.
+- **`saveSampleDataToWorkspace` (bf17231)** now ends the operation with `fmSaveError` when the
+  instrument file can't be written. The recorder's save doesn't use it; record 12 goes through
+  `mods.bin`, which modular's merge checked for every mod.
+- **`loadFileToMemory` in `fileWholeOnce` (958ef98)**, the export fixes (bbb2d38, 2cf0d19, 8a00898,
+  including `saveMemoryToWav`, which only the export calls), the strict file name ordering (7670291),
+  a missing Firmware folder (ce0053e), and the "cannot delete" popup's text (29124ff): not on any path
+  Resample hooks or calls.
+- **Nothing runs in the audio interrupt** in this merge, and no `// MT:` hook site moved.
+
+**DTCM:** 8,816 bytes free, 64 less than step 2's 8,880: the file browser's new `deleteDeniedText`, as
+modular's merge measured (`docs/mt/CE_FIRMWARE_MAP.md` section 15). Heap 137,728, unchanged.
+
+**Ran on the merge, 2026-11-20:** plain CE and mods builds from a fresh tree (386 warnings, all CE's);
+the host tests, all suites (`test_resample` 96 checks); the quick tier, 24 of 24 pass, `test_resample.py`
+included. Not run: the release tier, and step 0 again (section 12), both still due before Resample
+merges into `modular`. The emulator fakes the SD card, so CE's file manager fixes themselves are
+modular's merge's to check on the unit, not this branch's.
