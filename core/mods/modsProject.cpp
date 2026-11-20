@@ -10,6 +10,7 @@
 #include "humanize.h"
 #include "masterfx.h"
 #include "modsSwitches.h"
+#include "resample.h"
 #include "swing.h"
 #include "tracklen.h"
 
@@ -40,6 +41,9 @@ constexpr ImporterEntry kBuiltInImporters[] = {
 #endif
 #if MT_HAS_SWING
     { static_cast<uint8_t>(Mod::swing), swing::importSideFile },
+#endif
+#if MT_HAS_RESAMPLE
+    { static_cast<uint8_t>(Mod::resample), resample::importSideFile },
 #endif
     { 0, nullptr },
 };

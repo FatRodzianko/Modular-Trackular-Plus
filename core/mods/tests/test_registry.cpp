@@ -13,6 +13,7 @@
 #include "masterfx.h"
 #include "modsProject.h"
 #include "modsStore.h"
+#include "resample.h"
 #include "songloop.h"
 #include "swing.h"
 #include "synthfx/synthfxMod.h"
@@ -132,6 +133,10 @@ const std::vector<Expected> kExpected = {
     { Mod::synthfx, synthfx::kRecord, synthfx::kRecordVersion, synthfx::init, synthfx::load, nullptr, nullptr,
       synthfx::storeIfEdited, nullptr },
 #endif
+#if MT_HAS_RESAMPLE
+    { Mod::resample, resample::kRecord, resample::kRecordVersion, nullptr, resample::load, nullptr, nullptr,
+      nullptr, nullptr },
+#endif
 };
 
 bool built(Mod id)
@@ -147,6 +152,7 @@ bool built(Mod id)
     case Mod::songloop: return MT_HAS_SONGLOOP != 0;
     case Mod::synths: return MT_HAS_SYNTHS != 0;
     case Mod::synthfx: return MT_HAS_SYNTHFX != 0;
+    case Mod::resample: return MT_HAS_RESAMPLE != 0;
     default: return false; // not ported, or retired
     }
 }

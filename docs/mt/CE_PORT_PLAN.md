@@ -766,6 +766,8 @@ free heap 76,120, max stack 7,849.
 
 ### 3.14 resample
 
+Build plan: [RESAMPLE_PORT_PLAN.md](RESAMPLE_PORT_PLAN.md).
+
 - **What it does:** Trk Audio / Trk Record: record the master or any instrument's
   output into the Sample Recorder (rs8, rs9).
 - **Hooks:** a source option in the Sample Recorder (`fSampleRec.cpp`); a tap that

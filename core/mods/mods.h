@@ -73,6 +73,9 @@ constexpr size_t kBuiltModCount = 0
 #if MT_HAS_SYNTHFX
                                   + 1
 #endif
+#if MT_HAS_RESAMPLE
+                                  + 1
+#endif
   ;
 
 // One byte per mod, 0 Off or 1 On, so Config list items can point at them.
