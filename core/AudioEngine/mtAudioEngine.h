@@ -61,10 +61,8 @@ class audioEngine
     void connectVoiceToExportQueue(AudioVoice* voice, ExportQueues* exportQueues, int idx);
     void connectMixerToExportQueue(MixerAndFxs<kVoices>* mixerAndFxs, ExportQueues* exportQueues);
     void connectOutputToExportQueue(AudioOutput* output, ExportQueues* exportQueues);
-#ifdef PLATFORM_IMX
     void refreshOutputSourceOutsideTheRecorder();
     void forceUsbGainOutsideTheRecorder();
-#endif
     void refreshTrackVolume();
     void refreshReverbVolume();
     void refreshDelayVolume();
@@ -177,7 +175,6 @@ class audioEngine
     void setHeadroomEnable(bool enabled);
     void setSnapToZeroEnable(bool enabled);
     void setSaturationType(SaturationType type);
-#ifdef PLATFORM_IMX
     enum OutputSourceType
     {
         kRegularMix,
@@ -185,7 +182,6 @@ class audioEngine
     };
 
     void setOutputSource(OutputSourceType source);
-#endif
     void detachUpdateTimer();
     void attachUpdateTimer();
 
@@ -591,11 +587,8 @@ class playerEngine
     friend audioEngine;
 
     AudioVoice audioVoice;
-#ifndef PLATFORM_IMX
-    MonoToStereo* monoToStereoPtr;
-#else
     std::vector<AudioAmplifier*> panningAmplifierPtr;
-#endif
+    bool voiceIsStereo = false;
     std::vector<AudioPlayMemory*> playMemPtr;
     std::vector<AudioAmplifier*> ampPtr;
     std::vector<AudioFilterStateVariable*> filterPtr;

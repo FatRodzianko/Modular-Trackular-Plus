@@ -413,10 +413,10 @@ void checkConfig()
     if (mtConfig.general.patternInfo > 2)
         mtConfig.general.patternInfo = 0;
 
-    if (mtConfig.general.lineInOutType > 2)
-    {
-        mtConfig.general.lineInOutType = 0;
-    }
+    if (mtConfig.general.noteDisplayMode >= NoteDisplayMode::kNoteDisplayModeCount)
+        mtConfig.general.noteDisplayMode = NoteDisplayMode::kNoteDisplayModeDefault;
+
+    mtConfig.general.lineInOutType = 0;
 
     if (mtConfig.general.theme >= ThemeManager::kMaxCustomThemes)
     {
@@ -558,6 +558,7 @@ void resetConfig()
     mtConfig.general.lineInOutType = 0;
     mtConfig.general.previewVolume = PREVIEW_VOLUME_DEFAULT;
     mtConfig.general.recThreshold = recThreshold_default;
+    mtConfig.general.noteDisplayMode = NoteDisplayMode::kNoteDisplayModeDefault;
 
     // interface ----------------------------------------
     mtConfig.interface.fxPopupDescription = 0;

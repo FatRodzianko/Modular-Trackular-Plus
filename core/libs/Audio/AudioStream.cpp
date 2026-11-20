@@ -45,9 +45,7 @@ uint16_t AudioStream::memory_used = 0;
 uint16_t AudioStream::memory_used_max = 0;
 bool AudioStream::renderMode = 0;
 
-#ifdef PLATFORM_IMX
 UsbAudio* AudioStream::usbAudio = nullptr;
-#endif
 
 volatile int __irq_semaphore = 0;
 

@@ -30,22 +30,44 @@
 5. **38 New Chord Inversions in the `Chord` (`f`) Step FX (All 3 Devices)**
 	* Expanded the **`Chord` (`f`)** effect from 30 to **68 chord voicings** by adding 38 inversions across major, minor, seventh, diminished, suspended, and `m7b5` chords.
 
-6. **Sample Editor - New Effects, Presets & Plugin SDK Additions**
-	* **`Transient Shaper` (All 3 Devices)**: New Sample Editor effect (`transient_shaper.ptfx`) with `Attack` (`-100%` to `+100%`) and `Sustain` (`-100%` to `+100%`) controls for shaping drum hits and loops.
-	* **`Haas Effect` (Tracker+ & Tracker Mini)**: New stereo widener effect (`haas.ptfx`) that delays the Left or Right channel (`1–100 ms`) with a smooth tail fade-out.
-	* **`Sample Cross-Mod` (All 3 Devices)**: New reference effect (`cross_mod.ptfx`) that layers, ring-modulates, FM-scrubs, amplitude-follows, or sidechains a sample against a secondary `.wav` file selected from the SD card.
-	* **On-Demand `.ptfx` Effect Loader (All 3 Devices)**: Removed the 128-plugin startup scan limit in favor of **`Load Effect...`** at the bottom of the Sample Editor effect list, browsing `/Effects/` (including subfolders) in `GlobalFileBrowser` with pretty effect display names and keeping the currently loaded effect above `Load Effect...`.
-	* **Effect Presets (All 3 Devices)**: Load, save, and reset effect presets via **`More`** (stored under `/Effects/Presets/<PluginName>/*.ptp`), automatically saving and restoring knob values and selected files.
-	* **Mono-to-Stereo Effect Support (Tracker+ & Tracker Mini)**: Applying a stereo effect plugin (such as `Haas Effect` or `Stereo Delay`) to a mono sample now automatically converts the instrument to stereo when the left and right channels differ.
-	* **Plugin SDK — File Pickers & Secondary Audio (All 3 Devices)**: `.ptfx` plugins can now declare input/output file parameters (`PTFX_PARAM_FILE` / `PTFX_PARAM_SAVE_FILE`) rendered with vertical rotated filenames, single-press browser open, `Delete` to clear, automatic secondary `.wav` decoding, and SD file I/O helpers. See [`docs/modular_effects_system.md`](docs/modular_effects_system.md).
+6. **Sample Editor - New Effects, Presets & Plugin SDK Additions (All 3 Devices)**
+	* **`Transient Shaper`**: New Sample Editor effect (`transient_shaper.ptfx`) with `Attack` (`-100%` to `+100%`) and `Sustain` (`-100%` to `+100%`) controls for shaping drum hits and loops.
+	* **`Haas Effect`**: New stereo widener effect (`haas.ptfx`) that delays the Left or Right channel (`1–100 ms`) with a smooth tail fade-out.
+	* **`Sample Cross-Mod`**: New reference effect (`cross_mod.ptfx`) that layers, ring-modulates, FM-scrubs, amplitude-follows, or sidechains a sample against a secondary `.wav` file selected from the SD card.
+	* **`Convolution Reverb`**: New Sample Editor reverb (`convolution_reverb.ptfx`) that applies the acoustic space or character of any `.wav` impulse response (IR) from your SD card to your sample. Supporting both mono and stereo IRs (up to ~550 ms) and automatically extending the sample tail so the reverb rings out cleanly.
+	* **On-Demand `.ptfx` Effect Loader**: Removed the 128-plugin startup scan limit in favor of **`Load Effect...`** at the bottom of the Sample Editor effect list, browsing `/Effects/` (including subfolders) in `GlobalFileBrowser` with pretty effect display names and keeping the currently loaded effect above `Load Effect...`.
+	* **Effect Presets**: Load, save, and reset effect presets via **`More`** (stored under `/Effects/Presets/<PluginName>/*.ptp`), automatically saving and restoring knob values and selected files.
+	* **Mono-to-Stereo Effect Support**: Applying a stereo effect plugin (such as `Haas Effect` or `Stereo Delay`) to a mono sample now automatically converts the instrument to stereo when the left and right channels differ.
+	* **Plugin SDK - File Pickers & Secondary Audio**: `.ptfx` plugins can now declare input/output file parameters (`PTFX_PARAM_FILE` / `PTFX_PARAM_SAVE_FILE`) rendered with vertical rotated filenames, single-press browser open, `Delete` to clear, automatic secondary `.wav` decoding, and SD file I/O helpers. See [`docs/modular_effects_system.md`](docs/modular_effects_system.md).
 
 7. **Clearer `[m | V]` vs `[Fx1 | Fx2]` Pattern Editor View & Volume Lane `!OFF` (All 3 Devices)**
 	* Empty step slots in the **`[m | V]`** pattern view now show dimmed **`m--`** and **`V--`** indicators instead of `---`, making it obvious at a glance whether you are viewing `[m | V]` or `[Fx1 | Fx2]`.
 	* **`!OFF` in the Dedicated Volume Lane**: Added **`!OFF`** as the leftmost value (before `0–100`) in the dedicated **`V--`** Volume lane (`[m | V]` view), allowing you to reset a sample track's volume back to its **Instrument Parameters** default volume directly from the Volume lane while keeping both `FX1` and `FX2` free.
 
-8. **USB Serial Development Console & Fault Reporting (Tracker+ & Tracker Mini)**
+8. **Stereo Samples on Original Tracker (Original Tracker + All 3 Devices)**
+	* **Stereo Sample Support**: Original Tracker can now load, preview, record, edit, and stream stereo samples (up to ~22.3 seconds in the Sample Editor, with longer stereo samples streaming from the SD card).
+	* **Smarter Mono/Stereo Playback**: Mono samples now use only a single voice channel under the hood across all 3 devices, saving CPU for busy projects while keeping full stereo playback and effects for stereo samples.
+
+9. **USB Storage Mode & Stereo USB Audio (Original Tracker)**
+	* **USB Storage Mode**: Added USB Storage mode to Original Tracker so you can mount the SD card on your computer over USB, with playback and streaming pausing safely while connected.
+	* **2-in / 2-out USB Audio**: Added 44.1 kHz / 16-bit stereo USB Audio (`Off`, `Input (2 in)`, `Output (2 out)`, `In/Out (2 in, 2 out)`) so you can record from your computer or stream audio to your DAW over USB.
+
+> [!NOTE]  
+> **On Hardware Limitations:** The OG Tracker runs at 180 MHz with 16 MB of sample RAM. Heavy use of stereo samples, sample streaming, or USB audio streaming can max out the CPU and cause audio stuttering or UI lag. Since we managed to optimize the core of the system, we still decided to include these options so you can use them at your own discretion.
+
+10. **Sample Recorder Source Improvements (All 3 Devices)**
+	* **Clearer Mono & Stereo Input Choices**: Sample Recorder now lets you pick directly between **`Line In (L)`**, **`Line In (R)`**, **`Line In (M)`** (mono mixdown), **`Line In`** (stereo), **`Radio`** (mono), **`Mic`** / **`Mic LG`** / **`Mic HG`**, **`USB (M)`** (mono mixdown), and **`USB`** (stereo), with count-in metronome support when recording from USB and live monitoring restored when you stop recording.
+	* **Simplified Settings**: Removed the redundant `Config -> General -> Line in channel` option now that mono/stereo Line In selection is built directly into the Sample Recorder.
+
+11. **USB Serial Development Console & Fault Reporting (Tracker+ & Tracker Mini)**
 	* Added an opt-in USB CDC serial console (`ENABLE_DEV_CONSOLE` when a `/.develop` file is present on the SD card) with host automation commands (`ping`, `storage on|off`, `flash <name>`, `reboot`, `help`) and a ring-buffered `ENABLE_LOG` build flag that preserves release optimization levels.
 	* With `ENABLE_DEV_CONSOLE`, CPU faults report `@fault pc=... lr=...` and a rough call chain over the serial console instead of freezing silently. See [`docs/developer_guide.md`](docs/developer_guide.md).
+
+12. **Pattern View Note Display Option (All 3 Devices)**
+	* Added **`Config → General → Note display`** to choose how notes are displayed in Pattern View: **`Original`** (`C4`, `C#4`, default) or **`Traditional`** (`C-4`, `C#4`).
+
+13. **SD-Card Random Name Wordlists (All 3 Devices)**
+	* Moved the random name generator wordlists to `/Words/adjectives.txt` and `/Words/nouns.txt` on the microSD card (one word per line, with a built-in fallback list when the files are absent; initial files provided in [`sd-card/Words/`](sd-card/Words/)), freeing some Flash space on Original Tracker and letting users customize their own wordlists.
 
 ### Changed & Fixed
 
@@ -80,6 +102,9 @@
 	* **Delay Crossfading, Saturation & Project Reset (All 3 Devices)**: `AudioEffectShortDelay` now crossfades delay-time changes smoothly while sounding and switches immediately with zero blend when quiet, saturates feedback peaks with `clamp16` instead of wrapping at full scale, and clears its buffer on project load.
 	* **Stale Block, Tail State & Tempo Safety Fixes (All 3 Devices / Tracker+ & Mini)**: Drains unselected `AudioOutput` channels when switching output sources, releases right-channel `Polyverb` input blocks when the left input is `nullptr`, settles/resets per-track filter state across silent/blocked instrument transitions, and guards `InternalTickClock` against non-positive or non-finite tempo values so invalid project tempos do not freeze the audio ISR or build catch-up bursts.
 	* **Fixed Noise Bursts on Very Short Loops & Grains (All 3 Devices)**: Prevented high-pitched notes on tiny backward loops, ping-pong loops, and granular grains from stepping past the loop boundaries and producing noise bursts.
+	* **Fixed Granular Mode on Long & Empty Samples (All 3 Devices)**: Enforced a minimum granular loop zone and clamped grain lengths on long samples (e.g., `1 ms` grains on samples longer than ~16 seconds) so `Gauss`/`Triangle` grains no longer go silent or wrap across the sample, and guarded against division by zero on empty sample slots.
+	* **Fixed Out-of-Bounds Pitch, Glide, Wavetable & Delay Rate Lookups (All 3 Devices)**: Clamped note, tune, fine-tune, and glide calculations inside the 120-entry note table (fixing wrong pitches at extreme octaves or when previewing `OFF`/`CUT`/`FADE` steps), rejected unsupported wavetable window sizes (`< 32` or larger than the sample), clamped tempo-synced Delay rate indices (`0–18`) when loading projects, and hardened sample-player update paths and `SdStream` buffer rotation.
+	* **Fixed Audio-Interrupt Heap Corruption During `.wav` Preview (Tracker+ & Tracker Mini / All 3 Devices)**: Removed per-block heap allocation (`std::vector`) inside the audio interrupt during `.wav` file preview on Tracker+ and Tracker Mini (preventing random crashes/hangs when browsing folders or switching screens while previewing), and cleared released audio block pointers on early allocation failure to prevent double-freeing blocks.
 	* **Fixed Sequencer `Tune` Modulation (All 3 Devices)**: Fixed a bug where sequencer modulation assigned to `Tune` did not work unless `Wavetable Position` modulation was active.
 
 * **Sequencer, MIDI & Pattern Editor Fixes (All 3 Devices)**:
@@ -94,13 +119,13 @@
 
 * **Performance Mode Fixes (All 3 Devices)**:
 	* **Fixed Pattern Edits Resetting After Visiting `Perform` While Stopped**: Leaving `Instrument Parameters` or `Master` after opening them from `Perform` while playback is stopped now exits Performance Mode cleanly instead of reloading the pattern from the SD card and undoing recent edits on the next note preview.
-	* **Fixed FX Slot Swapping & MIDI CC Row Handling**: Swapping two FX slots (`Shift + Left/Right`) now moves their selected row, live value, MIDI CC assignment, and pad lights together, and turning the encoder on a MIDI CC row no longer overwrites neighboring slot values.
+	* **Fixed FX Slot Swapping, End-Point FX2 & MIDI CC Row Handling**: Swapping two FX slots (`Shift + Left/Right`) now moves their selected row, live value, MIDI CC assignment, and pad lights together, turning the encoder on a MIDI CC row no longer overwrites neighboring slot values, and Performance Mode sample end-point checks now honour the second FX slot alongside the first.
 	* **Safe Missing Pattern Fallback**: Selecting a missing or unreadable pattern for a Performance track now plays silence instead of triggering unexpected notes.
 
 * **Sample Loader, Sample Playback, Sample Editor & Sample Recorder Fixes (All 3 Devices)**:
 	* **Sample Loader Folder, Import & `Delete Unused` Fixes**: Fixed opening folders with parentheses in their names (such as `Loops (120-140 BPM)`), handled unreadable or deeply nested folders safely, prevented multi-file imports from exceeding Slot 48 or available sample memory, fixed time labels above `100s` on the crop-import screen, fixed renaming instruments after a MIDI/Synth slot was active, and fixed `Delete unused` removing samples only used on the last step of a track, in Pattern 255, or in unsaved edits of the current pattern.
-	* **Sample Playback & Sample Editor Fixes**: Fixed `Add` slice jumbling slice markers after `Slice Evenly` or `Auto Slice`, improved zoomed waveform rendering when switching from a long sample to a short one, and prevented MIDI/Synth slots from interfering with Sample Playback controls and MIDI CC.
-	* **Sample Recorder Fixes**: Pressing `Record` again now cancels a count-in waiting on a missing external clock, project samples reload reliably if recording is interrupted by standby or USB Storage, and the previously selected instrument is always restored on exit.
+	* **Sample Playback & Sample Editor Fixes**: Fixed `Add` slice jumbling slice markers after `Slice Evenly` or `Auto Slice`, improved zoomed waveform rendering when switching from a long sample to a short one, fixed the Sample Playback progress cursor lingering or tracking a previous instrument's long release tail after switching instruments, fixed low-quality (resampled) samples playing at the wrong speed/pitch during Sample Editor effect preview, and prevented MIDI/Synth slots from interfering with Sample Playback controls and MIDI CC.
+	* **Sample Recorder & FM Radio Fixes**: Pressing `Record` again now cancels a count-in waiting on a missing external clock, project samples reload reliably if recording is interrupted by standby or USB Storage, the previously selected instrument is always restored on exit, and FM radio tuning/scanning on Original Tracker and Tracker+ was hardened with tune timeouts, I2C bus recovery, seek state-machine guards, and exact channel stepping to prevent radio scanning freezes.
 	* **`Analog Kick Gen` Click Fix**: Removed an audible click at the end of the kick decay in the `Analog Kick Gen` Sample Editor generator.
 
 * **File Screen, Navigation & File Safety Fixes (All 3 Devices)**:

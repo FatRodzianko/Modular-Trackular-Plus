@@ -46,7 +46,7 @@ from unicorn.arm_const import UC_ARM_REG_S0
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from machine import Machine  # noqa: E402
-from test_step0 import menu_item_named  # noqa: E402
+from test_step0 import group_children, menu_item_named  # noqa: E402
 from test_swing import QUIET, f32  # noqa: E402
 from test_tracklen import Rig as TracklenRig  # noqa: E402
 
@@ -370,7 +370,7 @@ def test_config(mt: Path) -> None:
     check(action & ~1 in words, "the project item calls projectSongloopSwitchChanged (the loop reset, the glyphs)")
     for group in ("menuMods", "menuProjectMods"):
         a = m.addr(group)
-        names = [m.cstr(m.r32(m.r32(m.r32(a + 12) + 4 * i) + 4)) for i in range(m.r8(a + 8))]
+        names = [m.cstr(m.r32(i + 4)) for i in group_children(m, a)]
         mods = [n for n in names if n in ("Color Song", "Copy to New", "Global Swing", "Humanize", "Master FX",
                                           "Song Loop", "Track Length")]
         check("Song Loop" in mods and mods == sorted(mods), f"{group}: the mods stay A-Z", str(names))

@@ -41,7 +41,7 @@ from unicorn.arm_const import UC_ARM_REG_S0
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from machine import Machine  # noqa: E402
-from test_step0 import FakeSd, menu_item_named, store_image  # noqa: E402
+from test_step0 import FakeSd, group_children, menu_item, menu_item_named, store_image  # noqa: E402
 
 SWING_ID = 4
 RECORD_ID = SWING_ID + 1
@@ -479,10 +479,6 @@ def test_live(mt: Path) -> None:
           f"{sd.unexpected} {sd.handles}")
 
 
-def menu_item(m: Machine, group: str, index: int) -> int:
-    return m.r32(m.r32(m.addr(group) + 12) + 4 * index)
-
-
 def test_config(mt: Path) -> None:
     r = Rig(mt)
     m = r.m
@@ -500,7 +496,7 @@ def test_config(mt: Path) -> None:
           "Project Settings -> Mods: Global Swing is the project's switch")
 
     group = m.addr("menuProjectSwing")
-    check(m.r8(group + 8) == 2 and m.r8(group + 29) == 2, "Project Settings -> Global Swing has 2 items")
+    check(len(group_children(m, group)) == 2, "Project Settings -> Global Swing has 2 items")
     check(m.r32(group + 4) == m.addr("menuProject"), "inside Project Settings")
     expected_items = [("Global swing", MENU_LIST_TEXT_ACTION, switches + SWING_ID),
                       ("Swing amount", MENU_LIST_VALUES, settings)]

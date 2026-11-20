@@ -97,7 +97,7 @@ Every merge into `modular`, from CE's `main` or from a mod branch, goes through 
 
 ## Releases
 
-Every merge into `modular` of a mod, a mod fix or CE's `main` gets an annotated tag on the merge, pushed with it. CI (`build.yml`) builds the Tracker+ firmware from the tag and publishes a public GitHub release named after it, with the tag's message as the notes and `TrackerPlus_MT_<tag>.ptf` and the `Synths` zip attached.
+Every merge into `modular` of a mod, a mod fix or CE's `main` gets an annotated tag on the merge, pushed with it. CI (`build.yml`) builds the Tracker+ firmware from the tag and publishes a public GitHub release named after it, with the tag's message as the notes and `TrackerPlus_MT_<tag>.ptf`, the `Effects`, `Synths` and `Words` zips attached.
 
 - A mod merge: `<mod>-<version>`, e.g. `resample-1.0`; a fix to it later: `resample-1.1`.
 - A CE merge: `CE_YYYYMMDD`, with `-2` for a second one that day.

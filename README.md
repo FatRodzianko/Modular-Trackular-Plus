@@ -64,6 +64,8 @@ have no mods.
    `make psyn` puts them in `build/Synths/`. Copy the `Synths` folder to the card's root.
    Without the folder, a project's synth parts can open on another engine, since the project
    stores each part's engine by its place in the list.
+   Also copy the `Words` folder from `PolyendTracker_CE_Words.zip` to the card's root: CE
+   picks new project names from its two lists, and without them it uses 16 words of each kind.
 4. **Flash it** as in
    [Flashing on Hardware & Emergency Recovery](#4-flashing-on-hardware--emergency-recovery)
    below. Config then shows the version as `1.0.0 MT`.
@@ -105,8 +107,7 @@ Built directly from the original Polyend firmware source code, Tracker CE opens 
 Automatically built from the latest changes in `main` (for all 3 devices):
 
 * Download the latest [Beta Firmware builds (`.zip`)](https://nightly.link/polyend/tracker-ce/workflows/build.yml/main/polyend-tracker-ce-firmware.zip)
-* Download the latest [Synth Engines (`.zip`)](https://nightly.link/polyend/tracker-ce/workflows/build.yml/main/polyend-tracker-ce-synths.zip)
-* Download the latest [Sample Editor Effects (`.zip`)](https://nightly.link/polyend/tracker-ce/workflows/build.yml/main/polyend-tracker-ce-effects.zip)
+* Download the latest [SD Card Content (`.zip`)](https://nightly.link/polyend/tracker-ce/workflows/build.yml/main/polyend-tracker-ce-sd-card.zip) (`/Words`, `/Effects`, `/Synths`)
 * See [`UPCOMING.md`](UPCOMING.md) to find out what's new in these Beta Builds.
 
 ---

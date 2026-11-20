@@ -32,7 +32,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from machine import Machine  # noqa: E402
-from test_step0 import menu_item_named  # noqa: E402
+from test_step0 import group_children, menu_item_named  # noqa: E402
 from test_swing import Projects  # noqa: E402
 from test_tracklen import (PLAIN, STEP_SIZE, TRACK0, TRACK_STRIDE, TRACKS, Rig, Screen,  # noqa: E402
                            SongPaste)
@@ -323,7 +323,7 @@ def test_config(mt: Path) -> None:
     check(m.r32(item + 12) == MENU_LIST_TEXT_ACTION and m.r32(m.r32(item + 16)) == c.switches + COPYPATTERN_ID,
           "Project Settings -> Mods: the project's switch")
     mods = m.addr("menuMods")
-    order = [m.cstr(m.r32(m.r32(m.r32(mods + 12) + 4 * i) + 4)) for i in range(1, m.r8(mods + 8))]
+    order = [m.cstr(m.r32(i + 4)) for i in group_children(m, mods)[1:]]
     check(order == sorted(order), "Config -> Mods stays A-Z", str(order))
 
 

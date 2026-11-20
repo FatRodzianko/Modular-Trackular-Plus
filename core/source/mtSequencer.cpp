@@ -185,13 +185,8 @@ AUDIO_CORE_RAM bool Sequencer::isMetronomeApplicableForActualRecordingSource(voi
 {
     return SR->recorderConfig.source == SR->sourceTypeMicLG ||
            SR->recorderConfig.source == SR->sourceTypeMicHG ||
-           SR->recorderConfig.source == SR->sourceTypeLineIn
-
-#ifdef PLATFORM_IMX
-           || SR->recorderConfig.source == SR->sourceTypeUsb
-#endif
-
-      ;
+           SR->isLineInSource() ||
+           SR->isUsbSource();
 }
 
 AUDIO_CORE_RAM void Sequencer::tick_uStep(void)
@@ -576,7 +571,7 @@ AUDIO_CORE_RAM void Sequencer::play_microStep(int row)
                         killFxOnSlot(row, fxIndex);
                         atLeastOneFx = 1;
 
-                        if (isMidiInstrument(stepToSend.instrument))
+                        if (!isSampleInstrument(stepToSend.instrument))
                         {
                             stepToSend.volume = _fx.value;
                             stepSent.volume = stepToSend.volume;

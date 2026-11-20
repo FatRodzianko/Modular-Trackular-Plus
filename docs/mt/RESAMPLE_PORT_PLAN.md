@@ -1,6 +1,7 @@
 # resample on CE: build plan
 
-Status: rebased onto `modular` `5b40785` on 2026-11-17 ([section 12](#12-rebase-onto-5b40785)).
+Status: on `modular` `CE_20261119` (`71b4a8c`) since 2026-11-19 ([section 13](#13-catch-up-to-ce_20261119)), rebased
+onto `5b40785` on 2026-11-17 before that ([section 12](#12-rebase-onto-5b40785)).
 Step 1 is committed (2026-11-19, on `modular` `5c331c1`, which adds the 1 KB heap trim). Step 0's results ([section 11](#11-step-0-results)) and
 every test run before the rebase come from `c32fee7` and the old rigs, and are to be run again.
 Your decisions are in section 9, 10 and 11 (from step 0) included. Based on the
@@ -696,3 +697,37 @@ build trees, references that stay references):
   rewrite and voice sleep;
 - step 1: the host tests (passed on `5b40785`, 2026-11-17), `test_resample.py` and the quick tier on a
   build of this tree.
+
+## 13. Catch-up to CE_20261119
+
+On 2026-11-19 this branch merged `modular` at `CE_20261119` (`71b4a8c`, CE's `main` up to `422e0ed`):
+25 CE commits. No conflict. Step 1's files are unchanged by it.
+
+**What changed that the design touches:**
+- **The recorder's sources (CE's 048809b8, OG USB and stereo samples).** The Tracker+ list is now nine:
+  "Line In (L)", "Line In (R)", "Line In (M)", "Line In", "Radio", "Mic LG", "Mic HG", "USB (M)",
+  "USB". `sourceTypeLineIn` is gone; `isLineInSource()`, `isUsbSource()` and `isStereoSource()` test
+  the groups, and the default source is "Line In" (`sourceTypeLineInS`). Only "Line In" and "USB"
+  record stereo. "Line In (L)" and "(R)" record one channel (`useRightChannelForMono`), "Line In (M)"
+  and "USB (M)" mix both into one. A mono take goes through `Recorder::update`'s mono branches, not the
+  stereo branch that hook 12 changes. **Which Line In sources get Trk Record is open (a decision for
+  you); step 2's mockups wait for it.** The label "Line in" in them is CE's old spelling.
+- **USB on the OG** (`#ifdef PLATFORM_IMX` removed around USB): no change on the Tracker+.
+- **Line In output type** (`mtConfig.general.lineInOutType`) is no longer applied: the input is always
+  stereo outside a take. The tap does not use it.
+- **Voices** feed the mixers through a stereo mirror (`getStereoMirror()`); the limiter, where the tap
+  sits, is unchanged.
+- **The sample players (5aaec6f0 and the others of 2026-11-05)** return from their update when playing
+  changes. 4.6's ended-sample-track fallback reads `isPlaying()`; step 6 checks it again on this base.
+- **Hook sites:** all still there, lines moved: `update` L128, `start` L298, `stop` L432, Button1/2
+  L1058/L1086, `destinationBufferSize` L1575, `recorder.record()` L1601, `functPlay` L2916, `functRec`
+  L2935, `functInstrument` L2949, `hideRadio` L526, `finishRecording` L278, the `isRec()` branches
+  L2832/L3121, `audioEngine::update` L277 unchanged.
+
+**DTCM:** 8,880 bytes free between heap and stack (`tools/mem_budget.py`, mods build of the merge),
+up from about 5,096: CE's b3c6473f builds fmt without `std::locale`, which drops about 3.9 KB of
+libstdc++ locale data from DTCM, and `instrumentPlayer` grows 256 bytes. The heap is still 137,728.
+
+**Ran on the merge, 2026-11-19:** plain CE and mods builds from a fresh tree; the host tests; the quick
+tier, 25 of 25 pass (`test_resample.py` 15 checks). Not run: the release tier (step 1 has no recorder
+hook), step 0 again (still to do, section 12).

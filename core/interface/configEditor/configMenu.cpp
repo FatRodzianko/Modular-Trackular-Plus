@@ -22,22 +22,8 @@
 
 // clang-format off
 
-#ifdef TRACKER_MINI
-constexpr uint8_t baseMenuGroupCount = 8;
-constexpr uint8_t projectMenuGroupCount = 10;
-constexpr uint8_t generalMenuGroupCount = 9;
-#elif defined(PLATFORM_IMX)
-constexpr uint8_t baseMenuGroupCount = 7 + MT_MODS; // MT: + Mods
-constexpr uint8_t projectMenuGroupCount = 10 + MT_MODS + MT_HAS_SWING + MT_HAS_HUMANIZE + MT_HAS_MASTERFX; // MT: + Mods, Global Swing, Humanize, Master FX
-constexpr uint8_t generalMenuGroupCount = 12;
-#else
-constexpr uint8_t baseMenuGroupCount = 6;
-constexpr uint8_t projectMenuGroupCount = 10;
-constexpr uint8_t generalMenuGroupCount = 12;
-#endif
-
 // baza baz
-cMenuGroup menuBase(menuBase, 0, baseMenuGroupCount);
+cMenuGroup menuBase(menuBase, 0);
 //=====================================================================================================================================
 //=====================================================================================================================================
 //=====================================================================================================================================
@@ -46,27 +32,24 @@ cMenuGroup menuBase(menuBase, 0, baseMenuGroupCount);
 
 // grupy glowne
 
-cMenuGroup menuProject(menuBase, "Project Settings", projectMenuGroupCount);
-cMenuGroup menuGeneral(menuBase, "General", generalMenuGroupCount);
-cMenuGroup menuMidi(menuBase, "MIDI", 11);
+cMenuGroup menuProject(menuBase, "Project Settings");
+cMenuGroup menuGeneral(menuBase, "General");
+cMenuGroup menuMidi(menuBase, "MIDI");
 
-#ifdef PLATFORM_IMX
-cMenuGroup menuUsb(menuBase, "USB", 2);
-#endif
+cMenuGroup menuUsb(menuBase, "USB");
 
-cMenuGroup menuMetro(menuBase, "Metronome", 5);
-cMenuGroup menuFirmware(menuBase, "Firmware", 4);
+cMenuGroup menuMetro(menuBase, "Metronome");
+cMenuGroup menuFirmware(menuBase, "Firmware");
 
 #if MT_MODS // MT: Config -> Mods, one Off/On item per mod after the count
-constexpr uint8_t modsMenuItemCount = 1 + mods::kBuiltModCount;
-cMenuGroup menuMods(menuBase, "Mods", modsMenuItemCount);
+cMenuGroup menuMods(menuBase, "Mods");
 #endif
 
 #ifdef TRACKER_MINI
-cMenuGroup menuFunctionButtons(menuBase, "Fn buttons binding", 8);
+cMenuGroup menuFunctionButtons(menuBase, "Fn buttons binding");
 #endif
 
-cMenuGroup menuCredits(menuBase, "Info", 4);
+cMenuGroup menuCredits(menuBase, "Info");
 
 // elementy/////////
 
@@ -94,8 +77,7 @@ cMenuItem melHeadroomMode(menuProject, "Extra headroom", headroomDesc,  menuType
 cMenuItem melSnapToZeroMode(menuProject, "Snap to zero", snapToZeroDesc,  menuTypeItemListTextWithAction, &setupSnapToZeroMode);
 
 #if MT_MODS // MT: Project Settings -> Mods: one Off/On item per mod for this project, then where the defaults are
-constexpr uint8_t projectModsMenuItemCount = mods::kBuiltModCount + 1;
-cMenuGroup menuProjectMods(menuProject, "Mods", projectModsMenuItemCount);
+cMenuGroup menuProjectMods(menuProject, "Mods");
 
 #if MT_HAS_COLORSONG
 const char projectColorsongDesc[] = { "Color Song for this project: Song screen blocks are colored by their "
@@ -190,7 +172,7 @@ const strItemTypeLabel projectModsDefaultsSetup{ "Config > Mods" };
 cMenuItem melProjectModsDefaults(menuProjectMods, "Defaults", nullptr, menuTypeItemLabel, &projectModsDefaultsSetup);
 
 #if MT_HAS_SWING // MT: Project Settings -> Global Swing
-cMenuGroup menuProjectSwing(menuProject, "Global Swing", 2);
+cMenuGroup menuProjectSwing(menuProject, "Global Swing");
 cMenuItem melSwingOn(menuProjectSwing, "Global swing", projectSwingDesc, menuTypeItemListTextWithAction, &projectSwingSetup);
 const char swingAmountDesc[] = { "25 to 75, as the Swing FX: 50 is no swing, above 50 the off-beat steps "
                                  "come later. Used when Global swing is On. " };
@@ -199,7 +181,7 @@ cMenuItem melSwingAmount(menuProjectSwing, "Swing amount", swingAmountDesc, menu
 #endif
 
 #if MT_HAS_HUMANIZE // MT: Project Settings -> Humanize
-cMenuGroup menuProjectHumanize(menuProject, "Humanize", 6);
+cMenuGroup menuProjectHumanize(menuProject, "Humanize");
 cMenuItem melHumanizeOn(menuProjectHumanize, "Humanize", projectHumanizeDesc, menuTypeItemListTextWithAction, &projectHumanizeSetup);
 const char humanizeTimingDesc[] = { "How far Humanize moves timing. Empty m: 0 to this value. A value "
                                     "already there: a random value in a window this wide. " };
@@ -220,7 +202,7 @@ cMenuItem melHumanizeSample(menuProjectHumanize, "Sample volume", humanizeSample
 #endif
 
 #if MT_HAS_MASTERFX // MT: Project Settings -> Master FX
-cMenuGroup menuProjectMasterfx(menuProject, "Master FX", 3);
+cMenuGroup menuProjectMasterfx(menuProject, "Master FX");
 const char masterfxReverbDesc[] = { "The Master reverb for this project: Stock is CE's own, the rest are "
                                     "plugins in /MasterFX on the card. Used when Master FX is On in Project "
                                     "Settings > Mods. " };
@@ -261,7 +243,7 @@ const strItemTypeListText setupHexMode{ &mtConfig.general.numberingMode, std::si
 const strItemTypeListText setupPadPreviewInPatternEdit{ &mtConfig.general.padPreviewInPatternEdit, 3, padPreviewInPatternEditTexts };
 const strItemTypeListText setupPatternArrangement{ &mtConfig.general.patternArrangement, 3, patternArrangementTexts };
 const strItemTypeListText setupPatternInfo{ &mtConfig.general.patternInfo, 3, patternInfoTexts };
-const strItemTypeListTextWithAction setupLineInOutType{ &mtConfig.general.lineInOutType, 3,  lineInOutType, setLineInOutType };
+const strItemTypeListText setupNoteDisplayMode{ &mtConfig.general.noteDisplayMode, std::size(noteDisplayModeTexts), noteDisplayModeTexts };
 
 #ifndef TRACKER_MINI
 cMenuItem melRadioReg(menuGeneral,
@@ -323,11 +305,11 @@ cMenuItem melPatternInfo(menuGeneral,
                          patternInfo,
                          menuTypeItemListText,
                          &setupPatternInfo);
-cMenuItem melLinInOutType(menuGeneral,
-                          "Line in channel",
-                          lineInChannelDesc,
-                          menuTypeItemListTextWithAction,
-                          &setupLineInOutType);
+cMenuItem melNoteDisplayMode(menuGeneral,
+                             "Note display",
+                             noteDisplayModeDesc,
+                             menuTypeItemListText,
+                             &setupNoteDisplayMode);
 
 //==================================================================================================================================================================
 // Metroneome
@@ -539,7 +521,6 @@ cMenuItem melModsTracklen(menuMods, "Track Length", modsTracklenDesc, menuTypeIt
 //==================================================================================================================================================================
 // USB
 
-#ifdef PLATFORM_IMX
 const strItemTypeActionButton usbStorageSetup{ usbStorageEnter, nullptr };
 const strItemTypeListTextWithAction usbAudioSetup{ &mtConfig.common.usbAudioMode,
                                               sizeof(kUsbAudioList)/sizeof(kUsbAudioList[0]), kUsbAudioList, usbAudioChange };
@@ -555,7 +536,6 @@ cMenuItem melUsbAudio(menuUsb,
 						  usbAudioDesc,
 						  menuTypeItemListTextWithAction,
                           &usbAudioSetup);
-#endif
 //==================================================================================================================================================================
 // File transfer
 // const strItemTypeActionButton startfileTransferSetup 		{ startFileTransferMode, nullptr};
@@ -802,8 +782,8 @@ void cConfigEditor::changeMenuListPosition(uint8_t list, int16_t value, uint8_t)
 
         if (menuBase.selectedItem + value < 0)
             menuBase.selectedItem = 0;
-        else if (menuBase.selectedItem + value > menuBase.childsCount - 1)
-            menuBase.selectedItem = menuBase.childsCount - 1;
+        else if (menuBase.selectedItem + value > menuBase.getCount() - 1)
+            menuBase.selectedItem = menuBase.getCount() - 1;
         else
             menuBase.selectedItem += value;
 
@@ -822,7 +802,7 @@ void cConfigEditor::changeMenuListPosition(uint8_t list, int16_t value, uint8_t)
         uint8_t start_position = submenu->selectedItem;
 
         uint8_t* item_selected = &submenu->selectedItem;
-        uint8_t item_max = submenu->childsCount - 1;
+        uint8_t item_max = submenu->getCount() - 1;
 
         if (*item_selected + value < 0)
             *item_selected = 0;
@@ -1083,7 +1063,7 @@ void cConfigEditor::configListConfirm(uint8_t list_pos)
 // wykonywanie akcji/edycji na elemencie menu
 void cMenuGroup::executeItem()
 {
-    if (childs[selectedItem]->type != menuTypeItem)
+    if (childs[selectedItem] == nullptr || childs[selectedItem]->type != menuTypeItem)
         return;
 
     cMenuItem* selected_child = (cMenuItem*)childs[selectedItem];
@@ -1118,9 +1098,9 @@ void cMenuGroup::executeItem()
 
 void cMenuGroup::reloadValues()
 {
-    for (uint8_t i = 0; i < childsCount; i++)
+    for (uint8_t i = 0; i < getCount(); i++)
     {
-        if (childs[i]->type == menuTypeItem)
+        if (childs[i] != nullptr && childs[i]->type == menuTypeItem)
         {
             char* valueText = ((cMenuItem*)childs[i])->getValue();
 
