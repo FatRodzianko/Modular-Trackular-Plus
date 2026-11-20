@@ -7,6 +7,7 @@
 #include "mtPadBoard.h"
 #include "mtPadsBacklight.h"
 #include "mtRandomNameGenerator.h"
+#include "mods.h" // MT:
 #include "sampleRecorder/sampleRecorder.h"
 
 #include "core/interfaceMenuPopup.h"
@@ -297,6 +298,9 @@ void cSampleRecorder::update()
 
 void cSampleRecorder::start(uint32_t options)
 {
+#if MT_HAS_RESAMPLE // MT: a new visit latches Resample's switch, before the labels are drawn
+    mods::resampleRecorderStarted();
+#endif
     recorder.setFullMemoryCallback([this]() { this->fullMemoryDuringRecordFlag = 1; });
     codec = platform->getCodecAudio();
     radio = platform->getRadio();
@@ -431,6 +435,9 @@ void cSampleRecorder::start(uint32_t options)
 
 void cSampleRecorder::stop()
 {
+#if MT_HAS_RESAMPLE // MT: the visit ends
+    mods::resampleRecorderStopped();
+#endif
     if (!dontTurnOffRadio)
     {
         engine.forceLineInStreamVolume(LINE_IN_VOLUME_MIN);
@@ -1613,8 +1620,33 @@ static void functActionRecord()
     SR->refreshSpectrum = 1;
 }
 
+#if MT_HAS_RESAMPLE // MT: on the setup screen, the keys under columns 1 and 2 press Resample's buttons
+// for the sources that show them, but not during a count-in, a take or one of CE's windows.
+static bool resampleSlotPressed(uint8_t slot)
+{
+    if (SR->currentScreen != cSampleRecorder::screenTypeConfig || SR->recordInProgressFlag != 0 ||
+        SR->waitForPreRollEnd || SR->fullMemoryWindowFlag || SR->selectionWindowFlag ||
+        SR->patternIsPlayingFlag || SR->selectionWindowSaveFlag)
+    {
+        return false;
+    }
+    if (!mods::resampleSlotPressed(slot, SR->resampleButtons()))
+    {
+        return false;
+    }
+    SR->drawResampleLabels();
+    return true;
+}
+#endif
+
 static void functActionRadioFreq()
 {
+#if MT_HAS_RESAMPLE // MT: Trk Audio
+    if (resampleSlotPressed(mods::resample::kTrkAudioSlot))
+    {
+        return;
+    }
+#endif
     if ((SR->currentScreen == cSampleRecorder::screenTypeConfig) &&
         (SR->recorderConfig.source != cSampleRecorder::sourceTypeRadio))
     {
@@ -1628,6 +1660,12 @@ static void functActionRadioFreq()
 
 static void functActionRadioLeft()
 {
+#if MT_HAS_RESAMPLE // MT: Trk Record
+    if (resampleSlotPressed(mods::resample::kTrkRecordSlot))
+    {
+        return;
+    }
+#endif
     if (SR->recorderConfig.source != cSampleRecorder::sourceTypeRadio)
     {
         return;

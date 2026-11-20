@@ -107,6 +107,89 @@ bool importSideFile(FileIo& io, const char* projectFolder, Store& store)
     return store.put(kRecord, kRecordVersion, &bits, kRecordSize) && bits != 0;
 }
 
+namespace
+{
+bool visitOn = false;
+} // namespace
+
+Buttons buttonsFor(bool lineIn, bool stereo, bool mic)
+{
+    if (lineIn)
+    {
+        return stereo ? Buttons::both : Buttons::trkAudio;
+    }
+    return mic ? Buttons::trkAudio : Buttons::none;
+}
+
+void visitStarted(bool modOn)
+{
+    visitOn = modOn;
+}
+
+void visitEnded()
+{
+    visitOn = false;
+}
+
+bool inVisit()
+{
+    return visitOn;
+}
+
+bool press(uint8_t slot, Buttons buttons, Settings* s)
+{
+    if (slot == kTrkAudioSlot && buttons != Buttons::none)
+    {
+        s->trkAudio = !s->trkAudio;
+        if (!s->trkAudio)
+        {
+            s->trkRecord = false;
+        }
+        return true;
+    }
+    if (slot == kTrkRecordSlot && buttons == Buttons::both)
+    {
+        s->trkRecord = !s->trkRecord;
+        if (s->trkRecord)
+        {
+            s->trkAudio = true;
+        }
+        return true;
+    }
+    return false;
+}
+
+bool store(const Settings& s, Store& store)
+{
+    const uint8_t bits = toBits(s);
+    uint16_t length = 0;
+    const uint8_t* data = store.find(kRecord, nullptr, &length);
+    if (data != nullptr && length == kRecordSize && data[0] == bits)
+    {
+        return false;
+    }
+    return store.put(kRecord, kRecordVersion, &bits, kRecordSize);
+}
+
+const char* title(uint8_t slot, Buttons buttons)
+{
+    if (slot == kTrkAudioSlot && buttons != Buttons::none)
+    {
+        return "Trk Audio";
+    }
+    if (slot == kTrkRecordSlot && buttons == Buttons::both)
+    {
+        return "Trk Record";
+    }
+    return nullptr;
+}
+
+const char* value(uint8_t slot, const Settings& s)
+{
+    const bool isOn = slot == kTrkRecordSlot ? s.trkRecord : s.trkAudio;
+    return isOn ? "On" : "Off";
+}
+
 } // namespace resample
 } // namespace mods
 

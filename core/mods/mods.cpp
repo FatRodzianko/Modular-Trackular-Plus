@@ -18,6 +18,7 @@
 #include "modsProject.h"
 #include "modsRegistry.h"
 #include "modsSwitches.h"
+#include "resample.h"
 #include "songloop.h"
 #include "swing.h"
 #include "synthfx/synthfxMod.h"
@@ -368,6 +369,38 @@ void projectSongloopSwitchChanged()
 {
     projectSwitchChanged();
     songloop::switchEdited();
+}
+#endif
+
+#if MT_HAS_RESAMPLE
+void resampleRecorderStarted()
+{
+    resample::visitStarted(on(Mod::resample));
+}
+
+void resampleRecorderStopped()
+{
+    resample::visitEnded();
+}
+
+bool resampleSlotPressed(uint8_t slot, resample::Buttons buttons)
+{
+    if (!resample::inVisit())
+    {
+        return false;
+    }
+    resample::Settings s = resample::settings;
+    if (!resample::press(slot, buttons, &s))
+    {
+        return false;
+    }
+    // Into RAM only once the record holds it, so the screen never shows a setting Save would lose.
+    if (resample::store(s, projectStore))
+    {
+        resample::settings = s;
+        project::markChanged();
+    }
+    return true;
 }
 #endif
 

@@ -175,6 +175,21 @@ void tracklenTracksPasted(uint8_t sourcePattern, uint8_t destPattern, uint8_t so
 void projectSongloopSwitchChanged();
 #endif
 
+#if MT_HAS_RESAMPLE
+namespace resample
+{
+enum class Buttons : uint8_t;
+}
+// The Sample Recorder, main loop: a visit starts and ends. A visit latches the project's
+// Resample switch.
+void resampleRecorderStarted();
+void resampleRecorderStopped();
+// The key under one of Resample's buttons, on the setup screen: the setting toggles, goes into
+// the project's record and marks the project changed. False if the visit is Off or the slot has
+// no button, so CE's own handling goes on.
+bool resampleSlotPressed(uint8_t slot, resample::Buttons buttons);
+#endif
+
 // After any Config menu edit: mods' settings the menu edits directly are stored if they
 // changed, which marks the project changed.
 void projectSettingEdited();

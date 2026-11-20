@@ -558,6 +558,9 @@ void cSampleRecorder::hideRadio()
     display.refreshControl(label[RADIO_COL2]);
     display.refreshControl(label[RADIO_COL3]);
     display.refreshControl(label[METRONOME_COL]);
+#if MT_HAS_RESAMPLE // MT: Resample's buttons in the two labels just emptied
+    drawResampleLabels();
+#endif
 
     display.setControlPosition(
       radioSpaceCover, (800 / 8) * (RADIO_COL1 < RADIO_COL3 ? RADIO_COL1 : RADIO_COL3) + 2, -1);
@@ -1078,3 +1081,39 @@ void cSampleRecorder::refreshOutputSource()
         engine.setOutputSource(audioEngine::OutputSourceType::kRegularMix);
     }
 }
+
+#if MT_HAS_RESAMPLE // MT: Resample's two buttons (core/mods/resample.h)
+static_assert(cSampleRecorder::RADIO_COL1 == mods::resample::kTrkAudioSlot &&
+                cSampleRecorder::RADIO_COL2 == mods::resample::kTrkRecordSlot,
+              "Resample's buttons are pressed with the keys under these columns");
+
+mods::resample::Buttons cSampleRecorder::resampleButtons() const
+{
+    return mods::resample::buttonsFor(isLineInSource(),
+                                      isStereoSource(),
+                                      recorderConfig.source == sourceTypeMicLG ||
+                                        recorderConfig.source == sourceTypeMicHG);
+}
+
+// On the setup screen of a visit with Resample on. hideRadio has emptied both labels.
+void cSampleRecorder::drawResampleLabels()
+{
+    if (currentScreen != screenTypeConfig || !mods::resample::inVisit())
+    {
+        return;
+    }
+
+    const mods::resample::Buttons buttons = resampleButtons();
+    for (const uint8_t slot : { mods::resample::kTrkAudioSlot, mods::resample::kTrkRecordSlot })
+    {
+        const char* title = mods::resample::title(slot, buttons);
+        if (title == nullptr)
+        {
+            continue;
+        }
+        display.setControlText(label[slot], title);
+        display.setControlText2(label[slot], mods::resample::value(slot, mods::resample::settings));
+        display.refreshControl(label[slot]);
+    }
+}
+#endif

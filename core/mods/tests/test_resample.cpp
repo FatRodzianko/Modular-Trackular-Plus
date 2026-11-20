@@ -1,8 +1,10 @@
 // Modular-Trackular mods. SPDX-License-Identifier: MIT
 //
 // Host tests for the resample mod's settings: the record, the 1.2.0 side file and its
-// import, and the record's trip through mods.bin. The recorder hooks come with later steps
-// (docs/mt/RESAMPLE_PORT_PLAN.md). Build and run with `make -C core/mods/tests`.
+// import, the record's trip through mods.bin, and the recorder's two buttons (which source
+// shows which, a press with its coupling, the record a press stores, the labels' texts). The
+// other recorder hooks come with later steps (docs/mt/RESAMPLE_PORT_PLAN.md). Build and run
+// with `make -C core/mods/tests`.
 
 #include "modsProject.h"
 #include "resample.h"
@@ -295,6 +297,100 @@ void testRecordRoundTrip()
 
 } // namespace
 
+void testButtonsFor()
+{
+    // buttonsFor(lineIn, stereo, mic), as cSampleRecorder::resampleButtons asks it
+    check(buttonsFor(true, true, false) == Buttons::both, "Line In: both buttons");
+    check(buttonsFor(true, false, false) == Buttons::trkAudio, "Line In (L), (R), (M): Trk Audio");
+    check(buttonsFor(false, false, true) == Buttons::trkAudio, "a mic: Trk Audio");
+    check(buttonsFor(false, true, false) == Buttons::none, "USB: none");
+    check(buttonsFor(false, false, false) == Buttons::none, "Radio, USB (M): none");
+}
+
+void testPress()
+{
+    Settings s;
+    check(press(kTrkAudioSlot, Buttons::both, &s) && same(s, true, false), "Trk Audio On");
+    check(press(kTrkRecordSlot, Buttons::both, &s) && same(s, true, true), "Trk Record On");
+    check(press(kTrkRecordSlot, Buttons::both, &s) && same(s, true, false),
+          "Trk Record Off leaves Trk Audio On");
+    check(press(kTrkRecordSlot, Buttons::both, &s) && press(kTrkAudioSlot, Buttons::both, &s) &&
+            same(s, false, false),
+          "Trk Audio Off turns Trk Record Off");
+
+    s = Settings{};
+    check(press(kTrkRecordSlot, Buttons::both, &s) && same(s, true, true),
+          "Trk Record On from Off turns Trk Audio On");
+
+    s = Settings{ true, true };
+    check(!press(kTrkRecordSlot, Buttons::trkAudio, &s) && same(s, true, true),
+          "no Trk Record button: the key does nothing");
+    check(press(kTrkAudioSlot, Buttons::trkAudio, &s) && same(s, false, false),
+          "Trk Audio Off on a mic turns the hidden Trk Record Off too");
+    check(!press(kTrkAudioSlot, Buttons::none, &s) && !press(kTrkRecordSlot, Buttons::none, &s) &&
+            same(s, false, false),
+          "no buttons: neither key does anything");
+    check(!press(0, Buttons::both, &s) && !press(3, Buttons::both, &s) && same(s, false, false),
+          "other keys aren't Resample's");
+}
+
+void testStore()
+{
+    uint8_t buffer[256];
+    Store records(buffer, sizeof(buffer), "TEST");
+    records.clear();
+
+    check(store(Settings{ true, false }, records), "a press with no record yet stores one");
+    uint16_t length = 0;
+    const uint8_t* data = records.find(kRecord, nullptr, &length);
+    check(data != nullptr && length == 1 && data[0] == 1, "record 12 holds Trk Audio");
+    check(!store(Settings{ true, false }, records), "the same settings: no change");
+    check(store(Settings{ true, true }, records), "both On: a change");
+    data = records.find(kRecord, nullptr, &length);
+    check(data != nullptr && data[0] == 3, "record 12 holds both");
+    check(store(Settings{}, records), "both Off: a change");
+    data = records.find(kRecord, nullptr, &length);
+    check(data != nullptr && length == 1 && data[0] == 0, "record 12 holds Off");
+
+    settings = Settings{ true, true };
+    load(records);
+    check(same(settings, false, false), "and loads back as Off");
+}
+
+void testLabels()
+{
+    check(std::string(title(kTrkAudioSlot, Buttons::both)) == "Trk Audio", "slot 1: Trk Audio");
+    check(std::string(title(kTrkRecordSlot, Buttons::both)) == "Trk Record", "slot 2: Trk Record");
+    check(std::string(title(kTrkAudioSlot, Buttons::trkAudio)) == "Trk Audio",
+          "a mic: slot 1 Trk Audio");
+    check(title(kTrkRecordSlot, Buttons::trkAudio) == nullptr, "a mic: slot 2 empty");
+    check(title(kTrkAudioSlot, Buttons::none) == nullptr &&
+            title(kTrkRecordSlot, Buttons::none) == nullptr,
+          "USB: both empty");
+
+    check(std::string(value(kTrkAudioSlot, Settings{})) == "Off" &&
+            std::string(value(kTrkRecordSlot, Settings{})) == "Off",
+          "both Off");
+    check(std::string(value(kTrkAudioSlot, Settings{ true, false })) == "On" &&
+            std::string(value(kTrkRecordSlot, Settings{ true, false })) == "Off",
+          "Trk Audio On, Trk Record Off");
+    check(std::string(value(kTrkAudioSlot, Settings{ true, true })) == "On" &&
+            std::string(value(kTrkRecordSlot, Settings{ true, true })) == "On",
+          "both On");
+}
+
+void testVisit()
+{
+    visitEnded();
+    check(!inVisit(), "no visit");
+    visitStarted(false);
+    check(!inVisit(), "a visit with the mod Off");
+    visitStarted(true);
+    check(inVisit(), "a visit with the mod On");
+    visitEnded();
+    check(!inVisit(), "the visit ended");
+}
+
 int main()
 {
     testBits();
@@ -302,6 +398,11 @@ int main()
     testImportFile();
     testImportThroughProject();
     testRecordRoundTrip();
+    testButtonsFor();
+    testPress();
+    testStore();
+    testLabels();
+    testVisit();
     printf("%d checks, %d failures\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }

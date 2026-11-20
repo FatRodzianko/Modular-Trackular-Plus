@@ -53,6 +53,38 @@ void load(const Store& store);
 // and a button was On, so the project used the mod.
 bool importSideFile(FileIo& io, const char* projectFolder, Store& store);
 
+// The recorder's buttons, in the two bottom labels CE leaves empty for every source but Radio:
+// Trk Audio for the four Line Ins and the mics, Trk Record for the stereo Line In only (decision
+// 9), none for Radio or USB.
+enum class Buttons : uint8_t
+{
+    none,
+    trkAudio,
+    both,
+};
+constexpr uint8_t kTrkAudioSlot = 1;  // label[RADIO_COL1]
+constexpr uint8_t kTrkRecordSlot = 2; // label[RADIO_COL2]
+
+Buttons buttonsFor(bool lineIn, bool stereo, bool mic);
+
+// A recorder visit: latched when the recorder starts and cleared when it stops, so the project's
+// switch, changed in Config, takes effect at the next visit. Nothing runs while it's Off.
+void visitStarted(bool modOn);
+void visitEnded();
+bool inVisit();
+
+// The key under slot pressed with these buttons shown: toggles that setting in s, with Trk
+// Record On turning Trk Audio On and Trk Audio Off turning Trk Record Off. False if the slot has
+// no button.
+bool press(uint8_t slot, Buttons buttons, Settings* s);
+
+// s into store's record. True if the record changed.
+bool store(const Settings& s, Store& store);
+
+// A slot's two texts: its title and On/Off. nullptr if the slot has no button.
+const char* title(uint8_t slot, Buttons buttons);
+const char* value(uint8_t slot, const Settings& s);
+
 } // namespace resample
 } // namespace mods
 

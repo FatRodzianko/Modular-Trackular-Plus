@@ -2,7 +2,7 @@
 
 Status: on `modular` `CE_20261119` (`71b4a8c`) since 2026-11-19 ([section 13](#13-catch-up-to-ce_20261119)), rebased
 onto `5b40785` on 2026-11-17 before that ([section 12](#12-rebase-onto-5b40785)).
-Step 1 is committed (2026-11-19, on `modular` `5c331c1`, which adds the 1 KB heap trim). Step 0's results ([section 11](#11-step-0-results)) and
+Step 1 is committed (2026-11-19, on `modular` `5c331c1`, which adds the 1 KB heap trim). Step 2 is committed (2026-11-20, on `CE_20261119`). Step 0's results ([section 11](#11-step-0-results)) and
 every test run before the rebase come from `c32fee7` and the old rigs, and are to be run again.
 Your decisions are in section 9, 10 and 11 (from step 0) included. Based on the
 source of `modular` at `5b40785` (rebased 2026-11-17 from `c32fee7`, section 12), which holds upstream's `main` up to `f25fb89` (the Sample Recorder
@@ -108,7 +108,7 @@ source but Radio. A press toggles Off and On.
 | 6 | Every recording after the loaded samples | Only with Trk Audio on; with it off the recorder is CE's, full length included |
 | 7 | (1.2.0 reloaded the samples after a take) | CE's reload kept |
 | 8 | Recorder buttons only | Same |
-| 9 | Trk Record for Line In only | Same |
+| 9 | Trk Record for Line In only | Same: the stereo "Line In" (CE's nine sources, section 13) |
 
 ## 3. What is different on CE
 
@@ -136,16 +136,16 @@ mod On (section 4.9), so Off is CE's path.
 
 | # | CE file, place | Call | Runs in | Does |
 |---|---|---|---|---|
-| 1 | `fSampleRec.cpp` `cSampleRecorder::start`, before the last `functSwitchModule(options)` block (L399) | `resample::recorderStarted()` | main | New visit: latch the switch and the settings, gates shut, nothing armed. With Trk Audio on, select `globalLastUsedInstrumentIndex` again if L384–397 swapped it for the MIDI one |
-| 2 | `fSampleRec.cpp` `cSampleRecorder::stop` (L405), first line | `resample::recorderStopped()` | main | Clear the visit. CE's own `stop()` then undoes the entry and stops the pattern |
+| 1 | `fSampleRec.cpp` `cSampleRecorder::start`, first line (step 2; `showDefaultScreen` draws the labels before the old place, L399) | `mods::resampleRecorderStarted()` | main | New visit: latch the switch, gates shut, nothing armed. Step 6 adds its own call before the last `functSwitchModule(options)` block: with Trk Audio on, select `globalLastUsedInstrumentIndex` again if L384–397 swapped it for the MIDI one |
+| 2 | `fSampleRec.cpp` `cSampleRecorder::stop` (L405), first line | `mods::resampleRecorderStopped()` | main | Clear the visit. CE's own `stop()` then undoes the entry and stops the pattern |
 | 3 | `fSampleRec.cpp` `cSampleRecorder::update` (L113), first line, before the count-in early return | `resample::recorderUpdate()` | main | Open or close the gates by the rule of 4.3; stop the pattern when a take ends; disarm when nothing counts in or records |
 | 4 | `fSampleRec.cpp` `functPlay` (L2907), first line | `if (resample::playPressed()) return;` | main | During a count-in with Trk Audio on: arm (Shift: the song) instead of playing. Otherwise CE's Play, which is heard because the gates are already open |
 | 5 | `fSampleRec.cpp` `functRec` (L2926), first line | `resample::recPressed()` | main | Shift held, setup or count-in, Trk Audio on: arm |
 | 6 | `fSampleRec.cpp` `functActionRecord`, after L1555 (`config.destinationBufferSize`) | `resample::placeBuffer(config)` | main | With the gates open: the buffer after the loaded samples (4.4). Too little room: CE's buffer, and the gates close here, before the take writes over the samples |
 | 7 | `fSampleRec.cpp` `functActionRecord`, after `recorder.record()` (L1589) | `resample::takeStarted()` | main | Armed and moved: play the pattern (or song) from its start, also if it was playing. Otherwise disarm |
-| 8 | `fSampleRec.cpp` `functActionButton1`/`2` (L1038, L1066), config screen, source Line In or a mic | `if (resample::slotPressed(n)) return;` | main | Toggle Trk Audio / Trk Record with their coupling, store the record, redraw the two labels |
+| 8 | `fSampleRec.cpp` `functActionRadioFreq`/`functActionRadioLeft`, first line (step 2: on the setup screen `setConfigScreenFunct` gives keys 1 and 2 to these, not to `functActionButton1`/`2`) | `if (resampleSlotPressed(n)) return;` | main | On the setup screen, outside a count-in, a take and CE's windows, for the sources that show the button: toggle Trk Audio / Trk Record with their coupling, store the record, mark the project changed, redraw the two labels |
 | 9 | `fSampleRec.cpp` `functInstrument` (L2940) | press: `if (resample::openPicker()) return;` release: `resample::pickerClosed()` after CE's release code | main | Trk Audio on: `showStepPopup(stepPopupInstr, …)` with no clamp; a pick that isn't MIDI leaves `recorderMidiLastUsedInstrumentIndex` alone |
-| 10 | `gSampleRec.cpp` `cSampleRecorder::hideRadio` (L526), end | `resample::drawLabels()` | main | Draw "Trk Audio" and "Trk Record" with Off/On on `label[RADIO_COL1]`/`label[RADIO_COL2]`, for the sources that show them |
+| 10 | `gSampleRec.cpp` `cSampleRecorder::hideRadio` (L526), after the labels' refresh | `drawResampleLabels()` | main | Draw "Trk Audio" and "Trk Record" with Off/On on `label[RADIO_COL1]`/`label[RADIO_COL2]`, for the sources that show them |
 | 11 | `Recorder.cpp` `Recorder::record`, around the queue `begin()` loop (L64–67) | `resample::queuesStarting()` before, `resample::queuesStarted()` after | main | Trk Record, Line In, gates open: mask the audio interrupt, begin the tap queues with the input queues, unmask, so all four start in the same interrupt |
 | 12 | `Recorder.cpp` `Recorder::update`, stereo branch (L102–110) | before the copy loop `if (resample::dropBlock()) { free both input blocks; skip the copy and the head step }`; the `memcpy` for each channel becomes `resample::copyBlock(channel, dest, src)` while the tap runs | **interrupt** | Monitor off: drop the take's first Line In block (decision 10), then add the tap's block; Monitor on: take the tap block alone. Saturating 16-bit add |
 | 13 | `Recorder.cpp` `Recorder::finishRecording` (L277), after `isActive = false` | `resample::takeFinished()` | **interrupt** (full memory) or main (stop) | End and clear the tap queues; note "take over" for hook 3 |
@@ -311,12 +311,15 @@ metronome loud.
 - In the config screen, `functActionButton1` does nothing and `functActionButton2` calls
   `functActionRadioLeft`, both only for Radio; the select functions return early for other sources.
   Hook 8 acts before them and leaves Radio alone.
-- **Shown for:** Trk Audio for Line In and the mics, not for USB (decision 1); Trk Record for Line In.
+- **Shown for:** Trk Audio for the four Line Ins and the mics, not for USB or USB (M) (decision 1);
+  Trk Record for the stereo "Line In" only (decision 9).
   Radio keeps its controls. Switching the source to USB or Radio with Trk Audio on closes the gates and
   stops the pattern; the setting itself stays, and comes back with Line In or a mic.
-- **Display bytes:** the two labels exist already with empty text, so the cost is their text: about
-  "Trk Audio" + "On" and "Trk Record" + "Off", under 40 bytes. Step 2 counts them per control,
-  as the rigs count `API_*` calls (CE no longer sets `lastMemoryUsed`). `radioSpaceCover`, which `hideRadio` shows over columns 1–3, is
+- **Display bytes:** the two labels exist already with empty text, so the cost is their text.
+  Measured in step 2 as the rigs count `API_*` calls, each text at its upper bound (24 + 12 a
+  character): the setup screen is 3,932 bytes without the buttons and 4,264 with both (label[1]
+  196, label[2] 208), 3,908 under `kFrameControlBytes`. The 40 bytes estimated here before forgot
+  that each text is a coprocessor command of its own. `radioSpaceCover`, which `hideRadio` shows over columns 1–3, is
   at y 29–423 and the labels at y 424–479, so it doesn't hide them (11.6).
 
 ### 4.8 Settings and data
@@ -415,15 +418,22 @@ One patch at a time, each its own commit on your word, on `mod/resample` (this w
    the importer, host tests. No recorder hook. **Done when** host tests pass (importer cases below), the
    golden test passes, Config shows Resample, and the `mods.bin` round trip keeps record 12.
 2. **Buttons and settings** (hooks 1, 2, 8, 10). First the user page `docs/mods/resample.md` with
-   mockups of the recorder's setup (Line In, a mic, USB; each button Off and On), shown to you before
+   mockups of the recorder's setup (stereo Line In, a mono Line In, a mic, USB; each button Off and On), shown to you before
    any screen code. **Done when** the display calls, caught at CE's
-   `API_*` functions as `test_colorsong.py` does (`eve.py` isn't in this repo), show both labels for Line In,
-   Trk Audio only for the mics, neither for Radio or USB; presses toggle with the coupling of section
+   `API_*` functions as `test_colorsong.py` does (`eve.py` isn't in this repo), show both labels for "Line In",
+   Trk Audio only for "Line In (L)", "(R)", "(M)" and the mics, neither for Radio, "USB (M)" or "USB"; presses toggle with the coupling of section
    2; a press marks the project changed; the record round-trips through Save, Save As, Open and New
    Project; the two labels' bytes, counted per control, keep the frame under `kFrameControlBytes`
    (CE's 9d6d10a builds the lists in the MCU; `lastMemoryUsed` is no longer set).
-   **Mockups approved 2026-11-19:** `docs/mods/resample.md` and five `docs/mods/img/resample-*.svg`
-   (`tools/docs/mockups_resample.py`). Their labels are checked again on the merged firmware.
+   **Mockups approved 2026-11-19, redrawn with CE's nine sources and approved 2026-11-20:**
+   `docs/mods/resample.md` and six `docs/mods/img/resample-*.svg` (`tools/docs/mockups_resample.py`).
+   **Done 2026-11-20:** host tests (`test_resample` 96 checks) and `test_resample.py` on a full
+   build with plain CE beside it: Off is CE's display calls for all nine sources; On shows the
+   buttons per source, presses toggle with the coupling, store record 12 and mark the project
+   changed, the switch takes effect at the next visit, and the screen stays under the frame limit
+   (4.7). The round trip of the record through Save, Save As, Open and New Project is step 1's.
+   `check_mockups.py` passes. Hooks 1 and 8 moved (4.1). Not covered by the emulator: the screen
+   itself, and a key pressed during a count-in or a take (refused by the guard, not driven).
 3. **Trk Audio** (hooks 3, 4 without the arm, 6, 14). **Done when** in the setup Play, Shift+Play and
    a MIDI Start sound as normal playback (samples, synths, MIDI out, delay and reverb); Rec then Play
    records the input only into the moved buffer, with the loaded samples left byte-identical; stopping
@@ -518,7 +528,9 @@ Your answers, 2026-11-12 (1 directly, 2–9 "the recommendations"):
    place and CE's full length.
 7. **The sample reload on leaving the recorder:** CE's, kept.
 8. **Where the buttons' settings change:** only on the recorder screen.
-9. **Trk Record:** Line In only.
+9. **Trk Record:** Line In only. Since CE's nine sources (section 13), your answer 2026-11-19: the
+   stereo "Line In" only. "Line In (L)", "(R)" and "(M)" get Trk Audio only, as the mics do, so the
+   tap stays in `Recorder::update`'s stereo branch (hook 12).
 
 From step 0, your answer 2026-11-13 ("Yes, both"):
 
@@ -710,8 +722,9 @@ On 2026-11-19 this branch merged `modular` at `CE_20261119` (`71b4a8c`, CE's `ma
   the groups, and the default source is "Line In" (`sourceTypeLineInS`). Only "Line In" and "USB"
   record stereo. "Line In (L)" and "(R)" record one channel (`useRightChannelForMono`), "Line In (M)"
   and "USB (M)" mix both into one. A mono take goes through `Recorder::update`'s mono branches, not the
-  stereo branch that hook 12 changes. **Which Line In sources get Trk Record is open (a decision for
-  you); step 2's mockups wait for it.** The label "Line in" in them is CE's old spelling.
+  stereo branch that hook 12 changes. **Trk Record: the stereo "Line In" only (decision 9, 2026-11-19).**
+  Trk Audio: all four Line Ins and both mics. No buttons: Radio, "USB (M)", "USB". Step 2's mockups
+  are redrawn with the nine sources.
 - **USB on the OG** (`#ifdef PLATFORM_IMX` removed around USB): no change on the Tracker+.
 - **Line In output type** (`mtConfig.general.lineInOutType`) is no longer applied: the input is always
   stereo outside a take. The tap does not use it.
