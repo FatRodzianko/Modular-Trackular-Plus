@@ -7,6 +7,7 @@
 #include "mtPadBoard.h"
 #include "mtPadsBacklight.h"
 #include "mtRandomNameGenerator.h"
+#include "mods.h" // MT:
 #include "sampleRecorder/sampleRecorder.h"
 
 #include "core/interfaceMenuPopup.h"
@@ -127,6 +128,21 @@ static int calcRadioChannel(float freq, float baseFreq, float spacing)
 
 void cSampleRecorder::update()
 {
+#if MT_HAS_RESAMPLE // MT: Resample's gates follow the screen, before the count-in's early return
+    {
+        const uint8_t status = newFileManager.getStatus();
+        mods::resample::RecorderView view;
+        view.onSetup = currentScreen == screenTypeConfig && patternIsPlayingFlag == 0;
+        view.takeRunning = recordInProgressFlag != 0 && !waitForPreRollEnd;
+        view.countingIn = recordInProgressFlag != 0 && waitForPreRollEnd;
+        view.buttonShown = resampleButtons() != mods::resample::Buttons::none;
+        view.samplesBusy = status == fmSavingRecordedSound || status == fmSavingImportingRecordedSound ||
+                           status == fmSaveRecordedSoundEnd || status == fmReloadingSamples ||
+                           status == fmReloadSamplesEnd;
+        view.midiInstrument = recorderMidiLastUsedInstrumentIndex;
+        mods::resample::recorderUpdate(view);
+    }
+#endif
     if (waitForPreRollEnd == true)
     {
         if (startRecordingOnPreRollEnd == true)
@@ -297,6 +313,9 @@ void cSampleRecorder::update()
 
 void cSampleRecorder::start(uint32_t options)
 {
+#if MT_HAS_RESAMPLE // MT: a new visit latches Resample's switch, before the labels are drawn
+    mods::resampleRecorderStarted();
+#endif
     recorder.setFullMemoryCallback([this]() { this->fullMemoryDuringRecordFlag = 1; });
     codec = platform->getCodecAudio();
     radio = platform->getRadio();
@@ -342,6 +361,9 @@ void cSampleRecorder::start(uint32_t options)
     engine.disconnectMixerImpact();
     engine.disableLineInImpact();
     engine.setLimiterSidechain(0); // force limiter sidechain to not to be line in R/L
+#if MT_HAS_RESAMPLE // MT: the entry ran, so Resample's gates may undo it
+    mods::resample::recorderEntered();
+#endif
 
     processPoints();
     listMonitor();
@@ -420,6 +442,12 @@ void cSampleRecorder::start(uint32_t options)
 
         mtProject.values.lastUsedInstrument = recorderMidiLastUsedInstrumentIndex;
     }
+#if MT_HAS_RESAMPLE // MT: with Trk Audio, the instrument chosen before the recorder stays chosen
+    if (mods::resample::keepsInstrument(resampleButtons() != mods::resample::Buttons::none))
+    {
+        mtProject.values.lastUsedInstrument = globalLastUsedInstrumentIndex;
+    }
+#endif
 
     // This can leave the recorder for another module. It has to come last, so that stop()
     // puts back the instrument replaced above before that module starts.
@@ -431,6 +459,9 @@ void cSampleRecorder::start(uint32_t options)
 
 void cSampleRecorder::stop()
 {
+#if MT_HAS_RESAMPLE // MT: the visit ends
+    mods::resampleRecorderStopped();
+#endif
     if (!dontTurnOffRadio)
     {
         engine.forceLineInStreamVolume(LINE_IN_VOLUME_MIN);
@@ -1597,8 +1628,18 @@ static void functActionRecord()
                       ? Recorder::Config::Source::kUsb
                       : Recorder::Config::Source::kI2s;
 
+#if MT_HAS_RESAMPLE // MT: with the gates open, the take goes after the loaded samples
+    mods::resample::placeBuffer(&config.destinationBufferAddress,
+                                &config.destinationBufferSize,
+                                config.destinationChannels,
+                                SR->resampleButtons() == mods::resample::Buttons::both,
+                                SR->recorderConfig.monitor == 0); // monitorNamesLabels[0], "On"
+#endif
     recorder.setConfig(config);
     recorder.record();
+#if MT_HAS_RESAMPLE // MT: an armed pattern or song starts with the take
+    mods::resample::takeStarted();
+#endif
 
     GP.spectrumResetZoom(0, 0, &SR->zoom);
     SR->spectrumTimerConstrains = 100;
@@ -1613,8 +1654,33 @@ static void functActionRecord()
     SR->refreshSpectrum = 1;
 }
 
+#if MT_HAS_RESAMPLE // MT: on the setup screen, the keys under columns 1 and 2 press Resample's buttons
+// for the sources that show them, but not during a count-in, a take or one of CE's windows.
+static bool resampleSlotPressed(uint8_t slot)
+{
+    if (SR->currentScreen != cSampleRecorder::screenTypeConfig || SR->recordInProgressFlag != 0 ||
+        SR->waitForPreRollEnd || SR->fullMemoryWindowFlag || SR->selectionWindowFlag ||
+        SR->patternIsPlayingFlag || SR->selectionWindowSaveFlag)
+    {
+        return false;
+    }
+    if (!mods::resampleSlotPressed(slot, SR->resampleButtons()))
+    {
+        return false;
+    }
+    SR->drawResampleLabels();
+    return true;
+}
+#endif
+
 static void functActionRadioFreq()
 {
+#if MT_HAS_RESAMPLE // MT: Trk Audio
+    if (resampleSlotPressed(mods::resample::kTrkAudioSlot))
+    {
+        return;
+    }
+#endif
     if ((SR->currentScreen == cSampleRecorder::screenTypeConfig) &&
         (SR->recorderConfig.source != cSampleRecorder::sourceTypeRadio))
     {
@@ -1628,6 +1694,12 @@ static void functActionRadioFreq()
 
 static void functActionRadioLeft()
 {
+#if MT_HAS_RESAMPLE // MT: Trk Record
+    if (resampleSlotPressed(mods::resample::kTrkRecordSlot))
+    {
+        return;
+    }
+#endif
     if (SR->recorderConfig.source != cSampleRecorder::sourceTypeRadio)
     {
         return;
@@ -2915,6 +2987,13 @@ static void functInsert()
 
 static void functPlay()
 {
+#if MT_HAS_RESAMPLE // MT: in a count-in, Play arms the pattern (Shift: the song) to start with the take
+    if (mods::resample::playPressed(SR->buttons->isButtonPressed(interfaceButtonShift),
+                                    SR->recordInProgressFlag != 0 && SR->waitForPreRollEnd))
+    {
+        return;
+    }
+#endif
     if (sequencer.getSeqState() == Sequencer::SEQ_STATE_STOP)
     {
         if (SR->buttons->isButtonPressed(interfaceButtonShift))
@@ -2934,6 +3013,11 @@ static void functPlay()
 
 static void functRec()
 {
+#if MT_HAS_RESAMPLE // MT: Shift+Rec arms the pattern to start with the take
+    mods::resample::recPressed(SR->buttons->isButtonPressed(interfaceButtonShift),
+                               SR->currentScreen == cSampleRecorder::screenTypeConfig &&
+                                 SR->patternIsPlayingFlag == 0);
+#endif
     if (SR->currentScreen == cSampleRecorder::screenTypeConfig ||
         (SR->currentScreen == cSampleRecorder::screenTypeRecord && SR->recordInProgressFlag == 1))
     {
@@ -2956,11 +3040,21 @@ static void functInstrument(uint8_t state)
 
             SR->setDefaultScreenFunct();
             SR->showDefaultScreen();
+#if MT_HAS_RESAMPLE // MT: a sample or synth picked with Trk Audio isn't the recorder's MIDI instrument
+            if (isMidiInstrument(mtProject.values.lastUsedInstrument))
+#endif
             SR->recorderMidiLastUsedInstrumentIndex = mtProject.values.lastUsedInstrument;
         }
     }
     else if (state == buttonPress)
     {
+#if MT_HAS_RESAMPLE // MT: with Trk Audio, every instrument in the list
+        if (mods::resample::fullPicker())
+        {
+            mtPopups.showStepPopup(stepPopupInstr, mtProject.values.lastUsedInstrument);
+            return;
+        }
+#endif
         mtProject.values.lastUsedInstrument =
           clamp<uint8_t>(mtProject.values.lastUsedInstrument,
                          MIDI_INSTRUMENTS_START_IDX,

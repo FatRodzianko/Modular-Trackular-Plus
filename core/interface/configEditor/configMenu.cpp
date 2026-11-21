@@ -123,6 +123,15 @@ const strItemTypeListTextWithAction projectMasterfxSetup{
 cMenuItem melProjectMasterfx(menuProjectMods, "Master FX", projectMasterfxDesc, menuTypeItemListTextWithAction, &projectMasterfxSetup);
 #endif
 
+#if MT_HAS_RESAMPLE
+const char projectResampleDesc[] = { "Resample for this project: Trk Audio and Trk Record in the Sample "
+                                     "Recorder, so the tracker plays during a take and can be recorded "
+                                     "with the Line In. Takes effect at the next visit. " };
+const strItemTypeListTextWithAction projectResampleSetup{
+    &mods::switches[static_cast<size_t>(mods::Mod::resample)], 2, onOffStateTexts, mods::projectSwitchChanged };
+cMenuItem melProjectResample(menuProjectMods, "Resample", projectResampleDesc, menuTypeItemListTextWithAction, &projectResampleSetup);
+#endif
+
 #if MT_HAS_SONGLOOP
 const char projectSongloopDesc[] = { "Song Loop for this project, by P-N-E-M: on the Song screen with Rec "
                                      "on, Shift + Down selects a block of positions and Play Selection "
@@ -462,6 +471,15 @@ const char modsMasterfxDesc[] = { "Whether new projects start with Master FX on.
 const strItemTypeListTextWithAction modsMasterfxSetup{
     &mods::defaults[static_cast<size_t>(mods::Mod::masterfx)], 2, onOffStateTexts, mods::defaultsChanged };
 cMenuItem melModsMasterfx(menuMods, "Master FX", modsMasterfxDesc, menuTypeItemListTextWithAction, &modsMasterfxSetup);
+#endif
+
+#if MT_HAS_RESAMPLE
+const char modsResampleDesc[] = { "Whether new projects start with Resample on. Each project has its own "
+                                  "switch in Project Settings > Mods. Resample: the Sample Recorder can "
+                                  "play and record the tracker. " };
+const strItemTypeListTextWithAction modsResampleSetup{
+    &mods::defaults[static_cast<size_t>(mods::Mod::resample)], 2, onOffStateTexts, mods::defaultsChanged };
+cMenuItem melModsResample(menuMods, "Resample", modsResampleDesc, menuTypeItemListTextWithAction, &modsResampleSetup);
 #endif
 
 #if MT_HAS_SONGLOOP

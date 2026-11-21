@@ -80,4 +80,11 @@
 #define MT_HAS_SWING 0
 #endif
 
+#ifndef MT_HAS_RESAMPLE
+#define MT_HAS_RESAMPLE MT_MODS
+#elif !MT_MODS
+#undef MT_HAS_RESAMPLE
+#define MT_HAS_RESAMPLE 0
+#endif
+
 #endif /* MODS_MODSBUILD_H_ */

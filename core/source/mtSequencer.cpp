@@ -2829,7 +2829,11 @@ AUDIO_CORE_FLASH void Sequencer::handleNoteOn(
             engine.setLastUsedVoice(sel->firstTrack);
         }
     }
+#if MT_HAS_RESAMPLE // MT: in the recorder with Trk Audio, a live note never writes into the pattern
+    else if (isRec() && !mods::resample::playOnlyOn(source))
+#else
     else if (isRec())
+#endif
     {
         int8_t singleArmedTrack = getSingleArmedTrack();
         int startTrack = (singleArmedTrack >= 0) ? singleArmedTrack : getActualTrack();
@@ -3005,6 +3009,9 @@ AUDIO_CORE_FLASH void Sequencer::handleNoteOn(
     else // czyli playMode / dogrywanie / wgrywanie akordów w edit
     {
         int instrument = mtProject.values.lastUsedInstrument;
+#if MT_HAS_RESAMPLE // MT: in the recorder with Trk Audio, Resample's rule picks the track
+        const int livePick = mods::resample::liveTrack(sel->firstTrack, instrument);
+#endif
 
         for (int tryIdx = 0; tryIdx < kAllTracks; tryIdx++)
         {
@@ -3015,9 +3022,17 @@ AUDIO_CORE_FLASH void Sequencer::handleNoteOn(
                 continue;
             }
 
+#if MT_HAS_RESAMPLE // MT:
+            if (livePick != mods::resample::kCeRule
+                  ? trackIdx == livePick
+                  : (!isTrackEngineMuted(trackIdx) &&
+                     ((isEditMode() && !player.track[trackIdx].recOpen) ||
+                      !player.track[trackIdx].noteOpen)))
+#else
             if (!isTrackEngineMuted(trackIdx) &&
                 ((isEditMode() && !player.track[trackIdx].recOpen) ||
                  !player.track[trackIdx].noteOpen))
+#endif
             {
                 player.track[trackIdx].noteOpen = 1;
                 player.track[trackIdx].noteLength = -1;
@@ -3118,7 +3133,11 @@ void Sequencer::handleNoteOff(byte channel, // pochodzenie grida np. GRID_OUTSID
             }
         }
     }
+#if MT_HAS_RESAMPLE // MT: a note-off goes the way its note-on went
+    else if (!mods::resample::playOnlyOff(source) && isRec())
+#else
     else if (isRec())
+#endif
     {
         int8_t singleArmedTrack = getSingleArmedTrack();
         if (singleArmedTrack >= 0)

@@ -73,6 +73,9 @@ constexpr size_t kBuiltModCount = 0
 #if MT_HAS_SYNTHFX
                                   + 1
 #endif
+#if MT_HAS_RESAMPLE
+                                  + 1
+#endif
   ;
 
 // One byte per mod, 0 Off or 1 On, so Config list items can point at them.
@@ -170,6 +173,21 @@ void tracklenTracksPasted(uint8_t sourcePattern, uint8_t destPattern, uint8_t so
 #if MT_HAS_SONGLOOP
 // The same for Song Loop's switch, which also changes the status bar's glyphs.
 void projectSongloopSwitchChanged();
+#endif
+
+#if MT_HAS_RESAMPLE
+namespace resample
+{
+enum class Buttons : uint8_t;
+}
+// The Sample Recorder, main loop: a visit starts and ends. A visit latches the project's
+// Resample switch.
+void resampleRecorderStarted();
+void resampleRecorderStopped();
+// The key under one of Resample's buttons, on the setup screen: the setting toggles, goes into
+// the project's record and marks the project changed. False if the visit is Off or the slot has
+// no button, so CE's own handling goes on.
+bool resampleSlotPressed(uint8_t slot, resample::Buttons buttons);
 #endif
 
 // After any Config menu edit: mods' settings the menu edits directly are stored if they

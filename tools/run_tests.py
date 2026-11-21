@@ -128,6 +128,7 @@ def jobs_for(args, projects):
         Job("tracklen", e / "test_tracklen.py", mods, ref, inputs=both),
         Job("copypattern", e / "test_copypattern.py", mods, ref, inputs=both),
         Job("songloop", e / "test_songloop.py", mods, ref, inputs=both),
+        Job("resample", e / "test_resample.py", mods, ref, inputs=both),
         Job("sound rig", e / "test_sound_rig.py", mods, ref, inputs=both),
         # the simulator's clock on synthetic code, no firmware (docs/mt/SIMULATOR_STAGE1.md 2.4)
         Job("sim kernel", e / "test_sim_kernel.py"),
@@ -191,6 +192,24 @@ def jobs_for(args, projects):
                                 "--preempt", "3000,120000", "--preempt-play", play_gaps, inputs=[axf, folder]))
         jobs.append(Job("send leak", e / "test_send_leak.py", mods, ref, projects["held"],
                         inputs=[mods, ref, projects["held"]]))
+        # Resample's Trk Audio on the real boot: the recorder's gates against normal playback, the
+        # take's place, the mix (docs/mt/RESAMPLE_PORT_PLAN.md step 3)
+        jobs.append(Job("resample sound", e / "test_resample_sound.py", mods, ref, args.project,
+                        inputs=[mods, ref, Path(args.project)]))
+        # Shift+Rec and the count-in's Play: what starts with the take (step 4)
+        jobs.append(Job("resample shift+rec", e / "test_resample_shiftrec.py", mods, ref, args.project,
+                        inputs=[mods, ref, Path(args.project)]))
+        # Trk Record: the take holds the Line In and the tracker's own sound, before the metronome (step 5)
+        jobs.append(Job("resample trk record", e / "test_resample_record.py", mods, ref, args.project,
+                        inputs=[mods, ref, Path(args.project)]))
+        # Any instrument: the full list, the instrument kept, the track rule, no pattern write (step 6)
+        jobs.append(Job("resample instruments", e / "test_resample_instruments.py", mods, ref, args.project,
+                        inputs=[mods, ref, Path(args.project)]))
+        # The recorder's keys, pads and MIDI with the audio interrupt firing inside them; 20 takes;
+        # the pool and the tap's own instructions with 8 synth voices (step 7)
+        jobs.append(Job("resample preempt", e / "test_resample_preempt.py", mods, args.project,
+                        "--seeds", "1" if args.tier == "release" else "1,2,3",
+                        inputs=[mods, Path(args.project)]))
         # A project's own synth patches, opened and copied by CE's code with its backslash paths
         synths = ROOT / "build" / "Synths"
         jobs.append(Job("project patches", e / "test_project_patches.py", mods, args.project, synths,

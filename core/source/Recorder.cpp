@@ -3,6 +3,9 @@
 #include "polyassert.h"
 #include <Recorder.h>
 
+#include "modsBuild.h" // MT:
+#include "resample.h"  // MT:
+
 uint32_t Recorder::DestinationChannelConfig::maxLength = 0;
 uint32_t Recorder::DestinationChannelConfig::length = 0;
 
@@ -61,10 +64,16 @@ void Recorder::record()
           engine.getAudioInput()->getRecordingQueueI2s(AudioInput::InputChannels::kRight);
     }
 
+#if MT_HAS_RESAMPLE // MT: Trk Record: the tap's queues start in the same audio interrupt as these
+    mods::resample::queuesStarting();
+#endif
     for (int sourceChannel = 0; sourceChannel < config.sourceChannels; sourceChannel++)
     {
         recordingQueue[sourceChannel]->begin();
     }
+#if MT_HAS_RESAMPLE // MT:
+    mods::resample::queuesStarted();
+#endif
 
     if (config.sourceChannels == 1)
     {
@@ -98,14 +107,31 @@ void Recorder::update()
                           recordingQueue + config.sourceChannels,
                           [](auto& queue) { return queue->available() > 0; });
 
+#if MT_HAS_RESAMPLE // MT: Trk Record, Monitor off: the first Line In block goes, to line up with the tap
+            if (areChannelsAvailable && mods::resample::dropBlock())
+            {
+                for (int sourceChannel = 0; sourceChannel < config.sourceChannels; sourceChannel++)
+                {
+                    recordingQueue[sourceChannel]->readBuffer();
+                    recordingQueue[sourceChannel]->freeBuffer();
+                }
+                areChannelsAvailable = false;
+            }
+#endif
             if (areChannelsAvailable)
             {
                 for (int sourceChannel = 0; sourceChannel < config.sourceChannels; sourceChannel++)
                 {
                     int16_t* destInitialAddress = channelConfig[sourceChannel].initialAddress;
+#if MT_HAS_RESAMPLE // MT: Trk Record adds the tracker's block
+                    mods::resample::copyBlock(sourceChannel,
+                                              &destInitialAddress[recordingHeadIdx],
+                                              recordingQueue[sourceChannel]->readBuffer());
+#else
                     memcpy(&destInitialAddress[recordingHeadIdx],
                            recordingQueue[sourceChannel]->readBuffer(),
                            sizeof(int16_t) * AUDIO_BLOCK_SAMPLES);
+#endif
                     recordingQueue[sourceChannel]->freeBuffer();
                 }
 
@@ -283,6 +309,9 @@ void Recorder::finishRecording()
     }
 
     isActive = false;
+#if MT_HAS_RESAMPLE // MT: Trk Record: the tap's queues end with CE's
+    mods::resample::takeFinished();
+#endif
     inputStereoToMono->setOutSignalType(AudioStereoToMono::OutSignalType::stereo);
 }
 

@@ -3,11 +3,11 @@
 
 CXX      ?= g++
 CXXFLAGS := -std=gnu++20 -Wall -Wextra -Werror -g -fsanitize=address,undefined -DMT_HOST_TEST -I..
-COMMON   := ../modsStore.cpp ../modsSwitches.cpp ../modsProject.cpp ../humanize.cpp ../swing.cpp ../colorsong.cpp ../masterfx.cpp ../tracklen.cpp ../copypattern.cpp ../songloop.cpp ../synthfx/synthfxSettings.cpp ../masterfx/masterfxPlugins.cpp ../masterfx/masterfxPack.cpp
+COMMON   := ../modsStore.cpp ../modsSwitches.cpp ../modsProject.cpp ../humanize.cpp ../swing.cpp ../colorsong.cpp ../masterfx.cpp ../tracklen.cpp ../copypattern.cpp ../songloop.cpp ../synthfx/synthfxSettings.cpp ../masterfx/masterfxPlugins.cpp ../masterfx/masterfxPack.cpp ../resample.cpp
 BUILD    := build
-TESTS    := test_mods test_registry test_registry_partial test_humanize test_swing test_colorsong test_masterfx test_tracklen test_copypattern test_songloop test_synthfx test_synthfx_plugins test_masterfx_plugins test_cardguard
+TESTS    := test_mods test_registry test_registry_partial test_humanize test_swing test_colorsong test_masterfx test_tracklen test_copypattern test_songloop test_synthfx test_synthfx_plugins test_masterfx_plugins test_cardguard test_resample
 # The registry again with some mods left out of the build.
-PARTIAL  := -DMT_HAS_SWING=0 -DMT_HAS_COLORSONG=0
+PARTIAL  := -DMT_HAS_SWING=0 -DMT_HAS_COLORSONG=0 -DMT_HAS_RESAMPLE=0
 
 .PHONY: all clean
 
@@ -55,6 +55,10 @@ $(BUILD)/test_copypattern: $(COMMON) test_copypattern.cpp $(wildcard ../*.h)
 	$(CXX) $(CXXFLAGS) -o $@ $(filter %.cpp,$^)
 
 $(BUILD)/test_songloop: $(COMMON) test_songloop.cpp $(wildcard ../*.h)
+	@mkdir -p $(BUILD)
+	$(CXX) $(CXXFLAGS) -o $@ $(filter %.cpp,$^)
+
+$(BUILD)/test_resample: $(COMMON) test_resample.cpp $(wildcard ../*.h)
 	@mkdir -p $(BUILD)
 	$(CXX) $(CXXFLAGS) -o $@ $(filter %.cpp,$^)
 

@@ -14,6 +14,7 @@
 #include "humanize.h"
 #include "masterfx.h"
 #include "modsProject.h"
+#include "resample.h"
 #include "songloop.h"
 #include "swing.h"
 #include "synthfx/synthfxMod.h"
@@ -149,6 +150,20 @@ constexpr std::array<ModDescriptor, kBuiltModCount> kMods{ {
     .apply = nullptr,
     .reset = nullptr,
     .storeIfEdited = synthfx::storeIfEdited,
+    .stored = nullptr,
+  },
+#endif
+#if MT_HAS_RESAMPLE
+  {
+    .id = Mod::resample,
+    .name = "Resample",
+    .record = resample::kRecord,
+    .recordVersion = resample::kRecordVersion,
+    .init = nullptr,
+    .load = resample::load,      // the recorder's buttons store the record themselves
+    .apply = nullptr,
+    .reset = nullptr,
+    .storeIfEdited = nullptr,
     .stored = nullptr,
   },
 #endif

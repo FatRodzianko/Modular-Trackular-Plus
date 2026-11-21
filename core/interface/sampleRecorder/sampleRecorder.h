@@ -5,6 +5,11 @@
 #include "mtKeyboardManager.h"
 #include "mtStructs.h"
 
+#include "modsBuild.h" // MT:
+#if MT_HAS_RESAMPLE
+#include "resample.h" // MT:
+#endif
+
 #ifndef TRACKER_MINI
 const uint8_t sourceCount = 9;
 const char* const ptrSourcesNamesLabels[9] = {
@@ -115,6 +120,10 @@ class cSampleRecorder : public ModuleBase
     void showFreqValue();
     void showRadio();
     void hideRadio();
+#if MT_HAS_RESAMPLE // MT: Resample's buttons for the source, drawn where hideRadio empties the labels
+    mods::resample::Buttons resampleButtons() const;
+    void drawResampleLabels();
+#endif
 
     void setDefaultScreenFunct();
     void setStopSeqFunctions();

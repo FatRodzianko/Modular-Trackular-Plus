@@ -274,7 +274,11 @@ AUDIO_CORE_RAM void audioEngine::update()
 {
     recorder.update();
 
+#if MT_HAS_RESAMPLE // MT: during a take, the players' update runs while Resample's gates are open
+    if (!recorder.isRecordingActive() || mods::resample::engineRuns())
+#else
     if (!recorder.isRecordingActive())
+#endif
     {
         currentTempo = sequencer.getCurrentTempo();
 

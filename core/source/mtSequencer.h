@@ -650,6 +650,9 @@ class Sequencer
 #if MT_HAS_SWING // MT: for mods::swing
     strPlayer::strSwing& swingForMods() { return player.swing; }
 #endif
+#if MT_HAS_RESAMPLE // MT: for mods::resample's track rule, the mute CE's own rule reads
+    uint8_t trackMutedForMods(uint8_t track) { return isTrackEngineMuted(track); }
+#endif
 
     strPattern* getPatternToSaveToFile() { return currentPattern; }
 
