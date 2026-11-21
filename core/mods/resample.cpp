@@ -9,6 +9,14 @@
 #include <cstdio>
 #include <cstring>
 
+#ifndef MT_HOST_TEST
+#include "mtAudioEngine.h"
+#include "mtSequencer.h"
+#include "mtStructs.h"
+
+extern strMtProject mtProject;
+#endif
+
 namespace mods
 {
 namespace resample
@@ -107,9 +115,22 @@ bool importSideFile(FileIo& io, const char* projectFolder, Store& store)
     return store.put(kRecord, kRecordVersion, &bits, kRecordSize) && bits != 0;
 }
 
+volatile uint8_t engineOpen = 0;
+
 namespace
 {
 bool visitOn = false;
+Visit visit;
+bool gatesAreOpen = false;   // main loop's view; engineOpen follows it
+bool mixerConnected = false; // this visit's last mixer call was a connect
+
+void forgetGates()
+{
+    engineOpen = 0;
+    gatesAreOpen = false;
+    mixerConnected = false;
+    visit = Visit{};
+}
 } // namespace
 
 Buttons buttonsFor(bool lineIn, bool stereo, bool mic)
@@ -121,14 +142,18 @@ Buttons buttonsFor(bool lineIn, bool stereo, bool mic)
     return mic ? Buttons::trkAudio : Buttons::none;
 }
 
+// The gates are closed at both ends: CE's entry follows a start, and CE's stop() undoes the
+// entry whether they were open or not (section 4.3, "Leaving").
 void visitStarted(bool modOn)
 {
     visitOn = modOn;
+    forgetGates();
 }
 
 void visitEnded()
 {
     visitOn = false;
+    forgetGates();
 }
 
 bool inVisit()
@@ -189,6 +214,180 @@ const char* value(uint8_t slot, const Settings& s)
     const bool isOn = slot == kTrkRecordSlot ? s.trkRecord : s.trkAudio;
     return isOn ? "On" : "Off";
 }
+
+bool gatesWanted(bool visitOn, const Settings& s, const Visit& v, const RecorderView& view)
+{
+    if (!visitOn || !s.trkAudio || !view.buttonShown || !v.entered || v.samplesOverwritten ||
+        view.samplesBusy)
+    {
+        return false;
+    }
+    return view.takeRunning ? v.takeMoved : view.onSetup;
+}
+
+uint32_t framesInRam(bool streamed, uint32_t ramFrames, uint32_t length)
+{
+    if (streamed || ramFrames > 0)
+    {
+        return ramFrames;
+    }
+    return length;
+}
+
+uintptr_t sampleEnd(uintptr_t address, uint32_t frames, bool stereo)
+{
+    return address + static_cast<uintptr_t>(frames) * (stereo ? 2u : 1u) * sizeof(int16_t);
+}
+
+Placement place(uintptr_t bankStart, uintptr_t bankEnd, uintptr_t loadedEnd, uint8_t channels)
+{
+    Placement p;
+    if (channels == 0 || bankEnd <= bankStart)
+    {
+        return p;
+    }
+    uintptr_t start = loadedEnd > bankStart ? loadedEnd : bankStart;
+    start = (start + (kTakeStartAlign - 1)) & ~static_cast<uintptr_t>(kTakeStartAlign - 1);
+    if (start >= bankEnd)
+    {
+        return p;
+    }
+    const uint32_t perChannel =
+      static_cast<uint32_t>((bankEnd - start) / channels) & ~(kTakeBlockBytes - 1);
+    if (perChannel < kMinTakeFrames * sizeof(int16_t))
+    {
+        return p;
+    }
+    p.address = start;
+    p.size = perChannel * channels;
+    return p;
+}
+
+#ifndef MT_HOST_TEST
+
+// Each one as CE's recorder entry and exit (fSampleRec.cpp start and stop) make it, in their
+// order. connectMixerImpact and disconnectMixerImpact go strictly in turns: a second disconnect
+// would store the defaults over the project's mix and lose it.
+namespace
+{
+void openGates()
+{
+    engine.unblockAllNoteOn();
+    sequencer.setSynthMute(Sequencer::MuteState::kUnmuted);
+    engine.unblockDelayRefresh();
+    if (!mixerConnected)
+    {
+        engine.connectMixerImpact();
+        mixerConnected = true;
+    }
+    engine.setLimiterSidechain(mtProject.values.limiterSidechain);
+    engine.refreshAllSends();
+    engine.refreshTrackVolume();
+    engineOpen = 1;
+    gatesAreOpen = true;
+}
+
+void closeGates()
+{
+    if (sequencer.getSeqState() != Sequencer::SEQ_STATE_STOP)
+    {
+        sequencer.stop();
+    }
+    engineOpen = 0;
+    engine.blockAllNoteOn();
+    sequencer.setSynthMute(Sequencer::MuteState::kMuted);
+    engine.blockDelayRefresh();
+    engine.clearDelay();
+    engine.clearReverb();
+    if (mixerConnected)
+    {
+        engine.disconnectMixerImpact();
+        mixerConnected = false;
+    }
+    engine.setLimiterSidechain(0);
+    gatesAreOpen = false;
+}
+} // namespace
+
+void recorderEntered()
+{
+    if (!visitOn)
+    {
+        return;
+    }
+    visit.entered = true;
+    mixerConnected = false; // CE's entry just disconnected
+}
+
+void recorderUpdate(const RecorderView& view)
+{
+    if (!visitOn)
+    {
+        return;
+    }
+    if (!view.takeRunning)
+    {
+        visit.takeMoved = false;
+    }
+    const bool want = gatesWanted(visitOn, settings, visit, view);
+    if (want && !gatesAreOpen)
+    {
+        openGates();
+    }
+    else if (!want && gatesAreOpen)
+    {
+        closeGates();
+    }
+}
+
+// address and size come in as CE's buffer, the whole sample memory.
+void placeBuffer(int16_t** address, uint32_t* size, int channels)
+{
+    if (!visitOn)
+    {
+        return;
+    }
+    visit.takeMoved = false;
+    if (gatesAreOpen)
+    {
+        const uintptr_t bankStart = reinterpret_cast<uintptr_t>(*address);
+        uintptr_t loadedEnd = bankStart;
+        for (int i = 0; i < kSampleInstrumentsCount; i++)
+        {
+            const strInstrument& instrument = mtProject.instrument[i];
+            const strSampleMemory& memory = mtProject.sampleMemory[i];
+            if (!instrument.isActive || instrument.sample.address == nullptr)
+            {
+                continue;
+            }
+            const bool stereo =
+              memory.isStereo ||
+              memory.address[strSampleMemory::Channel::kRight] !=
+                memory.address[strSampleMemory::Channel::kLeft];
+            const uintptr_t end =
+              sampleEnd(reinterpret_cast<uintptr_t>(instrument.sample.address),
+                        framesInRam(memory.isStreamed, memory.ramFrames, instrument.sample.length),
+                        stereo);
+            if (end > loadedEnd)
+            {
+                loadedEnd = end;
+            }
+        }
+        const Placement p =
+          place(bankStart, bankStart + *size, loadedEnd, static_cast<uint8_t>(channels));
+        if (p.size != 0)
+        {
+            *address = reinterpret_cast<int16_t*>(p.address);
+            *size = p.size;
+            visit.takeMoved = true;
+            return;
+        }
+        closeGates(); // too little room: the take is CE's, over the samples, and silent
+    }
+    visit.samplesOverwritten = true;
+}
+
+#endif // MT_HOST_TEST
 
 } // namespace resample
 } // namespace mods

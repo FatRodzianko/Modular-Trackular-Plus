@@ -3,7 +3,7 @@
 Status: on `modular` `CE_20261120` (`ff9b46a`) since 2026-11-20 ([section 14](#14-catch-up-to-ce_20261120)), on
 `CE_20261119` (`71b4a8c`) from 2026-11-19 ([section 13](#13-catch-up-to-ce_20261119)), rebased
 onto `5b40785` on 2026-11-17 before that ([section 12](#12-rebase-onto-5b40785)).
-Step 1 is committed (2026-11-19, on `modular` `5c331c1`, which adds the 1 KB heap trim). Step 2 is committed (2026-11-20, on `CE_20261119`). Step 0's results ([section 11](#11-step-0-results)) and
+Step 1 is committed (2026-11-19, on `modular` `5c331c1`, which adds the 1 KB heap trim). Step 2 is committed (2026-11-20, on `CE_20261119`). Step 3 is built and passes the emulator (2026-11-20, on `CE_20261120`), not committed. Step 0's results ([section 11](#11-step-0-results)) and
 every test run before the rebase come from `c32fee7` and the old rigs, and are to be run again.
 Your decisions are in section 9, 10 and 11 (from step 0) included. Based on the
 source of `modular` at `5b40785` (rebased 2026-11-17 from `c32fee7`, section 12), which holds upstream's `main` up to `f25fb89` (the Sample Recorder
@@ -18,7 +18,7 @@ numbers are for `5b40785` and only show where to look.
   PR, branch or issue for it (section 1).
 - **The port is simpler than on 1.2.0.** CE's source lets each piece be a one- or two-line `// MT:`
   call into `core/mods/resample.cpp`, where the 1.2.0 patch had to reach the same places with pool
-  words and thunks. 16 hooks (17 call sites) in five CE files. No heap, no SDRAM.
+  words and thunks. 17 hooks (18 call sites) in five CE files, hook 1b added in step 3. No heap, no SDRAM.
 - **What moves is the behaviour of `rs8` and `rs9`,** with the changes you chose (section 2.1): the Trk
   Audio and Trk Record buttons, saved with the project; any instrument in the recorder with Trk Audio
   on, played on the cursor track's rule with the ended-sample-track fallback. Nothing of 1.2.0's
@@ -138,11 +138,12 @@ mod On (section 4.9), so Off is CE's path.
 | # | CE file, place | Call | Runs in | Does |
 |---|---|---|---|---|
 | 1 | `fSampleRec.cpp` `cSampleRecorder::start`, first line (step 2; `showDefaultScreen` draws the labels before the old place, L399) | `mods::resampleRecorderStarted()` | main | New visit: latch the switch, gates shut, nothing armed. Step 6 adds its own call before the last `functSwitchModule(options)` block: with Trk Audio on, select `globalLastUsedInstrumentIndex` again if L384–397 swapped it for the MIDI one |
+| 1b | `fSampleRec.cpp` `cSampleRecorder::start`, after the entry's `engine.setLimiterSidechain(0)` (step 3) | `mods::resample::recorderEntered()` | main | The entry ran, so the gates may open, and the mix is now disconnected. The gates stay shut in a visit whose entry CE skipped (`handleStartupWithPopupAndMenu`): opening there would restore a mix CE never stored |
 | 2 | `fSampleRec.cpp` `cSampleRecorder::stop` (L405), first line | `mods::resampleRecorderStopped()` | main | Clear the visit. CE's own `stop()` then undoes the entry and stops the pattern |
-| 3 | `fSampleRec.cpp` `cSampleRecorder::update` (L113), first line, before the count-in early return | `resample::recorderUpdate()` | main | Open or close the gates by the rule of 4.3; stop the pattern when a take ends; disarm when nothing counts in or records |
-| 4 | `fSampleRec.cpp` `functPlay` (L2907), first line | `if (resample::playPressed()) return;` | main | During a count-in with Trk Audio on: arm (Shift: the song) instead of playing. Otherwise CE's Play, which is heard because the gates are already open |
+| 3 | `fSampleRec.cpp` `cSampleRecorder::update` (L113), first line, before the count-in early return | `resample::recorderUpdate(view)` | main | Open or close the gates by the rule of 4.3; closing stops the pattern, so a take's end does; disarm when nothing counts in or records (step 4). Step 3: the call reads the screen, the take, the buttons and the file manager's status into a `RecorderView` |
+| 4 | `fSampleRec.cpp` `functPlay` (L2907), first line (step 4; step 3 needs none, CE's Play is heard with the gates open) | `if (resample::playPressed()) return;` | main | During a count-in with Trk Audio on: arm (Shift: the song) instead of playing. Otherwise CE's Play, which is heard because the gates are already open |
 | 5 | `fSampleRec.cpp` `functRec` (L2926), first line | `resample::recPressed()` | main | Shift held, setup or count-in, Trk Audio on: arm |
-| 6 | `fSampleRec.cpp` `functActionRecord`, after L1555 (`config.destinationBufferSize`) | `resample::placeBuffer(config)` | main | With the gates open: the buffer after the loaded samples (4.4). Too little room: CE's buffer, and the gates close here, before the take writes over the samples |
+| 6 | `fSampleRec.cpp` `functActionRecord`, just before `recorder.setConfig(config)` (step 3: after CE has set the buffer and the channels) | `resample::placeBuffer(&address, &size, channels)` | main | With the gates open: the buffer after the loaded samples (4.4). Too little room: CE's buffer, and the gates close here, before the take writes over the samples. Any take left in CE's buffer marks the samples overwritten for the rest of the visit (4.3) |
 | 7 | `fSampleRec.cpp` `functActionRecord`, after `recorder.record()` (L1589) | `resample::takeStarted()` | main | Armed and moved: play the pattern (or song) from its start, also if it was playing. Otherwise disarm |
 | 8 | `fSampleRec.cpp` `functActionRadioFreq`/`functActionRadioLeft`, first line (step 2: on the setup screen `setConfigScreenFunct` gives keys 1 and 2 to these, not to `functActionButton1`/`2`) | `if (resampleSlotPressed(n)) return;` | main | On the setup screen, outside a count-in, a take and CE's windows, for the sources that show the button: toggle Trk Audio / Trk Record with their coupling, store the record, mark the project changed, redraw the two labels |
 | 9 | `fSampleRec.cpp` `functInstrument` (L2940) | press: `if (resample::openPicker()) return;` release: `resample::pickerClosed()` after CE's release code | main | Trk Audio on: `showStepPopup(stepPopupInstr, …)` with no clamp; a pick that isn't MIDI leaves `recorderMidiLastUsedInstrumentIndex` alone |
@@ -199,6 +200,16 @@ runs. Closed otherwise: Trk Audio off, Radio or USB selected, a take in CE's buf
 before it starts), the crop and save screens after a take, the instrument picker over the setup stays
 open. So the crop and save screens are CE's, and coming back to the setup opens them again.
 
+Added in step 3, each also closing the gates:
+- **CE's entry ran** this visit (hook 1b). In a visit whose entry CE skipped, the gates stay shut, so
+  the recorder is CE's.
+- **No take of this visit went into CE's buffer.** Such a take (the fallback, or one with Trk Audio
+  off) writes over the loaded samples, which CE reloads only on leaving. Until then the tracker would
+  play the take as its samples, so it stays silent for the rest of the visit.
+- **The file manager isn't saving a take or reloading the samples** (`fmSavingRecordedSound`,
+  `fmSavingImportingRecordedSound`, `fmSaveRecordedSoundEnd`, `fmReloadingSamples`,
+  `fmReloadSamplesEnd`), so nothing plays samples while the SD card writes or reads them.
+
 **Open** (main loop only; the inverse of the entry, with CE's own calls):
 
 1. `engine.unblockAllNoteOn()` and `sequencer.setSynthMute(kUnmuted)`;
@@ -206,8 +217,8 @@ open. So the crop and save screens are CE's, and coming back to the setup opens 
 3. `engine.connectMixerImpact()`: the project's mix back, **only if this visit's last mixer call was a
    disconnect**;
 4. the limiter sidechain from the project (`setLimiterSidechain(mtProject.values.limiterSidechain)`;
-   the test project's is off, so step 3 also tests one with the sidechain on, and whether
-   `resetLimiter` is needed then);
+   step 3 also ran the test project with the sidechain on track 1: the setup played bit-identical to
+   normal playback for 600 blocks, so `resetLimiter` isn't needed);
 5. `engine.refreshAllSends()` and `refreshTrackVolume()`, so the per-block update recomputes every
    send and level;
 6. "open" set, so hook 14 lets the per-block update run during a take.
@@ -249,7 +260,8 @@ starts, which the rule above does.
 - **Size:** the rest, rounded down to whole 256-byte blocks per channel. `Recorder::setConfig` divides
   it between the channels.
 - **Fallback:** under 10 s at the take's channel count (0.88 MB mono, 1.76 MB stereo), CE's buffer; hook
-  6 closes the gates first, so the take is CE's and silent.
+  6 closes the gates first, so the take is CE's and silent, and the tracker stays silent until the
+  recorder is left and CE reloads the samples (4.3).
 - **What CE gains:** with streaming, a project's large samples hold only their RAM prefix, so most
   projects leave far more than 1.2.0 did. With nothing loaded a stereo take still gets about 350 s
   (61.8 MB ÷ 176.4 KB/s), as in CE today.
@@ -441,6 +453,28 @@ One patch at a time, each its own commit on your word, on `mod/resample` (this w
    the take stops the pattern and leaves every value the entry sets as CE's entry leaves it; the user's
    mix values survive any order of open, close, source change and leave; the fallback take is CE's;
    with Trk Audio off the recorder is CE's, buffer included.
+   **Done 2026-11-20 in the emulator, on `CE_20261120`:** host tests (`test_resample` 132 checks:
+   the gate rule over all 256 combinations of its inputs, and placement as section 7 lists it),
+   `test_resample.py` again, and the new `tools/emu/test_resample_sound.py` (in `run_tests.py`'s
+   project jobs) on a full build of the hellish downtown project with its synth patches, against
+   the reference build. It checks:
+   - Play in the setup gives normal playback's 600 blocks bit for bit, with the project's mix set
+     away from CE's defaults by CC first, and again with the limiter sidechain on track 1;
+   - Shift+Play and a MIDI Start in the setup are heard;
+   - Rec then Play: the take goes to the first 32-byte boundary after the loaded samples, holds the
+     input only, and the loaded samples are byte-identical after it;
+   - stopping the take stops the pattern and leaves everything as CE's entry left it;
+   - back on the setup the gates open again;
+   - all nine sources open or shut as 4.3 says;
+   - after four presses and on leaving, the project's mix is unchanged;
+   - the fallback take is CE's, the rest of the visit is silent, and leaving reloads the samples as
+     they were;
+   - with Trk Audio off, with the mod Off and on plain CE, Play is silent and the take is CE's.
+
+   Costs: DTCM 8 B (8,808 free), ITCM none, flash about 800 B.
+   Not run yet: `--preempt` across the gate calls, the pool with all 8 synth voices, the release
+   tier, and the unit. The emulator also doesn't show MIDI out on the jacks, or real SD timing for
+   the reload after leaving.
 4. **Shift+Rec** (hooks 5, 7, 4's count-in arm). **Done when** Shift+Rec with Pre Roll off and on
    behaves as section 2 says; Play and Shift+Rec arm during a count-in (Shift+Play arms the song), a
    plain Rec never disarms; an external-clock count-in given up by Rec (PR 97) leaves nothing armed.
@@ -565,6 +599,16 @@ From step 0, your answer 2026-11-13 ("Yes, both"):
   Trk Audio off) leaves it playing; each track sounds from its next note, since notes that started
   while the gates were shut stay silent. Restarting the pattern would be the other way.
 - **One line added to CE_PORT_PLAN section 3.14** pointing here.
+- **From step 3:**
+  - Hook 1b, so the gates open only after CE's own entry (4.1).
+  - Hook 4 moved whole to step 4: step 3's Play needs no hook.
+  - Hook 6 placed just before `setConfig`, where CE's buffer and channel count are final.
+  - The samples-overwritten and file-manager rules of 4.3, so no garbage is heard after a take in
+    CE's buffer and nothing plays while a take is saved or the samples reload.
+  - A CE quirk, left as it is: when CE skips the entry (`handleStartupWithPopupAndMenu`), its
+    `stop()` still calls `connectMixerImpact`, which can restore the mix stored by an earlier visit.
+    Resample doesn't add to it, since hook 1b keeps the gates shut there. A write-up for upstream
+    only on your word.
 
 ## 11. Step 0 results
 

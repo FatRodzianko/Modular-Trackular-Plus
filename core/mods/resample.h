@@ -20,6 +20,8 @@
 #include "modsFileIo.h"
 #include "modsStore.h"
 
+#include <cstdint>
+
 namespace mods
 {
 namespace resample
@@ -84,6 +86,64 @@ bool store(const Settings& s, Store& store);
 // A slot's two texts: its title and On/Off. nullptr if the slot has no button.
 const char* title(uint8_t slot, Buttons buttons);
 const char* value(uint8_t slot, const Settings& s);
+
+// -- Trk Audio: the gates ------------------------------------------------------------------------
+// "Open" undoes the recorder's entry, so the tracker sounds as in normal playback; "closed" is
+// CE's recorder. Docs: the plan's section 4.3.
+
+// What the recorder shows, read on each main-loop pass of a visit.
+struct RecorderView
+{
+    bool onSetup = false;     // the setup screen, a count-in included, no stop-pattern question
+    bool takeRunning = false; // a take records (any count-in is over)
+    bool buttonShown = false; // the source shows Trk Audio
+    bool samplesBusy = false; // CE saves a take or reloads the samples
+};
+
+// The visit's own state, apart from the switch and the settings.
+struct Visit
+{
+    bool entered = false;            // CE's entry ran: notes blocked, the mix at its defaults
+    bool takeMoved = false;          // the take that runs went after the loaded samples
+    bool samplesOverwritten = false; // a take of this visit went where CE puts it, over them
+};
+
+// Open: the visit On, Trk Audio on, a source with the button, CE's entry done, the samples intact
+// and not being saved or reloaded, and the setup on screen or a take after the samples running.
+bool gatesWanted(bool visitOn, const Settings& s, const Visit& v, const RecorderView& view);
+
+// Where a take goes with the gates open: after the loaded samples (section 4.4). An instrument's
+// RAM data ends as CE's findFreeSampleRamScratchStereo has it.
+uint32_t framesInRam(bool streamed, uint32_t ramFrames, uint32_t length);
+uintptr_t sampleEnd(uintptr_t address, uint32_t frames, bool stereo);
+
+constexpr uint32_t kMinTakeFrames = 10 * 44100; // under 10 s of room: CE's buffer instead
+constexpr uint32_t kTakeStartAlign = 32;
+constexpr uint32_t kTakeBlockBytes = 256; // one audio block of one channel
+
+struct Placement
+{
+    uintptr_t address = 0;
+    uint32_t size = 0; // bytes for all channels; 0: too little room
+};
+
+// The free space from loadedEnd (rounded up) to bankEnd, in whole blocks per channel.
+Placement place(uintptr_t bankStart, uintptr_t bankEnd, uintptr_t loadedEnd, uint8_t channels);
+
+// Hook 14, in the audio interrupt: the engine's per-block update also runs during a take while
+// the gates are open. One byte, written only by the main loop.
+extern volatile uint8_t engineOpen;
+inline bool engineRuns()
+{
+    return engineOpen != 0;
+}
+
+#ifndef MT_HOST_TEST
+// The recorder's hooks, main loop.
+void recorderEntered();                          // hook 1b: CE's entry ran
+void recorderUpdate(const RecorderView& view);   // hook 3: open or close the gates
+void placeBuffer(int16_t** address, uint32_t* size, int channels); // hook 6, before setConfig
+#endif
 
 } // namespace resample
 } // namespace mods

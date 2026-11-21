@@ -128,6 +128,19 @@ static int calcRadioChannel(float freq, float baseFreq, float spacing)
 
 void cSampleRecorder::update()
 {
+#if MT_HAS_RESAMPLE // MT: Resample's gates follow the screen, before the count-in's early return
+    {
+        const uint8_t status = newFileManager.getStatus();
+        mods::resample::RecorderView view;
+        view.onSetup = currentScreen == screenTypeConfig && patternIsPlayingFlag == 0;
+        view.takeRunning = recordInProgressFlag != 0 && !waitForPreRollEnd;
+        view.buttonShown = resampleButtons() != mods::resample::Buttons::none;
+        view.samplesBusy = status == fmSavingRecordedSound || status == fmSavingImportingRecordedSound ||
+                           status == fmSaveRecordedSoundEnd || status == fmReloadingSamples ||
+                           status == fmReloadSamplesEnd;
+        mods::resample::recorderUpdate(view);
+    }
+#endif
     if (waitForPreRollEnd == true)
     {
         if (startRecordingOnPreRollEnd == true)
@@ -346,6 +359,9 @@ void cSampleRecorder::start(uint32_t options)
     engine.disconnectMixerImpact();
     engine.disableLineInImpact();
     engine.setLimiterSidechain(0); // force limiter sidechain to not to be line in R/L
+#if MT_HAS_RESAMPLE // MT: the entry ran, so Resample's gates may undo it
+    mods::resample::recorderEntered();
+#endif
 
     processPoints();
     listMonitor();
@@ -1604,6 +1620,10 @@ static void functActionRecord()
                       ? Recorder::Config::Source::kUsb
                       : Recorder::Config::Source::kI2s;
 
+#if MT_HAS_RESAMPLE // MT: with the gates open, the take goes after the loaded samples
+    mods::resample::placeBuffer(
+      &config.destinationBufferAddress, &config.destinationBufferSize, config.destinationChannels);
+#endif
     recorder.setConfig(config);
     recorder.record();
 

@@ -54,8 +54,9 @@ Only the input is recorded. The tracker is there to play along with.
 - A pattern started by a MIDI Start from another device is heard too.
 - During the count-in (Pre Roll), **Play** or **Shift + Rec** makes the pattern start with the take.
 - With Trk Audio on, a take goes into free memory after the project's samples, so the samples stay
-  as they are. If less than 10 seconds is free there, the take goes where CE puts it and the tracker
-  stays silent for that take.
+  as they are. If less than 10 seconds is free there, the take goes where CE puts it, over the
+  samples, and the tracker stays silent until you leave the Sample Recorder, which reloads the
+  samples. The same happens after a take recorded with Trk Audio Off.
 
 ## Record the tracker
 

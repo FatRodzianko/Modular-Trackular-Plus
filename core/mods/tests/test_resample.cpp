@@ -2,8 +2,9 @@
 //
 // Host tests for the resample mod's settings: the record, the 1.2.0 side file and its
 // import, the record's trip through mods.bin, and the recorder's two buttons (which source
-// shows which, a press with its coupling, the record a press stores, the labels' texts). The
-// other recorder hooks come with later steps (docs/mt/RESAMPLE_PORT_PLAN.md). Build and run
+// shows which, a press with its coupling, the record a press stores, the labels' texts), and Trk
+// Audio's rules (when the gates open, where a take goes). The other recorder hooks come with
+// later steps (docs/mt/RESAMPLE_PORT_PLAN.md). Build and run
 // with `make -C core/mods/tests`.
 
 #include "modsProject.h"
@@ -389,6 +390,119 @@ void testVisit()
     check(inVisit(), "a visit with the mod On");
     visitEnded();
     check(!inVisit(), "the visit ended");
+    check(!engineRuns(), "outside a visit the engine's update keeps CE's rule");
+}
+
+// The gates' rule (section 4.3): the case that opens them, then each thing that keeps them shut.
+void testGates()
+{
+    const Settings on{ true, false };
+    Visit v;
+    v.entered = true;
+    RecorderView setup;
+    setup.onSetup = true;
+    setup.buttonShown = true;
+
+    check(gatesWanted(true, on, v, setup), "the setup, Trk Audio on: open");
+    check(gatesWanted(true, Settings{ true, true }, v, setup), "Trk Record on too: open");
+    check(!gatesWanted(false, on, v, setup), "the visit Off: shut");
+    check(!gatesWanted(true, Settings{}, v, setup), "Trk Audio off: shut");
+
+    RecorderView noButton = setup;
+    noButton.buttonShown = false;
+    check(!gatesWanted(true, on, v, noButton), "Radio or USB: shut");
+
+    Visit notEntered;
+    check(!gatesWanted(true, on, notEntered, setup), "CE's entry not run (stop-pattern question): shut");
+
+    Visit overwritten = v;
+    overwritten.samplesOverwritten = true;
+    check(!gatesWanted(true, on, overwritten, setup), "a take of this visit went over the samples: shut");
+
+    RecorderView busy = setup;
+    busy.samplesBusy = true;
+    check(!gatesWanted(true, on, v, busy), "CE saves a take or reloads the samples: shut");
+
+    RecorderView crop = setup;
+    crop.onSetup = false;
+    check(!gatesWanted(true, on, v, crop), "the crop or save screen: shut");
+
+    RecorderView take = crop;
+    take.takeRunning = true;
+    Visit moved = v;
+    moved.takeMoved = true;
+    check(gatesWanted(true, on, moved, take), "a take after the loaded samples: open");
+    check(!gatesWanted(true, on, v, take), "a take in CE's buffer: shut");
+    check(!gatesWanted(true, Settings{}, moved, take), "a moved take with Trk Audio off: shut");
+
+    // a count-in is the setup with no take yet
+    check(gatesWanted(true, on, v, setup), "counting in: open");
+
+    // every combination: open only with all six conditions and the screen or a moved take
+    int open = 0;
+    for (int bits = 0; bits < 256; bits++)
+    {
+        Visit cv;
+        cv.entered = bits & 1;
+        cv.takeMoved = bits & 2;
+        cv.samplesOverwritten = bits & 4;
+        RecorderView cview;
+        cview.onSetup = bits & 8;
+        cview.takeRunning = bits & 16;
+        cview.buttonShown = bits & 32;
+        cview.samplesBusy = bits & 64;
+        const bool visitOn = bits & 128;
+        open += gatesWanted(visitOn, on, cv, cview) ? 1 : 0;
+    }
+    check(open == 4, "open in 4 of the 256 combinations: " + std::to_string(open));
+}
+
+// Where a take goes (section 4.4).
+void testPlacement()
+{
+    check(framesInRam(false, 0, 1000) == 1000, "a sample all in RAM: its length");
+    check(framesInRam(false, 300, 1000) == 300, "ramFrames set: ramFrames, as CE's rule");
+    check(framesInRam(true, 32768, 900000) == 32768, "a streamed sample: its RAM prefix");
+    check(framesInRam(true, 0, 900000) == 0, "a streamed sample with no prefix: nothing");
+    check(sampleEnd(0x1000, 100, false) == 0x1000 + 200, "mono: 2 bytes a frame");
+    check(sampleEnd(0x1000, 100, true) == 0x1000 + 400, "stereo: 4 bytes a frame");
+
+    constexpr uintptr_t bank = 0x80000000u;
+    constexpr uintptr_t bankSize = 60u * 1024 * 1024;
+    constexpr uintptr_t end = bank + bankSize;
+
+    Placement p = place(bank, end, bank, 2);
+    check(p.address == bank && p.size == bankSize, "nothing loaded, stereo: CE's buffer exactly");
+    p = place(bank, end, bank, 1);
+    check(p.address == bank && p.size == bankSize, "nothing loaded, mono: CE's buffer exactly");
+    p = place(bank, end, bank - 64, 1);
+    check(p.address == bank, "a loaded end below the bank: the bank's start");
+
+    p = place(bank, end, bank + 1001, 2);
+    check(p.address == bank + 1024, "the start rounded up to 32 bytes");
+    check(p.size % (2 * kTakeBlockBytes) == 0 && p.address + p.size <= end,
+          "stereo: whole blocks per channel, inside the bank");
+    check(end - (p.address + p.size) < 2 * kTakeBlockBytes, "stereo: under a block per channel left over");
+
+    p = place(bank, end, bank + 4096, 1);
+    check(p.address == bank + 4096 && p.size == bankSize - 4096, "mono, aligned: all the rest");
+
+    // the 10 s limit, at whole blocks per channel: 882,000 bytes round up to 3,446 blocks
+    constexpr uint32_t tenSeconds = 3446 * kTakeBlockBytes;
+    p = place(bank, end, end - 2 * tenSeconds, 2);
+    check(p.size == 2 * tenSeconds, "stereo, just 10 s of room: placed");
+    p = place(bank, end, end - 2 * tenSeconds + 32, 2);
+    check(p.size == 0, "stereo, a little under 10 s: CE's buffer");
+    p = place(bank, end, end - tenSeconds, 1);
+    check(p.size == tenSeconds, "mono, just 10 s of room: placed");
+    p = place(bank, end, end - tenSeconds + 32, 1);
+    check(p.size == 0, "mono, a little under 10 s: CE's buffer");
+    p = place(bank, end, end - tenSeconds, 2);
+    check(p.size == 0, "stereo with mono's 10 s: CE's buffer");
+
+    check(place(bank, end, end, 2).size == 0, "a full bank: CE's buffer");
+    check(place(bank, end, end + 100, 1).size == 0, "past the bank: CE's buffer");
+    check(place(bank, end, bank, 0).size == 0, "no channels: nothing");
 }
 
 int main()
@@ -403,6 +517,8 @@ int main()
     testStore();
     testLabels();
     testVisit();
+    testGates();
+    testPlacement();
     printf("%d checks, %d failures\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }
