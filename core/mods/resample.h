@@ -98,6 +98,15 @@ struct RecorderView
     bool takeRunning = false; // a take records (any count-in is over)
     bool buttonShown = false; // the source shows Trk Audio
     bool samplesBusy = false; // CE saves a take or reloads the samples
+    bool countingIn = false;  // Rec pressed with Pre Roll on, the take not started yet
+};
+
+// Shift+Rec, or Play in a count-in: what starts with the take (section 2, step 4).
+enum class Arm : uint8_t
+{
+    none,
+    pattern,
+    song,
 };
 
 // The visit's own state, apart from the switch and the settings.
@@ -106,6 +115,7 @@ struct Visit
     bool entered = false;            // CE's entry ran: notes blocked, the mix at its defaults
     bool takeMoved = false;          // the take that runs went after the loaded samples
     bool samplesOverwritten = false; // a take of this visit went where CE puts it, over them
+    Arm arm = Arm::none;
 };
 
 // Open: the visit On, Trk Audio on, a source with the button, CE's entry done, the samples intact
@@ -138,11 +148,22 @@ inline bool engineRuns()
     return engineOpen != 0;
 }
 
+// -- Shift+Rec ------------------------------------------------------------------------------------
+// Rec on the setup (a count-in included) with Shift held and the gates open arms the pattern; an
+// arm already set stays, so a plain Rec never disarms and Shift+Play's song is kept.
+Arm armOnRec(Arm now, bool shift, bool gatesOpen, bool onSetup);
+// Play in a count-in, the gates open and nothing playing: it arms (Shift: the song) instead of
+// playing. Otherwise CE's Play.
+bool playArms(bool gatesOpen, bool countingIn, bool playing);
+
 #ifndef MT_HOST_TEST
 // The recorder's hooks, main loop.
 void recorderEntered();                          // hook 1b: CE's entry ran
-void recorderUpdate(const RecorderView& view);   // hook 3: open or close the gates
+void recorderUpdate(const RecorderView& view);   // hook 3: the gates; disarm with no count-in or take
+bool playPressed(bool shift, bool countingIn);   // hook 4: true when it took the press
+void recPressed(bool shift, bool onSetup);       // hook 5, before CE's Rec
 void placeBuffer(int16_t** address, uint32_t* size, int channels); // hook 6, before setConfig
+void takeStarted();                              // hook 7: the armed pattern or song from its start
 #endif
 
 } // namespace resample

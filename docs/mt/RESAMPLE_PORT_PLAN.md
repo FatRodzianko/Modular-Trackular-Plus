@@ -3,7 +3,7 @@
 Status: on `modular` `CE_20261120` (`ff9b46a`) since 2026-11-20 ([section 14](#14-catch-up-to-ce_20261120)), on
 `CE_20261119` (`71b4a8c`) from 2026-11-19 ([section 13](#13-catch-up-to-ce_20261119)), rebased
 onto `5b40785` on 2026-11-17 before that ([section 12](#12-rebase-onto-5b40785)).
-Step 1 is committed (2026-11-19, on `modular` `5c331c1`, which adds the 1 KB heap trim). Step 2 is committed (2026-11-20, on `CE_20261119`). Step 3 is built and passes the emulator (2026-11-20, on `CE_20261120`), not committed. Step 0's results ([section 11](#11-step-0-results)) and
+Step 1 is committed (2026-11-19, on `modular` `5c331c1`, which adds the 1 KB heap trim). Step 2 is committed (2026-11-20, on `CE_20261119`). Step 3 is committed (2026-11-20, on `CE_20261120`). Step 4 is built and passes the emulator (2026-11-20), not committed. Step 0's results ([section 11](#11-step-0-results)) and
 every test run before the rebase come from `c32fee7` and the old rigs, and are to be run again.
 Your decisions are in section 9, 10 and 11 (from step 0) included. Based on the
 source of `modular` at `5b40785` (rebased 2026-11-17 from `c32fee7`, section 12), which holds upstream's `main` up to `f25fb89` (the Sample Recorder
@@ -141,10 +141,10 @@ mod On (section 4.9), so Off is CE's path.
 | 1b | `fSampleRec.cpp` `cSampleRecorder::start`, after the entry's `engine.setLimiterSidechain(0)` (step 3) | `mods::resample::recorderEntered()` | main | The entry ran, so the gates may open, and the mix is now disconnected. The gates stay shut in a visit whose entry CE skipped (`handleStartupWithPopupAndMenu`): opening there would restore a mix CE never stored |
 | 2 | `fSampleRec.cpp` `cSampleRecorder::stop` (L405), first line | `mods::resampleRecorderStopped()` | main | Clear the visit. CE's own `stop()` then undoes the entry and stops the pattern |
 | 3 | `fSampleRec.cpp` `cSampleRecorder::update` (L113), first line, before the count-in early return | `resample::recorderUpdate(view)` | main | Open or close the gates by the rule of 4.3; closing stops the pattern, so a take's end does; disarm when nothing counts in or records (step 4). Step 3: the call reads the screen, the take, the buttons and the file manager's status into a `RecorderView` |
-| 4 | `fSampleRec.cpp` `functPlay` (L2907), first line (step 4; step 3 needs none, CE's Play is heard with the gates open) | `if (resample::playPressed()) return;` | main | During a count-in with Trk Audio on: arm (Shift: the song) instead of playing. Otherwise CE's Play, which is heard because the gates are already open |
-| 5 | `fSampleRec.cpp` `functRec` (L2926), first line | `resample::recPressed()` | main | Shift held, setup or count-in, Trk Audio on: arm |
+| 4 | `fSampleRec.cpp` `functPlay` (L2907), first line (step 4; step 3 needs none, CE's Play is heard with the gates open) | `if (resample::playPressed(shift, countingIn)) return;` | main | During a count-in with the gates open and nothing playing: arm (Shift: the song) instead of playing. Otherwise CE's Play, which is heard because the gates are already open |
+| 5 | `fSampleRec.cpp` `functRec` (L2926), first line | `resample::recPressed(shift, onSetup)` | main | Shift held, setup or count-in, gates open, nothing armed yet: arm the pattern. CE's Rec then runs as always |
 | 6 | `fSampleRec.cpp` `functActionRecord`, just before `recorder.setConfig(config)` (step 3: after CE has set the buffer and the channels) | `resample::placeBuffer(&address, &size, channels)` | main | With the gates open: the buffer after the loaded samples (4.4). Too little room: CE's buffer, and the gates close here, before the take writes over the samples. Any take left in CE's buffer marks the samples overwritten for the rest of the visit (4.3) |
-| 7 | `fSampleRec.cpp` `functActionRecord`, after `recorder.record()` (L1589) | `resample::takeStarted()` | main | Armed and moved: play the pattern (or song) from its start, also if it was playing. Otherwise disarm |
+| 7 | `fSampleRec.cpp` `functActionRecord`, after `recorder.record()` (L1589) | `resample::takeStarted()` | main | Armed, moved and the gates open: play the pattern (or song) from its start; one already playing is stopped first, as Stop then Play. Always disarms |
 | 8 | `fSampleRec.cpp` `functActionRadioFreq`/`functActionRadioLeft`, first line (step 2: on the setup screen `setConfigScreenFunct` gives keys 1 and 2 to these, not to `functActionButton1`/`2`) | `if (resampleSlotPressed(n)) return;` | main | On the setup screen, outside a count-in, a take and CE's windows, for the sources that show the button: toggle Trk Audio / Trk Record with their coupling, store the record, mark the project changed, redraw the two labels |
 | 9 | `fSampleRec.cpp` `functInstrument` (L2940) | press: `if (resample::openPicker()) return;` release: `resample::pickerClosed()` after CE's release code | main | Trk Audio on: `showStepPopup(stepPopupInstr, …)` with no clamp; a pick that isn't MIDI leaves `recorderMidiLastUsedInstrumentIndex` alone |
 | 10 | `gSampleRec.cpp` `cSampleRecorder::hideRadio` (L526), after the labels' refresh | `drawResampleLabels()` | main | Draw "Trk Audio" and "Trk Record" with Off/On on `label[RADIO_COL1]`/`label[RADIO_COL2]`, for the sources that show them |
@@ -478,6 +478,27 @@ One patch at a time, each its own commit on your word, on `mod/resample` (this w
 4. **Shift+Rec** (hooks 5, 7, 4's count-in arm). **Done when** Shift+Rec with Pre Roll off and on
    behaves as section 2 says; Play and Shift+Rec arm during a count-in (Shift+Play arms the song), a
    plain Rec never disarms; an external-clock count-in given up by Rec (PR 97) leaves nothing armed.
+   **Done 2026-11-20 in the emulator, on `CE_20261120`:** host tests (`test_resample` 142 checks:
+   what Shift+Rec and a count-in's Play arm), step 2 and 3's emulator tests again, and the new
+   `tools/emu/test_resample_shiftrec.py` (in `run_tests.py`'s project jobs) on the hellish
+   downtown project. "Starts with the take" is checked as `Sequencer::play` (or the song's start)
+   right after `Recorder::record` in the same main-loop pass, with no audio interrupt between. It
+   checks:
+   - Pre Roll off: Shift+Rec starts the pattern with the take from its first step, and it's heard;
+     over a playing pattern it stops it and starts it again with the take; a plain Rec starts
+     nothing;
+   - Pre Roll on (the count-in took 674 blocks): Shift+Rec, or Play in the count-in, starts the
+     pattern with the take, and nothing plays in the count-in; Shift+Play there starts the song; a
+     plain Rec in an armed count-in keeps the arm; a count-in with nothing pressed starts nothing;
+   - an external clock: the count-in waits twice the internal one's length with no take, Rec gives
+     it up, and a later plain Rec starts no pattern;
+   - with Trk Audio off, the mod Off and on plain CE: Shift+Rec starts no pattern and the take is
+     CE's, and Play in a count-in plays at once, as CE.
+
+   The same test on step 3's builds fails its 8 arm checks and passes CE's.
+   Costs: flash 360 B, no DTCM (the arm fits in the visit's padding), no ITCM.
+   Not run yet: `--preempt`, the release tier, and the unit. The emulator doesn't show the
+   count-in's clicks against the pattern's first step in real time.
 5. **Trk Record** (hooks 11, 12, 13 and the tap objects). **Done when** the take equals Line In plus
    the tap (Monitor off, the Line In from its second block, lined up with the tap as played) and the
    tap alone (Monitor on) frame for frame from its first frame, with
@@ -609,6 +630,15 @@ From step 0, your answer 2026-11-13 ("Yes, both"):
     `stop()` still calls `connectMixerImpact`, which can restore the mix stored by an earlier visit.
     Resample doesn't add to it, since hook 1b keeps the gates shut there. A write-up for upstream
     only on your word.
+- **From step 4:**
+  - A second Play or Shift+Play in a count-in changes what is armed (pattern or song) and never
+    disarms, as a plain Rec never does.
+  - Shift+Rec keeps a song that Shift+Play armed.
+  - Play in a count-in over a pattern that already plays is CE's (it stops it), and an arm stays.
+  - A pattern already playing when an armed take starts is stopped and started again with CE's
+    own `stop()` and `playPattern()`/`playSong()`, as pressing Stop then Play would.
+  - Arming needs the gates open, so with too little room after the samples nothing is armed and
+    the take is CE's.
 
 ## 11. Step 0 results
 

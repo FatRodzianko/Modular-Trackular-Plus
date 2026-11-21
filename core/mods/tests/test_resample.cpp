@@ -3,7 +3,8 @@
 // Host tests for the resample mod's settings: the record, the 1.2.0 side file and its
 // import, the record's trip through mods.bin, and the recorder's two buttons (which source
 // shows which, a press with its coupling, the record a press stores, the labels' texts), and Trk
-// Audio's rules (when the gates open, where a take goes). The other recorder hooks come with
+// Audio's rules (when the gates open, where a take goes), and what Shift+Rec and a count-in's
+// Play arm. The other recorder hooks come with
 // later steps (docs/mt/RESAMPLE_PORT_PLAN.md). Build and run
 // with `make -C core/mods/tests`.
 
@@ -505,6 +506,21 @@ void testPlacement()
     check(place(bank, end, bank, 0).size == 0, "no channels: nothing");
 }
 
+void testArm()
+{
+    check(armOnRec(Arm::none, true, true, true) == Arm::pattern, "Shift+Rec on the setup, open: the pattern armed");
+    check(armOnRec(Arm::none, false, true, true) == Arm::none, "a plain Rec arms nothing");
+    check(armOnRec(Arm::pattern, false, true, true) == Arm::pattern, "a plain Rec in a count-in never disarms");
+    check(armOnRec(Arm::song, true, true, true) == Arm::song, "Shift+Rec after Shift+Play keeps the song");
+    check(armOnRec(Arm::none, true, false, true) == Arm::none, "Shift+Rec with the gates shut: CE's Rec");
+    check(armOnRec(Arm::none, true, true, false) == Arm::none, "Shift+Rec off the setup (a take, the crop screen): nothing");
+
+    check(playArms(true, true, false), "Play in a count-in, open, nothing playing: arms");
+    check(!playArms(true, false, false), "Play on the setup with no count-in: CE's Play");
+    check(!playArms(false, true, false), "Play in a count-in with the gates shut: CE's Play");
+    check(!playArms(true, true, true), "Play in a count-in over a playing pattern: CE's stop");
+}
+
 int main()
 {
     testBits();
@@ -519,6 +535,7 @@ int main()
     testVisit();
     testGates();
     testPlacement();
+    testArm();
     printf("%d checks, %d failures\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }

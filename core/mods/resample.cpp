@@ -263,6 +263,20 @@ Placement place(uintptr_t bankStart, uintptr_t bankEnd, uintptr_t loadedEnd, uin
     return p;
 }
 
+Arm armOnRec(Arm now, bool shift, bool gatesOpen, bool onSetup)
+{
+    if (shift && gatesOpen && onSetup && now == Arm::none)
+    {
+        return Arm::pattern;
+    }
+    return now;
+}
+
+bool playArms(bool gatesOpen, bool countingIn, bool playing)
+{
+    return gatesOpen && countingIn && !playing;
+}
+
 #ifndef MT_HOST_TEST
 
 // Each one as CE's recorder entry and exit (fSampleRec.cpp start and stop) make it, in their
@@ -328,6 +342,10 @@ void recorderUpdate(const RecorderView& view)
     if (!view.takeRunning)
     {
         visit.takeMoved = false;
+        if (!view.countingIn)
+        {
+            visit.arm = Arm::none; // a count-in given up, or a Rec that started nothing
+        }
     }
     const bool want = gatesWanted(visitOn, settings, visit, view);
     if (want && !gatesAreOpen)
@@ -337,6 +355,53 @@ void recorderUpdate(const RecorderView& view)
     else if (!want && gatesAreOpen)
     {
         closeGates();
+    }
+}
+
+bool playPressed(bool shift, bool countingIn)
+{
+    if (!visitOn ||
+        !playArms(gatesAreOpen, countingIn, sequencer.getSeqState() != Sequencer::SEQ_STATE_STOP))
+    {
+        return false;
+    }
+    visit.arm = shift ? Arm::song : Arm::pattern;
+    return true;
+}
+
+void recPressed(bool shift, bool onSetup)
+{
+    if (visitOn)
+    {
+        visit.arm = armOnRec(visit.arm, shift, gatesAreOpen, onSetup);
+    }
+}
+
+// Right after recorder.record(), so the pattern's first step and the take's first block start
+// together. A pattern already playing starts again, as Stop then Play would.
+void takeStarted()
+{
+    if (!visitOn)
+    {
+        return;
+    }
+    const Arm arm = visit.arm;
+    visit.arm = Arm::none;
+    if (arm == Arm::none || !visit.takeMoved || !gatesAreOpen)
+    {
+        return;
+    }
+    if (sequencer.getSeqState() != Sequencer::SEQ_STATE_STOP)
+    {
+        sequencer.stop();
+    }
+    if (arm == Arm::song)
+    {
+        sequencer.playSong();
+    }
+    else
+    {
+        sequencer.playPattern();
     }
 }
 

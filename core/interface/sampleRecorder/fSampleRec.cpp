@@ -134,6 +134,7 @@ void cSampleRecorder::update()
         mods::resample::RecorderView view;
         view.onSetup = currentScreen == screenTypeConfig && patternIsPlayingFlag == 0;
         view.takeRunning = recordInProgressFlag != 0 && !waitForPreRollEnd;
+        view.countingIn = recordInProgressFlag != 0 && waitForPreRollEnd;
         view.buttonShown = resampleButtons() != mods::resample::Buttons::none;
         view.samplesBusy = status == fmSavingRecordedSound || status == fmSavingImportingRecordedSound ||
                            status == fmSaveRecordedSoundEnd || status == fmReloadingSamples ||
@@ -1626,6 +1627,9 @@ static void functActionRecord()
 #endif
     recorder.setConfig(config);
     recorder.record();
+#if MT_HAS_RESAMPLE // MT: an armed pattern or song starts with the take
+    mods::resample::takeStarted();
+#endif
 
     GP.spectrumResetZoom(0, 0, &SR->zoom);
     SR->spectrumTimerConstrains = 100;
@@ -2973,6 +2977,13 @@ static void functInsert()
 
 static void functPlay()
 {
+#if MT_HAS_RESAMPLE // MT: in a count-in, Play arms the pattern (Shift: the song) to start with the take
+    if (mods::resample::playPressed(SR->buttons->isButtonPressed(interfaceButtonShift),
+                                    SR->recordInProgressFlag != 0 && SR->waitForPreRollEnd))
+    {
+        return;
+    }
+#endif
     if (sequencer.getSeqState() == Sequencer::SEQ_STATE_STOP)
     {
         if (SR->buttons->isButtonPressed(interfaceButtonShift))
@@ -2992,6 +3003,11 @@ static void functPlay()
 
 static void functRec()
 {
+#if MT_HAS_RESAMPLE // MT: Shift+Rec arms the pattern to start with the take
+    mods::resample::recPressed(SR->buttons->isButtonPressed(interfaceButtonShift),
+                               SR->currentScreen == cSampleRecorder::screenTypeConfig &&
+                                 SR->patternIsPlayingFlag == 0);
+#endif
     if (SR->currentScreen == cSampleRecorder::screenTypeConfig ||
         (SR->currentScreen == cSampleRecorder::screenTypeRecord && SR->recordInProgressFlag == 1))
     {

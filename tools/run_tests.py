@@ -196,6 +196,9 @@ def jobs_for(args, projects):
         # take's place, the mix (docs/mt/RESAMPLE_PORT_PLAN.md step 3)
         jobs.append(Job("resample sound", e / "test_resample_sound.py", mods, ref, args.project,
                         inputs=[mods, ref, Path(args.project)]))
+        # Shift+Rec and the count-in's Play: what starts with the take (step 4)
+        jobs.append(Job("resample shift+rec", e / "test_resample_shiftrec.py", mods, ref, args.project,
+                        inputs=[mods, ref, Path(args.project)]))
         # A project's own synth patches, opened and copied by CE's code with its backslash paths
         synths = ROOT / "build" / "Synths"
         jobs.append(Job("project patches", e / "test_project_patches.py", mods, args.project, synths,
