@@ -205,6 +205,11 @@ def jobs_for(args, projects):
         # Any instrument: the full list, the instrument kept, the track rule, no pattern write (step 6)
         jobs.append(Job("resample instruments", e / "test_resample_instruments.py", mods, ref, args.project,
                         inputs=[mods, ref, Path(args.project)]))
+        # The recorder's keys, pads and MIDI with the audio interrupt firing inside them; 20 takes;
+        # the pool and the tap's own instructions with 8 synth voices (step 7)
+        jobs.append(Job("resample preempt", e / "test_resample_preempt.py", mods, args.project,
+                        "--seeds", "1" if args.tier == "release" else "1,2,3",
+                        inputs=[mods, Path(args.project)]))
         # A project's own synth patches, opened and copied by CE's code with its backslash paths
         synths = ROOT / "build" / "Synths"
         jobs.append(Job("project patches", e / "test_project_patches.py", mods, args.project, synths,

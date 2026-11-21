@@ -3,7 +3,7 @@
 Status: on `modular` `CE_20261120` (`ff9b46a`) since 2026-11-20 ([section 14](#14-catch-up-to-ce_20261120)), on
 `CE_20261119` (`71b4a8c`) from 2026-11-19 ([section 13](#13-catch-up-to-ce_20261119)), rebased
 onto `5b40785` on 2026-11-17 before that ([section 12](#12-rebase-onto-5b40785)).
-Step 1 is committed (2026-11-19, on `modular` `5c331c1`, which adds the 1 KB heap trim). Step 2 is committed (2026-11-20, on `CE_20261119`). Step 3 is committed (2026-11-20, on `CE_20261120`). Step 4 is committed (2026-11-20). Step 5 is committed (2026-11-20). Step 6 is built and passes its emulator tests, not committed yet. Step 0's results ([section 11](#11-step-0-results)) and
+Step 1 is committed (2026-11-19, on `modular` `5c331c1`, which adds the 1 KB heap trim). Step 2 is committed (2026-11-20, on `CE_20261119`). Step 3 is committed (2026-11-20, on `CE_20261120`). Step 4 is committed (2026-11-20). Step 5 is committed (2026-11-20). Step 6 is committed (2026-11-21). Step 7: the release tier, the preemption test and the unit pass (2026-11-21); the merge into `modular` is next, on your word. Step 0's results ([section 11](#11-step-0-results)) and
 every test run before the rebase come from `c32fee7` and the old rigs, and are to be run again.
 Your decisions are in section 9, 10 and 11 (from step 0) included. Based on the
 source of `modular` at `5b40785` (rebased 2026-11-17 from `c32fee7`, section 12), which holds upstream's `main` up to `f25fb89` (the Sample Recorder
@@ -580,6 +580,51 @@ One patch at a time, each its own commit on your word, on `mod/resample` (this w
    pool and CPU with all 8 synth voices, the release tier, the unit.
 7. **Release tier, ladder, hardware checklist** (sections 7 and 8). Merge into `modular` on your word.
 
+   Emulator, 2026-11-21, on step 6's builds (`bd53ed9`):
+   - `tools/run_tests.py --tier release` with the diagnostic build: 0 failed of 32 run, the other
+     29 cached passes of the same inputs. Sequencer side (`test_bundle_cost.py`): the mods add 843
+     instructions to the worst block (limit 3,800), 109 on average.
+   - New `tools/emu/test_resample_preempt.py`, now in the release tier (one seed; deep: three). The
+     recorder's keys, pads and the main loop run with the audio interrupt firing inside them every
+     2,000 to 40,000 instructions, held back while the NVIC mask or PRIMASK is on; USB MIDI notes come
+     inside those interrupts. Per seed: Line In, Trk Audio and Trk Record On, 20 takes (Shift+Rec
+     every other one), each with a pad and a MIDI note held in it, then Trk Audio pressed with pads
+     held. Two seeds pass: about 2,900 interrupts inside main-loop code each, the heap the same
+     after every take, the tap never missed a block, no note open, the pattern untouched, the pool no
+     higher, the gates shut after leaving, the mask calls balanced, stack at most 5,304 B.
+   - Eight synth voices held (the ladder's `L7` project): pool peak 19 in normal playback, 21 in a
+     Trk Record take (limit 80, at most 4 over). The tap's own work (its two queues' update and hook
+     12's `copyBlock`, which takes the place of CE's memcpy): 2,780 instructions a block, worst and
+     average the same, about 0.7 % of the CPU by 1.2.0's figure. The code is in flash.
+   - `tools/emu/make_resample_test_projects.py` writes `RS1 Resample test` and `RS2 1.2.0 buttons`
+     (section 8). Opened through CE's Open in the emulator: RS1 Resample Off, both buttons Off; RS2
+     Resample On and both buttons On, from the importer.
+
+   The unit, 2026-11-21, the diagnostic build of step 6 (`TrackerPlus_resample6_diag.ptf`), all of
+   section 8's steps; 34 stops in `/mfx_log.txt`, 0 blocks over time in any, 0 back to back, the
+   synth never over its limit:
+   - Ladder on the Pattern screen: `L1` average 13 %, slowest 22 %; `L5` 23 % and 31 %; `L7` 41 %
+     and 65 %, pool 20.
+   - `RS1` (the source project's Master FX, Shimmer and BBD, all sends at 40), every recorder step:
+     average 6 to 19 %, slowest 32 %, pool at most 22. The main loop's longest gap in the recorder
+     was 45 ms (the stall limit is 3 s).
+   - `L7` in a Trk Record take, 11 s: average 46 %, slowest 72 %, pool 24. Against `L7`'s plain play,
+     5 points more on average and 7 at the slowest. That's CE's own recording and the tap together;
+     a take with both buttons Off has no tracker sound to compare.
+   - Free heap 66,552 to 68,184 B all session, max stack 8,765 B.
+   - By ear: no clicks or dropouts; the take holds the pattern with its delay and reverb and none of
+     the metronome's clicks; with a source and Monitor On it's in the take once. Settings kept over a
+     power cycle, the importer turned `RS2` On with both buttons On, and a take's Save & Load left
+     the project's samples sounding right.
+   - Two things the steps had wrong: with both buttons Off, Play does start the pattern, as in CE
+     (`functPlay` on CE's `main`); the tracker is muted but MIDI out still plays external synths.
+     And step 7's check is the project's current instrument (the one Instr shows and new notes
+     use), which nothing in the recorder writes into a pattern.
+
+   Not checked on the unit: the Profiler's own reading (the log's interrupt figures stand in for it),
+   a new project with Resample turned On (its buttons hidden while it's Off, as designed), Radio,
+   USB and the mic sources.
+
 ## 7. Tests
 
 Read with [PAST_FAILURES.md](PAST_FAILURES.md): the boot rig (real Open, Play button, main loop,
@@ -614,12 +659,16 @@ test stage 4, "recorder tap at level C"):
 ## 8. Hardware
 
 After the release tier, first the steps of [DEVICE_TEST_LADDER.md](DEVICE_TEST_LADDER.md) with this
-build (L1, L5 and L7 at least). Then one sitting, about 20 minutes. The test project is generated with
-the firmware and named then (a few sample instruments, a synth track, a MIDI track, delay and reverb
-sends). No Break FX, Performance mode, Export or per-mod Saving checks.
+build (L1, L5 and L7 at least). Then one sitting, about 20 minutes. The test projects (step 7):
+`tools/emu/make_resample_test_projects.py` writes `RS1 Resample test` (hellish downtown's samples
+and synth parts, all sending to the delay and the reverb, Resample never set) and `RS2 1.2.0 buttons`
+(a 1.2.0 `resample.bin` with both buttons On, for the importer); step 10 uses the ladder's `L7`. No
+MIDI track: no step needs a MIDI device, and MIDI in is tested in the emulator. No Break FX,
+Performance mode, Export or per-mod Saving checks.
 
 1. Open the test project, Config → Project Settings → Mods: Resample On.
-2. Sample Recorder, Line In, both buttons Off: Rec records as in CE, Play is silent, the take plays back.
+2. Sample Recorder, Line In, both buttons Off: Rec records as in CE; Play starts the pattern with
+   the tracker muted, as in CE (MIDI out still plays); the take plays back.
 3. Trk Audio On: Play in the setup is heard at the project's levels with delay and reverb; Rec then
    Play plays the pattern during the take; stopping the take stops the pattern.
 4. Shift+Rec with Pre Roll on: the pattern starts with the take.
@@ -627,9 +676,12 @@ sends). No Break FX, Performance mode, Export or per-mod Saving checks.
    In: both. Monitor on: Line In isn't doubled.
 6. A count-in take with Trk Record: the clicks are heard and the take has none.
 7. Pick a sample instrument in the recorder and play pads with the pattern running, then a synth
-   instrument; leave the recorder: the Pattern screen has its instrument back.
+   instrument; leave the recorder: the project's current instrument (what Instr shows) is the one
+   picked before, and no pattern has changed.
 8. Save & Load a take, then play the project's other samples: they sound right.
-9. Save the project, power off and on, open it: both settings kept. New Project: both Off.
+9. Save the project, power off and on, open it: both settings kept. New Project: both Off. Open
+   `RS2 1.2.0 buttons`: Resample On in Project Settings, both buttons On in the recorder (step 7
+   adds this one for the importer; the emulator reads the same through CE's Open).
 10. During a Trk Record take with all 8 synth voices sounding, read the Profiler; listen for clicks
     or dropouts in steps 3 to 7.
 

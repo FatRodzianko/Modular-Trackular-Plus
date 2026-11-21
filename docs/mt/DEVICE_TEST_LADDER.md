@@ -229,6 +229,23 @@ E4's four held notes make two stacks (each note takes a stack of four; the third
 first two's), so all 8 voices sound, and the sound is wide. Its log line is the hook's first run on
 the unit: note-ons there run in the audio interrupt.
 
+## The Resample set: the recorder with the tracker in it
+
+`python tools/emu/make_resample_test_projects.py "<project>" build/device/resample_card` writes the two
+Resample projects, and the ladder's `--ladder` into the same folder gives `L1`, `L5` and `L7`. First
+`L1`, `L5` and `L7` as in the steps above, then the plan's ten steps
+([RESAMPLE_PORT_PLAN.md](RESAMPLE_PORT_PLAN.md) section 8) on these:
+
+| Project | What's in it | What it isolates |
+|---|---|---|
+| `RS1 Resample test` | The source's patterns, samples and synth patches, every sample and synth part sending 40 to the delay and the reverb; Resample Off and never set | The buttons, Trk Audio, Shift+Rec, Trk Record, instruments in the recorder, Save and reopen |
+| `RS2 1.2.0 buttons` | The source with a 1.2.0 `resample.bin`, both buttons On, and Resample never set in `mods.bin` | The importer on the unit's card: opening it turns Resample and both buttons On |
+| `L7 8 voices none` | The ladder's 8 held voices | A Trk Record take at the voice limit: the tap's cost and the pool |
+
+The emulator opens both RS projects through CE's Open and reads what the steps expect: RS1 Resample
+Off, both buttons Off; RS2 Resample On, both On. The tap's own work is about 2,780 instructions a
+block in the emulator (about 0.7 % of the CPU by 1.2.0's figure), its code in flash.
+
 ## What a firmware comes with
 
 Each one handed over says what ran, what didn't, and the risk to the unit.
