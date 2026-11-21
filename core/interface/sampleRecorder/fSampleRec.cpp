@@ -139,6 +139,7 @@ void cSampleRecorder::update()
         view.samplesBusy = status == fmSavingRecordedSound || status == fmSavingImportingRecordedSound ||
                            status == fmSaveRecordedSoundEnd || status == fmReloadingSamples ||
                            status == fmReloadSamplesEnd;
+        view.midiInstrument = recorderMidiLastUsedInstrumentIndex;
         mods::resample::recorderUpdate(view);
     }
 #endif
@@ -441,6 +442,12 @@ void cSampleRecorder::start(uint32_t options)
 
         mtProject.values.lastUsedInstrument = recorderMidiLastUsedInstrumentIndex;
     }
+#if MT_HAS_RESAMPLE // MT: with Trk Audio, the instrument chosen before the recorder stays chosen
+    if (mods::resample::keepsInstrument(resampleButtons() != mods::resample::Buttons::none))
+    {
+        mtProject.values.lastUsedInstrument = globalLastUsedInstrumentIndex;
+    }
+#endif
 
     // This can leave the recorder for another module. It has to come last, so that stop()
     // puts back the instrument replaced above before that module starts.
@@ -3033,11 +3040,21 @@ static void functInstrument(uint8_t state)
 
             SR->setDefaultScreenFunct();
             SR->showDefaultScreen();
+#if MT_HAS_RESAMPLE // MT: a sample or synth picked with Trk Audio isn't the recorder's MIDI instrument
+            if (isMidiInstrument(mtProject.values.lastUsedInstrument))
+#endif
             SR->recorderMidiLastUsedInstrumentIndex = mtProject.values.lastUsedInstrument;
         }
     }
     else if (state == buttonPress)
     {
+#if MT_HAS_RESAMPLE // MT: with Trk Audio, every instrument in the list
+        if (mods::resample::fullPicker())
+        {
+            mtPopups.showStepPopup(stepPopupInstr, mtProject.values.lastUsedInstrument);
+            return;
+        }
+#endif
         mtProject.values.lastUsedInstrument =
           clamp<uint8_t>(mtProject.values.lastUsedInstrument,
                          MIDI_INSTRUMENTS_START_IDX,

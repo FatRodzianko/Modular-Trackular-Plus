@@ -127,9 +127,15 @@ Visit visit;
 bool gatesAreOpen = false;   // main loop's view; engineOpen follows it
 bool mixerConnected = false; // this visit's last mixer call was a connect
 
+// Hook 16: the sources (pads 0 to 47, MIDI notes 100 to 227) whose note-on went past CE's record
+// branch, one byte each so the main loop and the interrupt never share a word they rewrite.
+constexpr int kSources = 256;
+volatile uint8_t playedOnly[kSources];
+
 void forgetGates()
 {
     engineOpen = 0;
+    liveOn = 0;
     gatesAreOpen = false;
     mixerConnected = false;
     visit = Visit{};
@@ -151,6 +157,11 @@ void visitStarted(bool modOn)
 {
     visitOn = modOn;
     forgetGates();
+    // Not at the visit's end: a pad held while leaving still lets go the way it started.
+    for (int i = 0; i < kSources; i++)
+    {
+        playedOnly[i] = 0;
+    }
 }
 
 void visitEnded()
@@ -305,6 +316,46 @@ void addClipped(int16_t* dest, const int16_t* lineIn, const int16_t* tracker, ui
 volatile uint8_t tapRunning = 0;
 volatile uint16_t tapMissing = 0;
 
+int pickTrack(int firstTrack, bool sampleInstrument, const TrackFacts* tracks, int count)
+{
+    if (count <= 0)
+    {
+        return kNoTrack;
+    }
+    const int first = ((firstTrack % count) + count) % count;
+    for (int i = 0; i < count; i++)
+    {
+        const int t = (first + i) % count;
+        if (sampleInstrument && !tracks[t].sampleTrack)
+        {
+            continue;
+        }
+        if (!tracks[t].muted && !tracks[t].noteOpen)
+        {
+            return t;
+        }
+    }
+    for (int i = 0; i < count; i++)
+    {
+        const int t = (first + i) % count;
+        if (tracks[t].sampleTrack && !tracks[t].muted && tracks[t].ended)
+        {
+            return t;
+        }
+    }
+    return kNoTrack;
+}
+
+bool soundEnded(const SoundFacts& s)
+{
+    // instrumentPlayMode: playModeSingleShot 0, playModeSlice 4, playModeBeatSlice 5
+    const bool playsToItsEnd = s.playMode == 0 || s.playMode == 4 || s.playMode == 5;
+    return s.sampleInstrument && playsToItsEnd && !s.repeats && !s.delayed && !s.liveNote &&
+           !s.voicePlaying;
+}
+
+volatile uint8_t liveOn = 0;
+
 #ifndef MT_HOST_TEST
 
 // Each one as CE's recorder entry and exit (fSampleRec.cpp start and stop) make it, in their
@@ -384,6 +435,15 @@ void recorderUpdate(const RecorderView& view)
     {
         closeGates();
     }
+
+    // Trk Audio turned Off, or a source without it chosen: a sample or synth picked here gives way
+    // to the recorder's MIDI instrument, as CE's entry would have chosen it.
+    const bool live = settings.trkAudio && view.buttonShown && visit.entered;
+    if (liveOn != 0 && !live && !isMidiInstrument(mtProject.values.lastUsedInstrument))
+    {
+        mtProject.values.lastUsedInstrument = view.midiInstrument;
+    }
+    liveOn = live ? 1 : 0;
 }
 
 bool playPressed(bool shift, bool countingIn)
@@ -528,6 +588,93 @@ void placeBuffer(int16_t** address, uint32_t* size, int channels, bool recordSho
         closeGates(); // too little room: the take is CE's, over the samples, and silent
     }
     visit.samplesOverwritten = true;
+}
+
+static_assert(playModeSingleShot == 0 && playModeSlice == 4 && playModeBeatSlice == 5,
+              "soundEnded's play modes");
+
+bool keepsInstrument(bool buttonShown)
+{
+    const bool live = visitOn && settings.trkAudio && buttonShown && visit.entered;
+    liveOn = live ? 1 : 0;
+    return live;
+}
+
+bool fullPicker()
+{
+    return visitOn && liveOn != 0;
+}
+
+// Reads what the sequencer and the voices already hold in RAM: no display, card or heap, so the
+// MIDI path in the audio interrupt may call it.
+int liveTrack(int firstTrack, int instrument)
+{
+    if (liveOn == 0)
+    {
+        return kCeRule;
+    }
+    const Sequencer::strPlayer* player = sequencer.ptrPlayer;
+    TrackFacts tracks[kAllTracks];
+    for (int t = 0; t < kAllTracks; t++)
+    {
+        const auto& track = player->track[t];
+        TrackFacts& f = tracks[t];
+        f.muted = sequencer.trackMutedForMods(static_cast<uint8_t>(t)) != 0;
+        f.noteOpen = track.noteOpen;
+        f.sampleTrack = isSampleTrack(t);
+        if (!f.sampleTrack)
+        {
+            continue;
+        }
+        SoundFacts s;
+        const int last = track.stepSent.instrument;
+        s.sampleInstrument = isSampleInstrument(last) && last < kSampleInstrumentsCount;
+        s.playMode = s.sampleInstrument ? mtProject.instrument[last].playMode : 0;
+        for (const auto& fx : track.stepSent.fx)
+        {
+            if (fx.type == Sequencer::strFxConsts::FX_TYPE_ROLL ||
+                fx.type == Sequencer::strFxConsts::FX_TYPE_MIDI_CHORD ||
+                fx.type == Sequencer::strFxConsts::FX_TYPE_ARP)
+            {
+                s.repeats = true;
+            }
+        }
+        s.repeats = s.repeats || track.roll.isOn != 0 || track.arp.isOn != 0;
+        s.delayed = track.micromove.isActive != 0;
+        s.liveNote = track.recOpen != 0;
+        AudioVoice* voice = instrumentPlayer[t].getAudioVoice();
+        s.voicePlaying = voice->getMemoryPlayer(AudioVoice::kLeft)->isPlaying() ||
+                         voice->getMemoryPlayer(AudioVoice::kRight)->isPlaying();
+        f.ended = soundEnded(s);
+    }
+    return pickTrack(firstTrack, isSampleInstrument(instrument), tracks, kAllTracks);
+}
+
+bool playOnlyOn(int16_t source)
+{
+    if (liveOn == 0)
+    {
+        return false;
+    }
+    if (source >= 0 && source < kSources)
+    {
+        playedOnly[source] = 1;
+    }
+    return true;
+}
+
+bool playOnlyOff(int16_t source)
+{
+    if (source >= 0 && source < kSources)
+    {
+        if (playedOnly[source] == 0)
+        {
+            return false;
+        }
+        playedOnly[source] = 0;
+        return true;
+    }
+    return liveOn != 0; // a source with no byte: as Trk Audio is now
 }
 
 // CE begins its Line In queues right after this, and queuesStarted unmasks, so all four queues

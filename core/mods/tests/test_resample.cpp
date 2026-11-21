@@ -4,8 +4,8 @@
 // import, the record's trip through mods.bin, and the recorder's two buttons (which source
 // shows which, a press with its coupling, the record a press stores, the labels' texts), and Trk
 // Audio's rules (when the gates open, where a take goes), what Shift+Rec and a count-in's Play
-// arm, and Trk Record's (when a take records the tracker, the clipped sum). The other recorder
-// hooks come with later steps (docs/mt/RESAMPLE_PORT_PLAN.md). Build and run with
+// arm, Trk Record's (when a take records the tracker, the clipped sum), and the track a live note
+// takes with any instrument (docs/mt/RESAMPLE_PORT_PLAN.md). Build and run with
 // `make -C core/mods/tests`.
 
 #include "modsProject.h"
@@ -554,6 +554,88 @@ void testTap()
     check(same[0] == 32767 && same[1] == -32768 && same[2] == 10, "the destination may be the Line In");
 }
 
+void testTrackRule()
+{
+    constexpr int n = 16; // 8 sample tracks, then 8 MIDI tracks
+    auto fresh = [] {
+        std::vector<TrackFacts> t(n);
+        for (int i = 0; i < n; i++)
+        {
+            t[i].sampleTrack = i < 8;
+        }
+        return t;
+    };
+    auto busy = [](std::vector<TrackFacts>& t) {
+        for (auto& f : t)
+        {
+            f.noteOpen = true;
+        }
+    };
+
+    auto t = fresh();
+    check(pickTrack(3, true, t.data(), n) == 3, "the cursor's track when it's free");
+    t[3].noteOpen = true;
+    t[4].muted = true;
+    check(pickTrack(3, true, t.data(), n) == 5, "past a sounding and a muted track");
+    for (int i = 0; i < 8; i++)
+    {
+        t[i].noteOpen = i != 1;
+    }
+    t[4].muted = false;
+    check(pickTrack(6, true, t.data(), n) == 1, "round past track 8 to the first free sample track");
+    check(pickTrack(10, true, t.data(), n) == 1, "a sample instrument from a MIDI track's cursor: sample tracks only");
+    check(pickTrack(6, false, t.data(), n) == 8, "a synth or MIDI instrument takes the MIDI track after 8");
+
+    t = fresh();
+    busy(t);
+    check(pickTrack(0, true, t.data(), n) == kNoTrack, "all sounding, none ended: dropped");
+    check(pickTrack(0, false, t.data(), n) == kNoTrack, "a synth note with all sounding: dropped");
+    t[5].ended = true;
+    check(pickTrack(2, true, t.data(), n) == 5, "none free: the ended sample track");
+    check(pickTrack(2, false, t.data(), n) == 5, "a synth note too takes an ended sample track");
+    t[3].ended = true;
+    check(pickTrack(4, true, t.data(), n) == 5, "the first ended one from the cursor");
+    check(pickTrack(6, true, t.data(), n) == 3, "round to the first ended one");
+    t[3].muted = true;
+    t[5].muted = true;
+    check(pickTrack(0, true, t.data(), n) == kNoTrack, "an ended track that's muted isn't taken");
+    t = fresh();
+    busy(t);
+    t[12].ended = true; // never set for a MIDI track; the rule still takes sample tracks only
+    check(pickTrack(0, false, t.data(), n) == kNoTrack, "the fallback takes sample tracks only");
+
+    SoundFacts oneShot;
+    oneShot.sampleInstrument = true;
+    check(soundEnded(oneShot), "a 1-Shot played to its end");
+    SoundFacts s = oneShot;
+    s.voicePlaying = true;
+    check(!soundEnded(s), "a 1-Shot still playing");
+    for (uint8_t mode : { 4, 5 })
+    {
+        s = oneShot;
+        s.playMode = mode;
+        check(soundEnded(s), "Slice and Beat Slice at their end: mode " + std::to_string(mode));
+    }
+    for (uint8_t mode : { 1, 2, 3, 6, 7 })
+    {
+        s = oneShot;
+        s.playMode = mode;
+        check(!soundEnded(s), "loops, wavetable and granular never end: mode " + std::to_string(mode));
+    }
+    s = oneShot;
+    s.repeats = true;
+    check(!soundEnded(s), "Roll, Chord or Arp: more to come");
+    s = oneShot;
+    s.delayed = true;
+    check(!soundEnded(s), "a delayed note to come");
+    s = oneShot;
+    s.liveNote = true;
+    check(!soundEnded(s), "a live note holds it");
+    s = oneShot;
+    s.sampleInstrument = false;
+    check(!soundEnded(s), "the last note a synth or MIDI instrument");
+}
+
 int main()
 {
     testBits();
@@ -570,6 +652,7 @@ int main()
     testPlacement();
     testArm();
     testTap();
+    testTrackRule();
     printf("%d checks, %d failures\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }

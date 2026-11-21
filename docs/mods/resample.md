@@ -98,11 +98,30 @@ nothing plugged in, it's the tracker alone.
 
 ## Play instruments in the recorder
 
-With Trk Audio on, the recorder's instrument list has every instrument: samples, synths and MIDI.
-With it off, the list is MIDI only, as in CE.
+With Trk Audio on, the recorder's instrument list has every instrument: the synths, the samples and
+MIDI. With it off, the list is MIDI only, as in CE.
 
-- The pads and a MIDI controller play the instrument. You hear it, and Trk Record records it.
-- A note plays on the cursor's track, or the next track that's free and not muted. When none is
-  free, it takes a sample track whose note has ended. Otherwise the note is dropped.
-- Nothing is written into the pattern, with record mode on or off.
-- Leaving the recorder gives the other screens back the instrument they had.
+![Sample Recorder, Line In, Trk Audio Off: the instrument list, MIDI only](img/resample-instruments-midi.svg)
+
+*Trk Audio Off: **Instr** shows CE's list, the 16 MIDI channels. Nothing marked.*
+
+![Sample Recorder, Line In, Trk Audio On: the instrument list with every instrument](img/resample-instruments-all.svg)
+
+*Trk Audio On: **Instr** shows every instrument, here with sample 1 picked. Marked: the list. The
+synth and sample names are your project's.*
+
+1. Turn **Trk Audio** On.
+2. Hold **Instr**. Turn the knob, or press a pad, to pick an instrument: the pads go down the list
+   from its top, and each plays what it picks. Let go of **Instr** to close the list.
+3. Play the pads or a MIDI controller. You hear the instrument, and Trk Record records it.
+
+- The instrument you had picked before you opened the recorder stays picked. In CE, and with Trk
+  Audio off, the recorder picks its MIDI instrument instead.
+- Turning **Trk Audio** Off, or choosing **Radio**, **USB (M)** or **USB**, picks the recorder's MIDI
+  instrument again.
+- A note plays on the cursor's track, or the next track that's free and not muted. A sample plays on
+  tracks 1 to 8 only. When none is free, it takes a sample track whose sample has played to its end
+  (a 1-Shot, Slice or Beat Slice sample). Otherwise the note is dropped.
+- Nothing is written into the pattern, with edit mode or record mode on or off.
+- Leaving the recorder gives the other screens back the instrument they had before, even if you
+  picked another one in the recorder.

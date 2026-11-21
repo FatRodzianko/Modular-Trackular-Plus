@@ -99,6 +99,7 @@ struct RecorderView
     bool buttonShown = false; // the source shows Trk Audio
     bool samplesBusy = false; // CE saves a take or reloads the samples
     bool countingIn = false;  // Rec pressed with Pre Roll on, the take not started yet
+    uint8_t midiInstrument = 0; // the recorder's MIDI instrument (recorderMidiLastUsedInstrumentIndex)
 };
 
 // Shift+Rec, or Play in a count-in: what starts with the take (section 2, step 4).
@@ -174,6 +175,44 @@ void addClipped(int16_t* dest, const int16_t* lineIn, const int16_t* tracker, ui
 extern volatile uint8_t tapRunning;
 extern volatile uint16_t tapMissing;
 
+// -- Any instrument (rs9) -------------------------------------------------------------------------
+// While Trk Audio is in effect (On, on a source that shows it, after CE's entry) the recorder's
+// list has every instrument, and a live note takes a track by the rule below instead of CE's
+// (section 4.6). Elsewhere CE's rule runs unchanged.
+
+struct TrackFacts
+{
+    bool muted = false;
+    bool noteOpen = false;    // CE's: a note sounds or is held there
+    bool sampleTrack = false; // tracks 1 to 8
+    bool ended = false;       // a sample track whose last sound has played to its end
+};
+
+constexpr int kCeRule = -2;  // not in the recorder with Trk Audio: CE's condition
+constexpr int kNoTrack = -1; // no track: the note is dropped, as CE drops it
+
+// From firstTrack round all count tracks: the first not muted and not sounding (a sample
+// instrument only on a sample track); if none, the first sample track not muted whose sound has
+// ended; else kNoTrack.
+int pickTrack(int firstTrack, bool sampleInstrument, const TrackFacts* tracks, int count);
+
+// What a sample track last played, as the sequencer and its voices have it.
+struct SoundFacts
+{
+    bool sampleInstrument = false; // the last note's instrument
+    uint8_t playMode = 0;          // that instrument's instrumentPlayMode
+    bool repeats = false;          // Roll, Chord or Arp in the step sent, or Roll or Arp running
+    bool delayed = false;          // a micromoved note still to come
+    bool liveNote = false;         // a live note holds the track (recOpen)
+    bool voicePlaying = false;     // either channel's memory player
+};
+// 1-Shot, Slice or Beat Slice played to its end, nothing more to come. Never a loop, a
+// wavetable or granular sample, a synth or a MIDI instrument.
+bool soundEnded(const SoundFacts& s);
+
+// The interrupt's view: Trk Audio in effect. Written by the main loop only.
+extern volatile uint8_t liveOn;
+
 #ifndef MT_HOST_TEST
 // The recorder's hooks, main loop.
 void recorderEntered();                          // hook 1b: CE's entry ran
@@ -192,6 +231,16 @@ bool dropBlock();      // hook 12, interrupt: Monitor off, the take's first Line
 // Hook 12, interrupt: a channel's block into the take, CE's memcpy unless the tap runs.
 void copyBlock(int channel, int16_t* dest, const int16_t* lineIn);
 void takeFinished();   // hook 13, interrupt or main loop: the tap's queues ended and cleared
+
+// Any instrument. Main loop:
+bool keepsInstrument(bool buttonShown); // hook 1, end of CE's entry: true to keep the instrument
+bool fullPicker();                      // hook 9: the Instr list has every instrument
+// Interrupt (MIDI in) or main loop (pads):
+int liveTrack(int firstTrack, int instrument); // hook 15: the track, kNoTrack, or kCeRule
+// Hook 16: true sends a note past CE's record branch to the play-mode path. A note-off goes the
+// way its note-on went, so pressing Trk Audio while a pad is held leaves no note hanging.
+bool playOnlyOn(int16_t source);  // asked only when CE's isRec() is true
+bool playOnlyOff(int16_t source); // asked before isRec()
 #endif
 
 } // namespace resample

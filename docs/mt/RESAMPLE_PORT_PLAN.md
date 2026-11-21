@@ -3,7 +3,7 @@
 Status: on `modular` `CE_20261120` (`ff9b46a`) since 2026-11-20 ([section 14](#14-catch-up-to-ce_20261120)), on
 `CE_20261119` (`71b4a8c`) from 2026-11-19 ([section 13](#13-catch-up-to-ce_20261119)), rebased
 onto `5b40785` on 2026-11-17 before that ([section 12](#12-rebase-onto-5b40785)).
-Step 1 is committed (2026-11-19, on `modular` `5c331c1`, which adds the 1 KB heap trim). Step 2 is committed (2026-11-20, on `CE_20261119`). Step 3 is committed (2026-11-20, on `CE_20261120`). Step 4 is committed (2026-11-20). Step 5 is committed (2026-11-20). Step 0's results ([section 11](#11-step-0-results)) and
+Step 1 is committed (2026-11-19, on `modular` `5c331c1`, which adds the 1 KB heap trim). Step 2 is committed (2026-11-20, on `CE_20261119`). Step 3 is committed (2026-11-20, on `CE_20261120`). Step 4 is committed (2026-11-20). Step 5 is committed (2026-11-20). Step 6 is built and passes its emulator tests, not committed yet. Step 0's results ([section 11](#11-step-0-results)) and
 every test run before the rebase come from `c32fee7` and the old rigs, and are to be run again.
 Your decisions are in section 9, 10 and 11 (from step 0) included. Based on the
 source of `modular` at `5b40785` (rebased 2026-11-17 from `c32fee7`, section 12), which holds upstream's `main` up to `f25fb89` (the Sample Recorder
@@ -18,7 +18,8 @@ numbers are for `5b40785` and only show where to look.
   PR, branch or issue for it (section 1).
 - **The port is simpler than on 1.2.0.** CE's source lets each piece be a one- or two-line `// MT:`
   call into `core/mods/resample.cpp`, where the 1.2.0 patch had to reach the same places with pool
-  words and thunks. 17 hooks (18 call sites) in five CE files, hook 1b added in step 3. No heap, no SDRAM.
+  words and thunks. 17 hooks (18 call sites) in five CE files, hook 1b added in step 3, and a
+  one-line accessor in `mtSequencer.h` (step 6). No heap, no SDRAM.
 - **What moves is the behaviour of `rs8` and `rs9`,** with the changes you chose (section 2.1): the Trk
   Audio and Trk Record buttons, saved with the project; any instrument in the recorder with Trk Audio
   on, played on the cursor track's rule with the ended-sample-track fallback. Nothing of 1.2.0's
@@ -137,23 +138,23 @@ mod On (section 4.9), so Off is CE's path.
 
 | # | CE file, place | Call | Runs in | Does |
 |---|---|---|---|---|
-| 1 | `fSampleRec.cpp` `cSampleRecorder::start`, first line (step 2; `showDefaultScreen` draws the labels before the old place, L399) | `mods::resampleRecorderStarted()` | main | New visit: latch the switch, gates shut, nothing armed. Step 6 adds its own call before the last `functSwitchModule(options)` block: with Trk Audio on, select `globalLastUsedInstrumentIndex` again if L384–397 swapped it for the MIDI one |
+| 1 | `fSampleRec.cpp` `cSampleRecorder::start`, first line (step 2; `showDefaultScreen` draws the labels before the old place, L399) | `mods::resampleRecorderStarted()` | main | New visit: latch the switch, gates shut, nothing armed. Step 6 adds its own call after CE's instrument swap and before the last `functSwitchModule(options)` block, `if (resample::keepsInstrument(buttonShown)) lastUsedInstrument = globalLastUsedInstrumentIndex;`: with Trk Audio in effect (On, a source that shows it, CE's entry run), the instrument chosen before the visit stays selected |
 | 1b | `fSampleRec.cpp` `cSampleRecorder::start`, after the entry's `engine.setLimiterSidechain(0)` (step 3) | `mods::resample::recorderEntered()` | main | The entry ran, so the gates may open, and the mix is now disconnected. The gates stay shut in a visit whose entry CE skipped (`handleStartupWithPopupAndMenu`): opening there would restore a mix CE never stored |
 | 2 | `fSampleRec.cpp` `cSampleRecorder::stop` (L405), first line | `mods::resampleRecorderStopped()` | main | Clear the visit. CE's own `stop()` then undoes the entry and stops the pattern |
-| 3 | `fSampleRec.cpp` `cSampleRecorder::update` (L113), first line, before the count-in early return | `resample::recorderUpdate(view)` | main | Open or close the gates by the rule of 4.3; closing stops the pattern, so a take's end does; disarm when nothing counts in or records (step 4). Step 3: the call reads the screen, the take, the buttons and the file manager's status into a `RecorderView` |
+| 3 | `fSampleRec.cpp` `cSampleRecorder::update` (L113), first line, before the count-in early return | `resample::recorderUpdate(view)` | main | Open or close the gates by the rule of 4.3; closing stops the pattern, so a take's end does; disarm when nothing counts in or records (step 4). Step 3: the call reads the screen, the take, the buttons and the file manager's status into a `RecorderView`. Step 6: the view also carries `recorderMidiLastUsedInstrumentIndex`; when Trk Audio stops being in effect (Off, or a source without it), a sample or synth selected gives way to that MIDI instrument, and `liveOn` follows |
 | 4 | `fSampleRec.cpp` `functPlay` (L2907), first line (step 4; step 3 needs none, CE's Play is heard with the gates open) | `if (resample::playPressed(shift, countingIn)) return;` | main | During a count-in with the gates open and nothing playing: arm (Shift: the song) instead of playing. Otherwise CE's Play, which is heard because the gates are already open |
 | 5 | `fSampleRec.cpp` `functRec` (L2926), first line | `resample::recPressed(shift, onSetup)` | main | Shift held, setup or count-in, gates open, nothing armed yet: arm the pattern. CE's Rec then runs as always |
 | 6 | `fSampleRec.cpp` `functActionRecord`, just before `recorder.setConfig(config)` (step 3: after CE has set the buffer and the channels) | `resample::placeBuffer(&address, &size, channels, recordShown, monitorOn)` (step 5 adds the last two: the source shows Trk Record, Monitor is On) | main | With the gates open: the buffer after the loaded samples (4.4). Too little room: CE's buffer, and the gates close here, before the take writes over the samples. Any take left in CE's buffer marks the samples overwritten for the rest of the visit (4.3). Step 5: a moved take with Trk Record on the stereo Line In records the tap, with Monitor's state, which can't change during a take |
 | 7 | `fSampleRec.cpp` `functActionRecord`, after `recorder.record()` (L1589) | `resample::takeStarted()` | main | Armed, moved and the gates open: play the pattern (or song) from its start; one already playing is stopped first, as Stop then Play. Always disarms |
-| 8 | `fSampleRec.cpp` `functActionRadioFreq`/`functActionRadioLeft`, first line (step 2: on the setup screen `setConfigScreenFunct` gives keys 1 and 2 to these, not to `functActionButton1`/`2`) | `if (resampleSlotPressed(n)) return;` | main | On the setup screen, outside a count-in, a take and CE's windows, for the sources that show the button: toggle Trk Audio / Trk Record with their coupling, store the record, mark the project changed, redraw the two labels |
-| 9 | `fSampleRec.cpp` `functInstrument` (L2940) | press: `if (resample::openPicker()) return;` release: `resample::pickerClosed()` after CE's release code | main | Trk Audio on: `showStepPopup(stepPopupInstr, …)` with no clamp; a pick that isn't MIDI leaves `recorderMidiLastUsedInstrumentIndex` alone |
+| 8 | `fSampleRec.cpp` `functActionRadioFreq`/`functActionRadioLeft`, first line (step 2: on the setup screen `setConfigScreenFunct` gives keys 1 and 2 to these, not to `functActionButton1`/`2`) | `if (resampleSlotPressed(n)) return;` | main | On the setup screen, outside a count-in, a take and CE's windows, for the sources that show the button: toggle Trk Audio / Trk Record with their coupling, store the record, mark the project changed, redraw the two labels. The MIDI instrument handed back on Trk Audio Off (4.6) is done by hook 3 instead (step 6), which also covers a source change |
+| 9 | `fSampleRec.cpp` `functInstrument` (L2940) | press: `if (resample::fullPicker()) { showStepPopup(stepPopupInstr, lastUsedInstrument); return; }`; release: CE's line that sets `recorderMidiLastUsedInstrumentIndex` runs only for a MIDI pick (step 6) | main | Trk Audio in effect: every instrument, with no clamp; a pick that isn't MIDI leaves `recorderMidiLastUsedInstrumentIndex` alone |
 | 10 | `gSampleRec.cpp` `cSampleRecorder::hideRadio` (L526), after the labels' refresh | `drawResampleLabels()` | main | Draw "Trk Audio" and "Trk Record" with Off/On on `label[RADIO_COL1]`/`label[RADIO_COL2]`, for the sources that show them |
 | 11 | `Recorder.cpp` `Recorder::record`, around the queue `begin()` loop (L64–67) | `resample::queuesStarting()` before, `resample::queuesStarted()` after | main | Trk Record, Line In, gates open: mask the audio interrupt (`AudioNoInterrupts`, the NVIC's; step 5), begin the tap queues with the input queues, unmask, so all four start in the same interrupt. The first such take of a power-up builds the tap first |
 | 12 | `Recorder.cpp` `Recorder::update`, stereo branch (L102–110) | before the copy loop `if (resample::dropBlock()) { free both input blocks; skip the copy and the head step }`; the `memcpy` for each channel becomes `resample::copyBlock(channel, dest, src)` while the tap runs | **interrupt** | Monitor off: drop the take's first Line In block (decision 10), then add the tap's block; Monitor on: take the tap block alone. Saturating 16-bit add |
 | 13 | `Recorder.cpp` `Recorder::finishRecording` (L277), after `isActive = false` | `resample::takeFinished()` | **interrupt** (full memory) or main (stop) | End and clear the tap queues; note "take over" for hook 3 |
 | 14 | `mtAudioEngine.cpp` `audioEngine::update`, L277 | `if (!recorder.isRecordingActive() \|\| resample::engineRuns())` | **interrupt** | The players' and synths' per-block update runs during a take while the gates are open |
-| 15 | `mtSequencer.cpp` `Sequencer::handleNoteOn`, play-mode branch (L3010–3027) | before the loop `const int pick = resample::liveTrack(sel->firstTrack, instrument);`, and the condition at L3023 becomes `pick != kCeRule ? trackIdx == pick : (CE's condition)` | **interrupt** (MIDI in) and main (pads) | The rs9 track rule, in the recorder with Trk Audio on only (4.6) |
-| 16 | `mtSequencer.cpp` `handleNoteOn` (L2837) and `handleNoteOff` (L3126), the `else if (isRec())` of each | becomes `else if (isRec() && !resample::playOnly())` | **interrupt** (MIDI in) and main (pads) | In the recorder with Trk Audio on, notes skip the record branch and take the play-mode path, so they never write into the pattern (decision 11). Record mode itself is left as it is |
+| 15 | `mtSequencer.cpp` `Sequencer::handleNoteOn`, play-mode branch (L3010–3027) | before the loop `const int pick = resample::liveTrack(sel->firstTrack, instrument);`, and the condition at L3023 becomes `pick != kCeRule ? trackIdx == pick : (CE's condition)` | **interrupt** (MIDI in) and main (pads) | The rs9 track rule, in the recorder with Trk Audio on only (4.6). `liveTrack` reads `sequencer.ptrPlayer`, the voices' `isPlaying()` and the mute through `trackMutedForMods`, an accessor step 6 adds to `mtSequencer.h` for CE's private `isTrackEngineMuted` |
+| 16 | `mtSequencer.cpp` `handleNoteOn` (L2837) and `handleNoteOff` (L3126), the `else if (isRec())` of each | note-on: `else if (isRec() && !resample::playOnlyOn(source))`; note-off: `else if (!resample::playOnlyOff(source) && isRec())` (step 6) | **interrupt** (MIDI in) and main (pads) | In the recorder with Trk Audio on, notes skip the record branch and take the play-mode path, so they never write into the pattern (decision 11). Record mode itself is left as it is. A byte per source (pads, the preview button, MIDI notes) records a note-on sent past the branch, and its note-off goes the same way, so Trk Audio pressed while a pad is held leaves no note open |
 
 Plus the registry entry, the record, the importer and the tap objects in `core/mods/` (4.2, 4.8). Every
 call goes into `core/mods/resample.cpp`.
@@ -313,8 +314,8 @@ metronome loud.
   16 sends note-on and note-off past that branch to the play-mode path, so hook 15's rule applies and
   nothing is written (decision 11). With Trk Audio off it stays CE's. Pressing Trk Audio while a pad is
   held could send that note's off down the other path; step 6 tests that no note is left hanging.
-- **Trk Audio off with a sample or synth selected (hook 8):** select
-  `recorderMidiLastUsedInstrumentIndex`, as CE's entry does.
+- **Trk Audio off with a sample or synth selected (hook 3, step 6):** select
+  `recorderMidiLastUsedInstrumentIndex`, as CE's entry does. A source without Trk Audio does the same.
 
 ### 4.7 Buttons and labels
 
@@ -542,6 +543,41 @@ One patch at a time, each its own commit on your word, on `mod/resample` (this w
    pattern with edit mode on or off, nor with record mode armed on an external clock before the visit
    (11.5), while with Trk Audio off that case stays CE's; Trk Audio pressed while a pad is held leaves
    no note hanging; MIDI notes take the same tracks through the interrupt path.
+   **Done 2026-11-20 in the emulator, on `CE_20261120`:** host tests (`test_resample` 177 checks: the
+   track rule over a track table, from the cursor, round past track 16, sample tracks only for a
+   sample, muted and sounding tracks skipped, the ended-sample-track fallback and the drop, and which
+   sounds have ended), and the new `tools/emu/test_resample_instruments.py` (in `run_tests.py`'s
+   project jobs) on the hellish downtown project, driving the recorder with its own keys and pads.
+   The track a note takes is read from the sequencer's own fields (offsets from the build's DWARF,
+   each checked by a behaviour first) and checked on every press against the 4.6 rule worked out in
+   the test from those fields and the voices' `playing`. It checks:
+   - Trk Audio off: Instr shows CE's MIDI-only list; on: every instrument, its pads pick and preview,
+     and a sample or synth picked isn't the recorder's MIDI instrument;
+   - a live sample note and a live synth note in the setup are heard (peaks 6,856 and 15,026);
+   - 9 sample notes held take the 8 sample tracks from the cursor's and the 9th is dropped; a muted
+     track is skipped; 17 synth notes take 16 tracks and the 17th is dropped; with the pattern
+     playing, notes take the free tracks, then ended 1-Shot tracks (three), then a track a note-off
+     step freed, then are dropped; nothing left open after each;
+   - a held 1-Shot note's voice stops at the sample's end (39 blocks), and the held track isn't
+     taken as ended;
+   - three USB MIDI notes in the audio interrupt take the rule's tracks and close;
+   - a live note is in a Trk Record take (the fake Line In is silent);
+   - Trk Audio Off, and USB, select the recorder's MIDI instrument again; Line In with Trk Audio On
+     keeps the instrument chosen before the visit; leaving gives it back;
+   - nothing written to the pattern with edit mode off, with it on, and with record mode armed on an
+     external clock before the visit; there, with Trk Audio off and in plain CE, CE's record branch
+     writes the pad into the pattern (11.5 confirmed);
+   - Trk Audio Off while a pad is held, and On while a record-branch pad is held: no note left open;
+   - the mod Off and plain CE: CE's list and CE's MIDI instrument.
+
+   The same test on step 5's builds fails 54 checks (the mod's; one of them only because step 5 has
+   no `liveOn` to read) and passes CE's. `test_resample.py`, `test_resample_sound.py`,
+   `test_resample_shiftrec.py` and `test_resample_record.py` pass again on step 6's builds, and the
+   quick tier, 24 of 24. Build warnings 386, CE's.
+   Costs: flash 1,040 B, DTCM 256 B (8,352 free; the per-source note table 256 B, `liveOn` 1 B),
+   no ITCM, no SDRAM.
+   Not run yet: `--preempt` (a MIDI note in the interrupt while the main loop presses a pad), the
+   pool and CPU with all 8 synth voices, the release tier, the unit.
 7. **Release tier, ladder, hardware checklist** (sections 7 and 8). Merge into `modular` on your word.
 
 ## 7. Tests
@@ -685,6 +721,21 @@ From step 0, your answer 2026-11-13 ("Yes, both"):
     (CE then copies from address 0 into the take) and its `freeBuffer()` frees the main loop's block.
     It can only touch the take's last block, in RAM, never the card. Resample adds nothing to it. A
     write-up for upstream only on your word.
+- **From step 6:**
+  - "Trk Audio in effect" (`liveOn`): the visit On, Trk Audio On, a source that shows it, CE's
+    entry run. It doesn't follow the gates: after a take over the samples the gates stay shut, and
+    the full list, the rule and the pattern guard still hold (the notes are silent, as the tracker is).
+  - The MIDI instrument handed back on Trk Audio Off is done in hook 3, not hook 8, so a source
+    without Trk Audio hands it back too. Turning Trk Audio On again doesn't bring the sample back.
+  - Hook 16 keeps one byte per source (pads 0–47, the preview button 96, MIDI notes 100–227), so the
+    main loop and the interrupt never rewrite a shared word. It's cleared at a visit's start, after
+    `liveOn` is 0, and not at its end, so a pad held while leaving lets go the way it started.
+  - `liveTrack` needs CE's private mute; `mtSequencer.h` gets a one-line accessor,
+    `trackMutedForMods`, as Swing has `swingForMods`.
+  - CE swaps `currentPattern` and `bufferPattern` (`mtSequencer.cpp` L3575), so a test that hashes
+    the pattern follows `currentPattern`.
+  - After Rec on the Pattern screen, CE's instrument read as the cursor's step's, not the one picked
+    just before, so the test reads the instrument right before it opens the recorder.
 
 ## 11. Step 0 results
 

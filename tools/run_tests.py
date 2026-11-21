@@ -202,6 +202,9 @@ def jobs_for(args, projects):
         # Trk Record: the take holds the Line In and the tracker's own sound, before the metronome (step 5)
         jobs.append(Job("resample trk record", e / "test_resample_record.py", mods, ref, args.project,
                         inputs=[mods, ref, Path(args.project)]))
+        # Any instrument: the full list, the instrument kept, the track rule, no pattern write (step 6)
+        jobs.append(Job("resample instruments", e / "test_resample_instruments.py", mods, ref, args.project,
+                        inputs=[mods, ref, Path(args.project)]))
         # A project's own synth patches, opened and copied by CE's code with its backslash paths
         synths = ROOT / "build" / "Synths"
         jobs.append(Job("project patches", e / "test_project_patches.py", mods, args.project, synths,
