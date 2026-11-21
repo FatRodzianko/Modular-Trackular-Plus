@@ -10,9 +10,12 @@
 #include <cstring>
 
 #ifndef MT_HOST_TEST
+#include "Audio.h"
 #include "mtAudioEngine.h"
 #include "mtSequencer.h"
 #include "mtStructs.h"
+
+#include <new>
 
 extern strMtProject mtProject;
 #endif
@@ -277,6 +280,31 @@ bool playArms(bool gatesOpen, bool countingIn, bool playing)
     return gatesOpen && countingIn && !playing;
 }
 
+bool tapWanted(const Settings& s, bool recordShown, int channels, bool takeMoved)
+{
+    return s.trkRecord && recordShown && channels == 2 && takeMoved;
+}
+
+void addClipped(int16_t* dest, const int16_t* lineIn, const int16_t* tracker, uint32_t samples)
+{
+    for (uint32_t i = 0; i < samples; i++)
+    {
+        int32_t sum = static_cast<int32_t>(lineIn[i]) + static_cast<int32_t>(tracker[i]);
+        if (sum > INT16_MAX)
+        {
+            sum = INT16_MAX;
+        }
+        else if (sum < INT16_MIN)
+        {
+            sum = INT16_MIN;
+        }
+        dest[i] = static_cast<int16_t>(sum);
+    }
+}
+
+volatile uint8_t tapRunning = 0;
+volatile uint16_t tapMissing = 0;
+
 #ifndef MT_HOST_TEST
 
 // Each one as CE's recorder entry and exit (fSampleRec.cpp start and stop) make it, in their
@@ -405,14 +433,63 @@ void takeStarted()
     }
 }
 
+namespace
+{
+// The tap: static storage, built in place at the first Trk Record take, never destroyed.
+constexpr int kTapChannels = 2;
+alignas(AudioRecordQueue) uint8_t tapQueueStore[kTapChannels][sizeof(AudioRecordQueue)];
+alignas(AudioConnection) uint8_t tapLinkStore[kTapChannels][sizeof(AudioConnection)];
+bool tapBuilt = false;
+bool tapPending = false; // hook 6 placed a take that records the tracker
+bool tapMonitor = false; // Monitor On for it: the limiters already hold the Line In
+bool tapMasked = false;  // hook 11 masked the audio interrupt
+volatile uint8_t tapDrop = 0;  // Monitor off: the take's first Line In block is still to drop
+volatile uint8_t tapAlone = 0; // Monitor on: the take is the tap alone
+
+AudioRecordQueue* tapQueue(int channel)
+{
+    return reinterpret_cast<AudioRecordQueue*>(tapQueueStore[channel]);
+}
+
+// A queue joins the end of the update list, after the limiters and the final mixers, so it gets
+// each limiter block in the interrupt that made it (11.1). AudioStream's constructor walks that list,
+// so the audio interrupt is masked for it; AudioConnection masks its own list walk. A new
+// connection marks the queue active, and its first update while not recording puts it to sleep.
+void buildTap()
+{
+    if (tapBuilt)
+    {
+        return;
+    }
+    AudioNoInterrupts();
+    for (int channel = 0; channel < kTapChannels; channel++)
+    {
+        new (tapQueueStore[channel]) AudioRecordQueue();
+    }
+    AudioInterrupts();
+    AudioOutput* output = engine.getAudioOutput();
+    for (int channel = 0; channel < kTapChannels; channel++)
+    {
+        new (tapLinkStore[channel])
+          AudioConnection(output->getLimiter(static_cast<AudioOutput::OutputChannels>(channel)),
+                          0,
+                          tapQueue(channel),
+                          0);
+    }
+    tapBuilt = true;
+}
+} // namespace
+
 // address and size come in as CE's buffer, the whole sample memory.
-void placeBuffer(int16_t** address, uint32_t* size, int channels)
+void placeBuffer(int16_t** address, uint32_t* size, int channels, bool recordShown, bool monitorOn)
 {
     if (!visitOn)
     {
         return;
     }
     visit.takeMoved = false;
+    tapPending = false;
+    tapMonitor = monitorOn;
     if (gatesAreOpen)
     {
         const uintptr_t bankStart = reinterpret_cast<uintptr_t>(*address);
@@ -445,11 +522,112 @@ void placeBuffer(int16_t** address, uint32_t* size, int channels)
             *address = reinterpret_cast<int16_t*>(p.address);
             *size = p.size;
             visit.takeMoved = true;
+            tapPending = tapWanted(settings, recordShown, channels, true);
             return;
         }
         closeGates(); // too little room: the take is CE's, over the samples, and silent
     }
     visit.samplesOverwritten = true;
+}
+
+// CE begins its Line In queues right after this, and queuesStarted unmasks, so all four queues
+// start in the same audio interrupt. The mask is the NVIC's (AudioNoInterrupts): AudioStream::release,
+// which begin() can reach through clear(), turns PRIMASK off again.
+void queuesStarting()
+{
+    tapMasked = false;
+    const bool want = visitOn && tapPending && gatesAreOpen && visit.takeMoved;
+    tapPending = false;
+    if (!want)
+    {
+        return;
+    }
+    buildTap();
+    AudioNoInterrupts();
+    tapMasked = true;
+    for (int channel = 0; channel < kTapChannels; channel++)
+    {
+        tapQueue(channel)->begin();
+    }
+    tapMissing = 0;
+    tapAlone = tapMonitor ? 1 : 0;
+    tapDrop = tapMonitor ? 0 : 1;
+    tapRunning = 1;
+}
+
+void queuesStarted()
+{
+    if (tapMasked)
+    {
+        tapMasked = false;
+        AudioInterrupts();
+    }
+}
+
+// CE's Line In queues update before their source and get each input block one interrupt late; the
+// tap gets the limiters' block in the interrupt that made it (11.1). So with Monitor off the first
+// Line In block, from before the take, goes, and from then on each pair was played together
+// (decision 10). With Monitor on the Line In is in the tap already and the input isn't used.
+bool dropBlock()
+{
+    if (tapDrop == 0)
+    {
+        return false;
+    }
+    tapDrop = 0;
+    return true;
+}
+
+void copyBlock(int channel, int16_t* dest, const int16_t* lineIn)
+{
+    constexpr uint32_t kBytes = sizeof(int16_t) * AUDIO_BLOCK_SAMPLES;
+    if (tapRunning == 0)
+    {
+        memcpy(dest, lineIn, kBytes);
+        return;
+    }
+    AudioRecordQueue* queue = tapQueue(channel);
+    const int16_t* tracker = queue->readBuffer();
+    if (tracker == nullptr)
+    {
+        tapMissing = static_cast<uint16_t>(tapMissing + 1);
+        if (lineIn != nullptr)
+        {
+            memcpy(dest, lineIn, kBytes);
+        }
+        else
+        {
+            memset(dest, 0, kBytes);
+        }
+        return;
+    }
+    if (tapAlone != 0 || lineIn == nullptr)
+    {
+        memcpy(dest, tracker, kBytes);
+    }
+    else
+    {
+        addClipped(dest, lineIn, tracker, AUDIO_BLOCK_SAMPLES);
+    }
+    queue->freeBuffer();
+}
+
+// After CE's isActive = false, so no copy of the interrupt reads the tap after this. From the full-
+// memory end in the interrupt, or from Recorder::stop in the main loop, which ends and clears CE's
+// queues the same way.
+void takeFinished()
+{
+    if (tapRunning == 0)
+    {
+        return;
+    }
+    tapRunning = 0;
+    tapDrop = 0;
+    for (int channel = 0; channel < kTapChannels; channel++)
+    {
+        tapQueue(channel)->end();
+        tapQueue(channel)->clear();
+    }
 }
 
 #endif // MT_HOST_TEST

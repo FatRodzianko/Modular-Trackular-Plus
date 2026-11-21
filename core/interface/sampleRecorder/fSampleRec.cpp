@@ -1622,8 +1622,11 @@ static void functActionRecord()
                       : Recorder::Config::Source::kI2s;
 
 #if MT_HAS_RESAMPLE // MT: with the gates open, the take goes after the loaded samples
-    mods::resample::placeBuffer(
-      &config.destinationBufferAddress, &config.destinationBufferSize, config.destinationChannels);
+    mods::resample::placeBuffer(&config.destinationBufferAddress,
+                                &config.destinationBufferSize,
+                                config.destinationChannels,
+                                SR->resampleButtons() == mods::resample::Buttons::both,
+                                SR->recorderConfig.monitor == 0); // monitorNamesLabels[0], "On"
 #endif
     recorder.setConfig(config);
     recorder.record();

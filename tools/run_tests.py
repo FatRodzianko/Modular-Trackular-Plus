@@ -199,6 +199,9 @@ def jobs_for(args, projects):
         # Shift+Rec and the count-in's Play: what starts with the take (step 4)
         jobs.append(Job("resample shift+rec", e / "test_resample_shiftrec.py", mods, ref, args.project,
                         inputs=[mods, ref, Path(args.project)]))
+        # Trk Record: the take holds the Line In and the tracker's own sound, before the metronome (step 5)
+        jobs.append(Job("resample trk record", e / "test_resample_record.py", mods, ref, args.project,
+                        inputs=[mods, ref, Path(args.project)]))
         # A project's own synth patches, opened and copied by CE's code with its backslash paths
         synths = ROOT / "build" / "Synths"
         jobs.append(Job("project patches", e / "test_project_patches.py", mods, args.project, synths,

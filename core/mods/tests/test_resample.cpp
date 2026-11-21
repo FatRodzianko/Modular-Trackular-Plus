@@ -3,10 +3,10 @@
 // Host tests for the resample mod's settings: the record, the 1.2.0 side file and its
 // import, the record's trip through mods.bin, and the recorder's two buttons (which source
 // shows which, a press with its coupling, the record a press stores, the labels' texts), and Trk
-// Audio's rules (when the gates open, where a take goes), and what Shift+Rec and a count-in's
-// Play arm. The other recorder hooks come with
-// later steps (docs/mt/RESAMPLE_PORT_PLAN.md). Build and run
-// with `make -C core/mods/tests`.
+// Audio's rules (when the gates open, where a take goes), what Shift+Rec and a count-in's Play
+// arm, and Trk Record's (when a take records the tracker, the clipped sum). The other recorder
+// hooks come with later steps (docs/mt/RESAMPLE_PORT_PLAN.md). Build and run with
+// `make -C core/mods/tests`.
 
 #include "modsProject.h"
 #include "resample.h"
@@ -521,6 +521,39 @@ void testArm()
     check(!playArms(true, true, true), "Play in a count-in over a playing pattern: CE's stop");
 }
 
+void testTap()
+{
+    Settings both;
+    both.trkAudio = true;
+    both.trkRecord = true;
+    Settings audioOnly;
+    audioOnly.trkAudio = true;
+    check(tapWanted(both, true, 2, true), "Trk Record, stereo Line In, a moved take: the tap runs");
+    check(!tapWanted(audioOnly, true, 2, true), "Trk Audio only: no tap");
+    check(!tapWanted(Settings{}, true, 2, true), "both Off: no tap");
+    check(!tapWanted(both, false, 2, true), "a source without Trk Record (a mono Line In, a mic): no tap");
+    check(!tapWanted(both, true, 1, true), "a mono take: no tap");
+    check(!tapWanted(both, true, 2, false), "a take in CE's buffer (the fallback): no tap");
+
+    const int16_t lineIn[] = { 0, 1000, -1000, 32767, -32768, 20000, -20000, 32767, -32768, 12 };
+    const int16_t tracker[] = { 0, 2000, -2000, 0, 0, 20000, -20000, 1, -1, -12 };
+    const int16_t expected[] = { 0, 3000, -3000, 32767, -32768, 32767, -32768, 32767, -32768, 0 };
+    constexpr uint32_t n = sizeof(lineIn) / sizeof(lineIn[0]);
+    int16_t out[n + 2];
+    for (auto& v : out)
+    {
+        v = 0x5A5A;
+    }
+    addClipped(out, lineIn, tracker, n);
+    check(memcmp(out, expected, sizeof(expected)) == 0, "the sum, clipped at both ends of 16 bits");
+    check(out[n] == 0x5A5A && out[n + 1] == 0x5A5A, "nothing written after the block");
+
+    int16_t same[3] = { 30000, -30000, 5 };
+    const int16_t add[3] = { 30000, -30000, 5 };
+    addClipped(same, same, add, 3);
+    check(same[0] == 32767 && same[1] == -32768 && same[2] == 10, "the destination may be the Line In");
+}
+
 int main()
 {
     testBits();
@@ -536,6 +569,7 @@ int main()
     testGates();
     testPlacement();
     testArm();
+    testTap();
     printf("%d checks, %d failures\n", checks, failures);
     return failures == 0 ? 0 : 1;
 }

@@ -3,7 +3,7 @@
 Status: on `modular` `CE_20261120` (`ff9b46a`) since 2026-11-20 ([section 14](#14-catch-up-to-ce_20261120)), on
 `CE_20261119` (`71b4a8c`) from 2026-11-19 ([section 13](#13-catch-up-to-ce_20261119)), rebased
 onto `5b40785` on 2026-11-17 before that ([section 12](#12-rebase-onto-5b40785)).
-Step 1 is committed (2026-11-19, on `modular` `5c331c1`, which adds the 1 KB heap trim). Step 2 is committed (2026-11-20, on `CE_20261119`). Step 3 is committed (2026-11-20, on `CE_20261120`). Step 4 is built and passes the emulator (2026-11-20), not committed. Step 0's results ([section 11](#11-step-0-results)) and
+Step 1 is committed (2026-11-19, on `modular` `5c331c1`, which adds the 1 KB heap trim). Step 2 is committed (2026-11-20, on `CE_20261119`). Step 3 is committed (2026-11-20, on `CE_20261120`). Step 4 is committed (2026-11-20). Step 5 is committed (2026-11-20). Step 0's results ([section 11](#11-step-0-results)) and
 every test run before the rebase come from `c32fee7` and the old rigs, and are to be run again.
 Your decisions are in section 9, 10 and 11 (from step 0) included. Based on the
 source of `modular` at `5b40785` (rebased 2026-11-17 from `c32fee7`, section 12), which holds upstream's `main` up to `f25fb89` (the Sample Recorder
@@ -143,12 +143,12 @@ mod On (section 4.9), so Off is CE's path.
 | 3 | `fSampleRec.cpp` `cSampleRecorder::update` (L113), first line, before the count-in early return | `resample::recorderUpdate(view)` | main | Open or close the gates by the rule of 4.3; closing stops the pattern, so a take's end does; disarm when nothing counts in or records (step 4). Step 3: the call reads the screen, the take, the buttons and the file manager's status into a `RecorderView` |
 | 4 | `fSampleRec.cpp` `functPlay` (L2907), first line (step 4; step 3 needs none, CE's Play is heard with the gates open) | `if (resample::playPressed(shift, countingIn)) return;` | main | During a count-in with the gates open and nothing playing: arm (Shift: the song) instead of playing. Otherwise CE's Play, which is heard because the gates are already open |
 | 5 | `fSampleRec.cpp` `functRec` (L2926), first line | `resample::recPressed(shift, onSetup)` | main | Shift held, setup or count-in, gates open, nothing armed yet: arm the pattern. CE's Rec then runs as always |
-| 6 | `fSampleRec.cpp` `functActionRecord`, just before `recorder.setConfig(config)` (step 3: after CE has set the buffer and the channels) | `resample::placeBuffer(&address, &size, channels)` | main | With the gates open: the buffer after the loaded samples (4.4). Too little room: CE's buffer, and the gates close here, before the take writes over the samples. Any take left in CE's buffer marks the samples overwritten for the rest of the visit (4.3) |
+| 6 | `fSampleRec.cpp` `functActionRecord`, just before `recorder.setConfig(config)` (step 3: after CE has set the buffer and the channels) | `resample::placeBuffer(&address, &size, channels, recordShown, monitorOn)` (step 5 adds the last two: the source shows Trk Record, Monitor is On) | main | With the gates open: the buffer after the loaded samples (4.4). Too little room: CE's buffer, and the gates close here, before the take writes over the samples. Any take left in CE's buffer marks the samples overwritten for the rest of the visit (4.3). Step 5: a moved take with Trk Record on the stereo Line In records the tap, with Monitor's state, which can't change during a take |
 | 7 | `fSampleRec.cpp` `functActionRecord`, after `recorder.record()` (L1589) | `resample::takeStarted()` | main | Armed, moved and the gates open: play the pattern (or song) from its start; one already playing is stopped first, as Stop then Play. Always disarms |
 | 8 | `fSampleRec.cpp` `functActionRadioFreq`/`functActionRadioLeft`, first line (step 2: on the setup screen `setConfigScreenFunct` gives keys 1 and 2 to these, not to `functActionButton1`/`2`) | `if (resampleSlotPressed(n)) return;` | main | On the setup screen, outside a count-in, a take and CE's windows, for the sources that show the button: toggle Trk Audio / Trk Record with their coupling, store the record, mark the project changed, redraw the two labels |
 | 9 | `fSampleRec.cpp` `functInstrument` (L2940) | press: `if (resample::openPicker()) return;` release: `resample::pickerClosed()` after CE's release code | main | Trk Audio on: `showStepPopup(stepPopupInstr, …)` with no clamp; a pick that isn't MIDI leaves `recorderMidiLastUsedInstrumentIndex` alone |
 | 10 | `gSampleRec.cpp` `cSampleRecorder::hideRadio` (L526), after the labels' refresh | `drawResampleLabels()` | main | Draw "Trk Audio" and "Trk Record" with Off/On on `label[RADIO_COL1]`/`label[RADIO_COL2]`, for the sources that show them |
-| 11 | `Recorder.cpp` `Recorder::record`, around the queue `begin()` loop (L64–67) | `resample::queuesStarting()` before, `resample::queuesStarted()` after | main | Trk Record, Line In, gates open: mask the audio interrupt, begin the tap queues with the input queues, unmask, so all four start in the same interrupt |
+| 11 | `Recorder.cpp` `Recorder::record`, around the queue `begin()` loop (L64–67) | `resample::queuesStarting()` before, `resample::queuesStarted()` after | main | Trk Record, Line In, gates open: mask the audio interrupt (`AudioNoInterrupts`, the NVIC's; step 5), begin the tap queues with the input queues, unmask, so all four start in the same interrupt. The first such take of a power-up builds the tap first |
 | 12 | `Recorder.cpp` `Recorder::update`, stereo branch (L102–110) | before the copy loop `if (resample::dropBlock()) { free both input blocks; skip the copy and the head step }`; the `memcpy` for each channel becomes `resample::copyBlock(channel, dest, src)` while the tap runs | **interrupt** | Monitor off: drop the take's first Line In block (decision 10), then add the tap's block; Monitor on: take the tap block alone. Saturating 16-bit add |
 | 13 | `Recorder.cpp` `Recorder::finishRecording` (L277), after `isActive = false` | `resample::takeFinished()` | **interrupt** (full memory) or main (stop) | End and clear the tap queues; note "take over" for hook 3 |
 | 14 | `mtAudioEngine.cpp` `audioEngine::update`, L277 | `if (!recorder.isRecordingActive() \|\| resample::engineRuns())` | **interrupt** | The players' and synths' per-block update runs during a take while the gates are open |
@@ -382,6 +382,7 @@ metronome loud.
 | Hook 16 `playOnly()` | as hook 15 | reads the latched visit flags |
 | Hook 12 `dropBlock()` | interrupt | frees CE's two input blocks with `freeBuffer()`, sets a flag |
 | Building the tap | main loop, first Trk Record take | placement `new` into static storage with the audio interrupt masked (`AudioStream`'s constructor walks the update list unmasked) |
+| Hook 11's mask | main loop | `AudioNoInterrupts()`, not `CPSID i`: `begin()` → `clear()` → `AudioStream::release` ends with `CPSIE i` and would unmask a global mask early (step 5) |
 | Everything else (gates, Play, `sequencer.stop`, the record store, labels) | main loop | |
 
 CE's own interrupt paths, from `CLAUDE.md`, and how they meet the mod:
@@ -505,6 +506,36 @@ One patch at a time, each its own commit on your word, on `mod/resample` (this w
    sample and synth tracks sounding (sound test stage 4); a loud sum clips; the jacks are unchanged by
    Trk Record; a count-in take with the metronome loud has no click in it; a take that fills its space
    stops at its end with nothing written after it; before the first Trk Record take the graph is CE's.
+   **Done 2026-11-20 in the emulator, on `CE_20261120`:** host tests (`test_resample` 151 checks:
+   when a take records the tracker, and the clipped sum), the earlier steps' emulator tests again,
+   and the new `tools/emu/test_resample_record.py` (in `run_tests.py`'s project jobs) on the hellish
+   downtown project, with a tone written into the I2S input buffer before each audio interrupt. A
+   take is checked against the tone fed in each interrupt and the jacks' blocks, which play each
+   limiter block one interrupt later and pass the limiters at unity while the metronome is silent.
+   It checks:
+   - Trk Audio only: the take is CE's, the tone one block late; at boot and through that take the
+     update list is the plain CE build's (189 objects);
+   - Trk Record, Monitor off: each block is the tone of its own interrupt plus the tap, clipped,
+     frame for frame from the first frame (301 blocks); the jacks play what they play with Trk Audio
+     only, bit for bit (a fresh run each); no tap block missing; the pool's peak the same (15 blocks
+     from the take's start, each);
+   - Monitor on: the take is the jacks' sound, the monitored tone in it once, frame for frame;
+   - the tap's two queues join the end of the update list at the first Trk Record take, end empty
+     and sleep (no block given to them) after it;
+   - a loud tone over the mix: 371 samples clipped, every one as the clipped sum;
+   - a take with just over 10 s free: it fills its space (3,484 blocks) and stops by itself, the
+     sum holds to its last block, nothing is written after its end in either channel, the tap ends
+     empty;
+   - a count-in take (637 blocks) with the metronome at 100 and at 0, Monitor on: the same take bit
+     for bit, while the jacks differ in 71 blocks of the count-in and 35 of the take;
+   - Trk Record stored On with Line In (L), Mic LG, and under 10 s free: the take is CE's, no tap.
+
+   The same test on step 4's builds fails its 11 Trk Record checks and passes CE's. The quick tier
+   passes, 24 of 24.
+   Costs: flash 912 B, DTCM 200 B (8,608 free; the tap's queues 144 B and connections 40 B), no
+   ITCM, no SDRAM.
+   Not run yet: `--preempt` (hook 11's mask and the stop race of section 10 included), the pool with
+   all 8 synth voices, the release tier, the unit, and the CPU of the copy loop (the Profiler).
 6. **Any instrument** (hooks 9, 15, 16). **Done when** the picker has the full list only with Trk
    Audio; the instrument is kept and given back; live sample and synth notes sound in the setup and in
    a Trk Record take; the track rule picks as 4.6 says in every case below; nothing is written to the
@@ -639,6 +670,21 @@ From step 0, your answer 2026-11-13 ("Yes, both"):
     own `stop()` and `playPattern()`/`playSong()`, as pressing Stop then Play would.
   - Arming needs the gates open, so with too little room after the samples nothing is armed and
     the take is CE's.
+
+- **From step 5:**
+  - Hook 6 gets two more arguments, whether the source shows Trk Record and Monitor's state, so
+    hook 11 needs no view of the recorder. Monitor can't change during a take (its keys act on the
+    setup screen only), so it is latched at the take's start.
+  - Hook 11 masks the audio interrupt in the NVIC (`AudioNoInterrupts`), as CE does elsewhere,
+    since CE's `release()` turns a global `CPSID` mask off again.
+  - In a Trk Record take, a Line In block the queue doesn't have (CE's own race below) counts as
+    silence, where CE's `memcpy` would read address 0.
+  - A CE race, left as it is: `Recorder::stop` drains its queues by calling `update()` from the
+    main loop while the audio interrupt can run `recorder.update()` too. If the interrupt comes
+    between a `readBuffer()` and its `freeBuffer()`, the interrupt's `readBuffer()` returns null
+    (CE then copies from address 0 into the take) and its `freeBuffer()` frees the main loop's block.
+    It can only touch the take's last block, in RAM, never the card. Resample adds nothing to it. A
+    write-up for upstream only on your word.
 
 ## 11. Step 0 results
 

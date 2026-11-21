@@ -156,14 +156,42 @@ Arm armOnRec(Arm now, bool shift, bool gatesOpen, bool onSetup);
 // playing. Otherwise CE's Play.
 bool playArms(bool gatesOpen, bool countingIn, bool playing);
 
+// -- Trk Record: the tap ------------------------------------------------------------------------
+// The tracker's sound as the two limiters make it, before the final mixers add the metronome, the
+// SD preview and the test tone (section 4.2). Two record queues of the mod's own take it, built at
+// the first Trk Record take of a power-up and never taken down; until then the graph is CE's.
+
+// A take records the tracker: Trk Record on, the stereo Line In (the source that shows Trk Record),
+// and the take after the loaded samples, so with the gates open.
+bool tapWanted(const Settings& s, bool recordShown, int channels, bool takeMoved);
+
+// Monitor off: a block of the take is the Line In plus the tracker, each sample clipped to 16 bits.
+void addClipped(int16_t* dest, const int16_t* lineIn, const int16_t* tracker, uint32_t samples);
+
+// The interrupt's view of the tap, written by the main loop only while the audio interrupt is
+// masked or the take isn't running. tapMissing counts blocks the tap didn't have (the update order
+// says it can't happen), for the tests.
+extern volatile uint8_t tapRunning;
+extern volatile uint16_t tapMissing;
+
 #ifndef MT_HOST_TEST
 // The recorder's hooks, main loop.
 void recorderEntered();                          // hook 1b: CE's entry ran
 void recorderUpdate(const RecorderView& view);   // hook 3: the gates; disarm with no count-in or take
 bool playPressed(bool shift, bool countingIn);   // hook 4: true when it took the press
 void recPressed(bool shift, bool onSetup);       // hook 5, before CE's Rec
-void placeBuffer(int16_t** address, uint32_t* size, int channels); // hook 6, before setConfig
+// Hook 6, before setConfig. recordShown: the source shows Trk Record; monitorOn: Monitor is On,
+// which can't change during the take.
+void placeBuffer(int16_t** address, uint32_t* size, int channels, bool recordShown, bool monitorOn);
 void takeStarted();                              // hook 7: the armed pattern or song from its start
+
+// Recorder.cpp's hooks.
+void queuesStarting(); // hook 11, main loop, before CE's queues begin: the tap's begin, masked
+void queuesStarted();  // hook 11, after them: unmasked
+bool dropBlock();      // hook 12, interrupt: Monitor off, the take's first Line In block is dropped
+// Hook 12, interrupt: a channel's block into the take, CE's memcpy unless the tap runs.
+void copyBlock(int channel, int16_t* dest, const int16_t* lineIn);
+void takeFinished();   // hook 13, interrupt or main loop: the tap's queues ended and cleared
 #endif
 
 } // namespace resample
