@@ -91,7 +91,7 @@ Full details in [`docs/modular_effects_system.md`](modular_effects_system.md).
 ## 4. UI, FT812 Display, Config & Bootloader Gotchas
 
 * **Do Not Shift `Interface::modules[]` Indices ([`core/interface/core/interface.cpp`](../core/interface/core/interface.cpp))**:
-  * UI navigation references `mtInterface.modules[]` by hardcoded index (`modules[9]` = `performanceMode`, `modules[10]` = `imageViewer`, `modules[12]` = `masterParams`). Slot `modules[11]` (formerly the NES emulator `gameModule`) is intentionally kept as `nullptr` so higher indices never shift.
+  * UI navigation references `mtInterface.modules[]` by hardcoded index (`modules[9]` = `performanceMode`, `modules[10]` = `infoViewer`, `modules[12]` = `masterParams`). Slot `modules[11]` (formerly the NES emulator `gameModule`) is intentionally kept as `nullptr` so higher indices never shift.
 * **FT812 Font Buffer Cap (`22,396` Bytes) & Embedded Hardware Icons**:
   * `kMaxFontBufferSize` in [`core/libs/NewDisplay/display.cpp`](../core/libs/NewDisplay/display.cpp) is `22,396` bytes (`decompressedFontsCommonBuffer`). Every individual font slot (both built-in RLE-compressed fonts and `.ptfont` slots on SD) must decompress to `<= 22,396` bytes.
   * **Font Slot 4 (`17px Bold`, FT812 Handle 4)** embeds 8 custom hardware icons at ASCII `0x18..0x1F` (`24..31`: `Pause`, `Stop`, `Play`, `Rec`, `Folder`, `Up-dir`, `Loop`, `Arrow`). If these are missing from a font, transport bar and file browser icons will appear blank.

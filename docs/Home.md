@@ -14,8 +14,8 @@ Welcome to the official documentation for **Polyend Tracker Community Edition (C
   * Complete guide to the 256-shape `WT Env` and `WT LFO` instrument modulators, dual-axis `Warp X/Y` shaping, `w` / `y` pattern step FX, and loading custom `.wav` contours from `/System/Envelopes/`.
 * **[Modular Sample Editor Effects - User & Architecture Guide (`docs/modular_effects_system.md`)](modular_effects_system.md)**
   * Overview of hot-loadable `.ptfx` Sample Editor effects and generators (`/System/Effects/*.ptfx`), bundled reference plugins, and hardware memory/cache architecture.
-* **[SD Card Image Viewer (`docs/image_viewer.md`)](image_viewer.md)**
-  * How to prepare and view up to 48 baseline JPEGs (`800 × 390` px) per folder in `/System/Images/Reference/`, `/System/Images/Notes/`, and `/System/Images/Custom/` under `Config > Info`.
+* **[SD Card Info Viewer (`docs/info_viewer.md`)](info_viewer.md)**
+  * How to prepare and view up to 48 baseline JPEGs (`800 × 390` px) and/or `.txt` pages per folder in `/System/Info/Reference/`, `/System/Info/Notes/`, and `/System/Info/Custom/` under `Config > Info`.
 
 ---
 

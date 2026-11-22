@@ -6,6 +6,7 @@ namespace
 {
 bool s_resolved = false;
 bool s_useHiddenFallback = false;
+uint32_t s_mountGeneration = 1;
 
 void resolveIfNeeded(FileSystem* fs)
 {
@@ -50,6 +51,12 @@ void resetCache()
 {
     s_resolved = false;
     s_useHiddenFallback = false;
+    ++s_mountGeneration;
+}
+
+uint32_t mountGeneration()
+{
+    return s_mountGeneration;
 }
 
 bool ensureDir(FileSystem* fs, const char* path)
@@ -129,9 +136,9 @@ std::string fontsDir(FileSystem* fs)
     return std::string(systemRoot(fs)) + "/Fonts";
 }
 
-std::string imagesDir(FileSystem* fs)
+std::string infoDir(FileSystem* fs)
 {
-    return std::string(systemRoot(fs)) + "/Images";
+    return std::string(systemRoot(fs)) + "/Info";
 }
 
 std::string snapshotsDir(FileSystem* fs)

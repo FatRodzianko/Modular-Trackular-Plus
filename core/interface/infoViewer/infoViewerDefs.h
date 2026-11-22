@@ -1,0 +1,12 @@
+#ifndef INTERFACE_INFOVIEWER_INFOVIEWERDEFS_H_
+#define INTERFACE_INFOVIEWER_INFOVIEWERDEFS_H_
+
+const uint8_t MANUAL_CHAPTERS_COUNT = 3;
+
+const char manualFolderNames[MANUAL_CHAPTERS_COUNT][10] = {
+    "Reference",
+    "Notes",
+    "Custom",
+};
+
+#endif /* INTERFACE_INFOVIEWER_INFOVIEWERDEFS_H_ */

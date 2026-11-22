@@ -1,8 +1,15 @@
 #include "Platform.h"
 #include "Profiler.h"
+#include "SdPaths.h"
+#include "SdTextFile.h"
+#include "TrackerImpl.h"
 #include "configEditor.h"
+#include "cr_section_macros.h"
 #include "mtGridEditor.h"
 #include "mtPadsBacklight.h"
+
+__NOINIT(EXTERNAL_RAM) static char s_configHintBuf[640];
+__NOINIT(EXTERNAL_RAM) static char s_aboutTextBuf[2048];
 
 static const uint16_t framesPlacesConfig[4][4] = {
     { (800 / 8) * 0 + 1, 31, 800 / 4 - 3, 391 },
@@ -23,18 +30,7 @@ static const uint16_t framesPlacesConfigGridScreen[3][4] = {
     { (800 / 8) * 2 + 1, 424, 800 / 8 - 3, 55 }
 };
 
-const char creditsText[] = {
-    "Polyend Tracker Community Edition (CE)"
-    "\nLicensed under the MIT License"
-    "\n(No Wholesale Commercial Clones; see LICENSE)."
-    "\n"
-    "\nAll provided demo projects and samples are under a CC BY-NC 4.0 license."
-    "\n"
-    "\nMore licenses can be found at github.com/polyend/tracker-ce"
-    "\nand polyend.com/licenses"
-    "\n\n\n\n\n\n\n\n\n\n\n\n\n"
-    "Sandroid was here ;)"
-};
+static constexpr const char kAboutFallbackText[] = "Polyend Tracker Community Edition (CE)";
 
 void cConfigEditor::initDisplayControls()
 {
@@ -470,14 +466,28 @@ void cConfigEditor::hideConfigItemLabel()
 
 void cConfigEditor::showConfigItemDesctription(const char* text)
 {
-    if (text == nullptr)
+    bool loaded = false;
+    if (text != nullptr && text[0] != '\0')
+    {
+        auto* tracker = TrackerImpl::getInstance();
+        auto* platform = (tracker != nullptr) ? tracker->getPlatform() : nullptr;
+        FileSystem* fs = (platform != nullptr) ? platform->getFileSystem() : nullptr;
+        if (fs != nullptr && fs->isSdCardInserted())
+        {
+            std::string path = SdPaths::textDir(fs) + "/config_hints.txt";
+            loaded = SdTextFile::readSection(
+              fs, path.c_str(), text, s_configHintBuf, sizeof(s_configHintBuf));
+        }
+    }
+
+    if (!loaded || s_configHintBuf[0] == '\0')
     {
         display.setControlHide(descriptionTextBox);
     }
     else
     {
         display.setControlShow(descriptionTextBox);
-        display.setControlText(descriptionTextBox, text);
+        display.setControlText(descriptionTextBox, s_configHintBuf);
     }
 
     display.refreshControl(descriptionTextBox);
@@ -638,8 +648,25 @@ void cConfigEditor::showCreditsControls()
 
     display.setControlHide(bgLabel);
 
+    const char* aboutPtr = kAboutFallbackText;
+    auto* tracker = TrackerImpl::getInstance();
+    auto* platform = (tracker != nullptr) ? tracker->getPlatform() : nullptr;
+    FileSystem* fs = (platform != nullptr) ? platform->getFileSystem() : nullptr;
+    if (fs != nullptr && fs->isSdCardInserted())
+    {
+        std::string aboutPath = SdPaths::infoDir(fs) + "/about.txt";
+        if (SdTextFile::readAll(fs, aboutPath.c_str(), s_aboutTextBuf, sizeof(s_aboutTextBuf)))
+        {
+            SdTextFile::stripCr(s_aboutTextBuf);
+            if (s_aboutTextBuf[0] != '\0')
+            {
+                aboutPtr = s_aboutTextBuf;
+            }
+        }
+    }
+
     display.setControlShow(creditsTextBox);
-    display.setControlText(creditsTextBox, creditsText);
+    display.setControlText(creditsTextBox, aboutPtr);
     display.refreshControl(creditsTextBox);
 
     display.synchronizeRefresh();

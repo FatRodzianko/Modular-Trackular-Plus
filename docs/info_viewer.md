@@ -1,46 +1,48 @@
-# SD Card Image Viewer (`Config > Info`)
+# SD Card Info Viewer (`Config > Info`)
 
-The **Polyend Tracker Community Edition (CE)** reactivates the hardware's built-in FT812 JPEG image viewer across all three devices (**Original Tracker**, **Tracker+**, and **Tracker Mini**) and expands it into a **3-folder user image viewer** accessible under **`Config > Info`**.
+The **Polyend Tracker Community Edition (CE)** provides a **3-folder Info Viewer** accessible under **`Config > Info`** across all three devices (**Original Tracker**, **Tracker+**, and **Tracker Mini**), supporting both **Baseline JPEG images** (`.jpg` / `.jpeg`) and **plain-text notes** (`.txt`) in the same folders.
 
 Use it to store hardware synth/MIDI CC charts, music theory and scale references, live setlists, track notes, or custom artwork right on your microSD card.
 
 ---
 
-## 1. Accessing the Image Viewer
+## 1. Accessing the Info Viewer
 
 1. Open **Config** (`[Shift] + [Master]` or via the module menu).
 2. Select **`Info`** in the left column.
 3. Choose one of the four entries:
-   - **`About`** - Displays the firmware version, license info, and credits.
-   - **`Reference`** - Opens images from `/System/Images/Reference/`
-   - **`Notes`** - Opens images from `/System/Images/Notes/`
-   - **`Custom`** - Opens images from `/System/Images/Custom/`
+   - **`About`** - Displays editable text from `/System/Info/about.txt` (firmware license info & credits).
+   - **`Reference`** - Opens images and `.txt` pages from `/System/Info/Reference/`
+   - **`Notes`** - Opens images and `.txt` pages from `/System/Info/Notes/`
+   - **`Custom`** - Opens images and `.txt` pages from `/System/Info/Custom/`
 
 ---
 
 ## 2. SD Card Folder Structure & File Naming
 
-Create an `Images` directory at the root of your microSD card with any of the three supported subfolders (`Reference`, `Notes`, `Custom`):
+Place your pages inside `/System/Info/` (or `/.system/Info/` if using the hidden system root) in any of the three supported subfolders (`Reference`, `Notes`, `Custom`):
 
 ```text
 SD Card Root/
-└── Images/
-    ├── Reference/
-    │   ├── 1.jpg
-    │   ├── 2.jpg
-    │   └── ... (up to 48.jpg)
-    ├── Notes/
-    │   ├── 1.jpg
-    │   └── ... (up to 48.jpg)
-    └── Custom/
-        ├── 1.jpg
-        └── ... (up to 48.jpg)
+└── System/
+    └── Info/
+        ├── Reference/
+        │   ├── 1.jpg
+        │   ├── 2.txt
+        │   └── ... (up to 48.jpg / 48.txt)
+        ├── Notes/
+        │   ├── 1.txt
+        │   └── ... (up to 48.txt)
+        └── Custom/
+            ├── 1.jpg
+            └── ... (up to 48.jpg)
 ```
 
 ### File Naming Rules
-- Name your files **`1.jpg`** through **`48.jpg`** (or **`1.jpeg`** through **`48.jpeg`**).
-- Each folder supports up to **48 images**, corresponding directly to **Pads `1`–`48`** on the desktop Tracker / Tracker+.
-- Numbering does not need to be contiguous (for example, if you only place `1.jpg`, `5.jpg`, and `10.jpg`, the Left/Right buttons and Jog-wheel will cycle cleanly through those three images, while pressing Pad 5 jumps directly to `5.jpg`).
+- Name your files **`1.jpg`**, **`1.jpeg`**, or **`1.txt`** through **`48.*`**.
+- Each folder supports up to **48 pages** (mixing images and text freely), corresponding directly to **Pads `1`–`48`** on the desktop Tracker / Tracker+.
+- Numbering does not need to be contiguous (for example, if you only place `1.jpg`, `5.txt`, and `10.jpg`, the Left/Right buttons and Jog-wheel will cycle cleanly through those three pages, while pressing Pad 5 jumps directly to `5.txt`).
+- Plain-text `.txt` pages support up to **`2 KB`** per file (CRLF `\r\n` and LF `\n` line endings are both supported).
 
 ---
 

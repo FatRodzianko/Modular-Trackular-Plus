@@ -260,7 +260,7 @@ class cDisplay
     uint32_t screenShotTimer = false;
 };
 
-extern uint32_t ImageViewerJpegAddress;
+extern uint32_t InfoViewerJpegAddress;
 extern cDisplay display;
 
 #endif
