@@ -83,10 +83,15 @@
 	* **Instant `Shift + Init Patch` Randomization**: Holding **`[Shift]`** inside the **Synth Patch Editor** swaps Button 2 from **`Init / Patch`** to **`Randomize / Patch`**.
 	* **Engine-Owned Randomizer Hook**: Extended the Synth Engine SDK so all randomization logic can live inside the individual synth engine. Implemented curated patch randomizers across all bundled factory synths. See [`docs/custom_synth_sdk.md`](docs/custom_synth_sdk.md).
 
+18. **SD-Card Offloading for Config & FX Help Descriptions, Editable `Info` Text & Secondary Font Offload (All 3 Devices)**
+	* Moved Config menu descriptions, Step FX help descriptions, and `Info → About` text out of firmware Flash into human-readable files at `/System/Text/config_hints.txt`, `/System/Text/fx_hints.txt`, and `/System/Info/about.txt`. Initial files provided in [`sd-card/System/`](sd-card/System/)).
+	* Renamed the `ImageViewer` to `InfoViewer`. New folders are in `/System/Info/` and enhanced it to support `.txt` pages (`1.txt`–`48.txt`, up to `2 KB` each) alongside baseline `.jpg`/`.jpeg` images.
+	* Moved the secondary `"New"` (`Liberation Sans`) UI font out of firmware Flash into [`sd-card/System/Fonts/New.ptfont`](sd-card/System/Fonts/New.ptfont), keeping `"Original"` built-in as the fallback. Together, these offloads reclaim `~46.5–47.2 KB` of Flash across all 3 devices (bringing Original Tracker free Flash to `~143.8 KB`).
+
 ### Changed & Fixed
 
 * **Unified `/System/` SD Card Layout & Hidden `/.system/` Support (All 3 Devices)**:
-	* Consolidated firmware-managed assets, plugins, synth data, and IMX config (`Effects`, `Envelopes`, `Fonts`, `Images`, `Snapshots`, `Synths/{Patches,Samples,*.psyn}`, `Text`, `Themes`, and `trackerConfig`) under `/System/` (automatically using `/.system/` if `/System/` is absent and `/.system/` exists; IMX reads legacy `/trackerConfig` as a fallback).
+	* Consolidated firmware-managed assets, plugins, synth data, and IMX config (`Effects`, `Envelopes`, `Fonts`, `Info`, `Snapshots`, `Synths/{Patches,Samples,*.psyn}`, `Text`, `Themes`, and `trackerConfig`) under `/System/` (automatically using `/.system/` if `/System/` is absent and `/.system/` exists; IMX reads legacy `/trackerConfig` as a fallback).
 	* Defaulted Sample Editor WAV load/export and Instrument Editor `.pti` save browsers to `/`, and made leading-dot files/folders (such as `.system` and `.Trash-1000`) consistently hidden in both Sample Loader and `GlobalFileBrowser`.
 	* Removed leftover dead `Games` browsing code from `FileManager` and SD drivers (~1.3 KB Flash reclaimed).
 

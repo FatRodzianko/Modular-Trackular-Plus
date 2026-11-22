@@ -18,7 +18,7 @@ __NOINIT(EXTERNAL_RAM) const char* ThemeManager::themeNamePointers[ThemeManager:
 __NOINIT(EXTERNAL_RAM) char ThemeManager::themeFilePaths[ThemeManager::kMaxCustomThemes][ThemeManager::kMaxFilePathLength];
 uint8_t ThemeManager::currentThemeIndex = 0;
 
-uint8_t ThemeManager::fontCount = 2;
+uint8_t ThemeManager::fontCount = 1;
 __NOINIT(EXTERNAL_RAM) char ThemeManager::fontNames[ThemeManager::kMaxCustomFonts][ThemeManager::kMaxNameLength];
 __NOINIT(EXTERNAL_RAM) const char* ThemeManager::fontNamePointers[ThemeManager::kMaxCustomFonts];
 __NOINIT(EXTERNAL_RAM) char ThemeManager::fontFilePaths[ThemeManager::kMaxCustomFonts][ThemeManager::kMaxFilePathLength];
@@ -47,9 +47,7 @@ void ThemeManager::ensureDefaultsInitialized()
     themeNamePointers[2] = themeNames[2];
 
     strcpy(fontNames[0], "Original");
-    strcpy(fontNames[1], "New");
     fontNamePointers[0] = fontNames[0];
-    fontNamePointers[1] = fontNames[1];
 }
 
 static bool hasExtension(const char* filename, const char* ext)
@@ -1407,9 +1405,8 @@ void ThemeManager::scanThemes()
 void ThemeManager::scanFonts()
 {
     ensureDefaultsInitialized();
-    fontCount = 2;
+    fontCount = 1;
     fontNamePointers[0] = fontNames[0];
-    fontNamePointers[1] = fontNames[1];
 
     FileSystem* fs = platform ? platform->getFileSystem() : nullptr;
     std::string fontsSlash = SdPaths::fontsDir(fs);
@@ -1518,10 +1515,11 @@ const char* ThemeManager::getCurrentFontName()
 
 bool ThemeManager::applyFont(uint8_t index)
 {
-    if (index < 2)
+    ensureDefaultsInitialized();
+    if (index == 0)
     {
-        currentFontIndex = index;
-        display.setFont(index);
+        currentFontIndex = 0;
+        display.setFont(0);
         return true;
     }
 

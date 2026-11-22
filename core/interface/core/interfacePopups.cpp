@@ -892,7 +892,7 @@ void InterfacePopups::changeStepPopupValue(int16_t value, InterfacePopups::Popup
 
 void InterfacePopups::refreshFxDescription()
 {
-    display.setControlValue(textBox, 10);
+    display.setControlValue(textBox, 3);
     display.setControlText(textBox, interfaceGlobals.fxDescPtr(selectedActualItem));
     // display.setControlShow(textBox);
     display.refreshControl(textBox);

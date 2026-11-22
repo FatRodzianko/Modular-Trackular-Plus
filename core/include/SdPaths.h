@@ -22,6 +22,9 @@ const char* systemRootRel(FileSystem* fs);
 // Clears the cached system root (call on SD unmount / remount).
 void resetCache();
 
+// Monotonically incremented each time resetCache() is called (SD unmount / remount).
+uint32_t mountGeneration();
+
 // Recursively ensures all directory segments in `path` exist (leading slash optional).
 bool ensureDir(FileSystem* fs, const char* path);
 bool ensureDir(FileSystem* fs, const std::string& path);
@@ -30,7 +33,7 @@ std::string effectsDir(FileSystem* fs);
 std::string effectPresetsDir(FileSystem* fs, const std::string& sanitizedPluginName);
 std::string envelopesDir(FileSystem* fs);
 std::string fontsDir(FileSystem* fs);
-std::string imagesDir(FileSystem* fs);
+std::string infoDir(FileSystem* fs);
 std::string snapshotsDir(FileSystem* fs);
 std::string synthsDir(FileSystem* fs);
 std::string synthPatchesDir(FileSystem* fs);

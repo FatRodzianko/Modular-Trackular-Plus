@@ -1,9 +1,9 @@
-#ifndef INTERFACE_IMAGEVIEWER_H_
-#define INTERFACE_IMAGEVIEWER_H_
+#ifndef INTERFACE_INFOVIEWER_H_
+#define INTERFACE_INFOVIEWER_H_
 
 #include "core/modulesBase.h"
 
-class cImageViewer : public ModuleBase
+class cInfoViewer : public ModuleBase
 {
 
   public:
@@ -14,8 +14,8 @@ class cImageViewer : public ModuleBase
     virtual void initDisplayControls();
     virtual void destroyDisplayControls() {}
 
-    cImageViewer() {}
-    ~cImageViewer() {}
+    cInfoViewer() {}
+    ~cInfoViewer() {}
 
     //----------------------------------
     void setDefaultScreenFunct();
@@ -23,11 +23,19 @@ class cImageViewer : public ModuleBase
 
     //----------------------------------
 
+    enum class PageType : uint8_t
+    {
+        kNone = 0,
+        kImage,
+        kText,
+    };
+
     void refreshImage();
     void countImages();
     void nextImage();
     void previouseImage();
     void setImage(uint8_t number);
+    PageType getPageType(uint8_t number);
     bool imageExists(uint8_t number);
 
     char titleText[40];
@@ -49,6 +57,6 @@ class cImageViewer : public ModuleBase
     char actualFolderName[12];
 };
 
-extern cImageViewer imageViewer;
+extern cInfoViewer infoViewer;
 
-#endif /* INTERFACE_IMAGEVIEWER_H_ */
+#endif /* INTERFACE_INFOVIEWER_H_ */

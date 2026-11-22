@@ -6,7 +6,7 @@
 #### User Guides
 * **[Custom Themes & Fonts](custom_themes_and_fonts)**
 * **[Wavetable Envelopes & LFOs](wavetable_envelopes)**
-* **[SD Card Image Viewer](image_viewer)**
+* **[SD Card Info Viewer](info_viewer)**
 * **[Modular Effects (.ptfx)](modular_effects_system)**
 
 #### Developer & SDK Guides

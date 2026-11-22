@@ -1,6 +1,6 @@
-#include "imageViewer/imageViewer.h"
+#include "infoViewer/infoViewer.h"
 
-void cImageViewer::initDisplayControls()
+void cInfoViewer::initDisplayControls()
 {
     doubleArrow[0].bitmaps[0].bitmapIndex = displayDoubleArrowL;
     doubleArrow[0].bitmaps[0].xValue = (800 / 8) * 0 + (800 / 16);
@@ -38,7 +38,7 @@ void cImageViewer::initDisplayControls()
 
     prop.text = nullptr;
     prop.style = 0;
-    prop.value = ImageViewerJpegAddress;
+    prop.value = InfoViewerJpegAddress;
     prop.x = 0;
     prop.y = 29;
     prop.w = 800;
@@ -58,7 +58,7 @@ void cImageViewer::initDisplayControls()
     infoTextBox = display.createControl<cTextBox>(&prop3);
 }
 
-void cImageViewer::showDefaultScreen()
+void cInfoViewer::showDefaultScreen()
 {
     for (uint8_t i = 0; i < 8; i++)
     {

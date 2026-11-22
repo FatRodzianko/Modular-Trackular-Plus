@@ -1,4 +1,4 @@
-#include "imageViewer.h"
+#include "infoViewer.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -8,16 +8,17 @@
 #include "mtPadsBacklight.h"
 
 #include "core/interfaceMenuPopup.h"
-#include "imageViewerDefs.h"
+#include "infoViewerDefs.h"
 
 #include "core/songTimer.h"
 
 #include "SdPaths.h"
+#include "SdTextFile.h"
 #include "TrackerImpl.h"
 #include "cr_section_macros.h"
 
-cImageViewer imageViewer;
-static cImageViewer* IV = &imageViewer;
+cInfoViewer infoViewer;
+static cInfoViewer* IV = &infoViewer;
 
 static void functPlayAction();
 static void functRecAction();
@@ -35,10 +36,10 @@ static void functPads(uint8_t pad, uint8_t state, int16_t velo);
 
 static void functMenu(uint8_t state);
 
-__NOINIT(EXTERNAL_RAM) static char s_infoText[256];
+__NOINIT(EXTERNAL_RAM) static char s_infoText[2048];
 static void functMiniMiddle();
 
-void cImageViewer::update()
+void cInfoViewer::update()
 {
     if (refreshImageState == 1)
     {
@@ -48,12 +49,12 @@ void cImageViewer::update()
             char path[80];
             snprintf(path,
                      sizeof(path),
-                     "%s/Images/%s/%d",
+                     "%s/Info/%s/%d",
                      SdPaths::systemRootRel(fileSystem),
                      actualFolderName,
                      imageNumber);
 
-            if (display.readImgFromSd(path, ImageViewerJpegAddress, 800, 390))
+            if (display.readImgFromSd(path, InfoViewerJpegAddress, 800, 390))
             {
                 refreshImageState = 0;
                 display.setControlHide(image);
@@ -75,7 +76,7 @@ void cImageViewer::update()
     }
 }
 
-void cImageViewer::start(uint32_t options)
+void cInfoViewer::start(uint32_t options)
 {
     moduleRefresh = 1;
 
@@ -110,7 +111,7 @@ void cImageViewer::start(uint32_t options)
     refreshImage();
 }
 
-void cImageViewer::stop()
+void cInfoViewer::stop()
 {
     moduleRefresh = 0;
     display.setControlHide(image);
@@ -121,7 +122,7 @@ void cImageViewer::stop()
     songTimer.show();
 }
 
-void cImageViewer::setDefaultScreenFunct()
+void cInfoViewer::setDefaultScreenFunct()
 {
     ip->clearButtonsRange(interfaceButton0, interfaceButton7);
     ip->clearAllPots();
@@ -147,23 +148,44 @@ void cImageViewer::setDefaultScreenFunct()
     ip->setPadsGlobal(functPads);
 }
 
-bool cImageViewer::imageExists(uint8_t number)
+cInfoViewer::PageType cInfoViewer::getPageType(uint8_t number)
 {
     FileSystem* fileSystem = TrackerImpl::getInstance()->getPlatform()->getFileSystem();
+    if (fileSystem == nullptr || !fileSystem->isSdCardInserted())
+    {
+        return PageType::kNone;
+    }
+
     const char* sysRoot = SdPaths::systemRootRel(fileSystem);
     char path[80];
 
-    snprintf(path, sizeof(path), "%s/Images/%s/%d.jpg", sysRoot, actualFolderName, number);
+    snprintf(path, sizeof(path), "%s/Info/%s/%d.jpg", sysRoot, actualFolderName, number);
     if (fileSystem->exists(path))
     {
-        return true;
+        return PageType::kImage;
     }
 
-    snprintf(path, sizeof(path), "%s/Images/%s/%d.jpeg", sysRoot, actualFolderName, number);
-    return fileSystem->exists(path);
+    snprintf(path, sizeof(path), "%s/Info/%s/%d.jpeg", sysRoot, actualFolderName, number);
+    if (fileSystem->exists(path))
+    {
+        return PageType::kImage;
+    }
+
+    snprintf(path, sizeof(path), "%s/Info/%s/%d.txt", sysRoot, actualFolderName, number);
+    if (fileSystem->exists(path))
+    {
+        return PageType::kText;
+    }
+
+    return PageType::kNone;
 }
 
-void cImageViewer::refreshImage()
+bool cInfoViewer::imageExists(uint8_t number)
+{
+    return getPageType(number) != PageType::kNone;
+}
+
+void cInfoViewer::refreshImage()
 {
     if (imagesCount == 0)
     {
@@ -184,12 +206,10 @@ void cImageViewer::refreshImage()
         const char* sysRoot = SdPaths::systemRoot(fileSystem);
         snprintf(s_infoText,
                  sizeof(s_infoText),
-                 "No images found in %s/Images/%s/"
-                 "\n\nPlace up to 48 baseline JPEG images (max 800 x 390 px) in:"
-                 "\n%s/Images/%s/1.jpg ... %s/Images/%s/48.jpg"
-                 "\n\nUse Left/Right, the Jog-wheel, or Pads 1-48 to switch images.",
-                 sysRoot,
-                 actualFolderName,
+                 "No pages found in %s/Info/%s/"
+                 "\n\nPlace up to 48 baseline JPEG images (max 800 x 390 px) or .txt files in:"
+                 "\n%s/Info/%s/1.jpg (or 1.txt) ... 48.jpg (or 48.txt)"
+                 "\n\nUse Left/Right, the Jog-wheel, or Pads 1-48 to switch pages.",
                  sysRoot,
                  actualFolderName,
                  sysRoot,
@@ -203,9 +223,6 @@ void cImageViewer::refreshImage()
     {
         snprintf(titleText, sizeof(titleText), "%s %d/%d", actualFolderName, imageNumber, imagesCount);
 
-        display.setControlHide(infoTextBox);
-        display.setControlHide(image);
-
         display.setControlText(label[6], "Close");
         display.setControlText(label[7], "");
         display.setAddControlStyle(label[0], controlStyleShowBitmap);
@@ -214,8 +231,40 @@ void cImageViewer::refreshImage()
         display.refreshControl(label[6]);
         display.refreshControl(label[7]);
 
-        refreshImageState = 1;
-        display.processDisplayUpdateImmediate();
+        if (getPageType(imageNumber) == PageType::kText)
+        {
+            refreshImageState = 0;
+            display.setControlHide(image);
+            display.refreshControl(image);
+
+            FileSystem* fileSystem = TrackerImpl::getInstance()->getPlatform()->getFileSystem();
+            char path[80];
+            snprintf(path,
+                     sizeof(path),
+                     "%s/Info/%s/%d.txt",
+                     SdPaths::systemRootRel(fileSystem),
+                     actualFolderName,
+                     imageNumber);
+
+            s_infoText[0] = '\0';
+            if (SdTextFile::readAll(fileSystem, path, s_infoText, sizeof(s_infoText)))
+            {
+                SdTextFile::stripCr(s_infoText);
+            }
+
+            display.setControlShow(infoTextBox);
+            display.setControlText(infoTextBox, s_infoText);
+            display.refreshControl(infoTextBox);
+        }
+        else
+        {
+            display.setControlHide(infoTextBox);
+            display.refreshControl(infoTextBox);
+            display.setControlHide(image);
+
+            refreshImageState = 1;
+            display.processDisplayUpdateImmediate();
+        }
     }
 
     titleBar->show();
@@ -223,7 +272,7 @@ void cImageViewer::refreshImage()
     display.synchronizeRefresh();
 }
 
-void cImageViewer::nextImage()
+void cInfoViewer::nextImage()
 {
     if (imagesCount <= 1)
     {
@@ -246,7 +295,7 @@ void cImageViewer::nextImage()
     } while (imageNumber != loop_start);
 }
 
-void cImageViewer::previouseImage()
+void cInfoViewer::previouseImage()
 {
     if (imagesCount <= 1)
     {
@@ -269,7 +318,7 @@ void cImageViewer::previouseImage()
     } while (imageNumber != loop_start);
 }
 
-void cImageViewer::countImages()
+void cInfoViewer::countImages()
 {
     imagesCount = 0;
     int firstFound = 1;
@@ -289,7 +338,7 @@ void cImageViewer::countImages()
     imageNumber = firstFound;
 }
 
-void cImageViewer::setImage(uint8_t number)
+void cInfoViewer::setImage(uint8_t number)
 {
     if (imagesCount == 0)
     {
