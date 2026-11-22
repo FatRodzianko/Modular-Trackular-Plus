@@ -169,10 +169,7 @@ class SdDir
                              char** list,
                              uint8_t list_length,
                              uint16_t max_used_memory,
-                             enListFileFilter filter = enListFileFilter_all,
-                             uint16_t skip_count = 0,
-                             uint16_t max_files_in_subdir = 0,
-                             enListFileFilter folderSizeFilter = enListFileFilter_all);
+                             enListFileFilter filter = enListFileFilter_all);
 
     uint16_t createInstrumentsList(char** list, uint8_t list_length, uint32_t* sizeOut);
     uint16_t countContainedFiles();
@@ -182,7 +179,6 @@ class SdDir
     char dir_path[255]{ 0 };
 
     bool filterFileEntry(const FILINFO& fno, enListFileFilter filter);
-    uint16_t countFilesInSubDirectory(const char* dir_name, enListFileFilter filter);
 };
 
 extern SdCard SD;

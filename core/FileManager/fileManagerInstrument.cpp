@@ -1143,7 +1143,9 @@ void cFileManager::removeWavExtensionFromName(char* fileName)
     }
 }
 
-void cFileManager::copySampleNameWithoutExtension(char* sampleName, char* fileName, int maxLength)
+void cFileManager::copySampleNameWithoutExtension(char* sampleName,
+                                                  const char* fileName,
+                                                  int maxLength)
 {
     strncpy(sampleName, fileName, maxLength);
     sampleName[maxLength] = 0;

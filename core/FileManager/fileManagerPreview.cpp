@@ -6,7 +6,7 @@
 
 #include "mtAudioEngine.h"
 
-bool cFileManager::previevSamplefromSD(uint8_t index, uint16_t from, uint16_t to)
+bool cFileManager::previevSamplefromSD(const char* filePath, uint16_t from, uint16_t to)
 {
     stopAutosave();
 
@@ -15,13 +15,8 @@ bool cFileManager::previevSamplefromSD(uint8_t index, uint16_t from, uint16_t to
     if (currentOperation != fmNoOperation && currentOperation != fmSaveWorkspaceProject)
         return false;
 
-    if (explorerList[index][0] == '/')
+    if (filePath == nullptr || filePath[0] == '\0')
         return false;
-
-    char filePath[255];
-    strcpy(filePath, explorerCurrentPath);
-    strcat(filePath, "/");
-    strcat(filePath, explorerList[index]);
 
     if (!fileSystem->exists(filePath))
         return false;

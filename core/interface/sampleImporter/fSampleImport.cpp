@@ -17,8 +17,45 @@
 
 #include <cr_section_macros.h>
 
+extern uint8_t externalRamScratchBuff[];
+
 __NOINIT(EXTERNAL_RAM) strTrackerSpectrum cSampleImporter::spectrum[2];
-__NOINIT(EXTERNAL_RAM) uint8_t cSampleImporter::selectionTab[2][cSampleImporter::maxListLength];
+__NOINIT(EXTERNAL_RAM) uint8_t cSampleImporter::instrumentSelectionTab[kSampleInstrumentsCount];
+// Raw aligned storage avoids a static constructor writing to EXTERNAL_RAM (0x70000000)
+// during .init_array before MK66 ExternalSdram::init() runs in setup().
+__NOINIT(EXTERNAL_RAM)
+alignas(FileBrowserData) static uint8_t s_browserDataStorage[sizeof(FileBrowserData)];
+
+FileBrowserData& cSampleImporter::browserData()
+{
+    return *reinterpret_cast<FileBrowserData*>(s_browserDataStorage);
+}
+
+namespace
+{
+// Top 448 KB of externalRamScratchBuff ([320 KB .. 768 KB]), strictly above
+// sdStream's [0 .. 320 KB] audio preview window.
+static constexpr uint32_t kSdStreamReservedBytes = 320 * 1024;
+static constexpr uint32_t kTotalSampleLoaderScratchBytes = 448 * 1024;
+static constexpr uint32_t kSampleLoaderScratchBaseOffset =
+  SHARED_SCRATCH_MEMORY_SIZE - kTotalSampleLoaderScratchBytes;
+
+static constexpr uint32_t kExplorerPtrsBytes =
+  cSampleImporter::kMaxExplorerEntries * sizeof(char*); // 32 KB
+static constexpr uint32_t kFileSelectionBytes =
+  cSampleImporter::kMaxExplorerEntries * sizeof(uint8_t); // 8 KB
+static constexpr uint32_t kFileNamesPoolBytes =
+  kTotalSampleLoaderScratchBytes - kExplorerPtrsBytes - kFileSelectionBytes; // 408 KB
+
+static_assert(kSampleLoaderScratchBaseOffset >= kSdStreamReservedBytes,
+              "Sample Loader scratch overlaps sdStream audio preview buffer");
+static_assert(kExplorerPtrsBytes == 32 * 1024, "Expected 32 KB pointer table");
+static_assert(kFileSelectionBytes == 8 * 1024, "Expected 8 KB selection bitmap");
+static_assert(kFileNamesPoolBytes == 408 * 1024, "Expected 408 KB packed string pool");
+static_assert(kSampleLoaderScratchBaseOffset + kTotalSampleLoaderScratchBytes <=
+                SHARED_SCRATCH_MEMORY_SIZE,
+              "Sample Loader scratch exceeds SHARED_SCRATCH_MEMORY_SIZE");
+} // namespace
 
 cSampleImporter sampleImporter;
 static cSampleImporter* SI = &sampleImporter;
@@ -93,24 +130,7 @@ void cSampleImporter::update()
 {
     uint8_t managerStatus = newFileManager.getStatus();
 
-    if (managerStatus == fmBrowseSamplesEnd)
-    {
-        locationExplorerCount =
-          newFileManager.getBrowsedFilesList(&explorerNames, &currentFolderMemoryFileUsage);
-
-        showFilesTree();
-        handleMemoryBar();
-
-        cancelSelect(listFiles);
-        setSelect();
-
-        refreshActionButtons();
-
-        ip->unblockAllInputs();
-
-        newFileManager.clearStatus();
-    }
-    else if (managerStatus == fmDrawingSampleWaveformEnd)
+    if (managerStatus == fmDrawingSampleWaveformEnd)
     {
         refreshSpectrum = 1;
         refreshPoints = 1;
@@ -241,6 +261,83 @@ void cSampleImporter::update()
     }
 }
 
+void cSampleImporter::bindExplorerScratch()
+{
+    uint8_t* cursor = externalRamScratchBuff + kSampleLoaderScratchBaseOffset;
+    explorerNames = reinterpret_cast<char**>(cursor);
+    cursor += kExplorerPtrsBytes;
+    fileSelectionTab = cursor;
+    cursor += kFileSelectionBytes;
+    char* namesPool = reinterpret_cast<char*>(cursor);
+
+    FileBrowserData& bd = browserData();
+
+    if (!browserInitialized)
+    {
+        memset(&bd, 0, sizeof(bd));
+        bd.currentPath[0] = '\0';
+        browserInitialized = true;
+    }
+
+    bd.mode = kSamplesBrowser;
+    bd.selectionEnabled = false;
+    bd.selectionList = nullptr;
+    bd.maxFileNameLen = kMaxFileNameLen;
+    bd.maxBrowserListLen = kMaxExplorerEntries;
+    bd.fileNamesBuffer = namesPool;
+    bd.fileNamesBufferSize = static_cast<int>(kFileNamesPoolBytes);
+    bd.defaultPath = "";
+    bd.customExtension = "wav;pti";
+    bd.packageMarkerFile = nullptr;
+    bd.browserList = explorerNames;
+
+    memset(fileSelectionTab, 0, kFileSelectionBytes);
+}
+
+void cSampleImporter::refreshExplorerList(bool preserveCursor)
+{
+    FileSystem* fs = newFileManager.getFileSystem();
+    if (fs == nullptr)
+    {
+        locationExplorerCount = 0;
+        selectedFile = 0;
+        return;
+    }
+
+    FileBrowserData& bd = browserData();
+
+    if (bd.currentPath[0] != '\0' && !fs->exists(bd.currentPath))
+    {
+        bd.currentPath[0] = '\0';
+        selectedFile = 0;
+        preserveCursor = false;
+    }
+
+    uint16_t prevSelected = selectedFile;
+    bd.browserListPosition = preserveCursor ? prevSelected : 0;
+    fileBrowser.start(fs, &bd);
+
+    locationExplorerCount = static_cast<uint16_t>(bd.browserListLength);
+    if (locationExplorerCount == 0)
+    {
+        selectedFile = 0;
+    }
+    else if (preserveCursor)
+    {
+        selectedFile =
+          static_cast<uint16_t>(clamp<int>(prevSelected, 0, locationExplorerCount - 1));
+    }
+    else
+    {
+        selectedFile =
+          static_cast<uint16_t>(clamp<int>(bd.browserListPosition, 0, locationExplorerCount - 1));
+    }
+    bd.browserListPosition = selectedFile;
+
+    dirGeneration++;
+    memUsageCacheFileIdx = 0xFFFF;
+}
+
 void cSampleImporter::start(uint32_t options)
 {
     moduleRefresh = 1;
@@ -269,26 +366,13 @@ void cSampleImporter::start(uint32_t options)
         mtProject.values.lastUsedInstrument = selectedSlot;
     }
 
-    // przeladuj pierwszy raz xxx trzeba to popawic
-    if (locationExplorerCount == 0 || interfaceGlobals.refreshFileExplorer)
-    {
-        interfaceGlobals.refreshFileExplorer = false;
+    interfaceGlobals.refreshFileExplorer = false;
+    bindExplorerScratch();
+    refreshExplorerList(true);
 
-        if (newFileManager.browseSdCard(nullptr))
-        {
-            SI->ip->blockAllInputs();
-        }
-    }
-    else
-    {
-        showFilesTree();
-        handleMemoryBar();
-
-        cancelSelect(listFiles);
-        setSelect();
-
-        // refreshActionButtons();
-    }
+    setSelect();
+    showFilesTree();
+    handleMemoryBar();
 
     listInstrumentSlots();
     showInstrumentsList();
@@ -312,6 +396,7 @@ void cSampleImporter::start(uint32_t options)
     showDefaultScreen();
     setDefaultScreenFunct();
 
+    cancelSelect(listFiles);
     cancelSelect(listInstruments);
 
     updateSelection();
@@ -325,6 +410,11 @@ void cSampleImporter::stop()
     mtPopups.hideInfoPopup();
 
     stopPlayingAll();
+
+    explorerNames = nullptr;
+    fileSelectionTab = nullptr;
+    explorerList.data = nullptr;
+    explorerList.selectTab = nullptr;
 
     moduleRefresh = 0;
 }
@@ -387,9 +477,10 @@ static void instrumentAdd(bool addNext)
 
     SI->playFromPads(INTERFACE_BUTTON_PREVIEW, buttonRelease, -1);
 
-    uint8_t replaceStart = SI->getSelectionStart(listInstruments);
-    uint8_t replaceEnd =
-      replaceStart + (SI->getSelectionEnd(listFiles) - SI->getSelectionStart(listFiles));
+    uint16_t fileSelStart = static_cast<uint16_t>(SI->getSelectionStart(listFiles));
+    uint16_t fileSelEnd = static_cast<uint16_t>(SI->getSelectionEnd(listFiles));
+    uint16_t replaceStart = static_cast<uint16_t>(SI->getSelectionStart(listInstruments));
+    uint16_t replaceEnd = replaceStart + (fileSelEnd - fileSelStart);
 
     if (replaceEnd >= kSampleInstrumentsCount)
     {
@@ -573,8 +664,14 @@ static void functImportAndReplaceInstrumentConfirm()
     SI->upperData.push_back(SI->spectrum[1].upperData);
 #endif
 
-    bool result = newFileManager.drawSampleWaveform(
-      SI->getSelectionStart(listFiles), SI->lowerData, SI->upperData);
+    char filePath[PATCH_SIZE];
+    if (!SI->buildEntryPath(
+          static_cast<uint16_t>(SI->getSelectionStart(listFiles)), filePath, sizeof(filePath)))
+    {
+        return;
+    }
+
+    bool result = newFileManager.drawSampleWaveform(filePath, SI->lowerData, SI->upperData);
 
     if (result)
     {
@@ -682,14 +779,21 @@ static void functImportStreamApply()
 
 void cSampleImporter::importPartOfSample()
 {
-    uint8_t selStart = getSelectionStart(listFiles);
+    uint16_t selStart = static_cast<uint16_t>(getSelectionStart(listFiles));
 
     FileManagerOperation::SampleLoadMode loadMode =
       importForceStream ? FileManagerOperation::SampleLoadMode::kStream
                         : static_cast<FileManagerOperation::SampleLoadMode>(sampleLoadMode);
 
-    bool result = newFileManager.importSamplesToProject(
-      selStart, selStart, selectedSlot, importStartPoint, importEndPoint, importIsLoFi == 1, loadMode);
+    bool result = newFileManager.importSamplesToProject(browserData().currentPath,
+                                                        explorerNames,
+                                                        selStart,
+                                                        selStart,
+                                                        selectedSlot,
+                                                        importStartPoint,
+                                                        importEndPoint,
+                                                        importIsLoFi == 1,
+                                                        loadMode);
 
     if (result)
     {
@@ -1174,7 +1278,7 @@ static void functLeft()
         SI->resetInstrSel();
 
         // clear instrument list selection
-        memset(&SI->selectionTab[listInstruments][0], 0, SI->maxListLength);
+        memset(SI->instrumentSelectionTab, 0, sizeof(SI->instrumentSelectionTab));
         SI->selectionLength[listInstruments] = 0;
     }
     else if (SI->selectedPlace == 0)
@@ -1298,8 +1402,8 @@ static void functSwitchModule(uint8_t button)
 
 uint8_t cSampleImporter::changeFileSelection(int16_t value)
 {
-    // An empty list has no entry to move to; the clamp below would wrap around to entry 255.
-    if (locationExplorerCount == 0)
+    // An empty list has no entry to move to; the clamp below would wrap around.
+    if (locationExplorerCount == 0 || fileSelectionTab == nullptr)
     {
         return 1;
     }
@@ -1308,9 +1412,9 @@ uint8_t cSampleImporter::changeFileSelection(int16_t value)
 
     if (selectionActive[selectedPlace])
     {
-        if (selectionTab[listFiles][selectedFile] != 1 && checkIfValidSelection(selectedFile))
+        if (fileSelectionTab[selectedFile] != 1 && checkIfValidSelection(selectedFile))
         {
-            selectionTab[listFiles][selectedFile] = 1;
+            fileSelectionTab[selectedFile] = 1;
             selectionLength[listFiles]++;
         }
         selectedFile = handleSelecting(selectedFile, locationExplorerCount, value, 1);
@@ -1319,11 +1423,13 @@ uint8_t cSampleImporter::changeFileSelection(int16_t value)
     }
     else
     {
-        selectedFile = clamp(selectedFile + value, 0, locationExplorerCount - 1);
-        memset(&selectionTab[listFiles][0], 0, SI->maxListLength);
+        selectedFile =
+          static_cast<uint16_t>(clamp<int>(selectedFile + value, 0, locationExplorerCount - 1));
+        memset(fileSelectionTab, 0, locationExplorerCount);
         SI->selectionLength[listFiles] = 0;
     }
 
+    browserData().browserListPosition = selectedFile;
     display.setControlValue(explorerListControl, selectedFile);
     display.refreshControl(explorerListControl);
 
@@ -1343,17 +1449,19 @@ uint8_t cSampleImporter::changeInstrumentSelection(int16_t value)
 
     if (selectionActive[selectedPlace])
     {
-        if (selectionTab[listInstruments][selectedSlot] != 1)
+        if (instrumentSelectionTab[selectedSlot] != 1)
         {
-            selectionTab[listInstruments][selectedSlot] = 1;
+            instrumentSelectionTab[selectedSlot] = 1;
             selectionLength[listInstruments]++;
         }
-        selectedSlot = handleSelecting(selectedSlot, 48, value, 0);
+        selectedSlot = static_cast<uint8_t>(
+          handleSelecting(selectedSlot, kSampleInstrumentsCount, value, 0));
     }
     else
     {
-        selectedSlot = clamp(selectedSlot + value, 0, kSampleInstrumentsCount - 1);
-        memset(&selectionTab[listInstruments][0], 0, SI->maxListLength);
+        selectedSlot =
+          static_cast<uint8_t>(clamp<int>(selectedSlot + value, 0, kSampleInstrumentsCount - 1));
+        memset(instrumentSelectionTab, 0, sizeof(instrumentSelectionTab));
         selectionLength[listInstruments] = 0;
     }
 
@@ -1418,10 +1526,34 @@ void cSampleImporter::BrowseOrAdd()
         {
             SI->playFromPads(INTERFACE_BUTTON_PREVIEW, buttonRelease, -1);
 
-            if (newFileManager.browseSdCard(&selectedFile))
+            const char* rowName = explorerRowName(selectedFile);
+            if (rowName != nullptr && strcmp(rowName, "/..") != 0)
             {
-                SI->ip->blockAllInputsExcept(interfaceButtonShift);
+                size_t curLen = strlen(browserData().currentPath);
+                size_t addLen = strlen(rowName); // includes leading '/'
+                if (curLen + addLen >= kMaxFilePathLen)
+                {
+                    return;
+                }
             }
+
+            browserData().browserListPosition = selectedFile;
+            fileBrowser.browse();
+
+            locationExplorerCount = static_cast<uint16_t>(browserData().browserListLength);
+            selectedFile = (locationExplorerCount > 0)
+                             ? static_cast<uint16_t>(clamp<int>(
+                                 browserData().browserListPosition, 0, locationExplorerCount - 1))
+                             : 0;
+            browserData().browserListPosition = selectedFile;
+            dirGeneration++;
+            memUsageCacheFileIdx = 0xFFFF;
+
+            cancelSelect(listFiles);
+            setSelect();
+            showFilesTree();
+            handleMemoryBar();
+            refreshActionButtons();
         }
     }
     else if (isFileRow(selectedFile))
@@ -1452,10 +1584,12 @@ void cSampleImporter::importSamples()
 {
     if (!fullMemoryFlag)
     {
-        uint8_t selStart = getSelectionStart(listFiles);
-        uint8_t selEnd = getSelectionEnd(listFiles);
+        uint16_t selStart = static_cast<uint16_t>(getSelectionStart(listFiles));
+        uint16_t selEnd = static_cast<uint16_t>(getSelectionEnd(listFiles));
 
         bool result = newFileManager.importSamplesToProject(
+          browserData().currentPath,
+          explorerNames,
           selStart,
           selEnd,
           selectedSlot,
@@ -1463,7 +1597,7 @@ void cSampleImporter::importSamples()
           MAX_16BIT,
           false,
           static_cast<FileManagerOperation::SampleLoadMode>(sampleLoadMode));
-        addNextOffset = (selEnd - selStart) + 1;
+        addNextOffset = static_cast<uint8_t>((selEnd - selStart) + 1);
 
         if (result)
         {
@@ -1568,12 +1702,13 @@ void cSampleImporter::calculateFileMemUsage()
 
     if (selectionLength[listFiles] && selectedPlace == 0)
     {
-        uint8_t selectionStart = getSelectionStart(listFiles);
+        uint16_t selectionStart = static_cast<uint16_t>(getSelectionStart(listFiles));
 
-        if (selectedSlot + selectionLength[listFiles] > 48)
+        if (selectedSlot + selectionLength[listFiles] > kSampleInstrumentsCount)
         {
             tempSelectionLength =
-              selectionLength[listFiles] - (selectedSlot + selectionLength[listFiles] - 48);
+              selectionLength[listFiles] -
+              (selectedSlot + selectionLength[listFiles] - kSampleInstrumentsCount);
         }
         else
         {
@@ -1581,9 +1716,9 @@ void cSampleImporter::calculateFileMemUsage()
         }
 
         // get file selection size
-        for (int i = selectionStart; i < (selectionStart + tempSelectionLength); i++)
+        for (uint16_t i = selectionStart; i < (selectionStart + tempSelectionLength); i++)
         {
-            tempSelectMemorySize += estimateFileRamUsage(currentFolderMemoryFileUsage[i]);
+            tempSelectMemorySize += estimateFileRamUsage(getEntryMemoryUsage(i));
         }
 
         // get size when pasted on current isntrument slot
@@ -1599,7 +1734,7 @@ void cSampleImporter::calculateFileMemUsage()
     }
     else
     {
-        currentSelectMemorySize = estimateFileRamUsage(currentFolderMemoryFileUsage[selectedFile]);
+        currentSelectMemorySize = estimateFileRamUsage(getEntryMemoryUsage(selectedFile));
 
         if (mtProject.instrument[selectedSlot].isActive)
         {
@@ -1680,12 +1815,13 @@ void cSampleImporter::playSelectedSdFile(uint16_t from, uint16_t to)
 
     stopPlayingAll();
 
-    if (explorerRowName(selectedFile) == nullptr)
+    char filePath[PATCH_SIZE];
+    if (!buildEntryPath(selectedFile, filePath, sizeof(filePath)))
     {
         return;
     }
 
-    if (newFileManager.previevSamplefromSD(selectedFile, from, to))
+    if (newFileManager.previevSamplefromSD(filePath, from, to))
     {
         //		ip->blockAllInputsExcept(interfaceButton4);
         //		ip->unblockPads();
@@ -1785,18 +1921,35 @@ void cSampleImporter::updateSelection()
     display.refreshControl(instrumentListControl);
 }
 
-uint8_t cSampleImporter::handleSelecting(uint8_t selectStart,
-                                         uint8_t selectMax,
-                                         int16_t value,
-                                         uint8_t fileCheck)
+uint8_t* cSampleImporter::getSelectionTab(uint8_t whichSelect)
+{
+    return (whichSelect == listFiles) ? fileSelectionTab : instrumentSelectionTab;
+}
+
+uint16_t cSampleImporter::getSelectionLimit(uint8_t whichSelect) const
+{
+    return (whichSelect == listFiles) ? locationExplorerCount
+                                      : static_cast<uint16_t>(kSampleInstrumentsCount);
+}
+
+uint16_t cSampleImporter::handleSelecting(uint16_t selectStart,
+                                          uint16_t selectMax,
+                                          int16_t value,
+                                          uint8_t fileCheck)
 {
     if (selectedPlace > 1)
     {
         return selectStart;
     }
 
+    uint8_t* tab = getSelectionTab(selectedPlace);
+    if (tab == nullptr)
+    {
+        return selectStart;
+    }
+
     int8_t sign = 1;
-    int16_t position;
+    int32_t position;
 
     if (value < 0)
     {
@@ -1812,20 +1965,20 @@ uint8_t cSampleImporter::handleSelecting(uint8_t selectStart,
         {
             position += (1 * sign);
 
-            if (!fileCheck || checkIfValidSelection(position))
+            if (!fileCheck || checkIfValidSelection(static_cast<uint16_t>(position)))
             {
-                if (selectionTab[selectedPlace][position] == 1)
+                if (tab[position] == 1)
                 {
                     uint8_t flag = 1;
                     if (sign < 0)
                     {
-                        selectionTab[selectedPlace][position + 1] = 0;
+                        tab[position + 1] = 0;
                     }
                     else if (sign > 0)
                     {
-                        if (selectionTab[selectedPlace][position - 1] == 1)
+                        if (tab[position - 1] == 1)
                         {
-                            selectionTab[selectedPlace][position - 1] = 0;
+                            tab[position - 1] = 0;
                         }
                         else
                         {
@@ -1843,7 +1996,7 @@ uint8_t cSampleImporter::handleSelecting(uint8_t selectStart,
                     if (selectionLength[selectedPlace] < MAX_SELECT)
                     {
                         selectionLength[selectedPlace]++;
-                        selectionTab[selectedPlace][position] = 1;
+                        tab[position] = 1;
                     }
                     else
                     {
@@ -1862,7 +2015,7 @@ uint8_t cSampleImporter::handleSelecting(uint8_t selectStart,
         }
     }
 
-    return position;
+    return static_cast<uint16_t>(position);
 }
 
 bool cSampleImporter::checkIfAnyInstrActive()
@@ -1884,7 +2037,17 @@ bool cSampleImporter::checkIfAnyInstrActive()
 
 void cSampleImporter::cancelSelect(uint8_t placeToCancel)
 {
-    memset(&SI->selectionTab[placeToCancel][0], 0, maxListLength);
+    if (placeToCancel == listFiles)
+    {
+        if (fileSelectionTab != nullptr)
+        {
+            memset(fileSelectionTab, 0, kFileSelectionBytes);
+        }
+    }
+    else
+    {
+        memset(instrumentSelectionTab, 0, sizeof(instrumentSelectionTab));
+    }
     selectionLength[placeToCancel] = 0;
 
     updateSelection();
@@ -1892,53 +2055,98 @@ void cSampleImporter::cancelSelect(uint8_t placeToCancel)
 
 int16_t cSampleImporter::getSelectionStart(uint8_t whichSelect)
 {
-    int16_t selStart = SI->maxListLength;
+    const uint8_t* tab = getSelectionTab(whichSelect);
+    const uint16_t limit = getSelectionLimit(whichSelect);
 
-    for (size_t i = 0; i < SI->maxListLength; i++)
+    if (tab != nullptr)
     {
-        if (selectionTab[whichSelect][i] == 1)
+        for (uint16_t i = 0; i < limit; i++)
         {
-            selStart = i;
-            return selStart;
+            if (tab[i] == 1)
+            {
+                return static_cast<int16_t>(i);
+            }
         }
     }
 
     if (whichSelect == listFiles)
     {
-        return selectedFile;
+        return static_cast<int16_t>(selectedFile);
     }
     else
     {
-        return selectedSlot;
+        return static_cast<int16_t>(selectedSlot);
     }
 }
 
 int16_t cSampleImporter::getSelectionEnd(uint8_t whichSelect)
 {
-    int16_t selEnd = 0;
+    const uint8_t* tab = getSelectionTab(whichSelect);
+    const uint16_t limit = getSelectionLimit(whichSelect);
 
-    for (int i = SI->maxListLength - 1; i >= 0; i--)
+    if (tab != nullptr && limit > 0)
     {
-        if (selectionTab[whichSelect][i] == 1)
+        for (int32_t i = static_cast<int32_t>(limit) - 1; i >= 0; i--)
         {
-            selEnd = i;
-            return selEnd;
+            if (tab[i] == 1)
+            {
+                return static_cast<int16_t>(i);
+            }
         }
     }
 
     if (whichSelect == listFiles)
     {
-        return selectedFile;
+        return static_cast<int16_t>(selectedFile);
     }
     else
     {
-        return selectedSlot;
+        return static_cast<int16_t>(selectedSlot);
     }
 }
 
-bool cSampleImporter::checkIfValidSelection(uint8_t positionToCheck)
+bool cSampleImporter::checkIfValidSelection(uint16_t positionToCheck)
 {
     return isFileRow(positionToCheck);
+}
+
+bool cSampleImporter::buildEntryPath(uint16_t row, char* out, size_t outSize) const
+{
+    const char* name = explorerRowName(row);
+    if (name == nullptr || name[0] == '\0' || name[0] == '/')
+    {
+        return false;
+    }
+
+    if (browserData().currentPath[0] == '\0')
+    {
+        snprintf(out, outSize, "%s", name);
+    }
+    else
+    {
+        snprintf(out, outSize, "%s/%s", browserData().currentPath, name);
+    }
+    return true;
+}
+
+uint32_t cSampleImporter::getEntryMemoryUsage(uint16_t row)
+{
+    if (memUsageCacheDirGen == dirGeneration && memUsageCacheFileIdx == row)
+    {
+        return memUsageCacheRawBytes;
+    }
+
+    char filePath[PATCH_SIZE];
+    if (!buildEntryPath(row, filePath, sizeof(filePath)))
+    {
+        return 0;
+    }
+
+    uint32_t rawBytes = newFileManager.getSampleFileMemoryUsage(filePath);
+    memUsageCacheDirGen = dirGeneration;
+    memUsageCacheFileIdx = row;
+    memUsageCacheRawBytes = rawBytes;
+    return rawBytes;
 }
 
 const char* cSampleImporter::explorerRowName(uint16_t row) const

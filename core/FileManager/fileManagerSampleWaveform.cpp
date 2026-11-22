@@ -3,7 +3,11 @@
 
 #include "fileManager.h"
 #include "fileTransfer.h"
+#include "util_string.h"
+#include <cr_section_macros.h>
 #include <vector>
+
+__NOINIT(EXTERNAL_RAM) static char s_drawWaveformPath[PATCH_SIZE];
 
 // waveform draw import
 uint32_t samplesCount = 0;
@@ -38,17 +42,13 @@ uint32_t cFileManager::getImportingSamplesCount()
 
 void cFileManager::drawSampleWaveformInit()
 {
-    char filePath[PATCH_SIZE];
-    volatile int pathSize = sizeof(filePath);
-    snprintf(filePath, pathSize, "%s/%s", explorerCurrentPath, explorerList[importCurrentFile]);
-
     if (fileSystem->isFileOpen(wavfile))
     {
         fileSystem->closeFile(wavfile, false);
     }
 
     [[maybe_unused]] auto [isOpen, fileHandle] =
-      fileSystem->openFile(filePath, FileSystem::FileOpenMode::kRead, &wavfile);
+      fileSystem->openFile(s_drawWaveformPath, FileSystem::FileOpenMode::kRead, &wavfile);
 
     if (!isOpen)
     {
@@ -195,7 +195,7 @@ void cFileManager::drawSampleWaveformFinish()
     currentOperation = fmNoOperation;
 }
 
-bool cFileManager::drawSampleWaveform(int16_t file_index,
+bool cFileManager::drawSampleWaveform(const char* filePath,
                                       std::vector<int8_t*>& lower,
                                       std::vector<int8_t*>& upper)
 {
@@ -205,8 +205,10 @@ bool cFileManager::drawSampleWaveform(int16_t file_index,
         return false;
     if (currentOperation != fmNoOperation)
         return false;
+    if (filePath == nullptr || filePath[0] == '\0')
+        return false;
 
-    importCurrentFile = file_index;
+    polystrncpy(s_drawWaveformPath, filePath, sizeof(s_drawWaveformPath));
     waveformStepLower = &lower;
     waveformStepUpper = &upper;
 

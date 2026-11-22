@@ -119,7 +119,7 @@ void cSampleImporter::initDisplayControls()
     points.startPoint = 0;
     spectrum[0].init();
     spectrum[1].init();
-    memset(selectionTab, 0, sizeof(selectionTab));
+    memset(instrumentSelectionTab, 0, sizeof(instrumentSelectionTab));
 
     strControlProperties prop5;
     prop.x = 100;
@@ -640,6 +640,7 @@ void cSampleImporter::showFileList()
 void cSampleImporter::rewindListToBeggining()
 {
     selectedFile = 0;
+    browserData().browserListPosition = 0;
     display.setControlValue(explorerListControl, selectedFile);
     display.refreshControl(explorerListControl);
 }
@@ -653,8 +654,8 @@ void cSampleImporter::moveInstrListToEnd()
 
 void cSampleImporter::setSelect()
 {
-    explorerList.selectTab = &selectionTab[listFiles][0];
-    instrumentList.selectTab = &selectionTab[listInstruments][0];
+    explorerList.selectTab = fileSelectionTab;
+    instrumentList.selectTab = instrumentSelectionTab;
 }
 
 void cSampleImporter::frameSelectMode(uint8_t place, uint8_t mode)

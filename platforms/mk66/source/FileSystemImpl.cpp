@@ -412,10 +412,7 @@ int FileSystemImpl::createFilesList(const char* path,
                                     char** list,
                                     uint8_t list_length,
                                     uint16_t max_used_memory,
-                                    enListFileFilter filter,
-                                    uint16_t skip_count,
-                                    uint16_t max_files_in_subdir,
-                                    enListFileFilter folderSizeFilter)
+                                    enListFileFilter filter)
 {
     SdDir dir;
 
@@ -424,14 +421,8 @@ int FileSystemImpl::createFilesList(const char* path,
         return kListError;
     }
 
-    int locationFileCount = dir.createFilesList(start_line,
-                                                list,
-                                                list_length,
-                                                max_used_memory,
-                                                (SdDir::enListFileFilter)filter,
-                                                skip_count,
-                                                max_files_in_subdir,
-                                                (SdDir::enListFileFilter)folderSizeFilter);
+    int locationFileCount = dir.createFilesList(
+      start_line, list, list_length, max_used_memory, (SdDir::enListFileFilter)filter);
 
     dir.close();
     return locationFileCount;

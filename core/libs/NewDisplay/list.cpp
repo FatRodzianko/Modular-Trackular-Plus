@@ -646,6 +646,10 @@ void cList::update()
     if (list->length > list->linesCount)
     {
         int16_t y_length = ((height - 14) * list->linesCount) / list->length;
+        if (y_length < 2)
+        {
+            y_length = 2;
+        }
         y_pos = posY + 6 + (list->start * ((height - 14) - y_length)) / list->length;
 
         // API_BLEND_FUNC(SRC_ALPHA , ZERO);

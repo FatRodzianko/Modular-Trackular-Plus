@@ -63,7 +63,7 @@ class cList : public cDisplayControl
 
     uint32_t textScrollTime;
     uint32_t textScrollTimeStart;
-    uint8_t textScrollItem;
+    uint16_t textScrollItem;
 };
 
 #endif
