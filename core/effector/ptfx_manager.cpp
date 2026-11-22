@@ -1,5 +1,6 @@
 #include "ptfx_manager.h"
 #include "Platform.h"
+#include "SdPaths.h"
 #include "TrackerImpl.h"
 #include "sampleEditor/sampleEditor.h"
 
@@ -54,10 +55,7 @@ void PtfxManager::initEffectList()
         FileSystem* fs = platform ? platform->getFileSystem() : nullptr;
         if (fs && fs->isSdCardInserted())
         {
-            if (!fs->exists("/Effects"))
-            {
-                fs->mkdir(0, "/Effects");
-            }
+            SdPaths::ensureDir(fs, SdPaths::effectsDir(fs));
             s_effectsDirChecked = true;
         }
     }

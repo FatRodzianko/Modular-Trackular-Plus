@@ -9,8 +9,8 @@
 ### Added
 
 1. **Loadable `.psyn` Synth Plugin SDK (Tracker+ & Tracker Mini)**
-	* **SD-Card Synth Plugins (`/Synths/*.psyn`)**: Synthesizer engines now load dynamically from `/Synths/*.psyn` on the microSD card without recompiling firmware. Developers can build custom C++20 or C synth engines with [`synth-plugin-sdk/`](synth-plugin-sdk/).
-	* **Sample-Based Synth Engines (`SampleSlot` & `4 MB` `SamplePool`)**: `.psyn` plugins can load `.wav` samples and wavetables from `/SynthSamples/<ENGINE>/` or anywhere on the SD card into a shared `4 MB` SDRAM sample pool, alongside a `1,920 KB` plugin code arena.
+	* **SD-Card Synth Plugins (`/System/Synths/*.psyn`)**: Synthesizer engines now load dynamically from `/System/Synths/*.psyn` on the microSD card without recompiling firmware. Developers can build custom C++20 or C synth engines with [`synth-plugin-sdk/`](synth-plugin-sdk/).
+	* **Sample-Based Synth Engines (`SampleSlot` & `4 MB` `SamplePool`)**: `.psyn` plugins can load `.wav` samples and wavetables from `/System/Synths/Samples/<ENGINE>/` or anywhere on the SD card into a shared `4 MB` SDRAM sample pool, alongside a `1,920 KB` plugin code arena.
 	* **100% Open-Source Firmware Link**: Moved the `PolySynth` host, `PolyDSP`, and Master FX (`Delay`, `Reverb`) to MIT-licensed source compilation with zero precompiled `.a` libraries linked into the firmware (only the prebuilt factory `.psyn` binaries in `synth/prebuilt/` remain under [`synth/prebuilt/LICENSE-PROPRIETARY.txt`](synth/prebuilt/LICENSE-PROPRIETARY.txt)).
 	* See [`docs/custom_synth_sdk.md`](docs/custom_synth_sdk.md) and [`synth-plugin-sdk/README.md`](synth-plugin-sdk/README.md).
 
@@ -36,8 +36,8 @@
 	* **`Sample Cross-Mod`**: New reference effect (`cross_mod.ptfx`) that layers, ring-modulates, FM-scrubs, amplitude-follows, or sidechains a sample against a secondary `.wav` file selected from the SD card.
 	* **`Convolution Reverb`**: New Sample Editor reverb (`convolution_reverb.ptfx`) that applies the acoustic space or character of any `.wav` impulse response (IR) from your SD card to your sample. Supporting both mono and stereo IRs (up to ~550 ms) and automatically extending the sample tail so the reverb rings out cleanly.
 	* **`Speech Gen`**: New retro formant speech generator (`speech_gen.ptfx`) inspired by classic 1980s speech utilities, with on-screen text entry (up to 64 characters, plus raw `[PHONEME]` bracket mode), `Voice` (`Male`/`Female`), `Mode` (`Natural`/`Robot`/`Whisper`), `Pitch` (`65–320 Hz`), `Speed` (`40–400 WPM`), `Mouth` & `Throat` formant shaping, and `Grime` (`Clean`/`Amiga 8b`/`Lo-Fi`).
-	* **On-Demand `.ptfx` Effect Loader**: Removed the 128-plugin startup scan limit in favor of **`Load Effect...`** at the bottom of the Sample Editor effect list, browsing `/Effects/` (including subfolders) in `GlobalFileBrowser` with pretty effect display names and keeping the currently loaded effect above `Load Effect...`.
-	* **Effect Presets**: Load, save, and reset effect presets via **`More`** (stored under `/Effects/Presets/<PluginName>/*.ptp`), automatically saving and restoring knob values, text parameters, and selected files.
+	* **On-Demand `.ptfx` Effect Loader**: Removed the 128-plugin startup scan limit in favor of **`Load Effect...`** at the bottom of the Sample Editor effect list, browsing `/System/Effects/` (including subfolders) in `GlobalFileBrowser` with pretty effect display names and keeping the currently loaded effect above `Load Effect...`.
+	* **Effect Presets**: Load, save, and reset effect presets via **`More`** (stored under `/System/Effects/Presets/<PluginName>/*.ptp`), automatically saving and restoring knob values, text parameters, and selected files.
 	* **Mono-to-Stereo Effect Support**: Applying a stereo effect plugin (such as `Haas Effect` or `Stereo Delay`) to a mono sample now automatically converts the instrument to stereo when the left and right channels differ.
 	* **Plugin SDK - File Pickers, Text Input & Secondary Audio**: `.ptfx` plugins can now declare input/output file parameters (`PTFX_PARAM_FILE` / `PTFX_PARAM_SAVE_FILE`), editable on-screen keyboard text parameters (`PTFX_PARAM_TEXT` via `host->get_text_param()`, up to 64 characters), dynamic generator lengths via `host->set_extra_samples()`, automatic secondary `.wav` decoding, and SD file I/O helpers. See [`docs/modular_effects_system.md`](docs/modular_effects_system.md).
 
@@ -67,8 +67,8 @@
 12. **Pattern View Note Display Option (All 3 Devices)**
 	* Added **`Config → General → Note display`** to choose how notes are displayed in Pattern View: **`Original`** (`C4`, `C#4`, default) or **`Traditional`** (`C-4`, `C#4`).
 
-13. **SD-Card Random Name Wordlists (All 3 Devices)**
-	* Moved the random name generator wordlists to `/Words/adjectives.txt` and `/Words/nouns.txt` on the microSD card (one word per line, with a built-in fallback list when the files are absent; initial files provided in [`sd-card/Words/`](sd-card/Words/)), freeing some Flash space on Original Tracker and letting users customize their own wordlists.
+13. **Customizable Random Name Wordlists (All 3 Devices)**
+	* Moved the random name generator wordlists to `/System/Text/autoname_adjectives.txt` and `/System/Text/autoname_nouns.txt` on the microSD card (one word per line, with a built-in fallback list when the files are absent. Initial files provided in [`sd-card/System/Text/`](sd-card/System/Text/)), freeing some Flash space on Original Tracker and letting users customize their own wordlists.
 
 14. **Project Settings — Max Tracks (`4` / `8` / `12` / `16`) (All 3 Devices)**
 	* Added **`Config → Project Settings → Max tracks`** (`4`, `8`, `12`, or `16`, default `16`) stored per-project, enabling a retro 8-track (or focused 4/12-track) workflow across Pattern Editor, Song Editor (with wider columns), Performance Mode, Track Mixer & Limiter Sidechain, Audio Stem Export, and `.it` Export while non-destructively preserving and silencing hidden tracks internally.
@@ -85,6 +85,11 @@
 
 ### Changed & Fixed
 
+* **Unified `/System/` SD Card Layout & Hidden `/.system/` Support (All 3 Devices)**:
+	* Consolidated firmware-managed assets, plugins, synth data, and IMX config (`Effects`, `Envelopes`, `Fonts`, `Images`, `Snapshots`, `Synths/{Patches,Samples,*.psyn}`, `Text`, `Themes`, and `trackerConfig`) under `/System/` (automatically using `/.system/` if `/System/` is absent and `/.system/` exists; IMX reads legacy `/trackerConfig` as a fallback).
+	* Defaulted Sample Editor WAV load/export and Instrument Editor `.pti` save browsers to `/`, and made leading-dot files/folders (such as `.system` and `.Trash-1000`) consistently hidden in both Sample Loader and `GlobalFileBrowser`.
+	* Removed leftover dead `Games` browsing code from `FileManager` and SD drivers (~1.3 KB Flash reclaimed).
+
 * **Faster UI Rendering & System Responsiveness (All 3 Devices)**:
 	* **~3×–4× Faster Heavy Screen Updates**: Rebuilt the display engine so screens are composed directly on the main processor and only changed regions are sent to the display. Fast Pattern Editor scrolling, Song mode navigation, and switching screens feel **~3×–4× faster** without partial intermediate redraws.
 	* **~5×–10× Lower Display CPU Overhead (Tracker+ & Tracker Mini) / ~3×–5× Lower (Original Tracker)**: Display transfers on Tracker+ and Tracker Mini now run in the background via hardware DMA (and idle screens no longer poll the display bus at all), freeing CPU headroom for tighter pad/encoder response, MIDI timing, and SD sample streaming.
@@ -100,6 +105,9 @@
 * **Factory & `CHIP` Synth Engine Performance Overhaul (Tracker+ & Tracker Mini)**:
 	* Overhauled real-time oscillator, filter (`SVF`, `Ladder`, `Diode`, `Biquad`), envelope, and modulation math across all factory `.psyn` synth engines (`ACD`, `FAT`, `VAP`, `WTFM`, `PERC`, `DIRT`) and `CHIP` for **~1.5×–3.3× faster** active voice rendering, zero silent-tail denormals, improved low-cutoff `Diode` filter precision, and clean `PERC` voice sleep termination while preserving original patch sound (`<= 1 LSB` typical RMS difference).
 	* Playing dense 8-voice chords and multi-synth arrangements (including `CHIP`) runs with significantly lower CPU load without audio dropouts or freezes.
+
+* **Safer Synth Model Switching on Jog Wheel (Tracker+ & Tracker Mini)**:
+	* Debounced Synth Model jog-wheel scrolling (`180 ms`, flushing immediately on pad preview, Load/Edit Patch, or leaving the screen), removed duplicate init-patch creation per switch, and parked the audio ISR + tore down old voices before loading a new `.psyn` engine to prevent freezes when scrolling rapidly while pressing note pads.
 
 * **Safer USB Storage Mode (Tracker+ & Tracker Mini)**:
 	* Entering USB Storage mode now cleanly stops playback, armed recordings, held notes, and SD sample streaming, and saves any pending changes first so the Tracker and your computer never write to the SD card at the same time.

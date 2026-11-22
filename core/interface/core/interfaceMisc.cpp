@@ -360,7 +360,6 @@ void Interface::commonThingsUpdate()
                 case fmImportingMod: text_index = 21; break;
                 case fmExportingMod: text_index = 22; break;
                 case fmReloadingSamples: text_index = 23; break;
-                case fmBrowsingGames: text_index = 24; break;
                 default: text_index = 0; break;
             }
 

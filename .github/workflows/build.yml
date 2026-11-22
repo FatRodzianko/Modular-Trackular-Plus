@@ -64,16 +64,16 @@ jobs:
       - name: Build reference .ptfx Sample Editor plugins
         run: |
           make ptfx
-          printf "Copy the Effects/ folder to the root directory of your Polyend Tracker microSD card.\n" > editor-fx-sdk/build/README.txt
+          printf "Copy the System/ folder to the root directory of your Polyend Tracker microSD card.\n" > editor-fx-sdk/build/README.txt
 
       - name: Bundle .psyn Synth plugins
         run: |
           make psyn
           rm -rf synth-plugin-sdk/build/package
-          mkdir -p synth-plugin-sdk/build/package
-          cp -r build/Synths synth-plugin-sdk/build/package/Synths
+          mkdir -p synth-plugin-sdk/build/package/System
+          cp -r build/System/Synths synth-plugin-sdk/build/package/System/Synths
           cp synth/prebuilt/LICENSE-PROPRIETARY.txt synth-plugin-sdk/build/package/LICENSE-PROPRIETARY.txt
-          printf "Copy the Synths/ folder to the root directory of your Polyend Tracker+ or Tracker Mini microSD card.\n" > synth-plugin-sdk/build/package/README.txt
+          printf "Copy the System/ folder to the root directory of your Polyend Tracker+ or Tracker Mini microSD card.\n" > synth-plugin-sdk/build/package/README.txt
 
       - name: Publish Firmware Size & Memory Summary
         if: always()
@@ -84,14 +84,14 @@ jobs:
             ls -lh build/*.ptf || true
             echo "\`\`\`"
             echo ""
-            echo "### Bundled \`.psyn\` Synth Engines (\`/Synths\`)"
+            echo "### Bundled \`.psyn\` Synth Engines (\`/System/Synths\`)"
             echo "\`\`\`text"
-            ls -lh build/Synths/*.psyn || true
+            ls -lh build/System/Synths/*.psyn || true
             echo "\`\`\`"
             echo ""
-            echo "### Generated \`.ptfx\` Sample Editor Effects (\`/Effects\`)"
+            echo "### Generated \`.ptfx\` Sample Editor Effects (\`/System/Effects\`)"
             echo "\`\`\`text"
-            ls -lh editor-fx-sdk/build/Effects/*.ptfx || true
+            ls -lh editor-fx-sdk/build/System/Effects/*.ptfx || true
             echo "\`\`\`"
             echo ""
             echo "### Linker Memory Usage (All 3 Devices)"
@@ -107,8 +107,7 @@ jobs:
             echo ""
             echo "> **Downloads (Bottom of Summary Page)**:"
             echo "> * **\`polyend-tracker-ce-firmware\`**: Ready-to-flash \`.ptf\` firmware files for **Original Tracker**, **Tracker+**, and **Tracker Mini**."
-            echo "> * **\`polyend-tracker-ce-synths\`**: Unzip and copy the included **\`Synths/\`** folder directly to the root of your Tracker+ or Tracker Mini microSD card."
-            echo "> * **\`polyend-tracker-ce-effects\`**: Unzip and copy the included **\`Effects/\`** folder directly to the root of your Tracker's microSD card."
+            echo "> * **\`polyend-tracker-ce-sd-card\`**: Unzip and copy the included **\`System/\`** folder directly to the root of your Tracker's microSD card (can optionally be renamed to \`.system/\` to hide it)."
           } >> "$GITHUB_STEP_SUMMARY"
 
           if [ "${{ github.event_name }}" = "pull_request" ]; then
@@ -116,14 +115,15 @@ jobs:
             echo "PR_SUMMARY_B64=$(base64 -w 0 pr_summary.md)"
           fi
 
-      - name: Assemble SD Card Content (Words, Effects, Synths)
+      - name: Assemble SD Card Content (System/)
         run: |
           rm -rf build/sd-card
           mkdir -p build/sd-card
-          cp -r sd-card/Words build/sd-card/Words
-          cp -r editor-fx-sdk/build/Effects build/sd-card/Effects
-          cp -r synth-plugin-sdk/build/package/Synths build/sd-card/Synths
-          cp synth-plugin-sdk/build/package/LICENSE-PROPRIETARY.txt build/sd-card/Synths/
+          cp -r sd-card/System build/sd-card/System
+          cp -r editor-fx-sdk/build/System/Effects/* build/sd-card/System/Effects/
+          cp -r synth-plugin-sdk/build/package/System/Synths/* build/sd-card/System/Synths/
+          cp synth-plugin-sdk/build/package/LICENSE-PROPRIETARY.txt build/sd-card/System/Synths/
+          find build/sd-card/System -name '.gitkeep' -delete
 
       - name: Upload Firmware Artifacts (.ptf)
         uses: actions/upload-artifact@v4
@@ -131,7 +131,7 @@ jobs:
           name: polyend-tracker-ce-firmware
           path: build/*.ptf
 
-      - name: Upload SD Card Content Artifact (Words, Effects, Synths)
+      - name: Upload SD Card Content Artifact (System/)
         uses: actions/upload-artifact@v4
         with:
           name: polyend-tracker-ce-sd-card
@@ -160,10 +160,10 @@ jobs:
               marker,
               '### Polyend Tracker CE Test Firmware & SD Card Content',
               '',
-              'This pull request passed all build checks. You can download and test the built firmware for **Original Tracker**, **Tracker+**, and **Tracker Mini** (`Build: ' + shortSha + '`) and the matching SD card content (`/Words`, `/Effects`, `/Synths`) directly using the links below (no GitHub account required):',
+              'This pull request passed all build checks. You can download and test the built firmware for **Original Tracker**, **Tracker+**, and **Tracker Mini** (`Build: ' + shortSha + '`) and the matching SD card content (`/System/`) directly using the links below (no GitHub account required):',
               '',
               `* **[Download Firmware (.zip)](${fwUrl})**`,
-              `* **[Download SD Card Content (.zip)](${sdCardUrl})** (\`/Words\`, \`/Effects\`, \`/Synths\`)`,
+              `* **[Download SD Card Content (.zip)](${sdCardUrl})** (\`/System/\`)`,
               '',
               '<details>',
               '<summary><b>How to Install & Flash on Your Tracker</b></summary>',
@@ -177,9 +177,9 @@ jobs:
               '3. Insert the microSD card into your Tracker, navigate to **Config → Firmware → Firmware update**, select the `.ptf` file, and confirm.',
               `4. Once rebooted, you can verify you are running this PR build under **Config → Firmware** (\`Build: ${shortSha}\`).`,
               '',
-              '### 2. Installing SD Card Content (`/Words`, `/Effects`, `/Synths`)',
+              '### 2. Installing SD Card Content (`/System/`)',
               `1. Download and unzip **[polyend-tracker-ce-sd-card.zip](${sdCardUrl})**.`,
-              '2. Copy **`Words/`**, **`Effects/`**, and **`Synths/`** (Tracker+ & Tracker Mini) to the root directory of your Tracker\'s microSD card.',
+              '2. Copy the **`System/`** folder to the root directory of your Tracker\'s microSD card (you can optionally rename it to **`.system/`** if you prefer it hidden).',
               '',
               '### 3. Emergency Recovery (Just in Case)',
               'The Tracker\'s bootloader is hardware-isolated from the firmware. If a test build ever fails to boot:',
@@ -224,7 +224,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           cd build/sd-card
-          zip -r ../PolyendTracker_CE_SD_Card.zip Words Effects Synths
+          zip -r ../PolyendTracker_CE_SD_Card.zip System
 
       - name: Publish GitHub Release on Version Tag
         if: startsWith(github.ref, 'refs/tags/v')

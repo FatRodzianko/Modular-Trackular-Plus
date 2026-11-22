@@ -31,7 +31,7 @@ The Polyend Tracker firmware supports fully customizable color themes (via JSON 
 ## 2. Installing Custom Themes
 
 ### File Location
-Place your theme files in the `/Themes/` folder at the root of your SD card:
+Place your theme files in the `/System/Themes/` folder at the root of your SD card:
 ```
 SD Card
 └── Themes/
@@ -42,12 +42,12 @@ SD Card
     ├── TerminalGreen.json
     └── MyCustomTheme.json
 ```
-*(If the `/Themes/` folder doesn't exist, the Tracker creates it automatically upon entering the Config menu).*
+*(If the `/System/Themes/` folder doesn't exist, the Tracker creates it automatically upon entering the Config menu).*
 
 ### Selecting a Theme
 1. On your Tracker, open **Config** (`Shift + Master` or via Menu).
 2. Scroll to **Display theme**.
-3. Turn the jog wheel to cycle through built-in themes (`Original`, `Monochrome`, `Anniversary`) and your custom themes from `/Themes/`.
+3. Turn the jog wheel to cycle through built-in themes (`Original`, `Monochrome`, `Anniversary`) and your custom themes from `/System/Themes/`.
 
 ---
 
@@ -59,7 +59,7 @@ You can use the visual theme and font editor directly in your browser at **[`htt
 * **Multi-Screen Simulation**: Switch between **Pattern Editor**, **Song Arranger**, **Sample / Waveform Editor**, **Notes Grid**, and **Config / Dialogs**.
 * **Click-to-Inspect**: Click directly on any element in the Tracker screen (notes, instruments, playhead, top bar, buttons, waveform) to immediately highlight and edit its color in the sidebar.
 * **Built-in Presets**: Quick-load Amiga, Terminal Green (CRT Phosphor), Bernstein Amber (Warm CRT), Cyberpunk (Neon), Solarized Dark, Original Tracker, Monochrome, and more.
-* **1-Click Import & Export**: Import existing `.json` theme files, or click **Export Theme JSON** to download a ready-to-use file directly into `/Themes/`.
+* **1-Click Import & Export**: Import existing `.json` theme files, or click **Export Theme JSON** to download a ready-to-use file directly into `/System/Themes/`.
 * **Integrated Custom Font Converter (Font Editor)**: Upload any TTF or OTF font directly in the browser to preview all 5 FT812 font sizes, test live on the Tracker screen simulator, and compile `.ptfont` binary packages with 1 click.
 
 ### Running the Theme Editor Locally (Optional)
@@ -83,8 +83,8 @@ Open the local URL (typically `http://localhost:5173`) in your browser to start 
 * **Supported Characters**: Standard ASCII alphanumeric characters, dashes (`-`), and underscores (`_`) are recommended. Spaces are supported on FAT32/exFAT SD cards.
 
 ### Capacity Limits
-* **Maximum Custom Themes**: Up to **29 custom themes** can be indexed from `/Themes/` (allowing **32 total themes** in the menu including the 3 built-in presets: `Original`, `Monochrome`, and `Anniversary`).
-* **Maximum Custom Fonts**: Up to **30 custom fonts** can be indexed from `/Fonts/` (allowing **32 total fonts** in the menu including `Original` and `New`).
+* **Maximum Custom Themes**: Up to **29 custom themes** can be indexed from `/System/Themes/` (allowing **32 total themes** in the menu including the 3 built-in presets: `Original`, `Monochrome`, and `Anniversary`).
+* **Maximum Custom Fonts**: Up to **30 custom fonts** can be indexed from `/System/Fonts/` (allowing **32 total fonts** in the menu including `Original` and `New`).
 * Files beyond the 32-entry limit are simply ignored; no crash or error occurs.
 * **Theme File Size**: A complete theme file is typically ~2 to 4 KB. The firmware reads up to **8 KB** per theme file, which is more than enough for all color configurations.
 
@@ -160,7 +160,7 @@ You do not need to specify every color. Any omitted color will automatically inh
 ## 7. Installing Custom Fonts
 
 ### File Location
-Place `.ptfont` font packages in the `/Fonts/` folder on your SD card:
+Place `.ptfont` font packages in the `/System/Fonts/` folder on your SD card:
 ```
 SD Card
 └── Fonts/
@@ -170,7 +170,7 @@ SD Card
 
 ### Selecting a Font
 1. In the **Config** menu, navigate to **Display font**.
-2. Turn the jog wheel to cycle through `Original`, `New`, and your custom `.ptfont` fonts from `/Fonts/`.
+2. Turn the jog wheel to cycle through `Original`, `New`, and your custom `.ptfont` fonts from `/System/Fonts/`.
 
 ---
 
@@ -189,4 +189,4 @@ Font conversion is built directly into the **[Web Theme & Font Editor](https://p
 2. Click **Font Editor** in the top navigation bar.
 3. Drop your `.ttf` or `.otf` font file (supports single font files with synthetic bold generation or separate Regular and Bold files).
 4. Preview the font across all 5 sizes and test live on simulated Tracker screens.
-5. Click **Convert & Download .ptfont** and place the generated file into `/Fonts/` on your SD card.
+5. Click **Convert & Download .ptfont** and place the generated file into `/System/Fonts/` on your SD card.

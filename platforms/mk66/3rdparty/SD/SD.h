@@ -167,7 +167,6 @@ class SdDir
         enListFileFilter_wave_inst,
         enListFileFilter_firmware,
         enListFileFilter_mod,
-        enListFileFilter_game,
     };
 
     uint16_t createFilesList(uint8_t start_line,

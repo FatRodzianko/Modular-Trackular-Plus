@@ -4,6 +4,7 @@
 #include "core/songTimer.h"
 #include "fileBrowser/GlobalFileBrowser.h"
 #include "fileManager.h"
+#include "SdPaths.h"
 #include "mtAudioEngine.h"
 #include "mtPadBoard.h"
 #include "mtPadsBacklight.h"
@@ -2053,7 +2054,7 @@ static void functLoadWav()
     cfg.mode = GlobalFileBrowserConfig::Mode::kLoadWav;
     cfg.title = "Load WAV - Sample Editor";
     cfg.contextKey = "se_load_wav";
-    cfg.initialDirectory = "/Samples";
+    cfg.initialDirectory = "/";
     cfg.extensionFilter = ".wav";
     cfg.returnModule = SE;
     cfg.returnModuleOptions = 1;
@@ -2108,7 +2109,7 @@ static void functExportWav()
     cfg.mode = GlobalFileBrowserConfig::Mode::kSaveWav;
     cfg.title = "Export WAV - Sample Editor";
     cfg.contextKey = "se_export_wav";
-    cfg.initialDirectory = "/Samples";
+    cfg.initialDirectory = "/";
     cfg.defaultFileName = defName;
     cfg.extensionFilter = ".wav";
     cfg.returnModule = SE;
@@ -2372,7 +2373,7 @@ static std::string buildModularPresetDir()
     {
         sanitized = "Plugin";
     }
-    return "/Effects/Presets/" + sanitized;
+    return SdPaths::effectPresetsDir(newFileManager.getFileSystem(), sanitized);
 }
 
 static bool reloadModularAfterBrowser(const float savedParams[12], uint8_t savedPage)
@@ -2477,7 +2478,7 @@ static void openModularParamFileBrowser(int paramIdx)
     }
     cfg.title = std::string(isSave ? "Save " : "Load ") +
                 (params.labelsText[paramIdx] ? params.labelsText[paramIdx] : "File");
-    cfg.initialDirectory = isWav ? "/Samples" : "/";
+    cfg.initialDirectory = "/";
     cfg.defaultFileName = defName;
     cfg.extensionFilter = extStr;
     cfg.contextKey = keyBuf;
@@ -2772,7 +2773,7 @@ void cSampleEditor::openLoadEffectBrowser()
     GlobalFileBrowserConfig cfg;
     cfg.mode = GlobalFileBrowserConfig::Mode::kLoadGenericFile;
     cfg.title = "Load Effect (.ptfx)";
-    cfg.initialDirectory = "/Effects";
+    cfg.initialDirectory = SdPaths::effectsDir(newFileManager.getFileSystem());
     cfg.extensionFilter = ".ptfx";
     cfg.confirmButtonLabel = "Load";
     cfg.contextKey = "se_load_ptfx";

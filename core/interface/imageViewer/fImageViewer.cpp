@@ -12,6 +12,7 @@
 
 #include "core/songTimer.h"
 
+#include "SdPaths.h"
 #include "TrackerImpl.h"
 #include "cr_section_macros.h"
 
@@ -34,7 +35,7 @@ static void functPads(uint8_t pad, uint8_t state, int16_t velo);
 
 static void functMenu(uint8_t state);
 
-__NOINIT(EXTERNAL_RAM) static char s_infoText[220];
+__NOINIT(EXTERNAL_RAM) static char s_infoText[256];
 static void functMiniMiddle();
 
 void cImageViewer::update()
@@ -43,8 +44,14 @@ void cImageViewer::update()
     {
         if (display.getImgLoadState() == 0 || display.getImgLoadState() == 3)
         {
-            char path[64];
-            snprintf(path, sizeof(path), "Images/%s/%d", actualFolderName, imageNumber);
+            FileSystem* fileSystem = TrackerImpl::getInstance()->getPlatform()->getFileSystem();
+            char path[80];
+            snprintf(path,
+                     sizeof(path),
+                     "%s/Images/%s/%d",
+                     SdPaths::systemRootRel(fileSystem),
+                     actualFolderName,
+                     imageNumber);
 
             if (display.readImgFromSd(path, ImageViewerJpegAddress, 800, 390))
             {
@@ -143,15 +150,16 @@ void cImageViewer::setDefaultScreenFunct()
 bool cImageViewer::imageExists(uint8_t number)
 {
     FileSystem* fileSystem = TrackerImpl::getInstance()->getPlatform()->getFileSystem();
-    char path[64];
+    const char* sysRoot = SdPaths::systemRootRel(fileSystem);
+    char path[80];
 
-    snprintf(path, sizeof(path), "Images/%s/%d.jpg", actualFolderName, number);
+    snprintf(path, sizeof(path), "%s/Images/%s/%d.jpg", sysRoot, actualFolderName, number);
     if (fileSystem->exists(path))
     {
         return true;
     }
 
-    snprintf(path, sizeof(path), "Images/%s/%d.jpeg", actualFolderName, number);
+    snprintf(path, sizeof(path), "%s/Images/%s/%d.jpeg", sysRoot, actualFolderName, number);
     return fileSystem->exists(path);
 }
 
@@ -172,14 +180,19 @@ void cImageViewer::refreshImage()
         display.refreshControl(label[6]);
         display.refreshControl(label[7]);
 
+        FileSystem* fileSystem = TrackerImpl::getInstance()->getPlatform()->getFileSystem();
+        const char* sysRoot = SdPaths::systemRoot(fileSystem);
         snprintf(s_infoText,
                  sizeof(s_infoText),
-                 "No images found in /Images/%s/"
+                 "No images found in %s/Images/%s/"
                  "\n\nPlace up to 48 baseline JPEG images (max 800 x 390 px) in:"
-                 "\n/Images/%s/1.jpg ... /Images/%s/48.jpg"
+                 "\n%s/Images/%s/1.jpg ... %s/Images/%s/48.jpg"
                  "\n\nUse Left/Right, the Jog-wheel, or Pads 1-48 to switch images.",
+                 sysRoot,
                  actualFolderName,
+                 sysRoot,
                  actualFolderName,
+                 sysRoot,
                  actualFolderName);
 
         display.setControlShow(infoTextBox);

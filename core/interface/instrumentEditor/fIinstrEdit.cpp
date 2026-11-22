@@ -77,6 +77,9 @@ static void onNoteKeyboardHide();
 void cInstrumentEditor::update()
 {
     moduleRefresh = 0;
+#if GUI_HANDLE_SYNTH
+    updatePendingSynthModel();
+#endif
 }
 
 void cInstrumentEditor::start(uint32_t options)
@@ -3212,7 +3215,7 @@ static void functEffectSavePti()
     GlobalFileBrowserConfig cfg;
     cfg.mode = GlobalFileBrowserConfig::Mode::kSaveGenericFile;
     cfg.title = "Save Instrument (.pti)";
-    cfg.initialDirectory = "/Instruments";
+    cfg.initialDirectory = "/";
     cfg.defaultFileName = defName;
     cfg.extensionFilter = ".pti";
     cfg.maxNameLength = sizeof(strInstrument::strSampleBankSlot::file_name) - 1;

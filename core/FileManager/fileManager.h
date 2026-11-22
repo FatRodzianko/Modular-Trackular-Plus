@@ -39,7 +39,6 @@ enum fileManagerStatus
     fmIdle = 0,
     fmBrowsingSamples,
     fmBrowsingFirmwares,
-    fmBrowsingGames,
     fmImportingSamplesToWorkspace,
     fmCopyingInstrumentsInWorkspace,
     fmDeleteingInstruments,
@@ -67,7 +66,6 @@ enum fileManagerStatus
     fmSaveEnd,
     fmBrowseSamplesEnd,
     fmBrowseFirmwaresEnd,
-    fmBrowseGamesEnd,
     fmImportSamplesEnd,
     fmCopyingInstrumentsEnd,
     fmDeleteInstrumentsEnd,
@@ -87,7 +85,6 @@ enum fileManagerStatus
     fmCopyError,
     fmBrowseSamplesError,
     fmBrowseFirmwaresError,
-    fmBrowseGamesError,
     fmImportSamplesError,
     fmCopyingInstrumentsError,
     fmDeleteInstrumentsError,
@@ -112,7 +109,6 @@ enum fileManagerOperation
     fmBrowseProjects,  // 6
     fmBrowseMods,      // 7
     fmBrowseFirmwares, // 8
-    fmBrowseGames,     // 8.5 ;>
 
     fmImportSamplesToWorkspace,   // 8.55 :>
     fmCopyInstrumentsInWorkspace, // 9
@@ -203,7 +199,6 @@ class cFileManager
     uint8_t getProjectsList(char*** list);
     uint8_t getModsList(char*** list);
     uint8_t getFirmwaresList(char*** list);
-    uint8_t getGamesList(char*** list);
 
     uint8_t getCurrentPatternIndex(); // want to load
     uint8_t getLoadedPatternIndex();  // finished loading
@@ -250,7 +245,6 @@ class cFileManager
 
     bool browseSdCard(uint8_t* index);
     bool browseFirmwares();
-    bool browseGames();
 
     void createPatchesFolder();
 
@@ -513,7 +507,6 @@ class cFileManager
     void updateExportModFile();
     void updateBrowseSamples();
     void updateBrowseFirmwares();
-    void updateBrowseGames();
     void startRequestedPatternLoad();
     void updateLoadWorkspacePattern();
     void updateExportSound();
@@ -610,7 +603,6 @@ class cFileManager
     uint8_t modsListLength = 0;
     static char* modsList[list_length_max];
 
-    void browseGamesLocation();
 
     void browseCurrentLocation();
     void listOnlyFolderNames();

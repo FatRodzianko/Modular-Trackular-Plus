@@ -8,6 +8,7 @@
 #include "mtSequencer.h"
 
 #include "AudioDataUtilities.h"
+#include "SdPaths.h"
 #include "fileManager.h"
 #include "fileTransfer.h"
 
@@ -34,15 +35,6 @@ void cFileManager::updateBrowseFirmwares() // fmBrowseFirmwares - 6
     {
         case 0: browseFirmwaresLocation(); break;
         default: stopOperationWithError(fmBrowseFirmwaresError); break;
-    }
-}
-
-void cFileManager::updateBrowseGames()
-{
-    switch (currentOperationStep)
-    {
-        case 0: browseGamesLocation(); break;
-        default: stopOperationWithError(fmBrowseGamesError); break;
     }
 }
 
@@ -477,77 +469,6 @@ uint8_t cFileManager::getFirmwaresList(char*** list)
     return firmwaresListLength;
 }
 
-///====================================================================================================
-///====================================       GAMES ===============================================
-///====================================================================================================
-void cFileManager::browseGamesLocation()
-{
-    if (!fileSystem->exists(cGamesPath))
-    {
-        fileSystem->mkdir(0, cGamesPath);
-    }
-
-    uint8_t gamesfoundCount = fileSystem->createFilesList(
-      cGamesPath, 0, projectsList, list_length_max, 3000, FileSystem::enListFileFilter_game);
-
-    if (gamesfoundCount == FileSystem::kListError)
-    {
-        stopOperationWithError(fmBrowseGamesError);
-        return;
-    }
-
-    std::sort(projectsList,
-              projectsList + gamesfoundCount,
-              [](char* a, char* b) { return compareStrings(a, b); });
-
-    char lowCase[50];
-    // usuwanie koncówek .nes
-    for (uint8_t i = 0; i < gamesfoundCount; i++)
-    {
-        strcpy(lowCase, projectsList[i]);
-        for (uint16_t a = 0; a < 50; a++)
-        {
-            lowCase[a] = tolower(lowCase[a]);
-            if (lowCase[a] == 0)
-                break;
-        }
-
-        char* nes = strstr(lowCase, ".nes\0");
-        if (nes != nullptr)
-        {
-            *(projectsList[i] + (nes - lowCase)) = 0;
-        }
-    }
-
-    projectsListLength = gamesfoundCount;
-
-    status = fmBrowseGamesEnd;
-    currentOperationStep = 0;
-    currentOperation = fmNoOperation;
-}
-
-bool cFileManager::browseGames()
-{
-    stopAutosave();
-
-    if (status != fmIdle && status != fmSavingProjectToWorkspace)
-        return false;
-    if (currentOperation != fmNoOperation && currentOperation != fmSaveWorkspaceProject)
-        return false;
-
-    status = fmBrowsingGames;
-    currentOperationStep = 0;
-    currentOperation = fmBrowseGames;
-
-    return true;
-}
-
-uint8_t cFileManager::getGamesList(char*** list)
-{
-    *list = projectsList;
-    return projectsListLength;
-}
-
 const char* cFileManager::getProjectsDefaultPath()
 {
     return cDefaultProjectsPath;
@@ -573,8 +494,5 @@ void cFileManager::createProjectsAndModFolders()
 
 void cFileManager::createPatchesFolder()
 {
-    if (!fileSystem->exists(cDefaultPatchesPath))
-    {
-        fileSystem->mkdir(0, cDefaultPatchesPath);
-    }
+    SdPaths::ensureDir(fileSystem, SdPaths::synthPatchesDir(fileSystem));
 }

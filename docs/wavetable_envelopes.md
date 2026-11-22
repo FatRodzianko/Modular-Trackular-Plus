@@ -102,7 +102,7 @@ The Tracker stores **256 wavetable shapes** (each represented as a 128-point, 16
 | UI Range | Slot Count | Source |
 | :--- | :---: | :--- |
 | **`F 001` - `F 128`** | 128 | **Factory Wavetables** - Built into the firmware (8 banks of 16 musical contours). |
-| **`U 001` - `U 128`** | 128 | **User Wavetables** - Loaded from the `/Envelopes` folder on your SD card, with built-in fallback shapes for any slot that does not have a corresponding `.wav` file on disk. |
+| **`U 001` - `U 128`** | 128 | **User Wavetables** - Loaded from the `/System/Envelopes` folder on your SD card, with built-in fallback shapes for any slot that does not have a corresponding `.wav` file on disk. |
 
 ### Built-In Factory Banks (`F 001` – `F 128`)
 - **`F 001` – `F 016`:** Exponential & logarithmic decays / percussive plucks
@@ -115,7 +115,7 @@ The Tracker stores **256 wavetable shapes** (each represented as a 128-point, 16
 - **`F 113` – `F 128`:** Staircases up & down
 
 ### Built-In Fallback Banks for User Slots (`U 001` – `U 128`)
-So that `U 001` – `U 128` are immediately useful even when `/Envelopes` does not exist on the SD card (or when you only place a handful of custom `.wav` files), all 128 user slots are pre-initialized at boot with 8 additional procedural banks:
+So that `U 001` – `U 128` are immediately useful even when `/System/Envelopes` does not exist on the SD card (or when you only place a handful of custom `.wav` files), all 128 user slots are pre-initialized at boot with 8 additional procedural banks:
 - **`U 001` – `U 016`:** West-Coast wavefolded contours
 - **`U 017` – `U 032`:** Syncopated binary pulse patterns
 - **`U 033` – `U 048`:** Reverse swells with snappy cutoffs
@@ -125,13 +125,13 @@ So that `U 001` – `U 128` are immediately useful even when `/Envelopes` does n
 - **`U 097` – `U 112`:** Stepped sample-and-hold (S&H) contours
 - **`U 113` – `U 128`:** Cinematic morphing risers
 
-When you place a `.wav` file in `/Envelopes` for a given slot (e.g., `001.wav`), it overwrites `U 001` while leaving any other `U xxx` slots without `.wav` files on their built-in fallback shapes.
+When you place a `.wav` file in `/System/Envelopes` for a given slot (e.g., `001.wav`), it overwrites `U 001` while leaving any other `U xxx` slots without `.wav` files on their built-in fallback shapes.
 
 ---
 
-## 5. How to Add Your Own Wavetables in `/Envelopes`
+## 5. How to Add Your Own Wavetables in `/System/Envelopes`
 
-### Step 1: Create the `/Envelopes` Folder on Your SD Card
+### Step 1: Create the `/System/Envelopes` Folder on Your SD Card
 At the root level of your Tracker SD card, create a folder named **`Envelopes`** (case-insensitive on FAT32):
 
 ```text
@@ -152,7 +152,7 @@ SD Card Root/
   - **`001.wav`** maps to **`U 001`**, **`002.wav`** maps to **`U 002`**, ..., **`128.wav`** maps to **`U 128`**.
   - You can populate as few or as many slots as you like. For example, placing only `001.wav` and `005.wav` will replace `U 001` and `U 005`.
 - **0-Based Numbering (Also Supported):**
-  - If `/Envelopes/000.wav` (or `0.wav`) is present, the loader automatically uses 0-based indexing (`000.wav` $\rightarrow$ `U 001`, `001.wav` $\rightarrow$ `U 002`, ..., `127.wav` $\rightarrow$ `U 128`).
+  - If `/System/Envelopes/000.wav` (or `0.wav`) is present, the loader automatically uses 0-based indexing (`000.wav` $\rightarrow$ `U 001`, `001.wav` $\rightarrow$ `U 002`, ..., `127.wav` $\rightarrow$ `U 128`).
 
 ### Step 3: `.wav` File Technical Requirements
 Your `.wav` files must meet the following specifications:
@@ -175,5 +175,5 @@ Audio editors and synths export waveforms in one of two ways, and the Tracker au
   - Automatically shifted and normalized from `[-1.0, +1.0]` to `[0.0, 1.0]` (`-1.0` $\rightarrow$ `0%`, `0.0` $\rightarrow$ `50%`, `+1.0` $\rightarrow$ `100%`) so negative halves of audio waveforms are never clipped or rectified.
 
 ### Step 5: When Are User Wavetables Loaded?
-- User wavetables from `/Envelopes` are loaded automatically from the SD card the first time a project uses or previews a **`U 001` – `U 128`** slot in a session.
-- If you swap SD cards or add new files to `/Envelopes`, reboot the Tracker (or power-cycle) so the `/Envelopes` directory is rescanned cleanly.
+- User wavetables from `/System/Envelopes` are loaded automatically from the SD card the first time a project uses or previews a **`U 001` – `U 128`** slot in a session.
+- If you swap SD cards or add new files to `/System/Envelopes`, reboot the Tracker (or power-cycle) so the `/System/Envelopes` directory is rescanned cleanly.
