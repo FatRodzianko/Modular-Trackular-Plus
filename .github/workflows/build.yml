@@ -120,10 +120,10 @@ jobs:
           rm -rf build/sd-card
           mkdir -p build/sd-card
           cp -r sd-card/System build/sd-card/System
+          rm -f build/sd-card/System/Effects/.gitkeep build/sd-card/System/Synths/.gitkeep
           cp -r editor-fx-sdk/build/System/Effects/* build/sd-card/System/Effects/
           cp -r synth-plugin-sdk/build/package/System/Synths/* build/sd-card/System/Synths/
           cp synth-plugin-sdk/build/package/LICENSE-PROPRIETARY.txt build/sd-card/System/Synths/
-          find build/sd-card/System -name '.gitkeep' -delete
 
       - name: Upload Firmware Artifacts (.ptf)
         uses: actions/upload-artifact@v4
@@ -136,6 +136,7 @@ jobs:
         with:
           name: polyend-tracker-ce-sd-card
           path: build/sd-card/
+          include-hidden-files: true
 
       - name: Post Firmware Download Links to PR (Same-Repo PRs)
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
@@ -224,7 +225,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           cd build/sd-card
-          zip -r ../PolyendTracker_CE_SD_Card.zip System
+          zip -r ../PolyendTracker_CE_SD_Card.zip System -x "*/.gitkeep"
 
       - name: Publish GitHub Release on Version Tag
         if: startsWith(github.ref, 'refs/tags/v')
