@@ -1,16 +1,17 @@
 #include "infoViewer/infoViewer.h"
 
+#include "infoViewer/infoViewerDefs.h"
+
 void cInfoViewer::initDisplayControls()
 {
     doubleArrow[0].bitmaps[0].bitmapIndex = displayDoubleArrowL;
     doubleArrow[0].bitmaps[0].xValue = (800 / 8) * 0 + (800 / 16);
     doubleArrow[0].bitmaps[0].yValue = 455;
     doubleArrow[1].bitmaps[0].bitmapIndex = displayDoubleArrowR;
-    doubleArrow[1].bitmaps[0].xValue = (800 / 8) * 7 + (800 / 16);
+    doubleArrow[1].bitmaps[0].xValue = (800 / 8) * 6 + (800 / 16);
     doubleArrow[1].bitmaps[0].yValue = 445;
 
-    strControlProperties prop;
-    // inicjalizacja kontrolek
+    strControlProperties prop{};
     for (uint8_t i = 0; i < 8; i++)
     {
         prop.colors = display.getTheme().activeLabelsColors;
@@ -25,7 +26,7 @@ void cInfoViewer::initDisplayControls()
         label[i] = display.createControl<cLabel>(&prop);
     }
 
-    strControlProperties prop2;
+    strControlProperties prop2{};
     prop2.text = nullptr;
     prop2.colors = nullptr;
     prop2.value = 255;
@@ -45,7 +46,7 @@ void cInfoViewer::initDisplayControls()
     prop.h = 390;
     image = display.createControl<cImg>(&prop);
 
-    strControlProperties prop3;
+    strControlProperties prop3{};
     prop3.colors = display.getTheme().configItemEditorTextLabelColors;
     prop3.text = nullptr;
     prop3.data = nullptr;
@@ -63,13 +64,35 @@ void cInfoViewer::showDefaultScreen()
     for (uint8_t i = 0; i < 8; i++)
     {
         display.setControlText(label[i], "");
+        display.setControlColors(label[i], display.getTheme().activeLabelsColors);
+        display.setControlStyle(
+          label[i],
+          controlStyleShow | controlStyleCenterX | controlStyleCenterY | controlStyleFont3);
     }
 
     titleBar->show();
-    titleBar->setTitle(actualFolderName);
+    titleBar->showRightLabel(false);
+    titleBar->setTitle("Viewer");
 
-    display.setControlData(label[0], &doubleArrow[0]);
-    display.setControlData(label[7], &doubleArrow[1]);
+    if (filesCount > 1)
+    {
+        display.setControlData(label[0], &doubleArrow[0]);
+        display.setControlStyle(label[0],
+                                controlStyleShow | controlStyleCenterX | controlStyleCenterY |
+                                  controlStyleFont3 | controlStyleShowBitmap);
+        display.setControlData(label[6], &doubleArrow[1]);
+        display.setControlStyle(label[6],
+                                controlStyleShow | controlStyleCenterX | controlStyleCenterY |
+                                  controlStyleFont3 | controlStyleShowBitmap);
+    }
+    else
+    {
+        display.setControlColors(label[0], display.getTheme().inactiveLabelsColors);
+        display.setControlColors(label[6], display.getTheme().inactiveLabelsColors);
+    }
+
+    display.setControlText(label[7], "Back");
+    display.setControlColors(label[7], display.getTheme().activeButtonLabelsColors);
 
     for (uint8_t i = 0; i < 8; i++)
     {
@@ -77,6 +100,5 @@ void cInfoViewer::showDefaultScreen()
     }
 
     display.refreshControl(bgLabel);
-
     display.synchronizeRefresh();
 }

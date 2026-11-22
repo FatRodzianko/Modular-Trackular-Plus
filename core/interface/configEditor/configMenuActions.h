@@ -27,10 +27,6 @@ void openCreditsAction();
 
 void startFileTransferMode();
 
-void openManual1Action();
-void openManual2Action();
-void openManual3Action();
-
 void setFunctionKey1();
 void setFunctionKey2();
 void setFunctionKey3();

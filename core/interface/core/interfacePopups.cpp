@@ -1390,6 +1390,12 @@ void InterfacePopups::showProgressPopup(const char* text)
     display.synchronizeRefresh();
 }
 
+void InterfacePopups::setProgressPopupText(const char* text)
+{
+    textLines[0] = (char*)text;
+    display.refreshControl(textPopup);
+}
+
 void InterfacePopups::changePopupProgress(int8_t value)
 {
     display.setControlShow(progressBar);

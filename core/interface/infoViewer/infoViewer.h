@@ -1,27 +1,32 @@
 #ifndef INTERFACE_INFOVIEWER_H_
 #define INTERFACE_INFOVIEWER_H_
 
+#include "config.h"
 #include "core/modulesBase.h"
+
+#include <cstdint>
 
 class cInfoViewer : public ModuleBase
 {
-
   public:
-    virtual void update();
-    virtual void start(uint32_t options);
-    virtual void stop();
+    virtual void update() override;
+    virtual void start(uint32_t options) override;
+    virtual void stop() override;
 
-    virtual void initDisplayControls();
-    virtual void destroyDisplayControls() {}
+    virtual void initDisplayControls() override;
+    virtual void destroyDisplayControls() override {}
 
     cInfoViewer() {}
     ~cInfoViewer() {}
 
-    //----------------------------------
+    static bool isImageFile(const char* name);
+    static bool isTextFile(const char* name);
+    static bool isViewableFile(const char* name);
+
+    void openFile(const char* dirPath, const char* fileName, ModuleBase* callerModule);
+
     void setDefaultScreenFunct();
     void showDefaultScreen();
-
-    //----------------------------------
 
     enum class PageType : uint8_t
     {
@@ -30,31 +35,47 @@ class cInfoViewer : public ModuleBase
         kText,
     };
 
-    void refreshImage();
-    void countImages();
-    void nextImage();
-    void previouseImage();
-    void setImage(uint8_t number);
-    PageType getPageType(uint8_t number);
-    bool imageExists(uint8_t number);
+    void scanSiblingFiles();
+    void refreshCurrentFile();
+    void nextFile();
+    void previousFile();
+    void scrollText(int deltaLines);
+    void closeViewer();
 
-    char titleText[40];
+    PageType getCurrentFileType() const;
 
-    strLabelData doubleArrow[2];
-    strFrameData frameData;
+    char titleText[64]{};
+    char scrollStatusText[24]{};
 
-    hControl label[8];
-    hControl bgLabel;
+    strLabelData doubleArrow[2]{};
+    strFrameData frameData{};
 
-    hControl image;
+    hControl label[8]{};
+    hControl bgLabel = -1;
+
+    hControl image = -1;
     hControl infoTextBox = -1;
 
-    int imageNumber = 1;
-    int imagesCount = 0;
+    int currentFileIndex = 0;
+    int filesCount = 0;
+    char** siblingFiles = nullptr;
+
+    // Scrollable text state (backed by externalRamScratchBuff)
+    char* textFileBuf = nullptr;
+    uint32_t* lineOffsets = nullptr;
+    int totalTextLines = 0;
+    int scrollLine = 0;
 
     uint8_t refreshImageState = 0;
 
-    char actualFolderName[12];
+    char currentDir[kMaxFilePathLen + 1]{};
+    char initialFileName[kMaxFileNameLen + 1]{};
+    ModuleBase* returnModule = nullptr;
+
+  private:
+    void buildLineIndex();
+    void refreshTextWindow();
+    void updateActionButtons();
 };
 
 extern cInfoViewer infoViewer;

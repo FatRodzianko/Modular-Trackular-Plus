@@ -186,6 +186,12 @@ const char* const noteDisplayModeTexts[2] = {
     "Traditional",
 };
 
+const char* const fileManagerConfirmTexts[3] = {
+    "Confirm all",
+    "Confirm delete",
+    "Never ask",
+};
+
 // metronome
 
 const char* const metroTimeSig[12] = {
@@ -276,6 +282,7 @@ constexpr const char hexModeDesc[] = "hexMode";
 constexpr const char patternArraDesc[] = "patternArra";
 constexpr const char patternInfo[] = "patternInfo";
 constexpr const char noteDisplayModeDesc[] = "noteDisplayMode";
+constexpr const char confirmFileDeleteDesc[] = "confirmFileDelete";
 constexpr const char usbAudioDesc[] = "usbAudio";
 constexpr const char padsPrevDesc[] = "padsPrev";
 constexpr const char firmUpdDesc[] = "firmUpd";

@@ -136,9 +136,9 @@ std::string fontsDir(FileSystem* fs)
     return std::string(systemRoot(fs)) + "/Fonts";
 }
 
-std::string infoDir(FileSystem* fs)
+std::string infoFile(FileSystem* fs)
 {
-    return std::string(systemRoot(fs)) + "/Info";
+    return std::string(systemRoot(fs)) + "/info.txt";
 }
 
 std::string snapshotsDir(FileSystem* fs)

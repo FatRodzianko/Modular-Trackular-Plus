@@ -120,3 +120,6 @@ Pattern 1-128 for the
 next pattern boundary,
 or switches immediately
 when stopped.
+
+[confirmFileDelete]
+Controls confirmation prompts in the File Manager: Confirm all (Copy, Move, Delete), Confirm delete (Delete only), or Never ask (skip confirmations; collisions and protected folders still guarded).

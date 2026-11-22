@@ -83,15 +83,20 @@
 	* **Instant `Shift + Init Patch` Randomization**: Holding **`[Shift]`** inside the **Synth Patch Editor** swaps Button 2 from **`Init / Patch`** to **`Randomize / Patch`**.
 	* **Engine-Owned Randomizer Hook**: Extended the Synth Engine SDK so all randomization logic can live inside the individual synth engine. Implemented curated patch randomizers across all bundled factory synths. See [`docs/custom_synth_sdk.md`](docs/custom_synth_sdk.md).
 
-18. **SD-Card Offloading for Config & FX Help Descriptions, Editable `Info` Text & Secondary Font Offload (All 3 Devices)**
-	* Moved Config menu descriptions, Step FX help descriptions, and `Info → About` text out of firmware Flash into human-readable files at `/System/Text/config_hints.txt`, `/System/Text/fx_hints.txt`, and `/System/Info/about.txt`. Initial files provided in [`sd-card/System/`](sd-card/System/)).
-	* Renamed the `ImageViewer` to `InfoViewer`. New folders are in `/System/Info/` and enhanced it to support `.txt` pages (`1.txt`–`48.txt`, up to `2 KB` each) alongside baseline `.jpg`/`.jpeg` images.
+18. **Offloading large texts to SD-Card & Secondary Font Offload (All 3 Devices)**
+	* Moved Config menu descriptions, Step FX help descriptions, and `Config → Info` text out of firmware Flash into human-readable files at `/System/Text/config_hints.txt`, `/System/Text/fx_hints.txt`, and `/System/info.txt` (rendered directly inline when highlighting `Info` in `Config`). Initial files provided in [`sd-card/System/`](sd-card/System/).
 	* Moved the secondary `"New"` (`Liberation Sans`) UI font out of firmware Flash into [`sd-card/System/Fonts/New.ptfont`](sd-card/System/Fonts/New.ptfont), keeping `"Original"` built-in as the fallback. Together, these offloads reclaim `~46.5–47.2 KB` of Flash across all 3 devices (bringing Original Tracker free Flash to `~143.8 KB`).
+
+19. **Dual-Pane File Manager & Built-In Image/Text Viewer (All 3 Devices)**
+	* Added a dedicated **2-pane File Manager** accessible from **`File → File Manager`** with independent left/right directory panes,
+	* Non-blocking folder copy, fast same-volume move, and recursive delete with progress bar, mid-operation **Cancel**, and collision prompts (**Overwrite / Skip / Rename / All: ON-OFF**).
+	* Added options in **`Config → General → File Manager`:** `Confirm all`, `Confirm delete`, `Never ask`. System folders are actively protected.
+	* Integrated the **File Viewer** directly into File Manager (**Button `View`** / **Enter**): opens any `.jpg`/`.jpeg` (`800 × 390` px) or text file (`.txt`, `.md`, `.json`, `.ini`, `.cfg`, `.log`, up to `128 KB` / `8,192` lines with `Up/Down/Jog` & `PgUp/PgDn`) from any folder, with sibling navigation (`Left/Right` / `<<` / `>>`). See [`docs/info_viewer.md`](docs/info_viewer.md).
 
 ### Changed & Fixed
 
 * **Unified `/System/` SD Card Layout & Hidden `/.system/` Support (All 3 Devices)**:
-	* Consolidated firmware-managed assets, plugins, synth data, and IMX config (`Effects`, `Envelopes`, `Fonts`, `Info`, `Snapshots`, `Synths/{Patches,Samples,*.psyn}`, `Text`, `Themes`, and `trackerConfig`) under `/System/` (automatically using `/.system/` if `/System/` is absent and `/.system/` exists; IMX reads legacy `/trackerConfig` as a fallback).
+	* Consolidated firmware-managed assets, plugins, synth data, and IMX config (`Effects`, `Envelopes`, `Fonts`, `Snapshots`, `Synths/{Patches,Samples,*.psyn}`, `Text`, `Themes`, `info.txt`, and `trackerConfig`) under `/System/` (automatically using `/.system/` if `/System/` is absent and `/.system/` exists; IMX reads legacy `/trackerConfig` as a fallback).
 	* Defaulted Sample Editor WAV load/export and Instrument Editor `.pti` save browsers to `/`, and made leading-dot files/folders (such as `.system` and `.Trash-1000`) consistently hidden in both Sample Loader and `GlobalFileBrowser`.
 	* Removed leftover dead `Games` browsing code from `FileManager` and SD drivers (~1.3 KB Flash reclaimed).
 
