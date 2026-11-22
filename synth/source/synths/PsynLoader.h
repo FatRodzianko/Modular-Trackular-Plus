@@ -33,6 +33,17 @@ class PsynLoader
      * Create the built-in silent fallback synth ("NONE") used only when /Synths/ has no .psyn files.
      */
     static std::unique_ptr<InstrumentType> createFallbackSynth();
+
+    /**
+     * Returns true if the loaded .psyn engine for `typeId` advertises PSYN_FLAG_HAS_RANDOMIZE_PATCH.
+     */
+    static bool supportsRandomizePatch(int typeId);
+
+    /**
+     * Invokes the .psyn engine's randomize_patch(host_patch, seed) callback.
+     * Caller should wrap in audio critical section + Patch::startBatchUpdate()/finishBatchUpdate().
+     */
+    static bool randomizePatch(int typeId, Patch& patch, uint32_t seed);
 };
 
 } // namespace polysynth

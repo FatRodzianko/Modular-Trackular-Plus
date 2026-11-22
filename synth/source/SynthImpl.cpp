@@ -304,4 +304,14 @@ std::vector<int> SynthImpl::getInstrumentTypeIds()
 
     return ids;
 }
+
+bool SynthImpl::supportsRandomizePatch(int instrumentTypeId)
+{
+    return PsynLoader::supportsRandomizePatch(instrumentTypeId);
+}
+
+bool SynthImpl::randomizePatch(int instrumentTypeId, Patch& patch, uint32_t seed)
+{
+    return PsynLoader::randomizePatch(instrumentTypeId, patch, seed);
+}
 }

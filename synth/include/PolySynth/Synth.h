@@ -104,6 +104,10 @@ class Synth
 
     virtual std::vector<int> getInstrumentTypeIds() = 0;
 
+    virtual bool supportsRandomizePatch(int instrumentTypeId) = 0;
+
+    virtual bool randomizePatch(int instrumentTypeId, Patch& patch, uint32_t seed) = 0;
+
 #ifdef __cpp_lib_span // workaround c++17 in PlatformImx
     /**
      * Setup the synth using instruments and mixer.

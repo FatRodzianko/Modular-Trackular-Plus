@@ -91,6 +91,7 @@ Synth::~Synth() = default;
 
 void Synth::init(Platform* platform, std::function<tiny_optional<float>()> getTempo)
 {
+    platformPtr = platform;
     s_psynRamPoolOffset = 0;
     synth = polysynth::Synth::createSynth(
       [](size_t size) -> void*
@@ -490,6 +491,76 @@ void Synth::initPatch(int part)
 
     setPatch(part, std::move(newPatch), kInitPatchName);
     savePatchToWorkspace(part);
+}
+
+bool Synth::supportsRandomizePatch(int part) const
+{
+    if (part < 0 || part >= kSynthParts || !synth || !parts[part].patch)
+    {
+        return false;
+    }
+    return synth->supportsRandomizePatch(*parts[part].instrumentTypeId);
+}
+
+bool Synth::randomizePatch(int part)
+{
+    if (!supportsRandomizePatch(part))
+    {
+        return false;
+    }
+
+    static uint32_t s_randCounter = 0x9E3779B9u;
+    s_randCounter += 0x9E3779B9u;
+    uint32_t hwTime = (platformPtr && platformPtr->getTimer()) ? platformPtr->getTimer()->micros() : 0u;
+    uint32_t seed = hwTime ^ s_randCounter;
+    seed ^= seed >> 16;
+    seed *= 0x85EBCA6Bu;
+    seed ^= seed >> 13;
+    seed *= 0xC2B2AE35u;
+    seed ^= seed >> 16;
+    if (seed == 0)
+    {
+        seed = 0xA341316Cu;
+    }
+
+    // Randomize sample/wavetable slots first (outside audio critical section because of SD I/O)
+    const size_t sampleSlotCount = parts[part].patch->getMetadata().sampleSlots.size();
+    if (sampleSlotCount > 0)
+    {
+        auto samples = listSamples(part);
+        if (!samples.empty())
+        {
+            uint32_t slotRng = seed ^ 0x51F2A3C7u;
+            for (size_t slotId = 0; slotId < sampleSlotCount; ++slotId)
+            {
+                slotRng ^= slotRng << 13;
+                slotRng ^= slotRng >> 17;
+                slotRng ^= slotRng << 5;
+                int randIdx = static_cast<int>(slotRng % static_cast<uint32_t>(samples.size()));
+                loadSampleByIndex(part, static_cast<int>(slotId), randIdx);
+            }
+        }
+    }
+
+    bool randomized = false;
+    {
+        DISABLE_AUDIO_INTERRUPTS();
+        auto& patch = *parts[part].patch;
+        patch.startBatchUpdate();
+        randomized = synth->randomizePatch(*parts[part].instrumentTypeId, patch, seed);
+        patch.finishBatchUpdate();
+        ENABLE_AUDIO_INTERRUPTS();
+    }
+
+    if (!randomized)
+    {
+        return false;
+    }
+
+    parts[part].patchName = kRandomPatchName;
+    parts[part].patchDirty = true;
+    savePatchToWorkspace(part);
+    return true;
 }
 
 void Synth::savePatchToWorkspace(int part)

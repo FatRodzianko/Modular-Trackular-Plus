@@ -521,6 +521,60 @@ class ChiptuneSynthVoice : public sdk::CustomSynthVoice<ChiptuneSynthVoice, Chip
         }
     }
 
+    static void randomizePatch(Patch& patch, uint32_t seed)
+    {
+        psyn::Rng rng(seed);
+        auto set = [&](ChipParamId id, float val)
+        { patch.setParamValue(*id, val, Patch::ParamChangeSource::kPatchAssign); };
+
+        const int model = rng.rangeInt(0, static_cast<int>(kModelNames.size()) - 1);
+        set(ChipParamId::kModel, static_cast<float>(model));
+        // Keep kTune, kFine, and kVolume untouched for in-key, consistent-level auditioning
+        set(ChipParamId::kShape, rng.range(0.08f, 0.92f));
+        set(ChipParamId::kPwmRate, rng.expRange(0.2f, 15.0f));
+        set(ChipParamId::kPwmDepth, rng.chance(0.75f) ? rng.range(0.0f, 0.85f) : 0.0f);
+        set(ChipParamId::kSubMix, rng.chance(0.7f) ? rng.range(0.0f, 0.75f) : 0.0f);
+
+        const int arpChord =
+          rng.chance(0.55f) ? 0 : rng.rangeInt(1, static_cast<int>(kArpNames.size()) - 1);
+        set(ChipParamId::kArpChord, static_cast<float>(arpChord));
+        set(ChipParamId::kArpSpeed, rng.range(15.0f, 65.0f));
+
+        const bool isFxModel = (model == static_cast<int>(ChipModel::kZapLaser) ||
+                                model == static_cast<int>(ChipModel::kChipDrum));
+        const float pitchSweep =
+          isFxModel ? rng.range(-30.0f, -6.0f)
+                    : (rng.chance(0.25f) ? rng.range(-18.0f, 18.0f) : 0.0f);
+        set(ChipParamId::kPitchSweep, pitchSweep);
+        set(ChipParamId::kSweepTime, rng.expRange(0.03f, 0.6f));
+
+        set(ChipParamId::kVibRate, rng.expRange(2.0f, 12.0f));
+        set(ChipParamId::kVibDepth, rng.chance(0.35f) ? rng.range(0.05f, 0.45f) : 0.0f);
+
+        const float attack = rng.chance(0.75f) ? rng.range(0.0f, 0.03f) : rng.expRange(0.03f, 0.55f);
+        float decay = rng.expRange(0.08f, 1.4f);
+        const float sustain = isFxModel ? rng.range(0.0f, 0.25f) : rng.range(0.0f, 0.9f);
+        if (sustain < 0.2f && decay < 0.18f)
+        {
+            decay = rng.range(0.18f, 0.6f);
+        }
+        const float release = rng.expRange(0.04f, 0.75f);
+        set(ChipParamId::kAmpAttack, attack);
+        set(ChipParamId::kAmpDecay, decay);
+        set(ChipParamId::kAmpSustain, sustain);
+        set(ChipParamId::kAmpRelease, release);
+
+        set(ChipParamId::kFilterCutoff, rng.expRange(500.0f, 16000.0f));
+        set(ChipParamId::kFilterResonance, rng.range(0.0f, 0.72f));
+        set(ChipParamId::kFilterEnvAmount, rng.range(-0.55f, 0.85f));
+
+        set(ChipParamId::kBitcrush, rng.chance(0.6f) ? rng.range(6.0f, 16.0f) : rng.range(3.5f, 8.0f));
+        set(ChipParamId::kDecimate, rng.chance(0.7f) ? rng.range(1.0f, 3.0f) : rng.range(1.0f, 12.0f));
+
+        set(ChipParamId::kPlayMode, static_cast<float>(rng.rangeInt(0, 2)));
+        set(ChipParamId::kGlideTime, rng.chance(0.3f) ? rng.expRange(0.02f, 0.25f) : 0.0f);
+    }
+
     static void createMetadata(const Patch& /*patch*/, Patch::Metadata& metadata)
     {
         using namespace polysynth::sdk;

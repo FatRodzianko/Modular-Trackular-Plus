@@ -32,6 +32,7 @@ static void functSynthPatchEditLeft();
 static void functSynthPatchEditRight();
 
 static void functSynthPatchEditMiniMiddle(uint8_t state);
+static void functSynthPatchEditShift(uint8_t state);
 static void functSynthPatchEditPads(uint8_t pad, uint8_t state, int16_t);
 
 static void functSynthPatchEditInsert();
@@ -161,6 +162,7 @@ void cInstrumentEditor::setSynthPatchEditorScreenFunct()
     ip->setButtonObj(interfaceButtonInsert, buttonPress, functSynthPatchEditInsert);
 
     ip->setButtonObj(interfaceButtonMiniMiddle, functSynthPatchEditMiniMiddle);
+    ip->setButtonObj(interfaceButtonShift, functSynthPatchEditShift);
 
     ip->setPadsGlobal(functSynthPatchEditPads);
 }
@@ -527,6 +529,12 @@ static void functSynthActionButtons(uint8_t button)
 static void functSynthSave()
 {
     uint8_t syntPartIdx = mtProject.values.lastUsedInstrument - SYNTH_INSTRUMENTS_START_IDX;
+    std::string curName = IE->getSynth()->getPatchName(syntPartIdx);
+    if (curName == Synth::kRandomPatchName)
+    {
+        functSynthSaveAs();
+        return;
+    }
 
     auto result = IE->getSynth()->savePatch(syntPartIdx);
 
@@ -544,7 +552,8 @@ static void functSynthSaveAs()
     std::string initDir = engineRoot;
     std::string defName = "Patch";
 
-    if (!curName.empty() && curName != Synth::kInitPatchName)
+    if (!curName.empty() && curName != Synth::kInitPatchName &&
+        curName != Synth::kRandomPatchName)
     {
         auto slash = curName.find_last_of('/');
         if (curName.front() == '/')
@@ -624,8 +633,60 @@ static void functSynthSaveAs()
     openGlobalFileBrowser(cfg);
 }
 
+static void functSynthPatchEditShift(uint8_t state)
+{
+    if (IE->keyboardManager.getState())
+    {
+        return;
+    }
+
+    if (state == buttonPress)
+    {
+        if (mtPopups.isNoteKeyboardPopupActive())
+        {
+            mtPopups.toggleNoteKeyboardPopup(InterfacePopups::noteKeyboardOption::kShowEditButtons);
+        }
+        IE->updateSynthPatchInitButtonLabel(true);
+    }
+    else if (state == buttonRelease)
+    {
+        if (mtPopups.isNoteKeyboardPopupActive())
+        {
+            mtPopups.toggleNoteKeyboardPopup(InterfacePopups::noteKeyboardOption::kForceShow);
+        }
+        IE->updateSynthPatchInitButtonLabel(false);
+    }
+}
+
+void cInstrumentEditor::updateSynthPatchInitButtonLabel(bool shiftHeld)
+{
+    if (mode != mtInstEditModeSynthPatchEdit || keyboardManager.getState())
+    {
+        return;
+    }
+
+    int syntPartIdx = mtProject.values.lastUsedInstrument - SYNTH_INSTRUMENTS_START_IDX;
+    bool showRandomize = shiftHeld && getSynth()->supportsRandomizePatch(syntPartIdx);
+    display.setControlText(label[2], showRandomize ? "Randomize" : "Init");
+    display.setControlText2(label[2], "Patch");
+    display.refreshControl(label[2]);
+}
+
 static void functSynthInit()
 {
+    int syntPartIdx = mtProject.values.lastUsedInstrument - SYNTH_INSTRUMENTS_START_IDX;
+    if (IE->buttons->isButtonPressed(interfaceButtonShift) &&
+        IE->getSynth()->supportsRandomizePatch(syntPartIdx))
+    {
+        IE->randomizeCurrentPatch();
+        IE->showSynthPatchSectionParam(true);
+        IE->showSynthPatchSectionParamValue(true);
+        IE->showSynthPatchMacroParam(true);
+        IE->showSynthPatchMacroParamValue(true);
+        IE->updateSynthPatchInitButtonLabel(IE->buttons->isButtonPressed(interfaceButtonShift));
+        return;
+    }
+
     IE->showSynthPatchInitPopup();
     IE->setSynthPatchInitPopupFunct();
 }
@@ -1164,7 +1225,12 @@ void cInstrumentEditor::showSynthPatchEditorScreen()
 
     display.setControlText(label[0], "Save");
     display.setControlText(label[1], "Save As");
-    display.setControlText(label[2], "Init");
+    {
+        int initPartIdx = mtProject.values.lastUsedInstrument - SYNTH_INSTRUMENTS_START_IDX;
+        bool showRandomize = buttons->isButtonPressed(interfaceButtonShift) &&
+                             getSynth()->supportsRandomizePatch(initPartIdx);
+        display.setControlText(label[2], showRandomize ? "Randomize" : "Init");
+    }
     display.setControlText(label[3], "");
     display.setControlText(label[4], "");
     display.setControlText(label[5], "Parameter");
@@ -1524,6 +1590,10 @@ void cInstrumentEditor::showSynthPatchSection(bool refreshList)
             sectionImgList[idx] = -1;
             idx++;
         }
+
+        imgGridData.textList = sectionNamesList;
+        imgGridData.imgList = sectionImgList;
+        display.setControlData(imgGridControl, &imgGridData);
     }
 
     display.setControlValue(imgGridControl, sectionListPos);
