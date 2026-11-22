@@ -21,8 +21,6 @@ __NOINIT(EXTERNAL_RAM) uint8_t externalRamFileManagerBuffL[READ_WRITE_BUFOR_SIZE
 __NOINIT(EXTERNAL_RAM) char* cFileManager::projectsList[cFileManager::list_length_max];
 __NOINIT(EXTERNAL_RAM) char* cFileManager::firmwaresList[cFileManager::list_length_max];
 __NOINIT(EXTERNAL_RAM) char* cFileManager::modsList[cFileManager::list_length_max];
-__NOINIT(EXTERNAL_RAM) char* cFileManager::explorerList[cFileManager::list_length_max];
-__NOINIT(EXTERNAL_RAM) uint32_t cFileManager::currentFolderMemoryFileUsage[cFileManager::list_length_max];
 __NOINIT(EXTERNAL_RAM) cFileManager::strImportFileDataCommon cFileManager::impFileData;
 
 cFileManager newFileManager;
@@ -46,8 +44,6 @@ void cFileManager::init(FileSystem* fileSystem, Synth* synth, bool stereoSampleM
     memset(projectsList, 0, sizeof(projectsList));
     memset(firmwaresList, 0, sizeof(firmwaresList));
     memset(modsList, 0, sizeof(modsList));
-    memset(explorerList, 0, sizeof(explorerList));
-    memset(currentFolderMemoryFileUsage, 0, sizeof(currentFolderMemoryFileUsage));
     memset(&impFileData, 0, sizeof(impFileData));
 
     fileTransfer.init(fileSystem);
@@ -75,7 +71,6 @@ void cFileManager::update()
         case fmOpenProject: projectOpen.update(); break;
         case fmCopyWorkspaceToProjects: projectSave.update(); break;
 
-        case fmBrowseSamples: updateBrowseSamples(); break;
         case fmBrowseFirmwares: updateBrowseFirmwares(); break;
 
         case fmImportSamplesToWorkspace: sampleImport.update(); break;
@@ -214,8 +209,10 @@ bool cFileManager::openProject(char* path, char* name)
     return projectOpen.openProject(path, name);
 }
 
-bool cFileManager::importSamplesToProject(uint8_t fileFrom,
-                                          uint8_t fileTo,
+bool cFileManager::importSamplesToProject(const char* sourceDirPath,
+                                          char* const* sourceFileList,
+                                          uint16_t fileFrom,
+                                          uint16_t fileTo,
                                           uint8_t instrumentSlot,
                                           uint16_t dataFrom,
                                           uint16_t dataTo,
@@ -225,6 +222,8 @@ bool cFileManager::importSamplesToProject(uint8_t fileFrom,
     stopAutosave();
 
     return sampleImport.importSamplesToProject(
+      sourceDirPath,
+      sourceFileList,
       fileFrom,
       fileTo,
       instrumentSlot,

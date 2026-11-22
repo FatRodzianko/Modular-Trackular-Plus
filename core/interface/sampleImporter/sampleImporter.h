@@ -1,6 +1,7 @@
 #ifndef INTERFACE_SAMPLEIMPORTER_H_
 #define INTERFACE_SAMPLEIMPORTER_H_
 
+#include "FileBrowser.h"
 #include "core/modulesBase.h"
 #include "mtKeyboardManager.h"
 #include "mtStructs.h"
@@ -131,15 +132,27 @@ class cSampleImporter : public ModuleBase
     void importSamples();
 
     // pliki wybranym folderze
+    static constexpr uint16_t kMaxExplorerEntries = 8192;
+    FileBrowser fileBrowser;
+    static FileBrowserData& browserData();
+    bool browserInitialized = false;
     uint16_t locationExplorerCount = 0;
-    char** explorerNames;
-    uint8_t selectedFile = 0;
+    char** explorerNames = nullptr;
+    uint8_t* fileSelectionTab = nullptr;
+    uint16_t selectedFile = 0;
+    uint16_t dirGeneration = 0;
+    uint16_t memUsageCacheDirGen = 0;
+    uint16_t memUsageCacheFileIdx = 0xFFFF;
+    uint32_t memUsageCacheRawBytes = 0;
     // Null for a row the list does not have: the list is empty, or it is being read again.
     const char* explorerRowName(uint16_t row) const;
     bool isFolderRow(uint16_t row) const;
     bool isFileRow(uint16_t row) const;
+    void bindExplorerScratch();
+    void refreshExplorerList(bool preserveCursor);
+    bool buildEntryPath(uint16_t row, char* out, size_t outSize) const;
+    uint32_t getEntryMemoryUsage(uint16_t row);
     char copyingInfo[20];
-    uint32_t* currentFolderMemoryFileUsage;
 
     //--------------------------------------------------------------
 
@@ -198,14 +211,14 @@ class cSampleImporter : public ModuleBase
     void rewindListToBeggining();
     void moveInstrListToEnd();
 
-    static const uint8_t maxListLength = 101; // 100 files and the parent folder
     uint8_t selectionActive[2] = { 0, 0 };
     uint32_t explorerHeaderColors[4];
     uint32_t instrumentHeaderColors[4];
     uint8_t shiftPressed;
-    static uint8_t selectionTab[2][maxListLength];
+    static uint8_t instrumentSelectionTab[kSampleInstrumentsCount];
     uint8_t selectionLength[2];
-    //	uint8_t currSelectPlace=0;
+    uint8_t* getSelectionTab(uint8_t whichSelect);
+    uint16_t getSelectionLimit(uint8_t whichSelect) const;
 
     //----------------------------------
     // impport
@@ -292,16 +305,16 @@ class cSampleImporter : public ModuleBase
     //----------------------------------
     void updateSelection();
 
-    uint8_t handleSelecting(uint8_t selectStart,
-                            uint8_t selectMax,
-                            int16_t value,
-                            uint8_t fileCheck);
+    uint16_t handleSelecting(uint16_t selectStart,
+                             uint16_t selectMax,
+                             int16_t value,
+                             uint8_t fileCheck);
 
     void cancelSelect(uint8_t placeToCancel);
     int16_t getSelectionStart(uint8_t whichSelect);
     int16_t getSelectionEnd(uint8_t whichSelect);
 
-    bool checkIfValidSelection(uint8_t positionToCheck);
+    bool checkIfValidSelection(uint16_t positionToCheck);
 
     void handleMemoryBar();
     void calculateFileMemUsage();

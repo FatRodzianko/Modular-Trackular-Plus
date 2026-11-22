@@ -922,7 +922,10 @@ void cConfigEditor::updateFirmware(bool yes)
         processUpdate = 1;
     }
 
+    CE->hidePopout();
     CE->hideConfigList();
+    CE->hideConfigItemLabel();
+    CE->hideConfigItemDesctription();
 
     CE->itemEditorShown = 0;
 

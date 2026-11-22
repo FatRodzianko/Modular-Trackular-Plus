@@ -62,10 +62,7 @@ class FileSystemImpl final : public FileSystem
                                 char** list,
                                 uint8_t list_length,
                                 uint16_t max_used_memory,
-                                enListFileFilter filter = enListFileFilter_all,
-                                uint16_t skip_count = 0,
-                                uint16_t max_files_in_subdir = 0,
-                                enListFileFilter folderSizeFilter = enListFileFilter_all) override;
+                                enListFileFilter filter = enListFileFilter_all) override;
 
     virtual void listDirContents(const char* dirPath,
                                  DirContentType contentType,
