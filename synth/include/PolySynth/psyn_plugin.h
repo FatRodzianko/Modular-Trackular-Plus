@@ -24,6 +24,7 @@ extern "C" {
 #define PSYN_FLAG_HAS_SAMPLE_SLOTS 0x0001u    /* Set in PsynHeader::flags if engine uses SampleSlots */
 #define PSYN_FLAG_SUPPORTS_IDLE_SLEEP 0x0002u /* Set in PsynHeader::flags if engine supports Voice Sleep */
 #define PSYN_FLAG_HAS_VOICE_TICK_IDLE 0x0004u /* Set in PsynHeader::flags if PsynPluginApi appends voice_tick_idle */
+#define PSYN_FLAG_HAS_RANDOMIZE_PATCH 0x0008u /* Set in PsynHeader::flags if PsynPluginApi appends randomize_patch */
 
 /**
  * Binary header at byte offset 0 of every .psyn file on SD card (/Synths/<NAME>.psyn).
@@ -257,6 +258,11 @@ typedef struct PsynPluginApi
      * If NULL (with PSYN_FLAG_HAS_VOICE_TICK_IDLE set) or flag unset, host falls back to voice_render_audio
      * when Voice Sleep is Off. */
     void (*voice_tick_idle)(void* voice, const PsynVoiceContext* ctx);
+
+    /* Optional extension (only present when PSYN_FLAG_HAS_RANDOMIZE_PATCH is set in PsynHeader::flags):
+     * Randomizes synth patch parameters in-place via host->patch_set_param_value() while preserving
+     * musical tuning, audibility, and user macro assignments. */
+    void (*randomize_patch)(void* host_patch, uint32_t seed);
 } PsynPluginApi;
 
 typedef const PsynPluginApi* (*PsynEntryFn)(const PsynHostApi* host);

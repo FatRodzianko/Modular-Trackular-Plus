@@ -802,6 +802,27 @@ void cInstrumentEditor::initCurrentPatch()
     IE->showSynthPatchName(syntPartIdx);
 }
 
+void cInstrumentEditor::randomizeCurrentPatch()
+{
+    int syntPartIdx = mtProject.values.lastUsedInstrument - SYNTH_INSTRUMENTS_START_IDX;
+    assert(syntPartIdx >= 0 && syntPartIdx < kSynthInstrumentsCount);
+
+    if (!IE->getSynth()->randomizePatch(syntPartIdx))
+    {
+        return;
+    }
+
+    polystrncpy(mtProject.values.synthPart[syntPartIdx].patchName,
+                IE->getSynth()->getPatchName(syntPartIdx).c_str(),
+                sizeof(SynthPartSettings::patchName));
+
+    newFileManager.setProjectStructChanged();
+
+    mtPopups.show(0, "Patch randomized");
+
+    IE->showSynthPatchName(syntPartIdx);
+}
+
 // ------------------------------------------------------------------------------------------
 // ------------------------------       GUI     ---------------------------------------------
 // ------------------------------------------------------------------------------------------

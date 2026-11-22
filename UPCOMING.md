@@ -79,6 +79,10 @@
 16. **Standalone `.pti` Instrument Saving (All 3 Devices)**
 	* Added a **`Save .pti`** button on the **Instrument Effects** screen (2nd page of Instrument Parameters), allowing you to export the active sample instrument with all the settings as a standalone `.pti` file anywhere on the SD card (defaulting to `/Instruments` via the unified file browser).
 
+17. **One-Click Synth Patch Randomizer (Tracker+ & Tracker Mini)**
+	* **Instant `Shift + Init Patch` Randomization**: Holding **`[Shift]`** inside the **Synth Patch Editor** swaps Button 2 from **`Init / Patch`** to **`Randomize / Patch`**.
+	* **Engine-Owned Randomizer Hook**: Extended the Synth Engine SDK so all randomization logic can live inside the individual synth engine. Implemented curated patch randomizers across all bundled factory synths. See [`docs/custom_synth_sdk.md`](docs/custom_synth_sdk.md).
+
 ### Changed & Fixed
 
 * **Faster UI Rendering & System Responsiveness (All 3 Devices)**:

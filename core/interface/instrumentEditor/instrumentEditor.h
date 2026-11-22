@@ -417,6 +417,8 @@ class cInstrumentEditor : public ModuleBase
     int loadPatchList();
     void revertPatch();
     void initCurrentPatch();
+    void randomizeCurrentPatch();
+    void updateSynthPatchInitButtonLabel(bool shiftHeld);
 
     void showSynthParamsScreen();
     void setSynthParamsScreenFunct();

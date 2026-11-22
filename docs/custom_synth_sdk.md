@@ -67,7 +67,8 @@ Recommended for full-featured engines sharing code cleanly with Polyend's `Patch
 
 | Header | Purpose |
 | :--- | :--- |
-| [`synth-plugin-sdk/include/psyn/psyn_cpp_bridge.h`](../synth-plugin-sdk/include/psyn/psyn_cpp_bridge.h) | Translates any `polysynth::InstrumentVoice` subclass into the C `.psyn` plugin ABI via `PSYN_REGISTER_CPP_VOICE(VoiceClass)`. |
+| [`synth-plugin-sdk/include/psyn/psyn_cpp_bridge.h`](../synth-plugin-sdk/include/psyn/psyn_cpp_bridge.h) | Translates any `polysynth::InstrumentVoice` subclass into the C `.psyn` plugin ABI via `PSYN_REGISTER_CPP_VOICE(VoiceClass)` (including compile-time detection of `tickIdle()` and `static void randomizePatch(Patch&, uint32_t)`). |
+| [`synth-plugin-sdk/include/psyn/psyn_random.h`](../synth-plugin-sdk/include/psyn/psyn_random.h) | Lightweight zero-allocation `psyn::Rng` (`xorshift32`) helper with `range()`, `expRange()`, `powRange()`, `rangeInt()`, `chance()`, and `choice()` for engine-side patch randomization. |
 | [`synth/include/PolySynth/sdk/SynthVoiceSDK.h`](../synth/include/PolySynth/sdk/SynthVoiceSDK.h) | Header-only C++20 base class `CustomSynthVoice`, `ParamHelper`, math helpers, standard `MidiCCs`, and formatters. |
 | [`synth/include/PolySynth/sdk/InstrumentVoice.h`](../synth/include/PolySynth/sdk/InstrumentVoice.h) | Pure virtual voice interface (`onMidiEvent`, `onParamChange`, `renderVoiceAudio`, `renderPostProcessAudio`, `hasPostProcess`, `tickIdle`, `hasTickIdle`, note query methods). |
 | [`synth/include/PolySynth/sdk/InstrumentType.h`](../synth/include/PolySynth/sdk/InstrumentType.h) | Engine factory interface (`createMetadata`, `createVoice`). |
@@ -79,7 +80,7 @@ Recommended for full-featured engines sharing code cleanly with Polyend's `Patch
 ### Mode B: Pure C (`psyn_plugin.h`)
 | Header | Purpose |
 | :--- | :--- |
-| [`synth-plugin-sdk/include/psyn/psyn_plugin.h`](../synth-plugin-sdk/include/psyn/psyn_plugin.h) | Self-contained 128-byte `PsynHeader` (`PSYN_MAGIC = 0x4E595350`, `PSYN_API_VERSION = 1`, `PSYN_FLAG_HAS_SAMPLE_SLOTS = 0x0001`, `PSYN_FLAG_SUPPORTS_IDLE_SLEEP = 0x0002`, `PSYN_FLAG_HAS_VOICE_TICK_IDLE = 0x0004`), `PsynHostApi` callbacks, `PsynPluginApi` vtable (plus optional `voice_tick_idle` when `PSYN_FLAG_HAS_VOICE_TICK_IDLE` is set), and `psyn_plugin_entry(const PsynHostApi* host)`. |
+| [`synth-plugin-sdk/include/psyn/psyn_plugin.h`](../synth-plugin-sdk/include/psyn/psyn_plugin.h) | Self-contained 128-byte `PsynHeader` (`PSYN_MAGIC = 0x4E595350`, `PSYN_API_VERSION = 1`, `PSYN_FLAG_HAS_SAMPLE_SLOTS = 0x0001`, `PSYN_FLAG_SUPPORTS_IDLE_SLEEP = 0x0002`, `PSYN_FLAG_HAS_VOICE_TICK_IDLE = 0x0004`, `PSYN_FLAG_HAS_RANDOMIZE_PATCH = 0x0008`), `PsynHostApi` callbacks, `PsynPluginApi` vtable (plus optional `voice_tick_idle` and `randomize_patch` extensions), and `psyn_plugin_entry(const PsynHostApi* host)`. |
 
 ---
 
@@ -227,11 +228,12 @@ python3 synth-plugin-sdk/tools/psyn_builder.py \
     --renders-aux 0 \
     --has-sample-slots 0 \
     --supports-idle-sleep 1 \
-    --has-voice-tick-idle 0
+    --has-voice-tick-idle 0 \
+    --has-randomize-patch 1
 ```
 
 > [!TIP]
-> Always set `--type-id-wave 0` and `--type-id-play-tracker 0` for new third-party engines (`PsynLoader` hashes `code_name` into a deterministic runtime `InstrumentTypeId` `0x100+` that never collides with factory IDs), and pass `--supports-idle-sleep 1` whenever your voice implements `isActive()` (plus `--has-voice-tick-idle 1` if it also overrides `tickIdle()`; see [Section 10.5](#10-real-time-audio-cpu--memory-guidelines)).
+> Always set `--type-id-wave 0` and `--type-id-play-tracker 0` for new third-party engines (`PsynLoader` hashes `code_name` into a deterministic runtime `InstrumentTypeId` `0x100+` that never collides with factory IDs), pass `--supports-idle-sleep 1` whenever your voice implements `isActive()` (plus `--has-voice-tick-idle 1` if it also overrides `tickIdle()`; see [Section 10.5](#10-real-time-audio-cpu--memory-guidelines)), and pass `--has-randomize-patch 1` if your engine implements `static void randomizePatch(Patch&, uint32_t)` (C++) or `randomize_patch(void* host_patch, uint32_t seed)` (C) to enable **`Shift + Randomize Patch`** in the Synth Patch Editor.
 
 ### Step 3: Deploy onto SD Card
 Copy the `.psyn` binary to `/Synths/MYSYN.psyn` and any preset patches to `/Patches/MYSYN/*.patch`. Reboot or re-enter the Synth menu — your new engine appears automatically in the Synth model selector (`SynthEditor`).

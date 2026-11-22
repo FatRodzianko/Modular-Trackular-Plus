@@ -49,6 +49,9 @@ class SynthImpl
     std::vector<std::string_view> getInstrumentTypeNames() override;
     std::vector<int> getInstrumentTypeIds() override;
 
+    bool supportsRandomizePatch(int instrumentTypeId) override;
+    bool randomizePatch(int instrumentTypeId, Patch& patch, uint32_t seed) override;
+
     void setup(std::span<std::shared_ptr<polysynth::Instrument>> newInstruments,
                std::span<std::shared_ptr<polysynth::Instrument>> newEffects,
                std::shared_ptr<Mixer> newMixer,
