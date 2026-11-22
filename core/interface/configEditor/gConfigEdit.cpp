@@ -155,7 +155,7 @@ void cConfigEditor::initDisplayControls()
     prop2.y = 30;
     prop2.w = 780;
     prop2.h = 450;
-    prop2.data = nullptr; //&textBoxData;
+    prop2.data = nullptr;
     creditsTextBox = display.createControl<cTextBox>(&prop2);
 
     prop2.style = controlStyleFont5;
@@ -654,7 +654,7 @@ void cConfigEditor::showCreditsControls()
     FileSystem* fs = (platform != nullptr) ? platform->getFileSystem() : nullptr;
     if (fs != nullptr && fs->isSdCardInserted())
     {
-        std::string aboutPath = SdPaths::infoDir(fs) + "/about.txt";
+        std::string aboutPath = SdPaths::infoFile(fs);
         if (SdTextFile::readAll(fs, aboutPath.c_str(), s_aboutTextBuf, sizeof(s_aboutTextBuf)))
         {
             SdTextFile::stripCr(s_aboutTextBuf);
@@ -682,6 +682,48 @@ void cConfigEditor::hideCreditsControls()
 
     display.setControlText(label[7], "");
     display.refreshControl(label[7]);
+}
+
+void cConfigEditor::showInlineInfoPanel()
+{
+    hideSubmenu();
+
+    display.setControlPosition(blankSpaceCover[1], (800 / 8) * 2 + 1, 29);
+    display.setControlSize(blankSpaceCover[1], 800 / 2 - 3, 394);
+    display.setControlShow(blankSpaceCover[1]);
+    display.refreshControl(blankSpaceCover[1]);
+
+    const char* aboutPtr = kAboutFallbackText;
+    auto* tracker = TrackerImpl::getInstance();
+    auto* platform = (tracker != nullptr) ? tracker->getPlatform() : nullptr;
+    FileSystem* fs = (platform != nullptr) ? platform->getFileSystem() : nullptr;
+    if (fs != nullptr && fs->isSdCardInserted())
+    {
+        std::string aboutPath = SdPaths::infoFile(fs);
+        if (SdTextFile::readAll(fs, aboutPath.c_str(), s_aboutTextBuf, sizeof(s_aboutTextBuf)))
+        {
+            SdTextFile::stripCr(s_aboutTextBuf);
+            if (s_aboutTextBuf[0] != '\0')
+            {
+                aboutPtr = s_aboutTextBuf;
+            }
+        }
+    }
+
+    display.setControlPosition(creditsTextBox, (800 / 8) * 2 + 12, 34);
+    display.setControlSize(creditsTextBox, 800 / 2 - 24, 384);
+    display.setControlShow(creditsTextBox);
+    display.setControlText(creditsTextBox, aboutPtr);
+    display.refreshControl(creditsTextBox);
+}
+
+void cConfigEditor::hideInlineInfoPanel()
+{
+    display.setControlHide(creditsTextBox);
+    display.refreshControl(creditsTextBox);
+
+    display.setControlHide(blankSpaceCover[1]);
+    display.refreshControl(blankSpaceCover[1]);
 }
 
 #ifdef GRID_EDITOR_ENABLED

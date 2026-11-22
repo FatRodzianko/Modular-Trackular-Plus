@@ -426,6 +426,9 @@ void checkConfig()
     if (mtConfig.general.noteDisplayMode >= NoteDisplayMode::kNoteDisplayModeCount)
         mtConfig.general.noteDisplayMode = NoteDisplayMode::kNoteDisplayModeDefault;
 
+    if (mtConfig.general.confirmFileDelete > 2)
+        mtConfig.general.confirmFileDelete = 1;
+
     mtConfig.general.lineInOutType = 0;
 
     if (mtConfig.general.theme >= ThemeManager::kMaxCustomThemes)
@@ -571,6 +574,7 @@ void resetConfig()
     mtConfig.general.previewVolume = PREVIEW_VOLUME_DEFAULT;
     mtConfig.general.recThreshold = recThreshold_default;
     mtConfig.general.noteDisplayMode = NoteDisplayMode::kNoteDisplayModeDefault;
+    mtConfig.general.confirmFileDelete = 1;
 
     // interface ----------------------------------------
     mtConfig.interface.fxPopupDescription = 0;

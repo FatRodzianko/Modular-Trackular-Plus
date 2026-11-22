@@ -16,7 +16,9 @@
 #include "performanceMode/performanceMode.h"
 
 #include "FileBrowser.h"
+#include "core/interface.h"
 #include "fileBrowser/GlobalFileBrowser.h"
+#include "fileManager/FileManagerModule.h"
 #include "fileManager.h"
 
 #include "Platform.h"
@@ -51,6 +53,7 @@ static void functImportMod();
 static void functSaveProject();
 static void functSaveAsProject();
 static void functExport();
+static void functOpenFileManager();
 //****************************************************
 // New project
 static void functSaveChangesCancelNewProject();
@@ -281,6 +284,7 @@ void cProjectEditor::setDefaultScreenFunct()
     ip->setButtonObj(interfaceButton3, buttonPress, functSaveProject);
     ip->setButtonObj(interfaceButton4, buttonPress, functSaveAsProject);
     ip->setButtonObj(interfaceButton5, buttonPress, functExport);
+    ip->setButtonObj(interfaceButton7, buttonPress, functOpenFileManager);
 
     ip->setButtonObj(interfaceButtonPlay, buttonPress, functPlayAction);
 
@@ -1136,6 +1140,12 @@ static void functExport()
 
     PE->setExportWindowFuncts();
     PE->showExportWindow();
+}
+
+static void functOpenFileManager()
+{
+    mtInterface.deactivateModule(&projectEditor);
+    mtInterface.activateModule(&fileManagerModule, 0);
 }
 
 //===============================================================================================================

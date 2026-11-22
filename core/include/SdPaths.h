@@ -33,7 +33,7 @@ std::string effectsDir(FileSystem* fs);
 std::string effectPresetsDir(FileSystem* fs, const std::string& sanitizedPluginName);
 std::string envelopesDir(FileSystem* fs);
 std::string fontsDir(FileSystem* fs);
-std::string infoDir(FileSystem* fs);
+std::string infoFile(FileSystem* fs);
 std::string snapshotsDir(FileSystem* fs);
 std::string synthsDir(FileSystem* fs);
 std::string synthPatchesDir(FileSystem* fs);

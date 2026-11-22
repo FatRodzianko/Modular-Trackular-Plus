@@ -10,6 +10,7 @@
 #include "core/titleBar.h"
 
 #include "fileBrowser/GlobalFileBrowser.h"
+#include "fileManager/FileManagerModule.h"
 #include "infoViewer/infoViewer.h"
 #include "instrumentEditor/instrumentEditor.h"
 #include "masterParams/masterParams.h"
@@ -54,7 +55,7 @@ extern uint8_t isAudioOutMuted();
 //=======================================================================
 //=======================================================================
 
-const uint8_t Interface::modulesCount = 13;
+const uint8_t Interface::modulesCount = 14;
 const hModule Interface::modules[modulesCount] = {
     &projectEditor,    // 0
     &sampleImporter,   // 1
@@ -69,6 +70,7 @@ const hModule Interface::modules[modulesCount] = {
     &infoViewer,        // 10
     &globalFileBrowser, // 11
     &masterParams,      // 12
+    &fileManagerModule, // 13
 };
 
 const uint8_t Interface::modulesButtonsCount = 11;

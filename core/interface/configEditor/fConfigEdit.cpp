@@ -1040,21 +1040,3 @@ void cConfigEditor::saveConfigToEeprom()
 
 //==============================================================================================================
 
-void openManual1Action()
-{
-    uint8_t folderIndex = 0;
-    CE->eventFunct(eventActivateInfoViewer, CE, &folderIndex, 0);
-}
-
-void openManual2Action()
-{
-    uint8_t folderIndex = 1;
-    CE->eventFunct(eventActivateInfoViewer, CE, &folderIndex, 0);
-}
-
-void openManual3Action()
-{
-    uint8_t folderIndex = 2;
-    CE->eventFunct(eventActivateInfoViewer, CE, &folderIndex, 0);
-}
-

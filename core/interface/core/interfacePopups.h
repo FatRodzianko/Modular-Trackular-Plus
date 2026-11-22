@@ -100,6 +100,7 @@ class InterfacePopups
     //-------------------------------------
     // blocking/progress
     void showProgressPopup(const char* text);
+    void setProgressPopupText(const char* text);
     void changePopupProgress(int8_t value);
     void hideProgressPopup();
 

@@ -1145,6 +1145,7 @@ struct strMtConfig
         uint8_t previewVolume;
         uint8_t recThreshold;
         uint8_t noteDisplayMode;
+        uint8_t confirmFileDelete;
     } general;
 
     struct strInterfaceState
