@@ -90,14 +90,9 @@ const char cModsPathFormat[] = "Mod/%s";
 const char cExportModPath[] = "Mod";
 const char cExportModFilePathFormat[] = "Mod/%s.it";
 
-const char cGamesPath[] = "Games";
-const char cGamesPathFormat[] = "Games/%s";
-
 const char cProjectFileName[] = "project.mt";
 
 const char cProjectsRecentFilePath[] = "Projects/recents";
-
-const char cDefaultPatchesPath[] = "Patches";
 
 const uint8_t WORKSPACE_SAMPLES_FORMAT_MAX_LENGTH = 38;
 

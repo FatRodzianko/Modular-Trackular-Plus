@@ -1,4 +1,5 @@
 #include "mtWavetableEnvelopes.h"
+#include "SdPaths.h"
 #include "TrackerImpl.h"
 #include "wavHeaderReader.h"
 #include <cr_section_macros.h>
@@ -211,17 +212,25 @@ void initWavetableEnvelopes()
 void loadUserWavetablesFromSD(FileSystem* fs)
 {
     if (!fs || !fs->isSdCardInserted()) return;
-    if (!fs->exists("Envelopes")) return;
+    std::string envDir = std::string(SdPaths::systemRootRel(fs)) + "/Envelopes";
+    if (!fs->exists(envDir.c_str())) return;
 
-    bool zeroBased = fs->exists("Envelopes/000.wav") || fs->exists("Envelopes/0.wav");
-    char pathBuf[48];
+    char pathBuf[64];
+    snprintf(pathBuf, sizeof(pathBuf), "%s/000.wav", envDir.c_str());
+    bool zeroBased = fs->exists(pathBuf);
+    if (!zeroBased)
+    {
+        snprintf(pathBuf, sizeof(pathBuf), "%s/0.wav", envDir.c_str());
+        zeroBased = fs->exists(pathBuf);
+    }
+
     for (int i = 0; i < 128; ++i)
     {
         int fileNum = zeroBased ? i : (i + 1);
-        snprintf(pathBuf, sizeof(pathBuf), "Envelopes/%03d.wav", fileNum);
+        snprintf(pathBuf, sizeof(pathBuf), "%s/%03d.wav", envDir.c_str(), fileNum);
         if (!fs->exists(pathBuf))
         {
-            snprintf(pathBuf, sizeof(pathBuf), "Envelopes/%d.wav", fileNum);
+            snprintf(pathBuf, sizeof(pathBuf), "%s/%d.wav", envDir.c_str(), fileNum);
             if (!fs->exists(pathBuf)) continue;
         }
 

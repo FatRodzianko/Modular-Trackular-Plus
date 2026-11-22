@@ -3,6 +3,7 @@
 #if GUI_HANDLE_SYNTH
 
 #include "PolySynth/Patch.h"
+#include "SdPaths.h"
 
 #include "core/interfacePopups.h"
 #include "fileBrowser/GlobalFileBrowser.h"
@@ -852,7 +853,10 @@ void cInstrumentEditor::setSynthPatchParamDefault()
                 const auto& defPath = metadata.sampleSlots[slotId].defaultSamplePath;
                 if (!defPath.empty())
                 {
-                    getSynth()->loadSampleByPath(syntPartIdx, slotId, "/SynthSamples/" + defPath);
+                    getSynth()->loadSampleByPath(
+                      syntPartIdx,
+                      slotId,
+                      SdPaths::synthSamplesDir(newFileManager.getFileSystem()) + "/" + defPath);
                 }
                 else
                 {

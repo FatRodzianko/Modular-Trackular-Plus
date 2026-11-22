@@ -522,7 +522,7 @@ uint16_t SdDir::countFilesInSubDirectory(const char* dir_name, enListFileFilter 
 
 bool SdDir::filterFileEntry(const FILINFO& fno, enListFileFilter filter)
 {
-    if (fno.fattrib & AM_HID) // ukryty
+    if ((fno.fattrib & AM_HID) || fno.fname[0] == '.') // ukryty
     {
         return false;
     }
@@ -647,24 +647,6 @@ bool SdDir::filterFileEntry(const FILINFO& fno, enListFileFilter filter)
             }
 
             return strstr(lowCase, ".mod\0") != NULL || strstr(lowCase, ".it\0") != NULL;
-        }
-        case enListFileFilter_game:
-        {
-            if (isMacMetaFile((FILINFO*)&fno))
-            {
-                return false;
-            }
-
-            char lowCase[255];
-            strcpy(lowCase, fno.fname);
-            for (uint16_t a = 0; a < 255; a++)
-            {
-                lowCase[a] = tolower(lowCase[a]);
-                if (lowCase[a] == 0)
-                    break;
-            }
-
-            return strstr(lowCase, ".nes\0") != NULL;
         }
     }
 
@@ -816,7 +798,7 @@ uint16_t SdDir::createInstrumentsList(char** list, uint8_t list_length, uint32_t
             break;
         }
 
-        if (fno.fattrib & AM_HID) // ukryty
+        if ((fno.fattrib & AM_HID) || fno.fname[0] == '.') // ukryty
         {
             continue;
         }
@@ -914,7 +896,7 @@ uint16_t SdDir::countContainedFiles()
             break;
         }
 
-        if (fno.fattrib & AM_HID) // ukryty
+        if ((fno.fattrib & AM_HID) || fno.fname[0] == '.') // ukryty
         {
             continue;
         }

@@ -336,7 +336,6 @@ class FileSystem
         enListFileFilter_wave_inst,
         enListFileFilter_firmware,
         enListFileFilter_mod,
-        enListFileFilter_game,
     };
 
     enum FileOpenMode

@@ -29,9 +29,9 @@ all: original plus mini psyn
 
 psyn:
 	$(MAKE) -C "$(ROOT_DIR)/synth-plugin-sdk" all TOOLCHAIN="$(TOOLCHAIN)"
-	@mkdir -p "$(OUT_DIR)/Synths"
-	@cp "$(SYNTH_DIR)"/prebuilt/*.psyn "$(OUT_DIR)/Synths/"
-	@cp "$(ROOT_DIR)"/synth-plugin-sdk/build/*.psyn "$(OUT_DIR)/Synths/"
+	@mkdir -p "$(OUT_DIR)/System/Synths"
+	@cp "$(SYNTH_DIR)"/prebuilt/*.psyn "$(OUT_DIR)/System/Synths/"
+	@cp "$(ROOT_DIR)"/synth-plugin-sdk/build/*.psyn "$(OUT_DIR)/System/Synths/"
 
 original:
 	@echo "=================================================================="
@@ -108,10 +108,10 @@ mini:
 	@echo "-> Output: $(OUT_DIR)/TrackerMini_$(MINI_POSTFIX).ptf"
 
 ptfx:
-	@mkdir -p "$(ROOT_DIR)/editor-fx-sdk/build/Effects"
+	@mkdir -p "$(ROOT_DIR)/editor-fx-sdk/build/System/Effects"
 	@for src in "$(ROOT_DIR)"/editor-fx-sdk/effects/*.c; do \
 		base=$$(basename "$$src" .c); \
-		python3 "$(ROOT_DIR)/editor-fx-sdk/ptfx_builder.py" "$$src" -o "$(ROOT_DIR)/editor-fx-sdk/build/Effects/$$base.ptfx" --toolchain "$(TOOLCHAIN)"; \
+		python3 "$(ROOT_DIR)/editor-fx-sdk/ptfx_builder.py" "$$src" -o "$(ROOT_DIR)/editor-fx-sdk/build/System/Effects/$$base.ptfx" --toolchain "$(TOOLCHAIN)"; \
 	done
 
 clean:

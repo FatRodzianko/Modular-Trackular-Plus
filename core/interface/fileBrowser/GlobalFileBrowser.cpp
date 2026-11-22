@@ -78,9 +78,8 @@ bool isProtectedRootFolder(const char* folderName)
     }
 
     static const char* const kProtectedFolders[] = {
-        "Samples",    "SynthSamples", "Synths",    "Patches",   "Projects",
-        "Mod",        "Mods",         "Effects",   "Recordings","Export",
-        "Workspace",  "Firmware",     "Themes",    "Games",     "System Volume Information",
+        "System",   ".system",    "Projects", "Mod",       "Recordings",
+        "Export",   "Workspace",  "Firmware", "System Volume Information",
     };
 
     for (const char* protectedName : kProtectedFolders)

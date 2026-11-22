@@ -1,4 +1,5 @@
 #include "FileSystemImpl.h"
+#include "SdPaths.h"
 #include "SD.h"
 #include "cr_section_macros.h"
 #include "fsl_sd.h"
@@ -125,6 +126,7 @@ bool FileSystemImpl::remount()
         return false;
     }
 
+    SdPaths::resetCache();
     SD.stop();
     cardInitializedSuccessfully = SD.init();
     usb_msc_set_media_ready(cardInitializedSuccessfully ? 1 : 0);

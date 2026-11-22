@@ -12,6 +12,7 @@ class ThemeManager
     static constexpr int kMaxCustomThemes = 32;
     static constexpr int kMaxCustomFonts = 32;
     static constexpr int kMaxNameLength = 32;
+    static constexpr int kMaxFilePathLength = 96;
 
     static void init(Platform* platform);
     static void scanThemesAndFonts();
@@ -40,13 +41,13 @@ class ThemeManager
     static uint8_t themeCount;
     static char themeNames[kMaxCustomThemes][kMaxNameLength];
     static const char* themeNamePointers[kMaxCustomThemes];
-    static char themeFilePaths[kMaxCustomThemes][64];
+    static char themeFilePaths[kMaxCustomThemes][kMaxFilePathLength];
     static uint8_t currentThemeIndex;
 
     static uint8_t fontCount;
     static char fontNames[kMaxCustomFonts][kMaxNameLength];
     static const char* fontNamePointers[kMaxCustomFonts];
-    static char fontFilePaths[kMaxCustomFonts][64];
+    static char fontFilePaths[kMaxCustomFonts][kMaxFilePathLength];
     static uint8_t currentFontIndex;
 
     static void ensureDefaultsInitialized();

@@ -1,4 +1,5 @@
 #include "FT812.h"
+#include "SdPaths.h"
 #include "TrackerImpl.h"
 #include "display.h"
 
@@ -61,16 +62,16 @@ void cDisplay::doScreenShot()
 {
     FileSystem* fileSystem = TrackerImpl::getInstance()->getPlatform()->getFileSystem();
 
-    if (!fileSystem->exists("Snapshots"))
-        fileSystem->mkdir(0, "Snapshots");
+    std::string snapshotsDir = std::string(SdPaths::systemRootRel(fileSystem)) + "/Snapshots";
+    SdPaths::ensureDir(fileSystem, snapshotsDir);
 
-    char bmpName[32];
+    char bmpName[64];
     uint16_t num = 1;
-    sprintf(bmpName, "Snapshots/Snapshot_%03d.bmp", 1);
+    snprintf(bmpName, sizeof(bmpName), "%s/Snapshot_%03d.bmp", snapshotsDir.c_str(), 1);
     while (fileSystem->exists(bmpName))
     {
         num++;
-        sprintf(bmpName, "Snapshots/Snapshot_%03d.bmp", num);
+        snprintf(bmpName, sizeof(bmpName), "%s/Snapshot_%03d.bmp", snapshotsDir.c_str(), num);
     }
 
     auto [isOpen, bmpHandle] =

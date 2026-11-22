@@ -77,7 +77,6 @@ void cFileManager::update()
 
         case fmBrowseSamples: updateBrowseSamples(); break;
         case fmBrowseFirmwares: updateBrowseFirmwares(); break;
-        case fmBrowseGames: updateBrowseGames(); break;
 
         case fmImportSamplesToWorkspace: sampleImport.update(); break;
         case fmCopyInstrumentsInWorkspace: instrumentCopy.update(); break;

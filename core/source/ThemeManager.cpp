@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "ThemeManager.h"
+#include "SdPaths.h"
 #include "SdTextFile.h"
 #include "Platform.h"
 #include "core/interface.h"
@@ -14,13 +15,13 @@ Platform* ThemeManager::platform = nullptr;
 uint8_t ThemeManager::themeCount = 3;
 __NOINIT(EXTERNAL_RAM) char ThemeManager::themeNames[ThemeManager::kMaxCustomThemes][ThemeManager::kMaxNameLength];
 __NOINIT(EXTERNAL_RAM) const char* ThemeManager::themeNamePointers[ThemeManager::kMaxCustomThemes];
-__NOINIT(EXTERNAL_RAM) char ThemeManager::themeFilePaths[ThemeManager::kMaxCustomThemes][64];
+__NOINIT(EXTERNAL_RAM) char ThemeManager::themeFilePaths[ThemeManager::kMaxCustomThemes][ThemeManager::kMaxFilePathLength];
 uint8_t ThemeManager::currentThemeIndex = 0;
 
 uint8_t ThemeManager::fontCount = 2;
 __NOINIT(EXTERNAL_RAM) char ThemeManager::fontNames[ThemeManager::kMaxCustomFonts][ThemeManager::kMaxNameLength];
 __NOINIT(EXTERNAL_RAM) const char* ThemeManager::fontNamePointers[ThemeManager::kMaxCustomFonts];
-__NOINIT(EXTERNAL_RAM) char ThemeManager::fontFilePaths[ThemeManager::kMaxCustomFonts][64];
+__NOINIT(EXTERNAL_RAM) char ThemeManager::fontFilePaths[ThemeManager::kMaxCustomFonts][ThemeManager::kMaxFilePathLength];
 uint8_t ThemeManager::currentFontIndex = 0;
 
 __NOINIT(EXTERNAL_RAM) static char s_themeNamesBuffer[ThemeManager::kMaxCustomThemes * ThemeManager::kMaxNameLength];
@@ -1310,7 +1311,7 @@ static void scanAssetDirectory(
   int maxCount,
   char names[][ThemeManager::kMaxNameLength],
   const char* namePointers[],
-  char filePaths[][64],
+  char filePaths[][ThemeManager::kMaxFilePathLength],
   char* namesBuffer,
   size_t namesBufferSize,
   char* fileList[])
@@ -1332,7 +1333,7 @@ static void scanAssetDirectory(
     }
     else
     {
-        fs->mkdir(0, dirName);
+        SdPaths::ensureDir(fs, dirName);
         if (fs->exists(dirName))
             dirToScan = dirName;
         else if (fs->exists(dirNameSlash))
@@ -1359,7 +1360,7 @@ static void scanAssetDirectory(
         if (!fileName || strlen(fileName) == 0)
             continue;
 
-        snprintf(filePaths[count], 64, "%s/%s", dirToScan, fileName);
+        snprintf(filePaths[count], ThemeManager::kMaxFilePathLength, "%s/%s", dirToScan, fileName);
 
         strncpy(names[count], fileName, ThemeManager::kMaxNameLength - 1);
         names[count][ThemeManager::kMaxNameLength - 1] = '\0';
@@ -1382,10 +1383,14 @@ void ThemeManager::scanThemes()
     themeNamePointers[1] = themeNames[1];
     themeNamePointers[2] = themeNames[2];
 
+    FileSystem* fs = platform ? platform->getFileSystem() : nullptr;
+    std::string themesSlash = SdPaths::themesDir(fs);
+    std::string themesRel = themesSlash.substr(1);
+
     scanAssetDirectory(
       platform,
-      "Themes",
-      "/Themes",
+      themesRel.c_str(),
+      themesSlash.c_str(),
       [](const char* name) { return hasExtension(name, ".json"); },
       ".json",
       5,
@@ -1406,10 +1411,14 @@ void ThemeManager::scanFonts()
     fontNamePointers[0] = fontNames[0];
     fontNamePointers[1] = fontNames[1];
 
+    FileSystem* fs = platform ? platform->getFileSystem() : nullptr;
+    std::string fontsSlash = SdPaths::fontsDir(fs);
+    std::string fontsRel = fontsSlash.substr(1);
+
     scanAssetDirectory(
       platform,
-      "Fonts",
-      "/Fonts",
+      fontsRel.c_str(),
+      fontsSlash.c_str(),
       [](const char* name) { return hasExtension(name, ".ptfont"); },
       ".ptfont",
       7,

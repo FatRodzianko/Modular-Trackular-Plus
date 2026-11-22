@@ -12,9 +12,9 @@ Use it to store hardware synth/MIDI CC charts, music theory and scale references
 2. Select **`Info`** in the left column.
 3. Choose one of the four entries:
    - **`About`** - Displays the firmware version, license info, and credits.
-   - **`Reference`** - Opens images from `/Images/Reference/`
-   - **`Notes`** - Opens images from `/Images/Notes/`
-   - **`Custom`** - Opens images from `/Images/Custom/`
+   - **`Reference`** - Opens images from `/System/Images/Reference/`
+   - **`Notes`** - Opens images from `/System/Images/Notes/`
+   - **`Custom`** - Opens images from `/System/Images/Custom/`
 
 ---
 
