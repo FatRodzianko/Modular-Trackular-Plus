@@ -298,8 +298,7 @@ static void functSynthLoad()
         {
             curFull = cfg.initialDirectory + "/" + IE->previousPatchName;
         }
-        if (curFull.size() < 6 ||
-            strcasecmp(curFull.c_str() + curFull.size() - 6, ".patch") != 0)
+        if (!hasFileExtension(curFull.c_str(), "patch"))
         {
             curFull += ".patch";
         }

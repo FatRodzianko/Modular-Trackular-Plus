@@ -66,11 +66,11 @@ static void buildPathWithoutJpgExt(const char* dir,
     }
 
     size_t len = strlen(outPath);
-    if (len >= 5 && strcasecmp(outPath + len - 5, ".jpeg") == 0)
+    if (hasFileExtension(outPath, "jpeg"))
     {
         outPath[len - 5] = '\0';
     }
-    else if (len >= 4 && strcasecmp(outPath + len - 4, ".jpg") == 0)
+    else if (hasFileExtension(outPath, "jpg"))
     {
         outPath[len - 4] = '\0';
     }

@@ -58,6 +58,7 @@ class cFileManagerModule : public ModuleBase
         char clipboardSrcDir[kMaxFilePathLen + 1];
         char renameOrigPath[kMaxFilePathLen + 1];
         char renameOrigName[kMaxFileNameLen + 1];
+        bool renameOrigIsFolder = false;
         char pendingOpSrcDir[kMaxFilePathLen + 1];
         char pendingOpDstDir[kMaxFilePathLen + 1];
         char popupLine1[80];

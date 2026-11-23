@@ -3201,14 +3201,9 @@ static void functEffectSavePti()
     if (IE->editorInstrument->sample.file_name[0] != '\0')
     {
         defName = IE->editorInstrument->sample.file_name;
-        if (defName.size() > 4)
+        if (defName.size() > 4 && hasFileExtension(defName.c_str(), "pti"))
         {
-            std::string ext = defName.substr(defName.size() - 4);
-            if (ext[0] == '.' && (ext[1] == 'p' || ext[1] == 'P') &&
-                (ext[2] == 't' || ext[2] == 'T') && (ext[3] == 'i' || ext[3] == 'I'))
-            {
-                defName.resize(defName.size() - 4);
-            }
+            defName.resize(defName.size() - 4);
         }
     }
 

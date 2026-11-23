@@ -806,6 +806,107 @@ void cFileManager::writeInstrumentToFileStruct(strInstrument* instrument,
                                        sizeof(instrumentFile->instrumentDataAndHeader));
 }
 
+bool cFileManager::updatePtiInstrumentName(const char* ptiFilePath)
+{
+    if (fileSystem == nullptr || ptiFilePath == nullptr)
+    {
+        return false;
+    }
+
+    const char* relPath = ptiFilePath;
+    while (*relPath == '/')
+    {
+        ++relPath;
+    }
+    if (relPath[0] == '\0')
+    {
+        return false;
+    }
+
+    const char* baseName = strrchr(relPath, '/');
+    baseName = (baseName != nullptr) ? (baseName + 1) : relPath;
+    if (!hasFileExtension(baseName, "pti"))
+    {
+        return false;
+    }
+
+    const size_t stemLen = strlen(baseName) - 4;
+    if (stemLen == 0)
+    {
+        return false;
+    }
+    if (!fileSystem->exists(relPath))
+    {
+        return false;
+    }
+
+    const uint32_t fileSize = fileSystem->getFileSize(relPath);
+    if (fileSize < sizeof(strProjectFileHeader))
+    {
+        return false;
+    }
+
+    auto [isOpen, fileHandle] =
+      fileSystem->openFile(relPath, FileSystem::FileOpenMode::kWriteOpen);
+    if (!isOpen)
+    {
+        return false;
+    }
+
+    strInstrumentFile instrFile{};
+    const uint32_t toRead = std::min<uint32_t>(fileSize, sizeof(strInstrumentFile));
+    const int32_t bytesRead = fileSystem->readFile(&instrFile, toRead, fileHandle);
+    if (bytesRead != static_cast<int32_t>(toRead))
+    {
+        fileSystem->closeFile(fileHandle);
+        return false;
+    }
+
+    InstrumentFileValidation::Result validation;
+    if (!InstrumentFileValidation::validate(reinterpret_cast<const uint8_t*>(&instrFile),
+                                            toRead,
+                                            fileSize,
+                                            sizeof(strInstrument),
+                                            INSTRUMENT_FILE_VERSION,
+                                            validation))
+    {
+        fileSystem->closeFile(fileHandle);
+        return false;
+    }
+
+    char newName[sizeof(instrFile.instrumentDataAndHeader.instrument.sample.file_name)]{};
+    const size_t copyLen = std::min<size_t>(stemLen, sizeof(newName) - 1);
+    memcpy(newName, baseName, copyLen);
+    newName[copyLen] = '\0';
+
+    if (strncmp(instrFile.instrumentDataAndHeader.instrument.sample.file_name,
+                newName,
+                sizeof(newName)) == 0)
+    {
+        fileSystem->closeFile(fileHandle);
+        return true;
+    }
+
+    memset(instrFile.instrumentDataAndHeader.instrument.sample.file_name,
+           0,
+           sizeof(instrFile.instrumentDataAndHeader.instrument.sample.file_name));
+    memcpy(instrFile.instrumentDataAndHeader.instrument.sample.file_name, newName, sizeof(newName));
+
+    if (validation.hasCrc && crcCalculator != nullptr)
+    {
+        const uint32_t crcOffset = validation.dataOffset - sizeof(uint32_t);
+        const uint32_t newCrc =
+          crcCalculator->calculate32bitCrc(reinterpret_cast<uint8_t*>(&instrFile), crcOffset);
+        memcpy(reinterpret_cast<uint8_t*>(&instrFile) + crcOffset, &newCrc, sizeof(newCrc));
+    }
+
+    const bool ok = fileSystem->seekFile(0, fileHandle) &&
+                    (fileSystem->writeFile(&instrFile, validation.dataOffset, fileHandle) ==
+                     static_cast<int32_t>(validation.dataOffset));
+    fileSystem->closeFile(fileHandle);
+    return ok;
+}
+
 bool cFileManager::saveInstrumentToPtiFile(uint8_t idx, const char* destPath)
 {
     if (fileSystem == nullptr || destPath == nullptr || idx >= kSampleInstrumentsCount)
@@ -834,10 +935,7 @@ bool cFileManager::saveInstrumentToPtiFile(uint8_t idx, const char* destPath)
     const char* baseName = strrchr(relPath, '/');
     baseName = (baseName != nullptr) ? (baseName + 1) : relPath;
     size_t stemLen = strlen(baseName);
-    if (stemLen > 4 && baseName[stemLen - 4] == '.' &&
-        (baseName[stemLen - 3] == 'p' || baseName[stemLen - 3] == 'P') &&
-        (baseName[stemLen - 2] == 't' || baseName[stemLen - 2] == 'T') &&
-        (baseName[stemLen - 1] == 'i' || baseName[stemLen - 1] == 'I'))
+    if (stemLen > 4 && hasFileExtension(baseName, "pti"))
     {
         stemLen -= 4;
     }

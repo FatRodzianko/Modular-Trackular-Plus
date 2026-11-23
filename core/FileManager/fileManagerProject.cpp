@@ -202,6 +202,132 @@ bool cFileManager::writeProjectFileToFileStruct(strMtProject* project, strProjec
     return true;
 }
 
+bool cFileManager::updateProjectFileMetadata(const char* projectDirPath)
+{
+    if (fileSystem == nullptr || projectDirPath == nullptr)
+    {
+        return false;
+    }
+
+    const char* start = projectDirPath;
+    while (*start == '/')
+    {
+        ++start;
+    }
+
+    size_t len = strlen(start);
+    while (len > 0 && start[len - 1] == '/')
+    {
+        --len;
+    }
+    if (len == 0 || len >= PATCH_SIZE)
+    {
+        return false;
+    }
+
+    char normDir[PATCH_SIZE];
+    memcpy(normDir, start, len);
+    normDir[len] = '\0';
+
+    char projectFilePath[PATCH_SIZE];
+    const int writtenPathLen =
+      snprintf(projectFilePath, sizeof(projectFilePath), "%s/%s", normDir, cProjectFileName);
+    if (writtenPathLen <= 0 || writtenPathLen >= static_cast<int>(sizeof(projectFilePath)))
+    {
+        return false;
+    }
+
+    if (!fileSystem->exists(projectFilePath))
+    {
+        return false;
+    }
+
+    if (fileSystem->getFileSize(projectFilePath) != sizeof(strProjectFile))
+    {
+        return false;
+    }
+
+    auto [isOpen, fileHandle] =
+      fileSystem->openFile(projectFilePath, FileSystem::FileOpenMode::kWriteOpen);
+    if (!isOpen)
+    {
+        return false;
+    }
+
+    strProjectFile projectFile{};
+    const int32_t bytesRead = fileSystem->readFile(&projectFile, sizeof(strProjectFile), fileHandle);
+    if (bytesRead != static_cast<int32_t>(sizeof(strProjectFile)))
+    {
+        fileSystem->closeFile(fileHandle);
+        return false;
+    }
+
+    const strProjectFileHeader& hdr = projectFile.projectDataAndHeader.projectHeader;
+    if (hdr.id_file[0] != 'M' || hdr.id_file[1] != 'T' || hdr.type != fileTypeProject ||
+        hdr.size != sizeof(strProjectFile))
+    {
+        fileSystem->closeFile(fileHandle);
+        return false;
+    }
+
+    const char* lastSlash = strrchr(normDir, '/');
+    const char* projName = (lastSlash != nullptr) ? (lastSlash + 1) : normDir;
+    char parentPath[PATCH_SIZE - PROJECT_NAME_SIZE];
+    if (lastSlash != nullptr)
+    {
+        const size_t parentLen = static_cast<size_t>(lastSlash - normDir);
+        const size_t copyLen =
+          (parentLen < sizeof(parentPath) - 1) ? parentLen : (sizeof(parentPath) - 1);
+        memcpy(parentPath, normDir, copyLen);
+        parentPath[copyLen] = '\0';
+    }
+    else
+    {
+        parentPath[0] = '\0';
+    }
+
+    char newName[PROJECT_NAME_SIZE]{};
+    strncpy(newName, projName, PROJECT_NAME_SIZE - 1);
+    newName[PROJECT_NAME_SIZE - 1] = '\0';
+
+    if (strncmp(projectFile.projectDataAndHeader.project.projectName, newName, PROJECT_NAME_SIZE) ==
+          0 &&
+        strncmp(projectFile.projectDataAndHeader.project.projectPath,
+                parentPath,
+                sizeof(projectFile.projectDataAndHeader.project.projectPath)) == 0)
+    {
+        fileSystem->closeFile(fileHandle);
+        return true;
+    }
+
+    memset(projectFile.projectDataAndHeader.project.projectName,
+           0,
+           sizeof(projectFile.projectDataAndHeader.project.projectName));
+    memcpy(projectFile.projectDataAndHeader.project.projectName, newName, PROJECT_NAME_SIZE);
+
+    memset(projectFile.projectDataAndHeader.project.projectPath,
+           0,
+           sizeof(projectFile.projectDataAndHeader.project.projectPath));
+    strncpy(projectFile.projectDataAndHeader.project.projectPath,
+            parentPath,
+            sizeof(projectFile.projectDataAndHeader.project.projectPath) - 1);
+    projectFile.projectDataAndHeader.project
+      .projectPath[sizeof(projectFile.projectDataAndHeader.project.projectPath) - 1] = '\0';
+
+    if (crcCalculator != nullptr)
+    {
+        projectFile.crc = crcCalculator->calculate32bitCrc(
+          reinterpret_cast<uint8_t*>(&projectFile.projectDataAndHeader),
+          sizeof(projectFile.projectDataAndHeader));
+    }
+
+    const bool ok = fileSystem->seekFile(0, fileHandle) &&
+                    (fileSystem->writeFile(&projectFile, sizeof(strProjectFile), fileHandle) ==
+                     static_cast<int32_t>(sizeof(strProjectFile)));
+    fileSystem->closeFile(fileHandle);
+    return ok;
+}
+
 //----------------------------------------------------------------------------------------------------------------
 //-----------------------------------------     xxxx
 //--------------------------------------------------------

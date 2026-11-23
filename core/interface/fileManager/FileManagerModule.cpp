@@ -9,6 +9,7 @@
 #include "core/titleBar.h"
 #include "display.h"
 #include "fileManager.h"
+#include "fileManagerDefs.h"
 #include "infoViewer/infoViewer.h"
 #include "mtAudioEngine.h"
 #include "mtConfig.h"
@@ -1655,10 +1656,48 @@ void cFileManagerModule::openRenameKeyboard()
     const char* rawName = p.browserData.browserList[pos];
     const char* cleanName = (rawName[0] == '/') ? (rawName + 1) : rawName;
     polystrncpy(scratchState->renameOrigName, cleanName, sizeof(scratchState->renameOrigName));
+    scratchState->renameOrigIsFolder = isFolderAt(activePane, pos);
+
+    int renameLimit = 60;
+    const bool isPtiFile =
+      !scratchState->renameOrigIsFolder && hasFileExtension(scratchState->renameOrigName, "pti");
+    if (scratchState->renameOrigIsFolder)
+    {
+        FileSystem* fs = newFileManager.getFileSystem();
+        char projectFilePath[kMaxFilePathLen + 1];
+        if (fs != nullptr &&
+            FileOpsWorker::joinPath(
+              fullPath, cProjectFileName, projectFilePath, sizeof(projectFilePath)) &&
+            fs->exists(projectFilePath))
+        {
+            renameLimit = PROJECT_NAME_SIZE - 1;
+        }
+    }
+    else if (isPtiFile)
+    {
+        renameLimit = SAMPLE_NAME_SIZE + 4;
+    }
+
+    char prefillName[kMaxFileNameLen + 1];
+    polystrncpy(prefillName, scratchState->renameOrigName, sizeof(prefillName));
+    if (static_cast<int>(strlen(prefillName)) > renameLimit)
+    {
+        if (isPtiFile)
+        {
+            const size_t origLen = strlen(scratchState->renameOrigName);
+            memcpy(prefillName, scratchState->renameOrigName, SAMPLE_NAME_SIZE);
+            memcpy(prefillName + SAMPLE_NAME_SIZE, scratchState->renameOrigName + origLen - 4, 4);
+            prefillName[SAMPLE_NAME_SIZE + 4] = '\0';
+        }
+        else
+        {
+            prefillName[renameLimit] = '\0';
+        }
+    }
 
     modalState = ModalState::kKeyboardRename;
-    keyboardManager.fillName(scratchState->renameOrigName);
-    keyboardManager.activateKeyboard(60);
+    keyboardManager.fillName(prefillName);
+    keyboardManager.activateKeyboard(renameLimit);
     showKeyboardUI("File Manager - Rename", "Rename");
 }
 
@@ -1734,6 +1773,14 @@ void cFileManagerModule::confirmKeyboard()
         {
             mtPopups.show(0, "Rename failed");
             return;
+        }
+        if (scratchState->renameOrigIsFolder)
+        {
+            newFileManager.updateProjectFileMetadata(targetPath);
+        }
+        else
+        {
+            newFileManager.updatePtiInstrumentName(targetPath);
         }
         char renamedName[kMaxFileNameLen + 1];
         polystrncpy(renamedName, entered, sizeof(renamedName));

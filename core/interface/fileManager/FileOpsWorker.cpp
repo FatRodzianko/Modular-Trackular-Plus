@@ -1,5 +1,6 @@
 #include "FileOpsWorker.h"
 
+#include "fileManager.h"
 #include "util_string.h"
 
 #include <cstdio>
@@ -713,6 +714,14 @@ void FileOpsWorker::executeResolvedTopItem(const char* srcPath, const char* dstP
             failWith("Move failed");
             return;
         }
+        if (isFolder)
+        {
+            newFileManager.updateProjectFileMetadata(dstPath);
+        }
+        else
+        {
+            newFileManager.updatePtiInstrumentName(dstPath);
+        }
         ++completedItems;
         ++currentItemIdx;
         return;
@@ -799,6 +808,7 @@ void FileOpsWorker::stepActiveFileCopy()
         ++filesCompleted;
         if (dirDepth == 0)
         {
+            newFileManager.updatePtiInstrumentName(pendingDstPath);
             ++completedItems;
             ++currentItemIdx;
         }
@@ -845,6 +855,7 @@ void FileOpsWorker::stepDirCopy()
 
     if (!found)
     {
+        newFileManager.updateProjectFileMetadata(frame.dstDir);
         --dirDepth;
         if (dirDepth == 0)
         {

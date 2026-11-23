@@ -5,6 +5,7 @@
 #include "MidiAdapter.h"
 #include "SdPaths.h"
 #include "config.h"
+#include "util_string.h"
 
 #include "fileTransfer.h"
 
@@ -261,8 +262,7 @@ void Synth::init(Platform* platform, std::function<tiny_optional<float>()> getTe
       "",
       [](const std::string& name)
       {
-          return name.size() > 5 &&
-                 strcasecmp(name.c_str() + name.size() - 5, ".psyn") == 0;
+          return name.size() > 5 && hasFileExtension(name.c_str(), "psyn");
       },
       std::nullopt);
 

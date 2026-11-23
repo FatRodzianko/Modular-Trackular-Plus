@@ -3,6 +3,7 @@
 #include "SdPaths.h"
 #include "TrackerImpl.h"
 #include "sampleEditor/sampleEditor.h"
+#include "util_string.h"
 
 #include <cr_section_macros.h>
 #include <cstring>
@@ -119,7 +120,7 @@ bool PtfxManager::loadPluginFromPath(const char* filepath, mtEffectModular& modu
     {
         strncpy(s_activeEntry.displayName, s_activeEntry.filename, sizeof(s_activeEntry.displayName) - 1);
         size_t nameLen = strlen(s_activeEntry.displayName);
-        if (nameLen > 5 && strcasecmp(s_activeEntry.displayName + nameLen - 5, ".ptfx") == 0)
+        if (nameLen > 5 && hasFileExtension(s_activeEntry.displayName, "ptfx"))
         {
             s_activeEntry.displayName[nameLen - 5] = '\0';
         }

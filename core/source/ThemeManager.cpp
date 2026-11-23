@@ -7,6 +7,7 @@
 #include "Platform.h"
 #include "core/interface.h"
 #include "display.h"
+#include "util_string.h"
 
 #include "cr_section_macros.h"
 
@@ -48,17 +49,6 @@ void ThemeManager::ensureDefaultsInitialized()
 
     strcpy(fontNames[0], "Original");
     fontNamePointers[0] = fontNames[0];
-}
-
-static bool hasExtension(const char* filename, const char* ext)
-{
-    if (!filename || !ext)
-        return false;
-    size_t flen = strlen(filename);
-    size_t elen = strlen(ext);
-    if (flen < elen)
-        return false;
-    return strcasecmp(filename + flen - elen, ext) == 0;
 }
 
 static inline int hexVal(char c)
@@ -1389,7 +1379,7 @@ void ThemeManager::scanThemes()
       platform,
       themesRel.c_str(),
       themesSlash.c_str(),
-      [](const char* name) { return hasExtension(name, ".json"); },
+      [](const char* name) { return hasFileExtension(name, "json"); },
       ".json",
       5,
       themeCount,
@@ -1416,7 +1406,7 @@ void ThemeManager::scanFonts()
       platform,
       fontsRel.c_str(),
       fontsSlash.c_str(),
-      [](const char* name) { return hasExtension(name, ".ptfont"); },
+      [](const char* name) { return hasFileExtension(name, "ptfont"); },
       ".ptfont",
       7,
       fontCount,
