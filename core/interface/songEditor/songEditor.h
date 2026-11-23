@@ -72,6 +72,7 @@ class cSongEditor : public ModuleBase
     void setDefaultScreenFunct();
 
     void changeSongPositionSelection(int16_t value);
+    void goToSongTop();
     void changeSelectedPlayListPattern(int value);
 
     void readSong();
