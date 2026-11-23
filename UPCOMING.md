@@ -147,6 +147,7 @@
 	* **Pattern Editor Cursor, Fill, Pad & Roll Fixes**: Fixed the cursor jumping past the end of a pattern after pasting with a large Edit Step, kept `Note Up` Rolls on the highest note (`G9`) instead of wrapping down to `C0`, fixed `Random Fx` and `Off` ranges in the Fill popup, ignored unused pads `47–48` in the `FX` pad shortcut, and kept pads in normal note layout when a MIDI or Synth instrument is selected.
 	* **Fixed Synth FX MIDI CC Control in Performance Mode**: Restored external MIDI CC control over synth effect parameters in Performance Mode.
 	* **Fixed Song Mode Block Copy/Paste**: Fixed copying and pasting song arrangement blocks smaller than 32 steps.
+	* **Fixed `Shift + Insert` Jump to Song Start on Song Screen**: Pressing `Shift + Insert` while focused on the Song slot list now jumps directly to the start of the song (Slot 1) instead of stepping back only 5 slots.
 	* **Fixed Beat-Slice Pad Lights in Live Recording (Original Tracker & Tracker+)**: Beat-slice pad guide lights now stay active in the Pattern Editor during Live Recording (`Rec + Play`), matching step-record mode.
 
 * **Performance Mode Fixes (All 3 Devices)**:
