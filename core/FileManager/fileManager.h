@@ -386,6 +386,8 @@ class cFileManager
 
     bool loadProjectFileFormFileStruct(strMtProject* project, strProjectFile* pFile);
     bool writeProjectFileToFileStruct(strMtProject* project, strProjectFile* pFile);
+    bool updateProjectFileMetadata(const char* projectDirPath);
+    bool updatePtiInstrumentName(const char* ptiFilePath);
 
     bool needImportModFileAfterNewProject() { return importModFileAfterNewProject; }
     void clearImportModFileAfterNewProject() { importModFileAfterNewProject = false; }
