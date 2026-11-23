@@ -1755,7 +1755,6 @@ void cFileManagerModule::confirmKeyboard()
         refreshPane(activePane, createdName);
         refreshPane(1 - activePane);
         showBrowseScreen();
-        mtPopups.show(0, "Folder created");
     }
     else if (modalState == ModalState::kKeyboardRename)
     {

@@ -641,6 +641,8 @@ void cSampleImporter::rewindListToBeggining()
 {
     selectedFile = 0;
     browserData().browserListPosition = 0;
+    explorerList.start = 0;
+    display.setControlData(explorerListControl, &explorerList);
     display.setControlValue(explorerListControl, selectedFile);
     display.refreshControl(explorerListControl);
 }
