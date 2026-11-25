@@ -295,6 +295,7 @@ class cFileManager
     bool loadPerformanceTrackToBuffer(uint8_t pattIndex, uint8_t trackIndex);
     bool isPatternLoading();
     bool isPatternPreloaded(uint8_t index);
+    bool isPatternReadyOrLoading(uint8_t index);
     void forgetPreloadedPattern();
     bool isPatternEmpty(uint8_t index);
 

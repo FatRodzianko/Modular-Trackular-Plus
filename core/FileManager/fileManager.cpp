@@ -324,6 +324,11 @@ void cFileManager::loadWorkspacePattern(uint8_t index)
 {
     assert(index > 0);
 
+    if (preloadedPattern == index && requestedPattern == 0)
+    {
+        return;
+    }
+
     preloadedPattern = 0;
     requestedPattern = index;
 }
@@ -335,11 +340,6 @@ void cFileManager::startRequestedPatternLoad()
         return;
     }
 
-    DISABLE_GLOBAL_INTERRUPTS();
-    uint8_t index = requestedPattern;
-    requestedPattern = 0;
-    ENABLE_GLOBAL_INTERRUPTS();
-
     stopAutosave(); // TODO: sprawdzic czy nie opoznia ladowania patternu
 
     // to wyjatek który moze byc wywolywany podczas exportu songa
@@ -349,6 +349,16 @@ void cFileManager::startRequestedPatternLoad()
     if (currentOperation != fmNoOperation && currentOperation != fmExportSound &&
         currentOperation != fmSaveWorkspaceProject)
         return;
+
+    DISABLE_GLOBAL_INTERRUPTS();
+    uint8_t index = requestedPattern;
+    requestedPattern = 0;
+    ENABLE_GLOBAL_INTERRUPTS();
+
+    if (index == 0)
+    {
+        return;
+    }
 
     currentPattern = index;
 
@@ -644,6 +654,19 @@ void cFileManager::startAudioEngine()
 bool cFileManager::isPatternPreloaded(uint8_t index)
 {
     return index > 0 && preloadedPattern == index;
+}
+
+bool cFileManager::isPatternReadyOrLoading(uint8_t index)
+{
+    if (index == 0)
+    {
+        return false;
+    }
+    if (preloadedPattern == index || requestedPattern == index)
+    {
+        return true;
+    }
+    return (currentOperation == fmLoadWorkspacePattern) && (currentPattern == index);
 }
 
 void cFileManager::forgetPreloadedPattern()

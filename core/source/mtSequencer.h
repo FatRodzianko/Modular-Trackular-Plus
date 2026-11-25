@@ -1044,6 +1044,7 @@ class Sequencer
     void reloadPatternAfterStop();
     void processPendingMidiProgramChange();
     void stopForMissingNextPattern();
+    bool canReuseCurrentPattern(uint8_t patternNumber);
 
     strPattern* currentPattern;
     strPattern* bufferPattern;
