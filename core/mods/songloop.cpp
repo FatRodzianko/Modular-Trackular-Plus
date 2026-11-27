@@ -679,7 +679,9 @@ class CeSide : public Ce
     {
         DISABLE_AUDIO_INTERRUPTS(); // the same request as the sequencer's, not at the same time
         const uint8_t next = newFileManager.getNextSongPattern();
-        if (next)
+        // CE's own preload (1e9a9e5) asks on track 16 too: not again while it loads, as CE's
+        // check. A second request while CE's load runs would load the pattern twice.
+        if (next && !newFileManager.isPatternReadyOrLoading(next))
         {
             newFileManager.loadWorkspacePattern(next);
         }

@@ -806,6 +806,273 @@ void cFileManager::writeInstrumentToFileStruct(strInstrument* instrument,
                                        sizeof(instrumentFile->instrumentDataAndHeader));
 }
 
+bool cFileManager::updatePtiInstrumentName(const char* ptiFilePath)
+{
+    if (fileSystem == nullptr || ptiFilePath == nullptr)
+    {
+        return false;
+    }
+
+    const char* relPath = ptiFilePath;
+    while (*relPath == '/')
+    {
+        ++relPath;
+    }
+    if (relPath[0] == '\0')
+    {
+        return false;
+    }
+
+    const char* baseName = strrchr(relPath, '/');
+    baseName = (baseName != nullptr) ? (baseName + 1) : relPath;
+    if (!hasFileExtension(baseName, "pti"))
+    {
+        return false;
+    }
+
+    const size_t stemLen = strlen(baseName) - 4;
+    if (stemLen == 0)
+    {
+        return false;
+    }
+    if (!fileSystem->exists(relPath))
+    {
+        return false;
+    }
+
+    const uint32_t fileSize = fileSystem->getFileSize(relPath);
+    if (fileSize < sizeof(strProjectFileHeader))
+    {
+        return false;
+    }
+
+    auto [isOpen, fileHandle] =
+      fileSystem->openFile(relPath, FileSystem::FileOpenMode::kWriteOpen);
+    if (!isOpen)
+    {
+        return false;
+    }
+
+    strInstrumentFile instrFile{};
+    const uint32_t toRead = std::min<uint32_t>(fileSize, sizeof(strInstrumentFile));
+    const int32_t bytesRead = fileSystem->readFile(&instrFile, toRead, fileHandle);
+    if (bytesRead != static_cast<int32_t>(toRead))
+    {
+        fileSystem->closeFile(fileHandle);
+        return false;
+    }
+
+    InstrumentFileValidation::Result validation;
+    if (!InstrumentFileValidation::validate(reinterpret_cast<const uint8_t*>(&instrFile),
+                                            toRead,
+                                            fileSize,
+                                            sizeof(strInstrument),
+                                            INSTRUMENT_FILE_VERSION,
+                                            validation))
+    {
+        fileSystem->closeFile(fileHandle);
+        return false;
+    }
+
+    char newName[sizeof(instrFile.instrumentDataAndHeader.instrument.sample.file_name)]{};
+    const size_t copyLen = std::min<size_t>(stemLen, sizeof(newName) - 1);
+    memcpy(newName, baseName, copyLen);
+    newName[copyLen] = '\0';
+
+    if (strncmp(instrFile.instrumentDataAndHeader.instrument.sample.file_name,
+                newName,
+                sizeof(newName)) == 0)
+    {
+        fileSystem->closeFile(fileHandle);
+        return true;
+    }
+
+    memset(instrFile.instrumentDataAndHeader.instrument.sample.file_name,
+           0,
+           sizeof(instrFile.instrumentDataAndHeader.instrument.sample.file_name));
+    memcpy(instrFile.instrumentDataAndHeader.instrument.sample.file_name, newName, sizeof(newName));
+
+    if (validation.hasCrc && crcCalculator != nullptr)
+    {
+        const uint32_t crcOffset = validation.dataOffset - sizeof(uint32_t);
+        const uint32_t newCrc =
+          crcCalculator->calculate32bitCrc(reinterpret_cast<uint8_t*>(&instrFile), crcOffset);
+        memcpy(reinterpret_cast<uint8_t*>(&instrFile) + crcOffset, &newCrc, sizeof(newCrc));
+    }
+
+    const bool ok = fileSystem->seekFile(0, fileHandle) &&
+                    (fileSystem->writeFile(&instrFile, validation.dataOffset, fileHandle) ==
+                     static_cast<int32_t>(validation.dataOffset));
+    fileSystem->closeFile(fileHandle);
+    return ok;
+}
+
+bool cFileManager::saveInstrumentToPtiFile(uint8_t idx, const char* destPath)
+{
+    if (fileSystem == nullptr || destPath == nullptr || idx >= kSampleInstrumentsCount)
+    {
+        return false;
+    }
+
+    const char* relPath = destPath;
+    while (*relPath == '/')
+    {
+        ++relPath;
+    }
+    if (relPath[0] == '\0')
+    {
+        return false;
+    }
+
+    const strInstrument& srcInstr = mtProject.instrument[idx];
+    if (!srcInstr.isActive || srcInstr.sample.length == 0)
+    {
+        return false;
+    }
+
+    strInstrument instrCopy = srcInstr;
+
+    const char* baseName = strrchr(relPath, '/');
+    baseName = (baseName != nullptr) ? (baseName + 1) : relPath;
+    size_t stemLen = strlen(baseName);
+    if (stemLen > 4 && hasFileExtension(baseName, "pti"))
+    {
+        stemLen -= 4;
+    }
+    if (stemLen > 0)
+    {
+        size_t copyLen = std::min(stemLen, sizeof(instrCopy.sample.file_name) - 1);
+        memcpy(instrCopy.sample.file_name, baseName, copyLen);
+        instrCopy.sample.file_name[copyLen] = '\0';
+    }
+
+    strInstrumentFile fileHeader{};
+    writeInstrumentToFileStruct(&instrCopy, &fileHeader);
+
+    const uint32_t dataSizeBytes = srcInstr.sample.length * (isInstrumentStereo(idx) ? 4u : 2u);
+
+    if (mtProject.sampleMemory[idx].isStreamed)
+    {
+        const char* streamSrcPath = voiceStreamManager.getInstrumentStreamPath(idx);
+        if (streamSrcPath == nullptr || streamSrcPath[0] == '\0' ||
+            !fileSystem->exists(streamSrcPath))
+        {
+            return false;
+        }
+
+        const char* streamSrcRel = streamSrcPath;
+        while (*streamSrcRel == '/')
+        {
+            ++streamSrcRel;
+        }
+
+        if (strcmp(streamSrcRel, relPath) == 0)
+        {
+            if (mtProject.sampleMemory[idx].fileDataOffset != sizeof(strInstrumentFile))
+            {
+                return false;
+            }
+            auto [dstOpen, dstHandle] =
+              fileSystem->openFile(relPath, FileSystem::FileOpenMode::kWriteOpen);
+            if (!dstOpen)
+            {
+                return false;
+            }
+            fileSystem->seekFile(0, dstHandle);
+            int32_t headerWritten =
+              fileSystem->writeFile(&fileHeader, sizeof(strInstrumentFile), dstHandle);
+            fileSystem->closeFile(dstHandle);
+            return headerWritten == static_cast<int32_t>(sizeof(strInstrumentFile));
+        }
+
+        auto [srcOpen, srcHandle] =
+          fileSystem->openFile(streamSrcPath, FileSystem::FileOpenMode::kRead);
+        if (!srcOpen)
+        {
+            return false;
+        }
+
+        auto [dstOpen, dstHandle] =
+          fileSystem->openFile(relPath, FileSystem::FileOpenMode::kWriteCreateNew);
+        if (!dstOpen)
+        {
+            fileSystem->closeFile(srcHandle);
+            return false;
+        }
+
+        bool ok =
+          fileSystem->seekFile(mtProject.sampleMemory[idx].fileDataOffset, srcHandle) &&
+          (fileSystem->writeFile(&fileHeader, sizeof(strInstrumentFile), dstHandle) ==
+           static_cast<int32_t>(sizeof(strInstrumentFile)));
+
+        uint8_t copyBuf[4096];
+        uint32_t remaining = dataSizeBytes;
+        while (ok && remaining > 0)
+        {
+            uint32_t toRead = std::min<uint32_t>(remaining, sizeof(copyBuf));
+            int32_t bytesRead = fileSystem->readFile(copyBuf, toRead, srcHandle);
+            if (bytesRead <= 0)
+            {
+                ok = false;
+                break;
+            }
+            int32_t bytesWritten = fileSystem->writeFile(copyBuf, bytesRead, dstHandle);
+            if (bytesWritten != bytesRead)
+            {
+                ok = false;
+                break;
+            }
+            remaining -= static_cast<uint32_t>(bytesRead);
+        }
+
+        fileSystem->closeFile(dstHandle);
+        fileSystem->closeFile(srcHandle);
+        if (!ok)
+        {
+            fileSystem->remove(relPath);
+        }
+        return ok;
+    }
+
+    const uint8_t* dataSource = reinterpret_cast<const uint8_t*>(srcInstr.sample.address);
+    if (dataSource == nullptr)
+    {
+        return false;
+    }
+
+    auto [dstOpen, dstHandle] =
+      fileSystem->openFile(relPath, FileSystem::FileOpenMode::kWriteCreateNew);
+    if (!dstOpen)
+    {
+        return false;
+    }
+
+    bool ok = (fileSystem->writeFile(&fileHeader, sizeof(strInstrumentFile), dstHandle) ==
+               static_cast<int32_t>(sizeof(strInstrumentFile)));
+
+    uint32_t writtenTotal = 0;
+    constexpr uint32_t kChunkSize = 4096;
+    while (ok && writtenTotal < dataSizeBytes)
+    {
+        uint32_t chunk = std::min<uint32_t>(dataSizeBytes - writtenTotal, kChunkSize);
+        int32_t bytesWritten =
+          fileSystem->writeFile(const_cast<uint8_t*>(dataSource + writtenTotal), chunk, dstHandle);
+        if (bytesWritten != static_cast<int32_t>(chunk))
+        {
+            ok = false;
+            break;
+        }
+        writtenTotal += chunk;
+    }
+
+    fileSystem->closeFile(dstHandle);
+    if (!ok)
+    {
+        fileSystem->remove(relPath);
+    }
+    return ok;
+}
+
 //------------------------------------------------------------------------------------------------------------------
 //-----------------------------------------     XXXX
 //-----------------------------------------------------------
@@ -974,7 +1241,9 @@ void cFileManager::removeWavExtensionFromName(char* fileName)
     }
 }
 
-void cFileManager::copySampleNameWithoutExtension(char* sampleName, char* fileName, int maxLength)
+void cFileManager::copySampleNameWithoutExtension(char* sampleName,
+                                                  const char* fileName,
+                                                  int maxLength)
 {
     strncpy(sampleName, fileName, maxLength);
     sampleName[maxLength] = 0;

@@ -14,6 +14,7 @@
  */
 
 #include "psyn_plugin.h"
+#include "psyn_random.h"
 
 #include <cmath>
 #include <cstddef>
@@ -961,6 +962,27 @@ class PluginAdapter
         holder->voice.tickIdle(vctx);
     }
 
+    static constexpr bool kHasRandomizePatch =
+      requires(polysynth::Patch& patch, uint32_t seed) { VoiceClass::randomizePatch(patch, seed); };
+
+    static void randomizePatch(void* hostPatch, uint32_t seed)
+    {
+        if constexpr (kHasRandomizePatch)
+        {
+            if (!hostPatch)
+            {
+                return;
+            }
+            PsynPatchProxy proxy(hostPatch);
+            VoiceClass::randomizePatch(proxy, seed);
+        }
+        else
+        {
+            (void)hostPatch;
+            (void)seed;
+        }
+    }
+
     static const PsynPluginApi* getApi()
     {
         static constexpr bool kOverridesPostProcess =
@@ -990,6 +1012,7 @@ class PluginAdapter
             .voice_clear_previous_notes = &voiceClearPreviousNotes,
             .voice_reset = &voiceReset,
             .voice_tick_idle = kOverridesTickIdle ? &voiceTickIdle : nullptr,
+            .randomize_patch = kHasRandomizePatch ? &randomizePatch : nullptr,
         };
         return &kApi;
     }

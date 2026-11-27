@@ -215,7 +215,7 @@ run on the unit: the emulator covers the marker, and Synth FX's `G2` showed the 
 them: all three parts on DCO6, every voice held. E1 to E3 have no patch files, so the firmware starts
 the parts on DCO6's Init. E4's and E5's patches are written by the firmware in the sound rig
 (`Synth::savePatchToWorkspace`) and loaded back there before they go in. The firmware is a mod build
-with `DCO6.psyn` in the card's `Synths` folder. Lightest first; stop at the first problem.
+with `DCO6.psyn` in the card's `System/Synths` folder (`Synths` before CE's 94cdc96). Lightest first; stop at the first problem.
 
 | Project | Voices | Patch | What it isolates |
 |---|---|---|---|

@@ -216,15 +216,7 @@ void cMasterParams::initDisplayControls()
     propSyncRate.colors = nullptr;
     delaySyncRateList = display.createControl<cList>(&propSyncRate);
 
-#ifdef FEATURE_SYNTH
-    limiterSidechainData.linesCount = 11 + kSynthParts;
-    limiterSidechainData.length = 11 + kSynthParts;
-#else
-    limiterSidechainData.linesCount = 11;
-    limiterSidechainData.length = 11;
-#endif
-    limiterSidechainData.start = 0;
-    limiterSidechainData.data = (char**)limiterSidechainListTxt;
+    rebuildLimiterSidechainList();
 
     strControlProperties propLimiterSidechain;
     propLimiterSidechain.style =
@@ -1052,6 +1044,8 @@ void cMasterParams::showReverbDiffusion()
 // limiter
 void cMasterParams::showLimiterScreen()
 {
+    rebuildLimiterSidechainList();
+    display.setControlData(limiterSidechainList, &limiterSidechainData);
 #if MT_HAS_MASTERFX // MT: the page opens on CE's Sidechain list; a ducking plugin's Sidechain list
                     // in column 3 and its meter above Back
     if (masterfxDucksUp)
@@ -1311,6 +1305,51 @@ void cMasterParams::showLimiterGainReduce()
     //	display.refreshControl(label[GAIN_REDUCE_FIELD_IDX]);
 }
 
+void cMasterParams::rebuildLimiterSidechainList()
+{
+    const uint8_t activeSampleTracks = getProjectActiveSampleTracks();
+    uint8_t count = 0;
+
+    for (uint8_t val = 0; val <= LIMITER_SIDECHAIN_MAX; val++)
+    {
+        if (val >= 1 && val <= kSampleTracks && val > activeSampleTracks)
+        {
+            continue;
+        }
+        limiterSidechainVisibleTexts[count] = limiterSidechainListTxt[val];
+        limiterSidechainVisibleValues[count] = val;
+        count++;
+    }
+
+    limiterSidechainVisibleCount = count;
+    limiterSidechainData.linesCount = count;
+    limiterSidechainData.length = count;
+    limiterSidechainData.start = getLimiterSidechainVisibleIdx(getEffectiveLimiterSidechain());
+    limiterSidechainData.data = (char**)limiterSidechainVisibleTexts;
+}
+
+uint8_t cMasterParams::getEffectiveLimiterSidechain() const
+{
+    const uint8_t val = mtProject.values.limiterSidechain;
+    if (val >= 1 && val <= kSampleTracks && val > getProjectActiveSampleTracks())
+    {
+        return LIMITER_SIDECHAIN_DEFAULT;
+    }
+    return val <= LIMITER_SIDECHAIN_MAX ? val : LIMITER_SIDECHAIN_DEFAULT;
+}
+
+uint8_t cMasterParams::getLimiterSidechainVisibleIdx(uint8_t sidechainVal) const
+{
+    for (uint8_t idx = 0; idx < limiterSidechainVisibleCount; idx++)
+    {
+        if (limiterSidechainVisibleValues[idx] == sidechainVal)
+        {
+            return idx;
+        }
+    }
+    return 0;
+}
+
 void cMasterParams::showLimiterSidechain()
 {
 #if MT_HAS_MASTERFX // MT: the Tracks list is in the control; a ducking plugin's Sidechain in column 3
@@ -1323,10 +1362,12 @@ void cMasterParams::showLimiterSidechain()
 #else
     const uint8_t sidechainColumn = 4;
 #endif
-    display.setControlValue(limiterSidechainList, mtProject.values.limiterSidechain);
+    const uint8_t effectiveSidechain = getEffectiveLimiterSidechain();
+    const uint8_t visibleIdx = getLimiterSidechainVisibleIdx(effectiveSidechain);
+    display.setControlValue(limiterSidechainList, visibleIdx);
     display.refreshControl(limiterSidechainList);
 
-    display.setControlText2(label[sidechainColumn], limiterSidechainListTxt[mtProject.values.limiterSidechain]);
+    display.setControlText2(label[sidechainColumn], limiterSidechainListTxt[effectiveSidechain]);
     display.refreshControl(label[sidechainColumn]);
 }
 
@@ -1588,15 +1629,27 @@ void cMasterParams::resizeBarControl(displayMode val)
         display.setControlShow(barControl[3]);
         display.refreshControl(barControl[3]);
 
+        const uint8_t activeSampleTracks = getProjectActiveSampleTracks();
         for (uint8_t i = 0; i < 8; i++)
         {
-            display.setControlPosition(trackVolumeBar[i], (800 / 8) * i + 2, 64);
-            display.setControlSize(trackVolumeBar[i], 800 / 16 - 3, 359);
-            display.refreshControl(trackVolumeBar[i]);
+            if (i < activeSampleTracks)
+            {
+                display.setControlPosition(trackVolumeBar[i], (800 / 8) * i + 2, 64);
+                display.setControlSize(trackVolumeBar[i], 800 / 16 - 3, 359);
+                display.refreshControl(trackVolumeBar[i]);
 
-            display.setControlPosition(barControl[i], (800 / 8) * i + 2 + 800 / 16, 64);
-            display.setControlSize(barControl[i], 800 / 16 - 3, 359);
-            display.refreshControl(barControl[i]);
+                display.setControlPosition(barControl[i], (800 / 8) * i + 2 + 800 / 16, 64);
+                display.setControlSize(barControl[i], 800 / 16 - 3, 359);
+                display.refreshControl(barControl[i]);
+            }
+            else
+            {
+                display.setControlHide(trackVolumeBar[i]);
+                display.refreshControl(trackVolumeBar[i]);
+
+                display.setControlHide(barControl[i]);
+                display.refreshControl(barControl[i]);
+            }
         }
 #ifdef FEATURE_SYNTH
         for (uint8_t i = 8; i < 8 + kSynthParts; i++)
@@ -1905,16 +1958,18 @@ void cMasterParams::showMixerScreen()
     titleBar->setTitle("Track Mixer 2/3");
 #endif
 
+    const uint8_t activeSampleTracks = getProjectActiveSampleTracks();
+
     if (isSolo)
     {
-        for (uint8_t i = 0; i < 8; i++)
+        for (uint8_t i = 0; i < activeSampleTracks; i++)
         {
             sprintf(mixerLabel[i], "%s", soloTrack == i ? (char*)"Unsolo" : (char*)"Solo");
         }
     }
     else
     {
-        for (uint8_t i = 0; i < 8; i++)
+        for (uint8_t i = 0; i < activeSampleTracks; i++)
         {
             sprintf(
               mixerLabel[i], "%s", mtProject.values.trackMute[i] ? (char*)"Unmute" : (char*)"Mute");
@@ -1923,23 +1978,37 @@ void cMasterParams::showMixerScreen()
 
     for (uint8_t i = 0; i < 8; i++)
     {
-        mtProject.values.TrackNames[i][7] = 0;
+        if (i < activeSampleTracks)
+        {
+            mtProject.values.TrackNames[i][7] = 0;
 
-        showLevelBar(i, &trackLevel[i]);
-        showTrackVolumeBar(i);
+            showLevelBar(i, &trackLevel[i]);
+            showTrackVolumeBar(i);
 
-        display.setControlText(trackNameLabel[i], &mtProject.values.TrackNames[i][0]);
-        display.setControlShow(trackNameLabel[i]);
-        display.refreshControl(trackNameLabel[i]);
+            display.setControlText(trackNameLabel[i], &mtProject.values.TrackNames[i][0]);
+            display.setControlShow(trackNameLabel[i]);
+            display.refreshControl(trackNameLabel[i]);
 
-        display.setControlValue(label[i], 1);
-        display.setControlColors(label[i],
-                                 mtProject.values.trackMute[i]
-                                   ? display.getTheme().inactiveLabelsColors
-                                   : display.getTheme().activeLabelsColors);
+            display.setControlValue(label[i], 1);
+            display.setControlColors(label[i],
+                                     mtProject.values.trackMute[i]
+                                       ? display.getTheme().inactiveLabelsColors
+                                       : display.getTheme().activeLabelsColors);
 
-        display.setControlText2(label[i], mixerLabel[i]);
-        display.refreshControl(label[i]);
+            display.setControlText2(label[i], mixerLabel[i]);
+            display.refreshControl(label[i]);
+        }
+        else
+        {
+            display.setControlHide(trackNameLabel[i]);
+            display.refreshControl(trackNameLabel[i]);
+
+            display.setControlValue(label[i], 1);
+            display.setControlColors(label[i], display.getTheme().inactiveLabelsColors);
+            display.setControlText(label[i], "");
+            display.setControlText2(label[i], "");
+            display.refreshControl(label[i]);
+        }
     }
 
     display.refreshControl(bgLabel);
@@ -1950,7 +2019,18 @@ void cMasterParams::showMixerScreen()
 
     resizeBarControl(displayMode::mixer);
 
-    display.setControlHide(blankSpaceCover[0]);
+    if (activeSampleTracks < kSampleTracks)
+    {
+        display.setControlPosition(blankSpaceCover[0], (800 / 8) * activeSampleTracks + 2, -1);
+        display.setControlSize(
+          blankSpaceCover[0], (800 / 8) * (kSampleTracks - activeSampleTracks) - 4, -1);
+        display.setControlShow(blankSpaceCover[0]);
+    }
+    else
+    {
+        display.setControlHide(blankSpaceCover[0]);
+    }
+    display.refreshControl(blankSpaceCover[0]);
     display.setControlHide(blankSpaceCover[1]);
     display.setControlHide(blankSpaceCover[2]);
 
@@ -2478,7 +2558,8 @@ void cMasterParams::showEditTracksNamesMode()
 {
     if (editTrackNameMode)
     {
-        for (uint8_t i = 0; i < 8; i++)
+        const uint8_t activeSampleTracks = getProjectActiveSampleTracks();
+        for (uint8_t i = 0; i < activeSampleTracks; i++)
         {
             display.setControlColors(label[i], display.getTheme().masterEditTrackNameLabelsColors);
             display.setControlText2(label[i], "Edit");
@@ -2531,7 +2612,8 @@ void cMasterParams::showKeyboardExport()
 
 void cMasterParams::refreshAllTracksMixerVolume()
 {
-    for (uint8_t i = 0; i < 8; i++)
+    const uint8_t activeSampleTracks = getProjectActiveSampleTracks();
+    for (uint8_t i = 0; i < activeSampleTracks; i++)
     {
         if (refreshVolumeFromCC[i])
         {

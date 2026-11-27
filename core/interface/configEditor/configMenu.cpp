@@ -4,7 +4,7 @@
 #include "configEditor/configMenuActions.h"
 #include "ThemeManager.h"
 
-#include "imageViewer/imageViewerDefs.h"
+#include "infoViewer/infoViewerDefs.h"
 
 #include "polyassert.h"
 #include "colorsong.h" // MT:
@@ -64,6 +64,7 @@ const strItemTypeListTextWithAction setupLimiterMode{ &mtProject.values.limiterM
 const strItemTypeListTextWithAction setupSendsMode{ &mtProject.values.sendsMode, 2, sendsModeTexts, setSendsMode };
 const strItemTypeListTextWithAction setupHeadroomMode{ &mtProject.values.isHeadroomEnabled, 2, onOffStateTexts, setHeadroomMode };
 const strItemTypeListTextWithAction setupSnapToZeroMode{ &mtProject.values.isSnapToZeroEnabled, 2, onOffStateTexts, setSnapToZeroMode };
+const strItemTypeListTextWithAction setupMaxTracks{ &mtProject.values.maxTracksMode, kMaxTracksModeCount, maxTracksTexts, setMaxTracks };
 
 cMenuItem melPerformanceSource(menuProject, "Performance presets", perfPresDesc, menuTypeItemListText, &setupPerfSource);
 cMenuItem melPatternDiv(menuProject, "Pattern divider", pattDivDesc, menuTypeItemListValues, &setupPatternDiv);
@@ -75,6 +76,7 @@ cMenuItem melLimiterMode(menuProject, "Limiter mode", limiterDesc, menuTypeItemL
 cMenuItem melSendsMode(menuProject, "Sends mode", sendsDesc,  menuTypeItemListTextWithAction, &setupSendsMode);
 cMenuItem melHeadroomMode(menuProject, "Extra headroom", headroomDesc,  menuTypeItemListTextWithAction, &setupHeadroomMode);
 cMenuItem melSnapToZeroMode(menuProject, "Snap to zero", snapToZeroDesc,  menuTypeItemListTextWithAction, &setupSnapToZeroMode);
+cMenuItem melMaxTracks(menuProject, "Max tracks", maxTracksDesc, menuTypeItemListTextWithAction, &setupMaxTracks);
 
 #if MT_MODS // MT: Project Settings -> Mods: one Off/On item per mod for this project, then where the defaults are
 cMenuGroup menuProjectMods(menuProject, "Mods");
@@ -226,7 +228,7 @@ cMenuItem melMasterfxLimiter(menuProjectMasterfx, "Limiter", masterfxLimiterDesc
 const strItemTypeListTextWithAction setupRadioRegion{ &mtConfig.general.radioRegion, 4, radioRegion, setRadioRegion };
 const strItemTypeListTextWithAction setupDispBrightness{ &mtConfig.general.dispBrightness, 3, brightness, setDisplayBrightness };
 strItemTypeListTextWithAction setupDispTheme{ &mtConfig.general.theme, DisplayThemes::kCount, themeChoices, setDisplayTheme };
-strItemTypeListTextWithAction setupDispFont{ &mtConfig.general.font, 2,  ptrFont, setDisplayFont };
+strItemTypeListTextWithAction setupDispFont{ &mtConfig.general.font, 1,  ptrFont, setDisplayFont };
 
 void refreshThemeAndFontMenuOptions()
 {
@@ -244,6 +246,7 @@ const strItemTypeListText setupPadPreviewInPatternEdit{ &mtConfig.general.padPre
 const strItemTypeListText setupPatternArrangement{ &mtConfig.general.patternArrangement, 3, patternArrangementTexts };
 const strItemTypeListText setupPatternInfo{ &mtConfig.general.patternInfo, 3, patternInfoTexts };
 const strItemTypeListText setupNoteDisplayMode{ &mtConfig.general.noteDisplayMode, std::size(noteDisplayModeTexts), noteDisplayModeTexts };
+const strItemTypeListText setupConfirmFileDelete{ &mtConfig.general.confirmFileDelete, std::size(fileManagerConfirmTexts), fileManagerConfirmTexts };
 
 #ifndef TRACKER_MINI
 cMenuItem melRadioReg(menuGeneral,
@@ -310,6 +313,11 @@ cMenuItem melNoteDisplayMode(menuGeneral,
                              noteDisplayModeDesc,
                              menuTypeItemListText,
                              &setupNoteDisplayMode);
+cMenuItem melConfirmFileDelete(menuGeneral,
+                               "File Manager",
+                               confirmFileDeleteDesc,
+                               menuTypeItemListText,
+                               &setupConfirmFileDelete);
 
 //==================================================================================================================================================================
 // Metroneome
@@ -352,6 +360,10 @@ const strItemTypeListText notesOutModeSetup{ &mtConfig.midi.notesOutMode, 4, mid
 const strItemTypeListText notesInChanneletup{ &mtConfig.midi.notesInChannel, 17, notesChannel };
 const strItemTypeListText ccInModeSetup{ &mtConfig.midi.ccInMode, 4, midiIn };
 const strItemTypeListText ccInChannelSetup{ &mtConfig.midi.ccInChannel, 17, notesChannel };
+const strItemTypeListText programChangeInModeSetup{ &mtConfig.midi.programChangeInMode, 4, midiIn };
+const strItemTypeListText programChangeInChannelSetup{ &mtConfig.midi.programChangeInChannel,
+                                                       17,
+                                                       notesChannel };
 const strItemTypeListText middleCSetup{ &mtConfig.midi.middleC, 4, middleC };
 const strItemTypeListTextWithAction slaveClockCompSetup{ &mtConfig.midi.slaveClockComp, std::size(slaveClockComp),  slaveClockComp, setSlaveClockCompValue };
 
@@ -380,6 +392,16 @@ cMenuItem melCCInChannel(menuMidi,
                          supportedCcInDesc,
                          menuTypeItemListText,
                          &ccInChannelSetup);
+cMenuItem melProgramChangeInMode(menuMidi,
+                                 "Program Change in",
+                                 programChangeInDesc,
+                                 menuTypeItemListText,
+                                 &programChangeInModeSetup);
+cMenuItem melProgramChangeInChannel(menuMidi,
+                                    "Program Change in ch.",
+                                    programChangeInDesc,
+                                    menuTypeItemListText,
+                                    &programChangeInChannelSetup);
 cMenuItem melMiddleC(menuMidi, "Middle C", nullptr, menuTypeItemListText, &middleCSetup);
 cMenuItem melSlaveClockComp(menuMidi,
                             "Clock sync correction",
@@ -546,33 +568,12 @@ cMenuItem melUsbAudio(menuUsb,
 // Credits & Info
 
 const strItemTypeActionButton creditsSetup{ openCreditsAction, nullptr };
-const strItemTypeActionButton manual1Setup{ openManual1Action, nullptr };
-const strItemTypeActionButton manual2Setup{ openManual2Action, nullptr };
-const strItemTypeActionButton manual3Setup{ openManual3Action, nullptr };
 
 cMenuItem melOpenCredits(menuCredits,
                          "About",
                          nullptr,
                          menuTypeItemActionButton,
                          &creditsSetup);
-
-cMenuItem melOpenManual1(menuCredits,
-                         &manualFolderNames[0][0],
-                         nullptr,
-                         menuTypeItemActionButton,
-                         &manual1Setup);
-
-cMenuItem melOpenManual2(menuCredits,
-                         &manualFolderNames[1][0],
-                         nullptr,
-                         menuTypeItemActionButton,
-                         &manual2Setup);
-
-cMenuItem melOpenManual3(menuCredits,
-                         &manualFolderNames[2][0],
-                         nullptr,
-                         menuTypeItemActionButton,
-                         &manual3Setup);
 
 
 //==================================================================================================================================================================
@@ -665,6 +666,7 @@ void cConfigEditor::hideConfigMenu()
     display.setControlHide(configListControl);
     display.setControlHide(configBasemenuListControl);
     display.setControlHide(configSubmenuListControl);
+    display.setControlHide(creditsTextBox);
     display.setControlHide(frameControl);
     display.setControlHide(blankSpaceCover[0]);
     display.setControlHide(blankSpaceCover[1]);
@@ -873,6 +875,17 @@ void cConfigEditor::refreshConfigMenu()
     }
     else if (menuBase.type == menuTypeGroup)
     {
+        if (activeSubmenu == &menuCredits)
+        {
+            changeLabelText(3, "");
+            changeLabelText(6, "");
+            changeLabelText(7, "");
+            showInlineInfoPanel();
+            display.synchronizeRefresh();
+            return;
+        }
+
+        hideInlineInfoPanel();
         reloadSubmenu();
         showSubmenu();
 

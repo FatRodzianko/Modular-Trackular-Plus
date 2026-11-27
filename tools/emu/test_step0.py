@@ -88,13 +88,15 @@ def test_menu(m: Machine) -> None:
 
     project = m.addr("menuProject")
     project_children = group_children(m, project)
-    check(len(project_children) == 14 and len(group_names(m, project)) == 14,
-          "Project Settings has CE's 10 items plus Mods, Global Swing, Humanize and Master FX",
+    # CE's 11 items since its 6ff1eaa (Max tracks, the last of them)
+    check(len(project_children) == 15 and len(group_names(m, project)) == 15,
+          "Project Settings has CE's 11 items plus Mods, Global Swing, Humanize and Master FX",
           f"{len(project_children)} items")
+    check(project_children[10:11] == [m.addr("melMaxTracks")], "CE's last item is Max tracks")
     project_mods = m.addr("menuProjectMods")
-    check(project_children[10:11] == [project_mods], "after CE's items comes the Mods group")
-    check(group_names(m, project)[10:11] == ["Mods"], "its name")
-    check(project_children[11:14] == [m.addr("menuProjectSwing"), m.addr("menuProjectHumanize"),
+    check(project_children[11:12] == [project_mods], "after CE's items comes the Mods group")
+    check(group_names(m, project)[11:12] == ["Mods"], "its name")
+    check(project_children[12:15] == [m.addr("menuProjectSwing"), m.addr("menuProjectHumanize"),
                                       m.addr("menuProjectMasterfx")],
           "then Global Swing, Humanize and Master FX")
     check(m.r32(project_mods) == MENU_TYPE_GROUP and m.r32(project_mods + 4) == project,

@@ -395,7 +395,13 @@ class cInstrumentEditor : public ModuleBase
 
     void changeSynthParamValue(int value, ValueChangeSource source = kArrowButton);
 
-    void changeSynthModel(int16_t value);
+    void changeSynthModel(int16_t value, bool deferCommit = false);
+    void commitPendingSynthModel();
+    void updatePendingSynthModel();
+    bool pendingSynthModelCommit = false;
+    int8_t pendingSynthModelPart = -1;
+    uint32_t pendingSynthModelTimestampMs = 0;
+    static constexpr uint32_t kSynthModelCommitDelayMs = 180;
     void changeSynthPolyphony(int16_t value);
     void changeSynthGain(int16_t value);
     void changeSynthPanning(int16_t value);
@@ -417,6 +423,8 @@ class cInstrumentEditor : public ModuleBase
     int loadPatchList();
     void revertPatch();
     void initCurrentPatch();
+    void randomizeCurrentPatch();
+    void updateSynthPatchInitButtonLabel(bool shiftHeld);
 
     void showSynthParamsScreen();
     void setSynthParamsScreenFunct();

@@ -5,6 +5,7 @@
 
 #include "fileTransfer.h"
 #include "instrumentFileValidation.h"
+#include "util_string.h"
 #include <string.h>
 
 extern uint8_t externalRamFileManagerSrcBuff[READ_WRITE_BUFOR_SIZE];
@@ -482,14 +483,9 @@ uint8_t cFileTransfer::copyFile(const char* src, const char* dest)
 
     if (transferStep == 2)
     {
-        uint32_t fileNameLen = strlen(src);
         bool invalidInstrument = false;
 
-        if (fileNameLen >= 4 &&
-            ((src[fileNameLen - 1] == 'i') || (src[fileNameLen - 1] == 'I')) &&
-            ((src[fileNameLen - 2] == 't') || (src[fileNameLen - 2] == 'T')) &&
-            ((src[fileNameLen - 3] == 'p') || (src[fileNameLen - 3] == 'P')) &&
-            (src[fileNameLen - 4] == '.'))
+        if (hasFileExtension(src, "pti"))
         {
             fileSystem->seekFile(0, transferFile);
             strInstrumentFile instrumentFile;

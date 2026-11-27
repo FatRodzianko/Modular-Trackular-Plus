@@ -8,6 +8,9 @@ says otherwise, and its project.mt carries the new name, so that Save on 1.2.0 w
 the copy and not to the original.
 
 What 1.2.0 can't read, and what the copy gets instead:
+  - project.mt in version 18 (CE's 6ff1eaa, Max tracks). 1.2.0 knows up to 17. Version 18 only
+    added maxTracksMode in a byte that was padding before, so the copy says 17 and that byte is
+    0 again: 1.2.0 plays every track, as it always does.
   - Pattern files in format 6 (8-byte steps). 1.2.0 reads them as 6-byte steps without
     checking. They become format 5: Volume and Micro-move columns are dropped, and FX
     only CE has (id 43 up: w, y, z) are cleared.
@@ -47,7 +50,9 @@ FW_1_2_0_PATTERN = bytes((1, 9, 2, 1))
 
 # project.mt. Offsets are the file's: RAM 0x202046c4 is file +0x110.
 PROJECT_SIZE = 0x914
-PROJECT_VERSION = 17
+PROJECT_VERSION = 17          # what the copy says: 1.2.0's
+PROJECT_VERSIONS = (17, 18)   # what CE writes; 18 (CE's 6ff1eaa) adds maxTracksMode
+PROJECT_MAX_TRACKS = 0x80D    # strMtValues +1789 (the build's DWARF), a padding byte in version 17
 PROJECT_NAME = 0x810
 PROJECT_NAME_SIZE = 33
 FW_1_2_0_PROJECT = bytes((1, 9, 2, 0xFF))
@@ -90,13 +95,14 @@ class Report:
     micromoves: int = 0
     ce_fx: int = 0
     synths: list[str] = field(default_factory=list)
+    project_version: int = 0      # the version the project said, when it was newer than 1.2.0's
     patches_left_out: list[str] = field(default_factory=list)
     instruments: list[str] = field(default_factory=list)
     chords_above_29: int = 0
     chances_above_100: int = 0
 
     def anything(self) -> bool:
-        return bool(self.patterns or self.synths or self.instruments)
+        return bool(self.patterns or self.synths or self.instruments or self.project_version)
 
 
 def pattern_v6_to_v5(data: bytes, report: Report) -> bytes:
@@ -148,9 +154,14 @@ def repair_project_file(project: Path, name: str, synth_model: str,
     if not path.is_file():
         raise Refused(f"No project.mt in {project}, so this isn't a project folder.")
     mt = bytearray(path.read_bytes())
-    if len(mt) != PROJECT_SIZE or mt[:2] != b"MT" or mt[HEADER_VERSION] != PROJECT_VERSION:
+    if len(mt) != PROJECT_SIZE or mt[:2] != b"MT" or mt[HEADER_VERSION] not in PROJECT_VERSIONS:
         raise Refused(f"project.mt: {len(mt)} bytes, version {mt[HEADER_VERSION] if len(mt) > 8 else '?'}. "
-                      f"I only know version {PROJECT_VERSION} at {PROJECT_SIZE} bytes, so I changed nothing.")
+                      f"I only know versions {', '.join(map(str, PROJECT_VERSIONS))} at {PROJECT_SIZE} bytes, "
+                      "so I changed nothing.")
+    if mt[HEADER_VERSION] != PROJECT_VERSION:
+        report.project_version = mt[HEADER_VERSION]
+        mt[HEADER_VERSION:HEADER_VERSION + 4] = bytes((PROJECT_VERSION,)) * 4
+        mt[PROJECT_MAX_TRACKS] = 0
     mt[HEADER_FW:HEADER_FW + 4] = FW_1_2_0_PROJECT
     encoded = name.encode("ascii")
     mt[PROJECT_NAME:PROJECT_NAME + PROJECT_NAME_SIZE] = encoded.ljust(PROJECT_NAME_SIZE, b"\0")
@@ -258,6 +269,9 @@ def print_report(report: Report, project: Path, out: Path) -> None:
         print(f"Patterns converted: {len(report.patterns)} ({', '.join(report.patterns)})")
         print(f"Lost in those patterns: {report.volumes} Volume, {report.micromoves} Micro-move, "
               f"{report.ce_fx} CE-only FX")
+    if report.project_version:
+        print(f"project.mt: version {report.project_version} -> {PROJECT_VERSION}; "
+              "Max tracks is CE's only, 1.2.0 plays all 16")
     for line in report.synths:
         print(line)
     if report.patches_left_out:

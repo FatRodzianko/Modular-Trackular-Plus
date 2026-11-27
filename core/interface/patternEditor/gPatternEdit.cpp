@@ -1195,7 +1195,8 @@ void cPatternEditor::showMuteButtons(uint8_t state, bool midiTracks)
             char* bottomText = (char*)"";
             auto colors = display.getTheme().inactiveLabelsColors;
 
-            bool showButton = midiTracks ? i < kMidiTracks : true;
+            const int trackIdx = midiTracks ? (i + kSampleTracks) : i;
+            bool showButton = (trackIdx < getProjectMaxTracks());
             if (showButton)
             {
                 int mute =
@@ -1245,7 +1246,7 @@ void cPatternEditor::showRecordArmingButtons(uint8_t state, bool midiTracks)
             char* bottomText = (char*)"";
             auto colors = display.getTheme().inactiveLabelsColors;
 
-            bool showButton = midiTracks ? buttonIdx < kMidiTracks : true;
+            bool showButton = (trackIdx < getProjectMaxTracks());
             if (showButton)
             {
                 topText = (char*)"Live REC";

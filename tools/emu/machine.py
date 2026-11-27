@@ -106,6 +106,12 @@ class Elf:
                 self.symbols.setdefault(name, Symbol(name, value, st_size, (info & 0xF) == STT_FUNC))
 
 
+# strMtProject: 48 strInstrument of 372 bytes, two counts, strSong (255 + 1), then strMtValues at 4 bytes;
+# maxTracksMode is strMtValues +1789 (the build's DWARF, CE's 6ff1eaa).
+MT_VALUES = (48 * 372 + 2 + 256 + 3) & ~3
+MAX_TRACKS_MODE = 1789
+
+
 class Machine:
     def __init__(self, axf_path: Path):
         self.elf = Elf(axf_path)
@@ -122,6 +128,15 @@ class Machine:
         self.uc.hook_add(UC_HOOK_MEM_INVALID, self._on_invalid)
         self.scratch_next = SCRATCH
         self._stub_next = STUB_BASE + 0x100
+        self._boot_values()
+
+    def _boot_values(self) -> None:
+        """Static initialisers the boot runs before main and the rigs don't. Since CE's 6ff1eaa,
+        mtProject.values.maxTracksMode (interface.cpp's OCRAM mtProject) starts at kMaxTracksModeDefault,
+        3: 16 tracks. Left at 0 it would be 4 tracks, and CE's sequencer, song paste and lists would
+        leave tracks 5 to 16 out. Images before 6ff1eaa have a padding byte there, left alone."""
+        if "_ZN9Sequencer18onMaxTracksChangedEh" in self.elf.symbols and "mtProject" in self.elf.symbols:
+            self.uc.mem_write(self.elf.symbols["mtProject"].addr + MT_VALUES + MAX_TRACKS_MODE, bytes((3,)))
 
     # -- symbols --------------------------------------------------------------
     def sym(self, name: str) -> Symbol:

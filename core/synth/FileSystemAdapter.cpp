@@ -1,6 +1,7 @@
 // NOLINTBEGIN
 #ifdef FEATURE_SYNTH
 #include "FileSystemAdapter.h"
+#include "SdPaths.h"
 #include "config.h"
 
 #include "cr_section_macros.h"
@@ -59,18 +60,6 @@ std::vector<std::string_view> FileSystemAdapter::listFiles(
                                         kMaxFileNameLen,
                                         fileCount,
                                         listDataName);
-    if (fileCount == 0 && pathPrefix == "/SynthSamples/")
-    {
-        fileCount = kMaxFilesListLength;
-        platformFileSystem->listDirContents(("/Samples/" + path).c_str(),
-                                            ::FileSystem::DirContentType::kFiles,
-                                            wrappedMatcher,
-                                            fileNamesBuffer,
-                                            kMaxFilesListLength * (kMaxFileNameLen + 1),
-                                            kMaxFileNameLen,
-                                            fileCount,
-                                            listDataName);
-    }
 
     std::vector<std::string_view> fileList;
 
@@ -98,18 +87,9 @@ std::optional<polysynth::FileSystem::FileHandle> FileSystemAdapter::open(
         }
     }
     auto [result, file] = platformFileSystem->openFile((pathPrefix + path).c_str(), mode);
-    if (!result && mode == ::FileSystem::FileOpenMode::kRead &&
-        (pathPrefix == "/Samples/" || pathPrefix == "/SynthSamples/"))
+    if (!result && mode == ::FileSystem::FileOpenMode::kRead)
     {
-        std::tie(result, file) = platformFileSystem->openFile(("/Samples/" + path).c_str(), mode);
-        if (!result)
-        {
-            std::tie(result, file) = platformFileSystem->openFile(("/" + path).c_str(), mode);
-        }
-        if (!result)
-        {
-            std::tie(result, file) = platformFileSystem->openFile(("/Patches/" + path).c_str(), mode);
-        }
+        std::tie(result, file) = platformFileSystem->openFile(("/" + path).c_str(), mode);
     }
 
     return result ? std::optional<polysynth::FileSystem::FileHandle>(file) : std::nullopt;
@@ -139,14 +119,7 @@ bool FileSystemAdapter::seek(FileHandle file, int offset)
 void FileSystemAdapter::createFolder(const std::string& path)
 {
     std::string fullPath = pathPrefix + path;
-    while (fullPath.size() > 1 && fullPath.back() == '/')
-    {
-        fullPath.pop_back();
-    }
-    if (!platformFileSystem->exists(fullPath.c_str()))
-    {
-        platformFileSystem->mkdir(0, fullPath.c_str());
-    }
+    SdPaths::ensureDir(platformFileSystem, fullPath);
 }
 #endif
 // NOLINTEND

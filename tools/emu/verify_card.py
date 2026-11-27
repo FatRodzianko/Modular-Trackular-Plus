@@ -4,7 +4,7 @@ synth engines, and what plays.
 
     python tools/emu/verify_card.py <repo> <axf> <card folder> <project folder name> [--play N]
 
-The card folder is what goes on the SD card: Projects/<name>, Synths and MasterFX. Run it on every
+The card folder is what goes on the SD card: Projects/<name>, System/Synths and MasterFX. Run it on every
 device project with the image that goes on the card, and write the steps from what it prints.
 """
 import json
@@ -29,10 +29,16 @@ sd = r.sd
 r.card_from(CARD / "Projects" / NAME, NAME, workspace=False)
 # keyed as the firmware's own paths reach the fake card: CE's Synths without a slash, the mods'
 # /MasterFX with one (as the pack files the firmware writes there)
-for sub, key in (("Synths", "Synths"), ("MasterFX", "/MasterFX")):
+# CE's engines are in System/Synths since CE's 94cdc96 (SdPaths::synthsDir); a card folder made before
+# it has them in Synths
+sd.dirs.add("System")
+for sub, key in (("System/Synths", "System/Synths"), ("Synths", "System/Synths"), ("MasterFX", "/MasterFX")):
+    if not (CARD / sub).is_dir():
+        continue
     sd.dirs.add(key)
     for f in (CARD / sub).iterdir():
-        sd.files[f"{key}/{f.name}"] = f.read_bytes()
+        if f.is_file():
+            sd.files[f"{key}/{f.name}"] = f.read_bytes()
 
 
 def sym(*parts):

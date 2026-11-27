@@ -38,8 +38,9 @@ TRACK_MUTE, MIDI_TRACK_MUTE = VALUES + 28, VALUES + 1586
 INSTRUMENT_SIZE, PLAY_MODE = 372, 60    # strInstrument, its playMode
 SAMPLES, MIDI_START, SYNTH_START, SYNTHS = 48, 48, 64, 3
 # Sequencer: selection.firstTrack at 1, ptrPlayer at 12, currentPattern at 20 (one of seq[2]: CE swaps
-# it with bufferPattern), player at 28; strPlayer.isREC at 21 and track[16] at 84, 112 bytes each.
-FIRST_TRACK, PTR_PLAYER, CURRENT_PATTERN, PLAYER, IS_REC, TRACKS, TRACK_SIZE = 1, 12, 20, 28, 21, 84, 112
+# it with bufferPattern), player at 28; strPlayer.isREC at 25 and track[16] at 88, 112 bytes each (21 and
+# 84 before CE's 1e9a9e5 merge: its midiProgramChange_pendingStoppedPattern, the build's DWARF).
+FIRST_TRACK, PTR_PLAYER, CURRENT_PATTERN, PLAYER, IS_REC, TRACKS, TRACK_SIZE = 1, 12, 20, 28, 25, 88, 112
 # strPlayerTrack: stepSent (instrument 1, fx types 2 and 4), noteOpen, recOpen, noteSource (int16),
 # roll.isOn, arp.isOn, micromove.isActive.
 SENT_INSTRUMENT, SENT_FX, NOTE_OPEN, REC_OPEN, NOTE_SOURCE = 1, (2, 4), 27, 28, 30

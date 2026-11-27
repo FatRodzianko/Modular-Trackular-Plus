@@ -52,9 +52,13 @@ def open_project(axf: Path, folder: Path, synths: Path) -> BootRig:
     r = BootRig(axf)
     m, sd = r.m, r.sd
     r.card_from(folder, NAME, workspace=False)      # in Projects only: the Open must copy them
-    sd.dirs.add("Synths")
-    for f in synths.glob("*.psyn"):
-        sd.files[f"Synths/{f.name}"] = f.read_bytes()
+    # CE's engine folder since its 94cdc96 (SdPaths::synthsDir: /System/Synths on a card with /System),
+    # and /Synths for a firmware from before it: both, as on a card copied for both
+    sd.dirs.add("System")
+    for folder in ("System/Synths", "Synths"):
+        sd.dirs.add(folder)
+        for f in synths.glob("*.psyn"):
+            sd.files[f"{folder}/{f.name}"] = f.read_bytes()
     updates = [0]
     r.watch(m.addr("_ZN14cPatternEditor6updateEv"), lambda mm: updates.__setitem__(0, updates[0] + 1))
     r.boot()

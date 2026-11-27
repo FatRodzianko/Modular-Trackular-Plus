@@ -10,7 +10,8 @@
 #include "core/titleBar.h"
 
 #include "fileBrowser/GlobalFileBrowser.h"
-#include "imageViewer/imageViewer.h"
+#include "fileManager/FileManagerModule.h"
+#include "infoViewer/infoViewer.h"
 #include "instrumentEditor/instrumentEditor.h"
 #include "masterParams/masterParams.h"
 #include "patternEditor/patternEditor.h"
@@ -55,7 +56,7 @@ extern uint8_t isAudioOutMuted();
 //=======================================================================
 //=======================================================================
 
-const uint8_t Interface::modulesCount = 13;
+const uint8_t Interface::modulesCount = 14;
 const hModule Interface::modules[modulesCount] = {
     &projectEditor,    // 0
     &sampleImporter,   // 1
@@ -67,9 +68,10 @@ const hModule Interface::modules[modulesCount] = {
     &configEditor,     // 7
     &sampleRecorder,   // 8
     &performanceMode,  // 9
-    &imageViewer,       // 10
+    &infoViewer,        // 10
     &globalFileBrowser, // 11
     &masterParams,      // 12
+    &fileManagerModule, // 13
 };
 
 const uint8_t Interface::modulesButtonsCount = 11;
@@ -671,10 +673,10 @@ void interfaceEnvents(uint8_t event, void* param1, void* param2, void* param3)
         {
             break;
         }
-        case eventActivateImageViewer:
+        case eventActivateInfoViewer:
         {
             mtInterface.deactivateModule((hModule)param1);
-            mtInterface.activateModule(&imageViewer, param2 == nullptr ? 0 : *((uint8_t*)param2));
+            mtInterface.activateModule(&infoViewer, param2 == nullptr ? 0 : *((uint8_t*)param2));
             break;
         }
         case eventToggleActiveModule:

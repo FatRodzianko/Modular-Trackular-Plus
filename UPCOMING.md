@@ -9,13 +9,13 @@
 ### Added
 
 1. **Loadable `.psyn` Synth Plugin SDK (Tracker+ & Tracker Mini)**
-	* **SD-Card Synth Plugins (`/Synths/*.psyn`)**: Synthesizer engines now load dynamically from `/Synths/*.psyn` on the microSD card without recompiling firmware. Developers can build custom C++20 or C synth engines with [`synth-plugin-sdk/`](synth-plugin-sdk/).
-	* **Sample-Based Synth Engines (`SampleSlot` & `4 MB` `SamplePool`)**: `.psyn` plugins can load `.wav` samples and wavetables from `/SynthSamples/<ENGINE>/` or anywhere on the SD card into a shared `4 MB` SDRAM sample pool, alongside a `1,920 KB` plugin code arena.
+	* **SD-Card Synth Plugins (`/System/Synths/*.psyn`)**: Synthesizer engines now load dynamically from `/System/Synths/*.psyn` on the microSD card without recompiling firmware. Developers can build custom C++20 or C synth engines with [`synth-plugin-sdk/`](synth-plugin-sdk/).
+	* **Sample-Based Synth Engines (`SampleSlot` & `4 MB` `SamplePool`)**: `.psyn` plugins can load `.wav` samples and wavetables from `/System/Synths/Samples/<ENGINE>/` or anywhere on the SD card into a shared `4 MB` SDRAM sample pool, alongside a `1,920 KB` plugin code arena.
 	* **100% Open-Source Firmware Link**: Moved the `PolySynth` host, `PolyDSP`, and Master FX (`Delay`, `Reverb`) to MIT-licensed source compilation with zero precompiled `.a` libraries linked into the firmware (only the prebuilt factory `.psyn` binaries in `synth/prebuilt/` remain under [`synth/prebuilt/LICENSE-PROPRIETARY.txt`](synth/prebuilt/LICENSE-PROPRIETARY.txt)).
 	* See [`docs/custom_synth_sdk.md`](docs/custom_synth_sdk.md) and [`synth-plugin-sdk/README.md`](synth-plugin-sdk/README.md).
 
 2. **Unified File Browser Across All Screens (All 3 Devices)**
-	* Replaced the older single-folder file pickers with a unified folder-navigating browser across Project **`Open`** / **`Save As`**, **`.mod` / `.it` Import**, Synth Patch **`Load`** / **`Save`**, Synth **Sample Slot** `.wav` selection, and Sample Editor **Effect Loader (`Load Effect...`), File Parameters & Effect Presets** (with direct switching out to other screens via hardware module buttons).
+	* Replaced the older single-folder file pickers with a unified folder-navigating browser across Project **`Open`** / **`Save As`**, **`.mod` / `.it` Import**, Instrument Effects **`Save .pti`**, Synth Patch **`Load`** / **`Save`**, Synth **Sample Slot** `.wav` selection, and Sample Editor **Effect Loader (`Load Effect...`), File Parameters & Effect Presets** (with direct switching out to other screens via hardware module buttons).
 	* See [`docs/global_file_browser.md`](docs/global_file_browser.md).
 
 3. **Per-Sample SD Streaming Controls & RAM Default in Sample Loader (All 3 Devices)**
@@ -35,10 +35,11 @@
 	* **`Haas Effect`**: New stereo widener effect (`haas.ptfx`) that delays the Left or Right channel (`1–100 ms`) with a smooth tail fade-out.
 	* **`Sample Cross-Mod`**: New reference effect (`cross_mod.ptfx`) that layers, ring-modulates, FM-scrubs, amplitude-follows, or sidechains a sample against a secondary `.wav` file selected from the SD card.
 	* **`Convolution Reverb`**: New Sample Editor reverb (`convolution_reverb.ptfx`) that applies the acoustic space or character of any `.wav` impulse response (IR) from your SD card to your sample. Supporting both mono and stereo IRs (up to ~550 ms) and automatically extending the sample tail so the reverb rings out cleanly.
-	* **On-Demand `.ptfx` Effect Loader**: Removed the 128-plugin startup scan limit in favor of **`Load Effect...`** at the bottom of the Sample Editor effect list, browsing `/Effects/` (including subfolders) in `GlobalFileBrowser` with pretty effect display names and keeping the currently loaded effect above `Load Effect...`.
-	* **Effect Presets**: Load, save, and reset effect presets via **`More`** (stored under `/Effects/Presets/<PluginName>/*.ptp`), automatically saving and restoring knob values and selected files.
+	* **`Speech Gen`**: New retro formant speech generator (`speech_gen.ptfx`) inspired by classic 1980s speech utilities, with on-screen text entry (up to 64 characters, plus raw `[PHONEME]` bracket mode), `Voice` (`Male`/`Female`), `Mode` (`Natural`/`Robot`/`Whisper`), `Pitch` (`65–320 Hz`), `Speed` (`40–400 WPM`), `Mouth` & `Throat` formant shaping, and `Grime` (`Clean`/`Amiga 8b`/`Lo-Fi`).
+	* **On-Demand `.ptfx` Effect Loader**: Removed the 128-plugin startup scan limit in favor of **`Load Effect...`** at the bottom of the Sample Editor effect list, browsing `/System/Effects/` (including subfolders) in `GlobalFileBrowser` with pretty effect display names and keeping the currently loaded effect above `Load Effect...`.
+	* **Effect Presets**: Load, save, and reset effect presets via **`More`** (stored under `/System/Effects/Presets/<PluginName>/*.ptp`), automatically saving and restoring knob values, text parameters, and selected files.
 	* **Mono-to-Stereo Effect Support**: Applying a stereo effect plugin (such as `Haas Effect` or `Stereo Delay`) to a mono sample now automatically converts the instrument to stereo when the left and right channels differ.
-	* **Plugin SDK - File Pickers & Secondary Audio**: `.ptfx` plugins can now declare input/output file parameters (`PTFX_PARAM_FILE` / `PTFX_PARAM_SAVE_FILE`) rendered with vertical rotated filenames, single-press browser open, `Delete` to clear, automatic secondary `.wav` decoding, and SD file I/O helpers. See [`docs/modular_effects_system.md`](docs/modular_effects_system.md).
+	* **Plugin SDK - File Pickers, Text Input & Secondary Audio**: `.ptfx` plugins can now declare input/output file parameters (`PTFX_PARAM_FILE` / `PTFX_PARAM_SAVE_FILE`), editable on-screen keyboard text parameters (`PTFX_PARAM_TEXT` via `host->get_text_param()`, up to 64 characters), dynamic generator lengths via `host->set_extra_samples()`, automatic secondary `.wav` decoding, and SD file I/O helpers. See [`docs/modular_effects_system.md`](docs/modular_effects_system.md).
 
 7. **Clearer `[m | V]` vs `[Fx1 | Fx2]` Pattern Editor View & Volume Lane `!OFF` (All 3 Devices)**
 	* Empty step slots in the **`[m | V]`** pattern view now show dimmed **`m--`** and **`V--`** indicators instead of `---`, making it obvious at a glance whether you are viewing `[m | V]` or `[Fx1 | Fx2]`.
@@ -66,10 +67,39 @@
 12. **Pattern View Note Display Option (All 3 Devices)**
 	* Added **`Config → General → Note display`** to choose how notes are displayed in Pattern View: **`Original`** (`C4`, `C#4`, default) or **`Traditional`** (`C-4`, `C#4`).
 
-13. **SD-Card Random Name Wordlists (All 3 Devices)**
-	* Moved the random name generator wordlists to `/Words/adjectives.txt` and `/Words/nouns.txt` on the microSD card (one word per line, with a built-in fallback list when the files are absent; initial files provided in [`sd-card/Words/`](sd-card/Words/)), freeing some Flash space on Original Tracker and letting users customize their own wordlists.
+13. **Customizable Random Name Wordlists (All 3 Devices)**
+	* Moved the random name generator wordlists to `/System/Text/autoname_adjectives.txt` and `/System/Text/autoname_nouns.txt` on the microSD card (one word per line, with a built-in fallback list when the files are absent. Initial files provided in [`sd-card/System/Text/`](sd-card/System/Text/)), freeing some Flash space on Original Tracker and letting users customize their own wordlists.
+
+14. **Project Settings — Max Tracks (`4` / `8` / `12` / `16`) (All 3 Devices)**
+	* Added **`Config → Project Settings → Max tracks`** (`4`, `8`, `12`, or `16`, default `16`) stored per-project, enabling a retro 8-track (or focused 4/12-track) workflow across Pattern Editor, Song Editor (with wider columns), Performance Mode, Track Mixer & Limiter Sidechain, Audio Stem Export, and `.it` Export while non-destructively preserving and silencing hidden tracks internally.
+
+15. **Pattern Switching via Incoming MIDI Program Change (All 3 Devices)**
+	* Added **`Config → MIDI → Program Change in`** (Off, USB, MIDI In jack, or both) and **`Config → MIDI → Program Change in ch.`** (`All` or channels `1–16`). Incoming MIDI Program Change messages (`0–127`) queue **Pattern `1–128`** for the next pattern boundary during playback, or switch immediately when stopped.
+
+16. **Standalone `.pti` Instrument Saving (All 3 Devices)**
+	* Added a **`Save .pti`** button on the **Instrument Effects** screen (2nd page of Instrument Parameters), allowing you to export the active sample instrument with all the settings as a standalone `.pti` file anywhere on the SD card (defaulting to `/Instruments` via the unified file browser).
+
+17. **One-Click Synth Patch Randomizer (Tracker+ & Tracker Mini)**
+	* **Instant `Shift + Init Patch` Randomization**: Holding **`[Shift]`** inside the **Synth Patch Editor** swaps Button 2 from **`Init / Patch`** to **`Randomize / Patch`**.
+	* **Engine-Owned Randomizer Hook**: Extended the Synth Engine SDK so all randomization logic can live inside the individual synth engine. Implemented curated patch randomizers across all bundled factory synths. See [`docs/custom_synth_sdk.md`](docs/custom_synth_sdk.md).
+
+18. **Offloading large texts to SD-Card & Secondary Font Offload (All 3 Devices)**
+	* Moved Config menu descriptions, Step FX help descriptions, and `Config → Info` text out of firmware Flash into human-readable files at `/System/Text/config_hints.txt`, `/System/Text/fx_hints.txt`, and `/System/info.txt` (rendered directly inline when highlighting `Info` in `Config`). Initial files provided in [`sd-card/System/`](sd-card/System/).
+	* Moved the secondary `"New"` (`Liberation Sans`) UI font out of firmware Flash into [`sd-card/System/Fonts/New.ptfont`](sd-card/System/Fonts/New.ptfont), keeping `"Original"` built-in as the fallback. Together, these offloads reclaim `~46.5–47.2 KB` of Flash across all 3 devices (bringing Original Tracker free Flash to `~143.8 KB`).
+
+19. **Dual-Pane File Manager & Built-In Image/Text Viewer (All 3 Devices)**
+	* Added a dedicated **2-pane File Manager** accessible from **`File → File Manager`** with independent left/right directory panes,
+	* Non-blocking folder copy, fast same-volume move, and recursive delete with progress bar, mid-operation **Cancel**, and collision prompts (**Overwrite / Skip / Rename / All: ON-OFF**).
+	* **Metadata-Aware Project & `.pti` Renaming**: Renaming, moving, or duplicating a Polyend Tracker project folder automatically updates the embedded project name/path and renaming a `.pti` instrument updates its embedded instrument name.
+	* Added options in **`Config → General → File Manager`:** `Confirm all`, `Confirm delete`, `Never ask`. System folders are actively protected.
+	* Integrated the **File Viewer** directly into File Manager (**Button `View`** / **Enter**): opens any `.jpg`/`.jpeg` (`800 × 390` px) or text file (`.txt`, `.md`, `.json`, `.ini`, `.cfg`, `.log`, up to `128 KB` / `8,192` lines with `Up/Down/Jog` & `PgUp/PgDn`) from any folder, with sibling navigation (`Left/Right` / `<<` / `>>`). See [`docs/info_viewer.md`](docs/info_viewer.md).
 
 ### Changed & Fixed
+
+* **Unified `/System/` SD Card Layout & Hidden `/.system/` Support (All 3 Devices)**:
+	* Consolidated firmware-managed assets, plugins, synth data, and IMX config (`Effects`, `Envelopes`, `Fonts`, `Snapshots`, `Synths/{Patches,Samples,*.psyn}`, `Text`, `Themes`, `info.txt`, and `trackerConfig`) under `/System/` (automatically using `/.system/` if `/System/` is absent and `/.system/` exists; IMX reads legacy `/trackerConfig` as a fallback).
+	* Defaulted Sample Editor WAV load/export and Instrument Editor `.pti` save browsers to `/`, and made leading-dot files/folders (such as `.system` and `.Trash-1000`) consistently hidden in both Sample Loader and `GlobalFileBrowser`.
+	* Removed leftover dead `Games` browsing code from `FileManager` and SD drivers (~1.3 KB Flash reclaimed).
 
 * **Faster UI Rendering & System Responsiveness (All 3 Devices)**:
 	* **~3×–4× Faster Heavy Screen Updates**: Rebuilt the display engine so screens are composed directly on the main processor and only changed regions are sent to the display. Fast Pattern Editor scrolling, Song mode navigation, and switching screens feel **~3×–4× faster** without partial intermediate redraws.
@@ -86,6 +116,9 @@
 * **Factory & `CHIP` Synth Engine Performance Overhaul (Tracker+ & Tracker Mini)**:
 	* Overhauled real-time oscillator, filter (`SVF`, `Ladder`, `Diode`, `Biquad`), envelope, and modulation math across all factory `.psyn` synth engines (`ACD`, `FAT`, `VAP`, `WTFM`, `PERC`, `DIRT`) and `CHIP` for **~1.5×–3.3× faster** active voice rendering, zero silent-tail denormals, improved low-cutoff `Diode` filter precision, and clean `PERC` voice sleep termination while preserving original patch sound (`<= 1 LSB` typical RMS difference).
 	* Playing dense 8-voice chords and multi-synth arrangements (including `CHIP`) runs with significantly lower CPU load without audio dropouts or freezes.
+
+* **Safer Synth Model Switching on Jog Wheel (Tracker+ & Tracker Mini)**:
+	* Debounced Synth Model jog-wheel scrolling (`180 ms`, flushing immediately on pad preview, Load/Edit Patch, or leaving the screen), removed duplicate init-patch creation per switch, and parked the audio ISR + tore down old voices before loading a new `.psyn` engine to prevent freezes when scrolling rapidly while pressing note pads.
 
 * **Safer USB Storage Mode (Tracker+ & Tracker Mini)**:
 	* Entering USB Storage mode now cleanly stops playback, armed recordings, held notes, and SD sample streaming, and saves any pending changes first so the Tracker and your computer never write to the SD card at the same time.
@@ -115,6 +148,7 @@
 	* **Pattern Editor Cursor, Fill, Pad & Roll Fixes**: Fixed the cursor jumping past the end of a pattern after pasting with a large Edit Step, kept `Note Up` Rolls on the highest note (`G9`) instead of wrapping down to `C0`, fixed `Random Fx` and `Off` ranges in the Fill popup, ignored unused pads `47–48` in the `FX` pad shortcut, and kept pads in normal note layout when a MIDI or Synth instrument is selected.
 	* **Fixed Synth FX MIDI CC Control in Performance Mode**: Restored external MIDI CC control over synth effect parameters in Performance Mode.
 	* **Fixed Song Mode Block Copy/Paste**: Fixed copying and pasting song arrangement blocks smaller than 32 steps.
+	* **Fixed `Shift + Insert` Jump to Song Start on Song Screen**: Pressing `Shift + Insert` while focused on the Song slot list now jumps directly to the start of the song (Slot 1) instead of stepping back only 5 slots.
 	* **Fixed Beat-Slice Pad Lights in Live Recording (Original Tracker & Tracker+)**: Beat-slice pad guide lights now stay active in the Pattern Editor during Live Recording (`Rec + Play`), matching step-record mode.
 
 * **Performance Mode Fixes (All 3 Devices)**:
@@ -123,6 +157,7 @@
 	* **Safe Missing Pattern Fallback**: Selecting a missing or unreadable pattern for a Performance track now plays silence instead of triggering unexpected notes.
 
 * **Sample Loader, Sample Playback, Sample Editor & Sample Recorder Fixes (All 3 Devices)**:
+	* **Flat 8,192-Entry Sample Loader (No More 100-Item Virtual Folders)**: Replaced the legacy 100-item virtual-folder (`name (1-100)`) pagination in Sample Loader with a flat sorted directory browser, supporting up to **8,192 entries per folder**.
 	* **Sample Loader Folder, Import & `Delete Unused` Fixes**: Fixed opening folders with parentheses in their names (such as `Loops (120-140 BPM)`), handled unreadable or deeply nested folders safely, prevented multi-file imports from exceeding Slot 48 or available sample memory, fixed time labels above `100s` on the crop-import screen, fixed renaming instruments after a MIDI/Synth slot was active, and fixed `Delete unused` removing samples only used on the last step of a track, in Pattern 255, or in unsaved edits of the current pattern.
 	* **Sample Playback & Sample Editor Fixes**: Fixed `Add` slice jumbling slice markers after `Slice Evenly` or `Auto Slice`, improved zoomed waveform rendering when switching from a long sample to a short one, fixed the Sample Playback progress cursor lingering or tracking a previous instrument's long release tail after switching instruments, fixed low-quality (resampled) samples playing at the wrong speed/pitch during Sample Editor effect preview, and prevented MIDI/Synth slots from interfering with Sample Playback controls and MIDI CC.
 	* **Sample Recorder & FM Radio Fixes**: Pressing `Record` again now cancels a count-in waiting on a missing external clock, project samples reload reliably if recording is interrupted by standby or USB Storage, the previously selected instrument is always restored on exit, and FM radio tuning/scanning on Original Tracker and Tracker+ was hardened with tune timeouts, I2C bus recovery, seek state-machine guards, and exact channel stepping to prevent radio scanning freezes.

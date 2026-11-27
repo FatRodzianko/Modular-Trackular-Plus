@@ -21,9 +21,9 @@ The plugins' headers carry the type ids 64 and 65 the firmware (synthsMod.h) and
 4. The old effect parameters (62-71, kept so old patches load): setting the Distortion through
    the patch, as an old patch does, rebuilds nothing (no createMetadata), changes no name and
    leaves the sound as it was.
-5. Engine switches: 30 rounds of WAVE, PHASE, CHIP and back on a part, notes held: the bytes in
-   use (newlib's mallinfo) after round 30 as after round 2, give or take the 64 bytes they move by
-   between rounds, and the heap's top (sbrk) the same over the last 15 rounds. CE's open host frees
+5. Engine switches: 60 rounds of WAVE, PHASE, CHIP and back on a part, notes held: the bytes in
+   use (newlib's mallinfo) after round 60 as after round 2, give or take the 64 bytes they move by
+   between rounds, and the heap's top (sbrk) the same over the last 30 rounds. CE's open host frees
    and makes the voices again on each switch, so the top rises a little over the first rounds while
    the free blocks settle (2.9 KB by round 12, then none to round 60): that isn't a leak.
 6. The switch Off: a part already on WAVE or PHASE keeps playing, sample for sample as On.
@@ -347,7 +347,9 @@ def switches(axf):
     r.blocks(2)
     heap, in_use = [], []
     info = SCRATCH + 0x3F0000           # newlib's struct mallinfo, returned through r0
-    for round_ in range(30):
+    # Since CE's 1e9a9e5 merge the top steps up once, by 2,808 bytes, between rounds 15 and 20, then holds
+    # (80 rounds run: 87,484 from round 20 on, bytes in use flat): settled is rounds 30 to 60.
+    for round_ in range(60):
         for e in (WAVE, PHASE, CHIP):
             r.set_instrument(0, e)
             r.note(0, 60, True)
@@ -357,10 +359,10 @@ def switches(axf):
         r.call("mallinfo", info)
         in_use.append(struct.unpack("<10I", r.m.read(info, 40))[7])    # uordblks
     check(not r.failures and abs(in_use[-1] - in_use[1]) <= 64,
-          f"30 rounds of WAVE, PHASE, CHIP with notes held: {in_use[1]:,} bytes in use after round 2, "
-          f"{in_use[-1]:,} after 30 {r.failures[:1]}")
-    check(heap[-1] == heap[14], f"engine switches: the heap's top settles (rounds 15 to 30: "
-                                f"{heap[14] - r.heap_base:,} to {heap[-1] - r.heap_base:,})")
+          f"60 rounds of WAVE, PHASE, CHIP with notes held: {in_use[1]:,} bytes in use after round 2, "
+          f"{in_use[-1]:,} after 60 {r.failures[:1]}")
+    check(heap[-1] == heap[29], f"engine switches: the heap's top settles (rounds 30 to 60: "
+                                f"{heap[29] - r.heap_base:,} to {heap[-1] - r.heap_base:,})")
     check(r.malloc_in_block == 0, f"engine switches: no malloc in the audio interrupt ({r.malloc_in_block})")
 
 

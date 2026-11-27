@@ -144,7 +144,7 @@ void cProjectEditor::showDefaultScreen()
     display.setControlText(label[4], "Save As");
     display.setControlText(label[5], "Export");
     display.setControlText(label[6], "");
-    display.setControlText(label[7], "");
+    display.setControlText(label[7], "File");
 
     display.setControlText2(label[0], "Project");
     display.setControlText2(label[1], "");
@@ -153,7 +153,7 @@ void cProjectEditor::showDefaultScreen()
     display.setControlText2(label[4], "");
     display.setControlText2(label[5], "");
     display.setControlText2(label[6], "");
-    display.setControlText2(label[7], "");
+    display.setControlText2(label[7], "Manager");
 
     for (uint8_t i = 0; i < 8; i++)
     {
@@ -166,6 +166,8 @@ void cProjectEditor::showDefaultScreen()
     }
 
     display.setControlValue(label[0], 1);
+    display.setControlValue(label[7], 1);
+    display.refreshControl(label[7]);
 
     display.setControlHide(browserLabelControl);
     display.setControlHide(recentLabelControl);

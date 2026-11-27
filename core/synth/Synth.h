@@ -43,7 +43,7 @@ class Synth
                                                 polysynth::InstrumentTypeId::kFMSynth,
                                                 polysynth::InstrumentTypeId::kDrumSynth,
                                                 polysynth::InstrumentTypeId::kShapingSynth, polysynth::InstrumentTypeId::kChiptuneSynth
-#if MT_HAS_SYNTHS // MT: WAVE, PHASE and DCO6 (core/mods/synths/synthsMod.h has the ids), .psyn plugins in /Synths.
+#if MT_HAS_SYNTHS // MT: WAVE, PHASE and DCO6 (core/mods/synths/synthsMod.h has the ids), .psyn plugins in /System/Synths.
                  // The project stores a part's model as its index in synthTypes: these keep 7, 8 and 9 when
                  // CE's 7 and ours are on the card, as in the builds before engines were plugins. DCO6
                  // comes last so WAVE and PHASE keep their indexes
@@ -52,6 +52,7 @@ class Synth
 #endif
                                                 };
     static constexpr auto kInitPatchName = "Init";
+    static constexpr auto kRandomPatchName = "Random";
 
     Synth();
     ~Synth();
@@ -65,6 +66,8 @@ class Synth
     bool savePatch(int part, const char* name);
     bool savePatch(int part);
     void initPatch(int part);
+    [[nodiscard]] bool supportsRandomizePatch(int part) const;
+    bool randomizePatch(int part);
     bool loadPatchFromWorkspace(int part, std::optional<std::string> overrideName = std::nullopt);
     void savePatchToWorkspace(int part);
     void saveDirtyWorkspacePatches();
@@ -146,6 +149,7 @@ class Synth
     std::shared_ptr<polysynth::PatchStore> patchStoreWorkspace;
     std::unique_ptr<MidiAdapter> midiAdapter;
     FileSystem* filesystem;
+    Platform* platformPtr = nullptr;
     std::vector<polysynth::InstrumentTypeId> synthTypes;
     std::vector<PluginTypeInfo> pluginTypes;
 

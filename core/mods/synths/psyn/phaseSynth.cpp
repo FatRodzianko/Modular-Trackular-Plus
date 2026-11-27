@@ -1,7 +1,7 @@
 // Modular-Trackular mods. SPDX-License-Identifier: MIT
 //
 // PHASE: a phase distortion synth (../phEngine.h) as a .psyn plugin (CE's synth-plugin-sdk,
-// built by Makefile here). The firmware loads it from /Synths on the card like CE's own
+// built by Makefile here). The firmware loads it from /System/Synths on the card like CE's own
 // engines. Its effects are Synth FX's two slots after its voices (synthfx/synthfxMod.h).
 //
 // Parameter ids are sy9's (Modular-Trackular's PHASE), 0-61, then the old effects' 62-71: kept

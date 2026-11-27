@@ -24,11 +24,13 @@ import test_resample_sound as snd  # noqa: E402
 from test_resample_sound import KEY, PLAY, REC, SHIFT, LOOP_EVERY, Run, check, to_line_in  # noqa: E402
 
 # strMtConfig: header (10 bytes), audioCodecConfig (16, at 12 for its float), firmware (8),
-# midi at 36 (size, then clkIn), values (150), general (18), interface (12), metronome at 230
-# (size, state, preRoll). 248 bytes in all, as the symbol's size; preRoll is checked by a read.
-CLK_IN, PRE_ROLL = 38, 233
+# midi at 36 (size, then clkIn), values at 52, general at 202, interface at 222, metronome at 234
+# (size, state, preRoll). 252 bytes in all, as the symbol's size; preRoll is checked by a read. Since
+# CE's 1e9a9e5 merge (the build's DWARF): midi has programChangeInMode and programChangeInChannel at
+# its end and general has confirmFileDelete, so metronome moved from 230 and the size from 248.
+CLK_IN, PRE_ROLL = 38, 237
 CLOCK_INTERNAL, CLOCK_USB = 0, 1
-CONFIG_SIZE = 248
+CONFIG_SIZE = 252
 
 
 class Shift(Run):

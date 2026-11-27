@@ -1,4 +1,5 @@
 #include "FileSystemImpl.h"
+#include "SdPaths.h"
 #include "TimeControl.h"
 #include "config.h"
 #include "log.h"
@@ -187,11 +188,13 @@ bool FileSystemImpl::remount()
     // sample streaming still has in flight.
     waitAsyncRead();
 
+    SdPaths::resetCache();
     return f_mount(&g_fileSystem, driverNumberBuffer, 1U) == FR_OK;
 }
 
 void FileSystemImpl::deinitSdDriver()
 {
+    SdPaths::resetCache();
     f_mount(0, driverNumberBuffer, 1);
     memset(&g_fileSystem, 0, sizeof(g_fileSystem));
     SD_HostDeinit(&g_sd);
@@ -488,10 +491,7 @@ int FileSystemImpl::createFilesList(const char* path,
                                     char** list,
                                     uint8_t list_length,
                                     uint16_t max_used_memory,
-                                    enListFileFilter filter,
-                                    uint16_t skip_count,
-                                    uint16_t max_files_in_subdir,
-                                    enListFileFilter folderSizeFilter)
+                                    enListFileFilter filter)
 {
     SdDir dir;
 
@@ -500,14 +500,8 @@ int FileSystemImpl::createFilesList(const char* path,
         return kListError;
     }
 
-    int locationFileCount = dir.createFilesList(start_line,
-                                                list,
-                                                list_length,
-                                                max_used_memory,
-                                                (SdDir::enListFileFilter)filter,
-                                                skip_count,
-                                                max_files_in_subdir,
-                                                (SdDir::enListFileFilter)folderSizeFilter);
+    int locationFileCount = dir.createFilesList(
+      start_line, list, list_length, max_used_memory, (SdDir::enListFileFilter)filter);
 
     dir.close();
     return locationFileCount;

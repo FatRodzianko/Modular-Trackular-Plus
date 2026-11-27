@@ -68,7 +68,7 @@ Tests stay under 75 % of the CPU unless the user says otherwise. `tools/emu/cpu_
 
 Before planning a mod's tests, read `docs/mt/PAST_FAILURES.md`. Before any device test, `tools/run_tests.py --tier release`, then the steps in `docs/mt/DEVICE_TEST_LADDER.md`. A pass doesn't mean safe on the unit: say what ran, what didn't, and the risk.
 
-Run mod tests on a full build, with CE's factory `.psyn` engines on the fake card (`build/Synths` or `synth/prebuilt`). Their licence (`synth/prebuilt/LICENSE-PROPRIETARY.txt`) allows it, but section 2(c) bans reverse engineering, so they're a black box: no disassembly, no tracing, no hooks inside them or in the `.psyn` pool they load into, no reading them by offset, and no measuring an engine to work out how it works. CE's host (`synth/`) is open, and so are our WAVE and PHASE: the rigs may hook those (`watch_own` in `sound_rig.py`). Sound test plan, including when each part gets built: `docs/mt/SOUND_TEST_PLAN.md`. CPU cost is measured on the device with the Profiler, with all 8 synth voices sounding.
+Run mod tests on a full build, with CE's factory `.psyn` engines on the fake card (`build/Synths`, a copy of `make psyn`'s `build/System/Synths`, or `synth/prebuilt`). The firmware reads them from `/System/Synths` since CE's 94cdc96. Their licence (`synth/prebuilt/LICENSE-PROPRIETARY.txt`) allows it, but section 2(c) bans reverse engineering, so they're a black box: no disassembly, no tracing, no hooks inside them or in the `.psyn` pool they load into, no reading them by offset, and no measuring an engine to work out how it works. CE's host (`synth/`) is open, and so are our WAVE and PHASE: the rigs may hook those (`watch_own` in `sound_rig.py`). Sound test plan, including when each part gets built: `docs/mt/SOUND_TEST_PLAN.md`. CPU cost is measured on the device with the Profiler, with all 8 synth voices sounding.
 
 ## User pages and UI mockups
 
@@ -97,7 +97,7 @@ Every merge into `modular`, from CE's `main` or from a mod branch, goes through 
 
 ## Releases
 
-Every merge into `modular` of a mod, a mod fix or CE's `main` gets an annotated tag on the merge, pushed with it. CI (`build.yml`) builds the Tracker+ firmware from the tag and publishes a public GitHub release named after it, with the tag's message as the notes and `TrackerPlus_MT_<tag>.ptf`, the `Effects`, `Synths` and `Words` zips attached.
+Every merge into `modular` of a mod, a mod fix or CE's `main` gets an annotated tag on the merge, pushed with it. CI (`build.yml`) builds the Tracker+ firmware from the tag and publishes a public GitHub release named after it, with the tag's message as the notes and `TrackerPlus_MT_<tag>.ptf` and `PolyendTracker_CE_SD_Card.zip` (the card's `System` folder: CE's and our `.psyn` engines, the `.ptfx` effects, the word lists, hint texts, themes and font) attached.
 
 - A mod merge: `<mod>-<version>`, e.g. `resample-1.0`; a fix to it later: `resample-1.1`.
 - A CE merge: `CE_YYYYMMDD`, with `-2` for a second one that day.

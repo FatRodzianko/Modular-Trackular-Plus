@@ -1,7 +1,7 @@
 // Modular-Trackular mods. SPDX-License-Identifier: MIT
 //
 // WAVE: a wavetable synth (../wtEngine.h) as a .psyn plugin (CE's synth-plugin-sdk, built by
-// Makefile here). The firmware loads it from /Synths on the card like CE's own engines. Its
+// Makefile here). The firmware loads it from /System/Synths on the card like CE's own engines. Its
 // effects are Synth FX's two slots (synthfx/synthfxMod.h), run on the part after the voices;
 // its filter has its own Drive.
 //

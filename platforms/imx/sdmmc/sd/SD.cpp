@@ -259,51 +259,9 @@ bool SdDir::close()
     return true;
 }
 
-uint16_t SdDir::countFilesInSubDirectory(const char* dir_name, enListFileFilter filter)
-{
-    char* const path = new char[strlen(dir_name) + strlen(dir_path) + 2];
-    FRESULT result;
-    DIR dir;
-    FILINFO file_info;
-    uint16_t count = 0;
-
-    strcpy(path, dir_path);
-    strcat(path, "/");
-    strcat(path, dir_name);
-
-    result = f_opendir(&dir, path);
-    if (result != FR_OK)
-    {
-        delete[] path;
-        return 0;
-    }
-
-    f_readdir(&dir, nullptr);
-
-    do
-    {
-        result = f_readdir(&dir, &file_info);
-
-        if (file_info.fname[0] == '\0')
-        {
-            break;
-        }
-        if (!filterFileEntry(file_info, filter))
-        {
-            continue;
-        }
-
-        count++;
-    } while (true);
-
-    delete[] path;
-    f_closedir(&dir);
-    return count;
-}
-
 bool SdDir::filterFileEntry(const FILINFO& fno, enListFileFilter filter)
 {
-    if (fno.fattrib & AM_HID) // ukryty
+    if ((fno.fattrib & AM_HID) || fno.fname[0] == '.') // ukryty
     {
         return false;
     }
@@ -410,24 +368,6 @@ bool SdDir::filterFileEntry(const FILINFO& fno, enListFileFilter filter)
 
             return strstr(lowCase, ".mod\0") != NULL || strstr(lowCase, ".it\0") != NULL;
         }
-        case enListFileFilter_game:
-        {
-            if (isMacMetaFile((FILINFO*)&fno))
-            {
-                return false;
-            }
-
-            char lowCase[255];
-            strcpy(lowCase, fno.fname);
-            for (uint16_t a = 0; a < 255; a++)
-            {
-                lowCase[a] = tolower(lowCase[a]);
-                if (lowCase[a] == 0)
-                    break;
-            }
-
-            return strstr(lowCase, ".nes\0") != NULL;
-        }
     }
 
     return false;
@@ -439,10 +379,7 @@ uint16_t SdDir::createFilesList(uint8_t start_line,
                                 char** list,
                                 uint8_t list_length,
                                 uint16_t max_used_memory,
-                                enListFileFilter filter,
-                                uint16_t skip_count,
-                                uint16_t max_files_in_subdir,
-                                enListFileFilter folderSizeFilter)
+                                enListFileFilter filter)
 {
     for (uint8_t i = 0; i < list_length; i++) // wyczyszczenie uzytej wczesniej pamieci
     {
@@ -492,12 +429,6 @@ uint16_t SdDir::createFilesList(uint8_t start_line,
             continue;
         }
 
-        if (skip_count > 0)
-        {
-            skip_count--;
-            continue;
-        }
-
         uint16_t len = strlen(fno.fname);
 
         if (fno.fattrib & AM_DIR)
@@ -512,35 +443,6 @@ uint16_t SdDir::createFilesList(uint8_t start_line,
         {
             strcpy(list[n], "/");
             strcat(list[n], fno.fname);
-            int16_t files_count = countFilesInSubDirectory(fno.fname, folderSizeFilter);
-
-            if (max_files_in_subdir != 0 && files_count > max_files_in_subdir)
-            {
-                uint16_t offset = 0;
-                len += 4 + 2 * 5;
-
-                while (files_count > 0 && n < list_length - 1)
-                {
-                    if (list[n] != nullptr)
-                    {
-                        delete list[n];
-                        memory_used -= len;
-                    }
-                    list[n] = new char[len];
-                    memory_used += len;
-                    snprintf(list[n],
-                             len,
-                             "/%s (%d-%d)",
-                             fno.fname,
-                             offset + 1,
-                             offset + max_files_in_subdir);
-                    files_count -= max_files_in_subdir;
-
-                    n++;
-                    offset += max_files_in_subdir;
-                }
-                n--;
-            }
         }
         else
         {
@@ -578,7 +480,7 @@ uint16_t SdDir::createInstrumentsList(char** list, uint8_t list_length, uint32_t
             break;
         }
 
-        if (fno.fattrib & AM_HID) // ukryty
+        if ((fno.fattrib & AM_HID) || fno.fname[0] == '.') // ukryty
         {
             continue;
         }
@@ -676,7 +578,7 @@ uint16_t SdDir::countContainedFiles()
             break;
         }
 
-        if (fno.fattrib & AM_HID) // ukryty
+        if ((fno.fattrib & AM_HID) || fno.fname[0] == '.') // ukryty
         {
             continue;
         }

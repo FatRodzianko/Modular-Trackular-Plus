@@ -47,7 +47,7 @@ from unicorn.arm_const import UC_ARM_REG_S0
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from machine import Machine  # noqa: E402
 from test_step0 import group_children, menu_item_named  # noqa: E402
-from test_swing import QUIET, f32  # noqa: E402
+from test_swing import f32, quiet  # noqa: E402
 from test_tracklen import Rig as TracklenRig  # noqa: E402
 
 SONGLOOP_ID = 13
@@ -141,7 +141,7 @@ class SongRig:
         self.last_loaded = 1
         self.preloaded = 0
         keep = ("loadWorkspacePattern", "setSongPos", "loadWorkspacePatternNow")
-        for name in QUIET:
+        for name in quiet(m):
             if not any(k + "E" in name for k in keep):
                 m.stub_function(m.addr(name), lambda mm: 0)
         m.stub_function(m.addr("_ZN12cFileManager20loadWorkspacePatternEh"), self._load)
@@ -150,6 +150,13 @@ class SongRig:
         # loadWorkspacePattern loaded (loadWorkspacePatternNow empties it), as cFileManager::preloadedPattern.
         if "_ZN12cFileManager18isPatternPreloadedEh" in m.elf.symbols:
             m.stub_function(m.addr("_ZN12cFileManager18isPatternPreloadedEh"),
+                            lambda mm: 1 if mm.arg(1) and mm.arg(1) == self.preloaded else 0)
+        # Since CE's 1e9a9e5 the sequencer (and the mod) ask for a pattern only if it is neither preloaded nor
+        # asked for (isPatternReadyOrLoading: preloadedPattern, requestedPattern or the running load). The real
+        # loadWorkspacePattern sets requestedPattern and the main loop loads it; here the load is done at once,
+        # so a pattern asked for is the preloaded one.
+        if "_ZN12cFileManager23isPatternReadyOrLoadingEh" in m.elf.symbols:
+            m.stub_function(m.addr("_ZN12cFileManager23isPatternReadyOrLoadingEh"),
                             lambda mm: 1 if mm.arg(1) and mm.arg(1) == self.preloaded else 0)
         m.stub_function(m.addr("_ZN12cFileManager21getLoadedPatternIndexEv"), lambda mm: self.last_loaded)
         m.stub_function(m.addr("_ZN9Sequencer10sendNoteOnEhPNS_9strPlayer14strPlayerTrack11strSendStepE"),
@@ -544,15 +551,20 @@ def test_performance(mt: Path) -> None:
             r.m.call(r.m.addr("_ZN9Sequencer22setPerformancePlayModeEha"), r.seq, 0, mode)
         r.run_patterns(4, main_tick=True)
         return r
+    # Since CE's 1e9a9e5, CE itself asks on track 16, in the interrupt, once fewer steps are left than about
+    # 200 ms holds (1 + tempo * 200 / 15000 steps), before the mod's own request on track 16's last two rows
+    # in the main loop. The mod then finds the pattern asked for (isPatternReadyOrLoading) and asks nothing.
     r = bwd(PLAYMODE_BACKWARD)
     own = [(b, p, off) for b, p, main, off in r.loads if main]
-    check(len(own) in (3, 4) and all(off for _, _, off in own), "track 1 Bwd: one own request per pattern, the interrupt held off",
-          str(own))
+    asked = [(b, p) for b, p, main, _ in r.loads]
+    check(not own, "track 1 Bwd: CE asks first, the mod asks nothing more", str(own))
     pattern_blocks = LENGTH * STEP_BLOCKS
-    late = [b % pattern_blocks for b, _, _ in own]
-    check(all(pattern_blocks - 2.2 * STEP_BLOCKS <= x < pattern_blocks for x in late),
-          "on track 16's last two rows", str([round(x / STEP_BLOCKS, 2) for x in late]))
-    check([p for _, p, _ in own][:3] == [2, 3, 4], "each the song's next pattern", str(own))
+    lookahead = min(LENGTH, 1 + int(TEMPO * 200 / 15000))
+    early = [b % pattern_blocks for b, _ in asked]
+    check(all(pattern_blocks - (lookahead + 0.2) * STEP_BLOCKS <= x < pattern_blocks for x in early),
+          f"in CE's lookahead on track 16 ({lookahead} steps)", str([round(x / STEP_BLOCKS, 2) for x in early]))
+    check([p for _, p in asked][:3] == [2, 3, 4] and len(asked) in (3, 4),
+          "each the song's next pattern, asked once", str(asked))
     check(not r.interrupts_off, "the audio interrupt on again after")
     for what, kw in (("Fwd", dict(mode=0)), ("no Performance", dict(mode=PLAYMODE_BACKWARD, perform=False))):
         r = bwd(**kw)

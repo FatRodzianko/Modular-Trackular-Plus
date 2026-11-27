@@ -21,7 +21,9 @@
 // patterns, and Continue Song turns it off at the next pattern end as CE's Continue Song does.
 // With a Performance play mode other than Fwd on track 1, CE asks for the next pattern on
 // track 1's last row, which then comes too late or at random; the mod asks on the last two rows
-// of track 16 instead, from the main loop. That also applies without a selection.
+// of track 16 instead, from the main loop. That also applies without a selection. Since CE's
+// 1e9a9e5 CE asks on track 16 itself, about 200 ms ahead; the mod then asks only if that pattern
+// is neither loaded nor loading (isPatternReadyOrLoading), so it doesn't load it twice.
 //
 // Nothing is saved. Off: none of this, CE's Song screen.
 //

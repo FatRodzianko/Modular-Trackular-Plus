@@ -32,8 +32,8 @@ class FileManagerOperation
 
     struct SampleLoadData
     {
-        char* filePath;
-        char* fileName;
+        const char* filePath;
+        const char* fileName;
         bool ptiFile;
         uint32_t fileOffset;
 

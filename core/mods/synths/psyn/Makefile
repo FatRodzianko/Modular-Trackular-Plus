@@ -2,7 +2,7 @@
 #
 # WAVE, PHASE and DCO6 as .psyn plugins, built as CE builds its CHIP (synth-plugin-sdk/Makefile, whose
 # compiler and linker flags this takes). The root Makefile's psyn target runs this and copies
-# build/*.psyn to build/Synths with CE's engines.
+# build/*.psyn to build/System/Synths with CE's engines.
 #
 # Each engine is one translation unit (its .cpp includes ../psyn/synthsSdk.inc): the SDK's
 # bridge header defines the plugin's allocator and fmt::format, so it goes in once.

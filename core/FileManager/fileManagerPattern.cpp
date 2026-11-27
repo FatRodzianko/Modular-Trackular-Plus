@@ -25,13 +25,31 @@ static_assert(PatternFileValidation::k16TracksPatternSize == sizeof(Sequencer::s
 
 void cFileManager::updateLoadWorkspacePattern()
 {
-    switch (currentOperationStep)
+    if (currentOperationStep == 0)
     {
-        case 0: savePatternToWorkspace(); break;
-        case 1: loadPatternFromWorkspace(currentPattern); break;
-        case 2: loadPatternFromWorkspaceFinish(); break;
-        default: stopOperationWithError(fmLoadPatternError); break;
+        savePatternToWorkspace();
+        if (currentOperation != fmLoadWorkspacePattern)
+        {
+            return;
+        }
     }
+
+    if (currentOperationStep == 1)
+    {
+        loadPatternFromWorkspace(currentPattern);
+        if (currentOperation != fmLoadWorkspacePattern)
+        {
+            return;
+        }
+    }
+
+    if (currentOperationStep == 2)
+    {
+        loadPatternFromWorkspaceFinish();
+        return;
+    }
+
+    stopOperationWithError(fmLoadPatternError);
 }
 
 //----------------------------------------------------------------------------------------

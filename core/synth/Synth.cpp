@@ -3,7 +3,9 @@
 #include "Synth.h"
 #include "FileSystemAdapter.h"
 #include "MidiAdapter.h"
+#include "SdPaths.h"
 #include "config.h"
+#include "util_string.h"
 
 #include "fileTransfer.h"
 
@@ -95,6 +97,7 @@ Synth::~Synth() = default;
 
 void Synth::init(Platform* platform, std::function<tiny_optional<float>()> getTempo)
 {
+    platformPtr = platform;
     s_psynRamPoolOffset = 0;
 #if MT_HAS_SYNTHS // MT: before any note: the host's note-on asks it in the audio interrupt
     polysynth::mtUnisonLookup = &mods::synths::unisonParams;
@@ -115,31 +118,24 @@ void Synth::init(Platform* platform, std::function<tiny_optional<float>()> getTe
     FileSystemAdapter::staticInit();
 
     filesystem = platform->getFileSystem();
-    if (!filesystem->exists("/Synths") && !filesystem->exists("/Synth"))
-    {
-        filesystem->mkdir(0, "/Synths");
-    }
-    std::string synthsDir = "/Synths";
-    auto synthsAdapter = std::make_unique<FileSystemAdapter>("/Synths", filesystem);
-    if (synthsAdapter
-          ->listFiles(
-            "", [](const std::string& name) { return name.size() > 5; }, std::nullopt)
-          .empty() &&
-        filesystem->exists("/Synth"))
-    {
-        synthsDir = "/Synth";
-        synthsAdapter = std::make_unique<FileSystemAdapter>("/Synth", filesystem);
-    }
+    std::string synthsDir = SdPaths::synthsDir(filesystem);
+    std::string patchesDir = SdPaths::synthPatchesDir(filesystem);
+    std::string samplesDir = SdPaths::synthSamplesDir(filesystem);
+    SdPaths::ensureDir(filesystem, synthsDir);
+    SdPaths::ensureDir(filesystem, patchesDir);
+    SdPaths::ensureDir(filesystem, samplesDir);
+
+    auto synthsAdapter = std::make_unique<FileSystemAdapter>(synthsDir, filesystem);
     synth->addFileSystem(polysynth::Synth::FileSystemId::kSynths, std::move(synthsAdapter));
     synth->addFileSystem(
       polysynth::Synth::FileSystemId::kPatches,
-      std::make_unique<FileSystemAdapter>(std::string(kPatchesFolder) + "/", filesystem));
+      std::make_unique<FileSystemAdapter>(patchesDir + "/", filesystem));
     synth->addFileSystem(
       polysynth::Synth::FileSystemId::kWorkspace,
       std::make_unique<FileSystemAdapter>(std::string(kWorkspaceFolder) + "/", filesystem));
     synth->addFileSystem(
       polysynth::Synth::FileSystemId::kSamples,
-      std::make_unique<FileSystemAdapter>("/SynthSamples/", filesystem));
+      std::make_unique<FileSystemAdapter>(samplesDir + "/", filesystem));
 
     sampleStore = synth->createSampleStore(polysynth::Synth::FileSystemId::kSamples);
     synth->initSamplePool(4 * 1024 * 1024, sampleStore);
@@ -273,8 +269,7 @@ void Synth::init(Platform* platform, std::function<tiny_optional<float>()> getTe
       "",
       [](const std::string& name)
       {
-          return name.size() > 5 &&
-                 strcasecmp(name.c_str() + name.size() - 5, ".psyn") == 0;
+          return name.size() > 5 && hasFileExtension(name.c_str(), "psyn");
       },
       std::nullopt);
 
@@ -488,6 +483,11 @@ void Synth::initPatch(int part)
 {
     assert(part < kSynthParts);
 
+    silencePart(part);
+    parts[part].loading.store(true, std::memory_order_release);
+    ScopeExit clearLoading(
+      [this, part] { parts[part].loading.store(false, std::memory_order_release); });
+
     std::shared_ptr<polysynth::Patch> newPatch =
       patchStore->createPatch(*parts[part].instrumentTypeId);
 
@@ -497,6 +497,76 @@ void Synth::initPatch(int part)
 
     setPatch(part, std::move(newPatch), kInitPatchName);
     savePatchToWorkspace(part);
+}
+
+bool Synth::supportsRandomizePatch(int part) const
+{
+    if (part < 0 || part >= kSynthParts || !synth || !parts[part].patch)
+    {
+        return false;
+    }
+    return synth->supportsRandomizePatch(*parts[part].instrumentTypeId);
+}
+
+bool Synth::randomizePatch(int part)
+{
+    if (!supportsRandomizePatch(part))
+    {
+        return false;
+    }
+
+    static uint32_t s_randCounter = 0x9E3779B9u;
+    s_randCounter += 0x9E3779B9u;
+    uint32_t hwTime = (platformPtr && platformPtr->getTimer()) ? platformPtr->getTimer()->micros() : 0u;
+    uint32_t seed = hwTime ^ s_randCounter;
+    seed ^= seed >> 16;
+    seed *= 0x85EBCA6Bu;
+    seed ^= seed >> 13;
+    seed *= 0xC2B2AE35u;
+    seed ^= seed >> 16;
+    if (seed == 0)
+    {
+        seed = 0xA341316Cu;
+    }
+
+    // Randomize sample/wavetable slots first (outside audio critical section because of SD I/O)
+    const size_t sampleSlotCount = parts[part].patch->getMetadata().sampleSlots.size();
+    if (sampleSlotCount > 0)
+    {
+        auto samples = listSamples(part);
+        if (!samples.empty())
+        {
+            uint32_t slotRng = seed ^ 0x51F2A3C7u;
+            for (size_t slotId = 0; slotId < sampleSlotCount; ++slotId)
+            {
+                slotRng ^= slotRng << 13;
+                slotRng ^= slotRng >> 17;
+                slotRng ^= slotRng << 5;
+                int randIdx = static_cast<int>(slotRng % static_cast<uint32_t>(samples.size()));
+                loadSampleByIndex(part, static_cast<int>(slotId), randIdx);
+            }
+        }
+    }
+
+    bool randomized = false;
+    {
+        DISABLE_AUDIO_INTERRUPTS();
+        auto& patch = *parts[part].patch;
+        patch.startBatchUpdate();
+        randomized = synth->randomizePatch(*parts[part].instrumentTypeId, patch, seed);
+        patch.finishBatchUpdate();
+        ENABLE_AUDIO_INTERRUPTS();
+    }
+
+    if (!randomized)
+    {
+        return false;
+    }
+
+    parts[part].patchName = kRandomPatchName;
+    parts[part].patchDirty = true;
+    savePatchToWorkspace(part);
+    return true;
 }
 
 void Synth::savePatchToWorkspace(int part)
@@ -577,16 +647,26 @@ void Synth::setInstrumentType(int partIdx, polysynth::InstrumentTypeId typeId)
     auto& part = parts[partIdx];
     if (part.instrumentTypeId != typeId)
     {
+        silencePart(partIdx);
+        part.loading.store(true, std::memory_order_release);
+        ScopeExit clearLoading(
+          [&part] { part.loading.store(false, std::memory_order_release); });
+
+        // Tear down old voices before loading the new engine so the previous .psyn
+        // plugin drops to activeVoices == 0 and can be evicted if the arena is full.
+        const int savedVoiceCount = part.instrument->getVoiceCount();
+        DISABLE_AUDIO_INTERRUPTS();
+        part.instrument->setVoiceCount(0);
+        ENABLE_AUDIO_INTERRUPTS();
+
         part.instrumentTypeId = typeId;
         setPatch(partIdx, patchStore->createPatch(*typeId), kInitPatchName);
 
-        if (part.instrument->getVoiceCount() > getMaxVoiceCount(partIdx))
-        {
-            setVoiceCount(partIdx, getMaxVoiceCount(partIdx));
-        }
+        const int newVoiceCount = std::min(savedVoiceCount, getMaxVoiceCount(partIdx));
 
         DISABLE_AUDIO_INTERRUPTS();
         part.instrument->assignPatch(part.patch);
+        part.instrument->setVoiceCount(newVoiceCount);
         ENABLE_AUDIO_INTERRUPTS();
     }
 }
@@ -811,10 +891,10 @@ bool Synth::loadSampleByPath(int part, int slotId, const std::string& fullSdPath
     }
 
     std::string storePath = fullSdPath;
-    static constexpr std::string_view kSynthSamplesPrefix = "/SynthSamples/";
-    if (storePath.rfind(kSynthSamplesPrefix, 0) == 0)
+    std::string samplesPrefix = SdPaths::synthSamplesDir(filesystem) + "/";
+    if (storePath.rfind(samplesPrefix, 0) == 0)
     {
-        storePath.erase(0, kSynthSamplesPrefix.size());
+        storePath.erase(0, samplesPrefix.size());
     }
 
     if (parts[part].patch->loadSample(slotId, storePath) == polysynth::LoadStatus::kSuccess)
@@ -827,32 +907,34 @@ bool Synth::loadSampleByPath(int part, int slotId, const std::string& fullSdPath
 
 std::string Synth::getEngineSampleFolder(int part)
 {
+    std::string base = SdPaths::synthSamplesDir(filesystem);
     if (part < 0 || part >= kSynthParts || !synth)
     {
-        return "/SynthSamples";
+        return base;
     }
     std::string engineName = synth->getInstrumentName(*parts[part].instrumentTypeId);
     if (engineName.empty())
     {
-        return "/SynthSamples";
+        return base;
     }
-    return "/SynthSamples/" + engineName;
+    return base + "/" + engineName;
 }
 
 std::string Synth::getEnginePatchFolder(int part)
 {
     clearPatchWireCache();
     newFileManager.createPatchesFolder();
+    std::string base = SdPaths::synthPatchesDir(filesystem);
     if (part < 0 || part >= kSynthParts || !synth)
     {
-        return "/Patches";
+        return base;
     }
     std::string engineName = synth->getInstrumentName(*parts[part].instrumentTypeId);
     if (engineName.empty())
     {
-        return "/Patches";
+        return base;
     }
-    return "/Patches/" + engineName;
+    return base + "/" + engineName;
 }
 
 namespace
@@ -1310,19 +1392,19 @@ bool sampleExistsOnSd(FileSystem* fs, const std::string& engineCode, const std::
     {
         rel.erase(rel.begin());
     }
-    if (fs->exists(("/SynthSamples/" + rel).c_str()) || fs->exists(("/Samples/" + rel).c_str()))
+    std::string samplesDir = SdPaths::synthSamplesDir(fs);
+    if (fs->exists((samplesDir + "/" + rel).c_str()))
     {
         return true;
     }
     if (rel.find('/') == std::string::npos && !engineCode.empty())
     {
-        if (fs->exists(("/SynthSamples/" + engineCode + "/" + rel).c_str()) ||
-            fs->exists(("/Samples/" + engineCode + "/" + rel).c_str()))
+        if (fs->exists((samplesDir + "/" + engineCode + "/" + rel).c_str()))
         {
             return true;
         }
     }
-    return fs->exists(("/Patches/" + rel).c_str());
+    return false;
 }
 
 std::string extractLeafSampleName(const std::string& filePath)

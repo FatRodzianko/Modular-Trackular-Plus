@@ -173,4 +173,214 @@ bool readRandomWord(FileSystem* fs, const char* path, uint32_t seed, char* outWo
 
     return false;
 }
+
+bool readSection(FileSystem* fs,
+                 const char* path,
+                 const char* key,
+                 char* outBuf,
+                 size_t outSize)
+{
+    if (outBuf == nullptr || outSize < 2)
+    {
+        if (outBuf != nullptr && outSize > 0)
+        {
+            outBuf[0] = '\0';
+        }
+        return false;
+    }
+
+    outBuf[0] = '\0';
+
+    if (fs == nullptr || path == nullptr || key == nullptr || key[0] == '\0')
+    {
+        return false;
+    }
+
+    SdScopedFile file(fs, path, FileSystem::FileOpenMode::kRead);
+    if (!file)
+    {
+        return false;
+    }
+
+    enum class ParseState : uint8_t
+    {
+        kLineStart,
+        kMatchKey,
+        kHeaderTailMatch,
+        kSkipLine,
+        kCopyLine,
+    };
+
+    ParseState state = ParseState::kLineStart;
+    size_t keyIdx = 0;
+    size_t outIdx = 0;
+    bool inTarget = false;
+    bool found = false;
+    bool done = false;
+
+    alignas(4) char chunk[256];
+    while (!done)
+    {
+        int32_t bytesRead = fs->readFile(chunk, sizeof(chunk), file.handle());
+        if (bytesRead <= 0)
+        {
+            break;
+        }
+
+        for (int32_t i = 0; i < bytesRead && !done; ++i)
+        {
+            char c = chunk[i];
+            if (c == '\r')
+            {
+                continue;
+            }
+
+            switch (state)
+            {
+                case ParseState::kLineStart:
+                    if (c == '#')
+                    {
+                        state = ParseState::kSkipLine;
+                    }
+                    else if (c == '[')
+                    {
+                        if (inTarget)
+                        {
+                            done = true;
+                        }
+                        else
+                        {
+                            keyIdx = 0;
+                            state = ParseState::kMatchKey;
+                        }
+                    }
+                    else if (c == '\n')
+                    {
+                        if (inTarget && outIdx + 1 < outSize)
+                        {
+                            outBuf[outIdx++] = '\n';
+                        }
+                    }
+                    else if (inTarget)
+                    {
+                        if (outIdx + 1 < outSize)
+                        {
+                            outBuf[outIdx++] = c;
+                        }
+                        state = ParseState::kCopyLine;
+                    }
+                    else
+                    {
+                        state = ParseState::kSkipLine;
+                    }
+                    break;
+
+                case ParseState::kMatchKey:
+                    if (c == '\n')
+                    {
+                        state = ParseState::kLineStart;
+                    }
+                    else if (c == ']')
+                    {
+                        state = (key[keyIdx] == '\0') ? ParseState::kHeaderTailMatch
+                                                      : ParseState::kSkipLine;
+                    }
+                    else if (key[keyIdx] != '\0' && c == key[keyIdx])
+                    {
+                        ++keyIdx;
+                    }
+                    else
+                    {
+                        state = ParseState::kSkipLine;
+                    }
+                    break;
+
+                case ParseState::kHeaderTailMatch:
+                    if (c == '\n')
+                    {
+                        inTarget = true;
+                        found = true;
+                        state = ParseState::kLineStart;
+                    }
+                    else if (c != ' ' && c != '\t')
+                    {
+                        state = ParseState::kSkipLine;
+                    }
+                    break;
+
+                case ParseState::kSkipLine:
+                    if (c == '\n')
+                    {
+                        state = ParseState::kLineStart;
+                    }
+                    break;
+
+                case ParseState::kCopyLine:
+                    if (c == '\n')
+                    {
+                        if (outIdx + 1 < outSize)
+                        {
+                            outBuf[outIdx++] = '\n';
+                        }
+                        state = ParseState::kLineStart;
+                    }
+                    else if (outIdx + 1 < outSize)
+                    {
+                        outBuf[outIdx++] = c;
+                    }
+                    break;
+            }
+        }
+    }
+
+    // Trim trailing blank / whitespace-only lines.
+    while (outIdx > 0)
+    {
+        if (outBuf[outIdx - 1] == '\n')
+        {
+            --outIdx;
+            continue;
+        }
+        size_t lineStart = outIdx;
+        while (lineStart > 0 && outBuf[lineStart - 1] != '\n')
+        {
+            --lineStart;
+        }
+        bool allSpace = true;
+        for (size_t k = lineStart; k < outIdx; ++k)
+        {
+            if (outBuf[k] != ' ' && outBuf[k] != '\t')
+            {
+                allSpace = false;
+                break;
+            }
+        }
+        if (allSpace)
+        {
+            outIdx = lineStart;
+            continue;
+        }
+        break;
+    }
+
+    outBuf[outIdx] = '\0';
+    return found && outIdx > 0;
+}
+
+void stripCr(char* buf)
+{
+    if (buf == nullptr)
+    {
+        return;
+    }
+    char* dst = buf;
+    for (const char* src = buf; *src != '\0'; ++src)
+    {
+        if (*src != '\r')
+        {
+            *dst++ = *src;
+        }
+    }
+    *dst = '\0';
+}
 } // namespace SdTextFile

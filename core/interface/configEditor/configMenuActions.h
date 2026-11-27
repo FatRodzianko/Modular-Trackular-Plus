@@ -17,6 +17,8 @@ void setLimiterMode();
 void setSendsMode();
 void setHeadroomMode();
 void setSnapToZeroMode();
+void applyProjectMaxTracks();
+void setMaxTracks();
 
 void setMetronomValues();
 void setSlaveClockCompValue();
@@ -24,10 +26,6 @@ void setSlaveClockCompValue();
 void openCreditsAction();
 
 void startFileTransferMode();
-
-void openManual1Action();
-void openManual2Action();
-void openManual3Action();
 
 void setFunctionKey1();
 void setFunctionKey2();

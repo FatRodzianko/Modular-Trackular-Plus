@@ -46,8 +46,8 @@ def step_at(track: int, step: int, size=t.STEP_V6) -> int:
     return t.PATTERN_HEADER + track * (1 + t.STEPS * size) + 1 + step * size
 
 
-def project_file(models=(0, 1, 2), name=b"Song") -> bytes:
-    mt = header(b"MT", 0, t.PROJECT_VERSION, 0x914, fw=(1, 0, 0, 0xFF))
+def project_file(models=(0, 1, 2), name=b"Song", version=t.PROJECT_VERSION) -> bytes:
+    mt = header(b"MT", 0, version, 0x914, fw=(1, 0, 0, 0xFF))
     mt += bytes(t.PROJECT_SIZE - len(mt))
     mt[t.PROJECT_NAME:t.PROJECT_NAME + len(name)] = name
     for slot, model in enumerate(models):
@@ -172,6 +172,31 @@ def test_project(base: Path):
           "a project 1.2.0 can already read gets no copy")
 
 
+def test_version_18(base: Path):
+    print("A version 18 project (CE's Max tracks)")
+    source = make_project(base / "d" / "Max")
+    mt = bytearray(project_file(version=18))
+    mt[t.PROJECT_MAX_TRACKS] = 0          # Max tracks 4, CE's kMaxTracks4
+    (source / "project.mt").write_bytes(bytes(mt))
+    before = snapshot(source)
+    out = source.with_name("Max 120")
+    report = t.repair(source, out, "ACD")
+    check(snapshot(source) == before, "the original isn't touched")
+    check(report.project_version == 18 and out.exists(), "a copy, though nothing else needs one")
+    got = (out / "project.mt").read_bytes()
+    check(got[t.HEADER_VERSION:t.HEADER_VERSION + 4] == bytes((17,)) * 4, "the copy says version 17")
+    check(got[t.PROJECT_MAX_TRACKS] == 0, "the Max tracks byte is 0, padding as in version 17")
+    mt[t.PROJECT_MAX_TRACKS] = 3          # 16 tracks, CE's default
+    (source / "project.mt").write_bytes(bytes(mt))
+    t.repair(source, source.with_name("Max 120b"), "ACD")
+    got = (source.with_name("Max 120b") / "project.mt").read_bytes()
+    check(got[t.PROJECT_MAX_TRACKS] == 0, "Max tracks 16 is cleared too")
+    rest = [i for i in range(len(got)) if got[i] != mt[i]]
+    check(set(rest) <= set(range(t.HEADER_FW, t.HEADER_FW + 4)) | set(range(t.HEADER_VERSION, t.HEADER_VERSION + 4))
+          | set(range(t.PROJECT_NAME, t.PROJECT_NAME + t.PROJECT_NAME_SIZE)) | {t.PROJECT_MAX_TRACKS},
+          "nothing else in project.mt changes")
+
+
 def test_refusals(base: Path):
     print("Refusals leave nothing behind")
     source = make_project(base / "c" / "Song", models=(6, 0, 1))
@@ -213,6 +238,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as folder:
         base = Path(folder)
         test_project(base)
+        test_version_18(base)
         test_refusals(base)
     print(f"{failures} failed" if failures else "All passed")
     return 1 if failures else 0

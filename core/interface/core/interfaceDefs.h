@@ -7,8 +7,6 @@
 #include "mtSequencer.h"
 #include "mtStructs.h"
 
-#include "interfaceFxDesc.h"
-
 #if defined(PLATFORM_IMX) && defined(FEATURE_SYNTH) // MT: off in MT_NO_SYNTH test builds
 #define GUI_HANDLE_SYNTH 1
 #else
@@ -268,7 +266,7 @@ enum interfaceEvents
     eventSwitchModuleWithOptions,
     eventToggleActiveModule,
 
-    eventActivateImageViewer,
+    eventActivateInfoViewer,
     eventActivateGameModule,
 
     eventSetFileTransferMode,
@@ -590,13 +588,7 @@ class InterfaceGlobals
 
     static constexpr const char* const* ptrFxNames = &ptrAllFxNames[1];
 
-    char* fxDescPtr(int16_t id)
-    {
-        if (id >= 0)
-            return (char*)fxDescriptions[id];
-        else
-            return nullptr;
-    }
+    char* fxDescPtr(int16_t id);
 
     // oswiezanie listy plikow w sampleloaderze
     bool refreshFileExplorer = false;

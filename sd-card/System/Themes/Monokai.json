@@ -1,0 +1,208 @@
+{
+  "name": "Monokai",
+  "base": "Original",
+  "background": "#272822",
+  "topBar": {
+    "text": "#f8f8f2",
+    "background": "#1e1f1c",
+    "frame": "#3e3d32",
+    "text2": "#66d9ef"
+  },
+  "songTimer": {
+    "text": "#f8f8f2",
+    "background": "#1e1f1c",
+    "frame": "#3e3d32",
+    "text2": "#e6db74"
+  },
+  "labels": {
+    "active": {
+      "text": "#f8f8f2",
+      "background": "#3e3d32",
+      "frame": "#a6e22e",
+      "text2": "#66d9ef"
+    },
+    "inactive": {
+      "text": "#75715e",
+      "background": "#1e1f1c",
+      "frame": "#2d2a2e",
+      "text2": "#75715e"
+    },
+    "activeButton": {
+      "text": "#f8f8f2",
+      "background": "#1e1f1c",
+      "frame": "#a6e22e",
+      "text2": "#a6e22e"
+    },
+    "inactiveButton": {
+      "text": "#75715e",
+      "background": "#1e1f1c",
+      "frame": "#f92672",
+      "text2": "#75715e"
+    },
+    "highlightedButton": {
+      "text": "#272822",
+      "background": "#a6e22e",
+      "frame": "#a6e22e",
+      "text2": "#272822"
+    },
+    "redButton": {
+      "text": "#ffffff",
+      "background": "#f92672",
+      "frame": "#f92672",
+      "text2": "#ffffff"
+    }
+  },
+  "moreButton": {
+    "text": "#f8f8f2",
+    "background": "#1e1f1c",
+    "activeDot": "#fd971f",
+    "inactiveDot": "#75715e"
+  },
+  "keyboard": {
+    "keyBackground": "#1e1f1c",
+    "text": "#f8f8f2",
+    "activeKey": "#f92672"
+  },
+  "editBox": {
+    "text": "#ffffff",
+    "boxBackground": "#1e1f1c",
+    "frame": "#a6e22e"
+  },
+  "bottomButtons": {
+    "text": "#f8f8f2",
+    "background": "#1e1f1c",
+    "frame": "#3e3d32"
+  },
+  "patternTracker": {
+    "trackName": "#75715e",
+    "background": "#272822",
+    "note": "#66d9ef",
+    "instrument": "#fd971f",
+    "fx1": "#f92672",
+    "fx2": "#a6e22e",
+    "inactiveNote": "#183f47",
+    "inactiveInstrument": "#4d2e0a",
+    "inactiveFx1": "#4d0b23",
+    "inactiveFx2": "#32440e",
+    "selection": "#f92672",
+    "gridDivider": "#32332b",
+    "inactiveTrack": "#1e1f1c",
+    "playhead": "#52211e",
+    "selectionText": "#ffffff",
+    "verticalDivider": "#3e3d32",
+    "stepNumber": "#75715e",
+    "greenMode": "#a6e22e",
+    "unfocusedTrack": "#21221d",
+    "activeTrack": "#272822",
+    "trackEnd": "#fd971f"
+  },
+  "songPlayer": {
+    "text": "#f8f8f2",
+    "activeBlock": "#66d9ef",
+    "scrollbar": "#75715e",
+    "background": "#1e1f1c",
+    "inactiveText": "#75715e",
+    "editMode": "#a6e22e",
+    "scrollbarBackground": "#141411",
+    "playhead": "#e6db74",
+    "emptyTrack": "#191916",
+    "playheadActive": "#a6e22e"
+  },
+  "waveform": {
+    "audio": "#66d9ef",
+    "background": "#1e1f1c",
+    "progress": {
+      "text": "#ffffff",
+      "cursor": "#f92672"
+    },
+    "sliceMarker": "#f92672",
+    "activeSlice": "#a6e22e",
+    "slicePlayhead": "#e6db74"
+  },
+  "frames": {
+    "active": "#f92672",
+    "inactive": "#3e3d32",
+    "green": "#a6e22e"
+  },
+  "popups": {
+    "stepTitle": {
+      "text": "#272822",
+      "background": "#66d9ef",
+      "frame": "#66d9ef"
+    },
+    "stepList": {
+      "frameNormal": "#3e3d32",
+      "frameSelect": "#a6e22e",
+      "scrollbar": "#75715e",
+      "background": "#1e1f1c",
+      "textNormal": "#f8f8f2",
+      "textSelect": "#66d9ef",
+      "scrollbarTrack": "#141411"
+    },
+    "note": {
+      "padBackground": "#1e1f1c",
+      "padText": "#f8f8f2",
+      "selectionFrame": "#f92672"
+    },
+    "noteKeyboard": {
+      "text": "#f8f8f2",
+      "background": "#272822",
+      "activeText": "#a6e22e"
+    },
+    "dialog": {
+      "text": "#f8f8f2",
+      "background": "#1e1f1c",
+      "frame": "#a6e22e"
+    }
+  },
+  "bars": {
+    "active": {
+      "primary": "#a6e22e",
+      "container": "#1e1f1c",
+      "background": "#2d2a2e"
+    },
+    "sampleLoaderNormal": {
+      "primary": "#fd971f",
+      "container": "#1e1f1c",
+      "background": "#2d2a2e"
+    }
+  },
+  "lists": {
+    "sampleLoader": {
+      "frameNormal": "#3e3d32",
+      "frameSelect": "#a6e22e",
+      "scrollbar": "#75715e",
+      "background": "#1e1f1c",
+      "textNormal": "#f8f8f2",
+      "textSelect": "#a6e22e",
+      "scrollbarTrack": "#141411"
+    },
+    "sampleLoaderInactive": {
+      "frameNormal": "#3e3d32",
+      "frameSelect": "#66d9ef",
+      "scrollbar": "#75715e",
+      "background": "#1e1f1c",
+      "textNormal": "#f8f8f2",
+      "textSelect": "#f8f8f2",
+      "scrollbarTrack": "#141411"
+    }
+  },
+  "accents": {
+    "white": "#f8f8f2",
+    "red": "#f92672",
+    "orange": "#fd971f",
+    "yellow": "#e6db74",
+    "green": "#a6e22e",
+    "cyan": "#66d9ef",
+    "grey": "#75715e"
+  },
+  "miniMenu": {
+    "text": "#f8f8f2",
+    "boxBackground": "#3e3d32",
+    "selectedBox": "#4f4e40",
+    "background": "#272822",
+    "frame": "#f92672",
+    "inactiveDot": "#75715e",
+    "activeDot": "#fd971f"
+  }
+}

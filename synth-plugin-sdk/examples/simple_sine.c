@@ -256,6 +256,26 @@ static void voice_reset(void* voice)
     v->gate = false;
 }
 
+static uint32_t next_rng(uint32_t* s)
+{
+    uint32_t x = *s;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    *s = x;
+    return x;
+}
+
+static void randomize_patch(void* host_patch, uint32_t seed)
+{
+    uint32_t rng = seed ? seed : 0xA341316Cu;
+    float r0 = (float)(next_rng(&rng) >> 8) * (1.0f / 16777215.0f);
+    float r1 = (float)(next_rng(&rng) >> 8) * (1.0f / 16777215.0f);
+    /* Keep kParamPitch and kParamGain untouched for in-key, consistent-level auditioning */
+    g_host->patch_set_param_value(host_patch, kParamDetune, true, (r0 - 0.5f) * 0.25f, 2);
+    g_host->patch_set_param_value(host_patch, kParamDecay, true, 0.08f * powf(25.0f, r1), 2);
+}
+
 static const PsynPluginApi kPluginApi = {
     .create_metadata = create_metadata,
     .format_param = format_param,
@@ -276,6 +296,8 @@ static const PsynPluginApi kPluginApi = {
     .voice_reset = voice_reset,
     /* Optional: populate alongside PSYN_FLAG_HAS_VOICE_TICK_IDLE when PSYN_FLAG_SUPPORTS_IDLE_SLEEP is used */
     .voice_tick_idle = NULL,
+    /* Optional: populate alongside PSYN_FLAG_HAS_RANDOMIZE_PATCH */
+    .randomize_patch = randomize_patch,
 };
 
 const PsynPluginApi* psyn_plugin_entry(const PsynHostApi* host)

@@ -17,6 +17,9 @@ constexpr uint32_t lofiSampleRate = targetSampleRate / 2;
 
 __NOINIT(EXTERNAL_RAM)
 static FileManagerOperation::SampleLoadData sampleImportDataBuff[48];
+__NOINIT(EXTERNAL_RAM) static char s_singleImportPath[PATCH_SIZE];
+__NOINIT(EXTERNAL_RAM) static char s_singleImportName[kMaxFileNameLen + 1];
+static char* s_singleImportNamePtr = s_singleImportName;
 
 // The slots of an import are given their place in sample memory, and the instruments behind
 // them are moved to make room, before the first file is loaded. A slot that then gets no sample
@@ -46,9 +49,7 @@ void SampleImport::update() // fmImportSamplesToWorkspace
         {
             importSamplesToWorkspaceInit();
             memset(sampleImportDataBuff, 0, sizeof(sampleImportDataBuff));
-            loadImportingSamplesData(sampleImportDataBuff,
-                                     newFileManager.getExplorerPath(),
-                                     newFileManager.getExplorerList());
+            loadImportingSamplesData(sampleImportDataBuff, importSourcePath, importSourceList);
             nextStep = SampleImportStep::moveMemory;
             break;
         }
@@ -219,8 +220,10 @@ void SampleImport::importSamplesToWorkspaceFinish()
 
 //=================================================================================================
 //=================================================================================================
-bool SampleImport::importSamplesToProject(uint8_t fileFrom,
-                                          uint8_t fileTo,
+bool SampleImport::importSamplesToProject(const char* sourceDirPath,
+                                          char* const* sourceFileList,
+                                          uint16_t fileFrom,
+                                          uint16_t fileTo,
                                           uint8_t instrumentSlot,
                                           uint16_t dataFrom,
                                           uint16_t dataTo,
@@ -231,6 +234,8 @@ bool SampleImport::importSamplesToProject(uint8_t fileFrom,
     if (newFileManager.getStatus() != fmIdle)
         return false;
     if (newFileManager.getCurrentOperation() != fmNoOperation)
+        return false;
+    if (sourceDirPath == nullptr || sourceFileList == nullptr)
         return false;
     if (dataFrom >= dataTo || dataFrom > std::numeric_limits<uint16_t>::max() ||
         dataTo > std::numeric_limits<uint16_t>::max())
@@ -245,6 +250,8 @@ bool SampleImport::importSamplesToProject(uint8_t fileFrom,
         fileTo = fileFrom + slotsAfterFirst;
     }
 
+    importSourcePath = sourceDirPath;
+    importSourceList = sourceFileList;
     sampleChannelMode = sampleMode;
     importLoadMode = loadMode;
     importCurrentFileIdx = fileFrom;
@@ -327,25 +334,11 @@ bool SampleImport::importSampleToProject(char* filePath,
         return false;
     }
 
-    // explorerCurrentPath, explorerList[importCurrentFile]
-    // kozrysta z listy plikow explorera
-    // ustawia plik do importu na 0 miejscu tablicy explorerList[]
-    // i uruchamia import jak w sample laderze
-    if (newFileManager.getExplorerList()[0] != nullptr)
-    {
-        delete[] newFileManager.getExplorerList()[0];
-        newFileManager.getExplorerList()[0] = nullptr;
-    }
+    snprintf(s_singleImportName, sizeof(s_singleImportName), "%s.wav", fileName);
+    polystrncpy(s_singleImportPath, filePath, sizeof(s_singleImportPath));
+    importSourcePath = s_singleImportPath;
+    importSourceList = &s_singleImportNamePtr;
 
-    uint16_t len = strlen(fileName) + 5; // + .wav + \0
-    newFileManager.getExplorerList()[0] = new char[len];
-    snprintf(newFileManager.getExplorerList()[0], len, "%s.wav", fileName);
-
-    // wymagane tez ustawienie aktualnego path explorera
-    // na lokalizajce wczytywanego pliku
-    polystrncpy(newFileManager.getExplorerPath(), filePath, PATCH_SIZE);
-
-    // liczy sie tlyko 0 index w tablicy
     importCurrentFileIdx = 0;
 
     // default parametry importu
@@ -361,9 +354,6 @@ bool SampleImport::importSampleToProject(char* filePath,
     currentInstrument = instrumentSlot;
     importStartSlot = instrumentSlot;
     importEndSlot = instrumentSlot;
-
-    // reset browsera przy nastepnym uzywaniu
-    newFileManager.resetBrowse();
 
     newFileManager.setStatus(fmImportingSamplesToWorkspace);
     operationStep = SampleImportStep::initStep;
@@ -390,8 +380,8 @@ static bool importedSampleFits(int slot, int lastSlot, uint16_t channelCount, ui
 //=================================================================================================
 //=================================================================================================
 void SampleImport::loadImportingSamplesData(FileManagerOperation::SampleLoadData* sampleImportData,
-                                            char* sourceFilePath,
-                                            char** sourceFileNameList)
+                                            const char* sourceFilePath,
+                                            char* const* sourceFileNameList)
 {
     char srcSamplePath[PATCH_SIZE];
     strWavFileHeader sampleHead;

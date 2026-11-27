@@ -5,9 +5,9 @@ filter, three envelopes, two LFOs and a mod matrix; **PHASE**, a phase distortio
 Casio CZ; and **DCO6**, a virtual analog synth after the Roland Juno-106, with Unison and Vintage.
 
 - Turn it on in **Project Settings → Mods → Synths** (for new projects: **Config → Mods**).
-- They are `.psyn` files, `WAVE.psyn`, `PHASE.psyn` and `DCO6.psyn`, in the card's `Synths` folder beside
-  CE's engines. Every release has them in `PolyendTracker_CE_Synths.zip` (install step 3 in the
-  [README](../../README.md#install)).
+- They are `.psyn` files, `WAVE.psyn`, `PHASE.psyn` and `DCO6.psyn`, in the card's `System/Synths` folder
+  beside CE's engines. Every release has them in the `System` folder of `PolyendTracker_CE_SD_Card.zip`
+  (install step 3 in the [README](../../README.md#install)).
 - Their effects are the [Synth FX](synthfx.md) slots, on the Synth FX button in the patch editor.
 - Off hides the three models in the picker. A part already playing one keeps it.
 

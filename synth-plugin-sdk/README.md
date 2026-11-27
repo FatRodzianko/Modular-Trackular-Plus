@@ -1,6 +1,6 @@
 # Polyend Loadable Synth Plugin SDK (`.psyn`)
 
-Build standalone relocatable SD-card synthesizer engines (`/Synths/<NAME>.psyn`) that run across all synth-capable Polyend Community Edition devices without recompiling firmware:
+Build standalone relocatable SD-card synthesizer engines (`/System/Synths/<NAME>.psyn` on Tracker CE, or `/Synths/<NAME>.psyn` on other CE devices) that run across all synth-capable Polyend Community Edition devices without recompiling firmware:
 
 All `.psyn` binaries target **ARMv7E-M (`Cortex-M7`), Thumb-2, VFPv5 hard-float** (`-mcpu=cortex-m7 -mthumb -mfloat-abi=hard -mfpu=fpv5-sp-d16 -mword-relocations`) and execute directly from the external SDRAM plugin arena ([`PsynLoader::kArenaSize`](../docs/memory_map.md#4-synthesizer-sdram-pool-psyn_ram_pool_size--imx) with automatic LRU eviction of inactive engines).
 
@@ -65,13 +65,15 @@ python3 tools/psyn_builder.py \
     --renders-aux 0 \
     --has-sample-slots 0 \
     --supports-idle-sleep 1 \
-    --has-voice-tick-idle 0
+    --has-voice-tick-idle 0 \
+    --has-randomize-patch 1
 ```
 
 * Pass `--type-id-wave 0` and `--type-id-play-tracker 0` for community engines so the firmware assigns a deterministic runtime ID (`0x100+` from `PsynLoader`) that never collides with factory synth IDs.
 * Pass `--has-sample-slots 1` whenever the engine declares sample or wavetable slots (`PSYN_FLAG_HAS_SAMPLE_SLOTS = 0x0001` in `PsynHeader::flags`).
 * Pass `--supports-idle-sleep 1` (`PSYN_FLAG_SUPPORTS_IDLE_SLEEP = 0x0002`) when your voice accurately reports `isActive() == false` once silent; this enables zero-CPU idle sleep and adds the per-patch `Voice Sleep` (`On` / `Off`, default `On`) switch to the `Voice` layout.
 * Pass `--has-voice-tick-idle 1` (`PSYN_FLAG_HAS_VOICE_TICK_IDLE = 0x0004`) if your voice also implements `InstrumentVoice::tickIdle()` / `voice_tick_idle()` to advance free-running oscillator/LFO/modulation state lightly while `Voice Sleep` is `Off` and `!isActive()`.
+* Pass `--has-randomize-patch 1` (`PSYN_FLAG_HAS_RANDOMIZE_PATCH = 0x0008`) if your engine implements `VoiceClass::randomizePatch(Patch&, uint32_t)` / `randomize_patch(void* host_patch, uint32_t seed)` to support one-click patch randomization.
 
 ---
 
@@ -79,10 +81,10 @@ python3 tools/psyn_builder.py \
 
 Copy the compiled `.psyn` file and any patches/samples onto your microSD card:
 
-* **Plugin binary**: `/Synths/<CODE_NAME>.psyn`
-* **Patches**: `/Patches/<patch_folder>/*.patch`
+* **Plugin binary**: `/System/Synths/<CODE_NAME>.psyn` (or `/.system/Synths/<CODE_NAME>.psyn` on Tracker CE)
+* **Patches**: `/System/Synths/Patches/<patch_folder>/*.patch`
 * **Sample folders (engines with `--has-sample-slots 1`)**:
-  * **Tracker+ / Tracker Mini & Play / Play+**: Firmware automatically creates `/SynthSamples/<CODE_NAME>/` on boot so synth libraries stay separate from `/Samples/`. Sample reads also fall back across `/SynthSamples/`, `/Samples/`, `/`, and `/Patches/`.
+  * **Tracker+ / Tracker Mini**: Firmware automatically creates `/System/Synths/Samples/<CODE_NAME>/` on boot. Sample reads resolve relative paths under `/System/Synths/Samples/` and absolute paths anywhere on the SD card.
   * **Polyend Synth**: Uses `/Samples/<CODE_NAME>/`.
 
 ### Sample Slots & Direct SD/WAV I/O

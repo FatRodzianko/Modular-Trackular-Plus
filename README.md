@@ -23,7 +23,7 @@ Off/On switch, so there's no separate build for each mix of mods.
 | **[Copy to New](docs/mods/copytonew.md)** | A Copy to New button on page 3 of the Pattern screen's bottom bar copies the pattern you're on into the next empty pattern, with your unsaved edits and every track's length, playing or stopped. You stay on your pattern. A pattern counts as empty only if it isn't in the song and has nothing in any step, even past its length. With Variable Track Length on, the copy gets the Trk Len lengths too. It works in edit mode. | On/Off only |
 | **[Song Loop](docs/mods/songloop.md)** | Repeat a block of song positions. In the Song screen's pattern column, with Rec on, Shift + Down selects the block and Play Selection repeats it; Continue Song plays the block out and goes on. During the loop Up/Down and the jog wheel move the block. The status bar shows the loop. Designed by P-N-E-M for 1.2.0. | On/Off only |
 | **[Resample](docs/mods/resample.md)** | Record the tracker itself in the Sample Recorder. With Line In or a mic as the Source, Trk Audio lets you hear the tracker while the recorder is open: Play starts the pattern, and Shift + Rec starts the take and the pattern together. Trk Record (stereo Line In only) puts the tracker's sound in the take, with the Line In added: samples, synths, Synth FX, the delay and reverb, never the metronome's clicks. With Trk Audio on, the recorder's instrument list has every instrument, so you can play samples and synths on the pads while you record. A project that used live resampling with Modular-Trackular on 1.2.0 keeps its buttons. | Sample Recorder → Trk Audio, Trk Record |
-| **[Synths](docs/mods/synths.md)** | Three more synth models in the picker: WAVE (wavetable, two oscillators, a filter, three envelopes, two LFOs and a mod matrix), PHASE (phase distortion, after the Casio CZ) and DCO6 (virtual analog after the Juno-106: one oscillator, a resonant low-pass and a high-pass, one envelope, one LFO, with Unison and Vintage). They are `.psyn` plugins, `WAVE.psyn`, `PHASE.psyn` and `DCO6.psyn`, in the card's `Synths` folder beside CE's engines (install step 3). Their effects are Synth FX's slots (below). Patches save as CE's do. Off hides the models; a part already playing one keeps it. 1.2.0 projects' WAVE and PHASE parts aren't converted. | Project Settings → Synths |
+| **[Synths](docs/mods/synths.md)** | Three more synth models in the picker: WAVE (wavetable, two oscillators, a filter, three envelopes, two LFOs and a mod matrix), PHASE (phase distortion, after the Casio CZ) and DCO6 (virtual analog after the Juno-106: one oscillator, a resonant low-pass and a high-pass, one envelope, one LFO, with Unison and Vintage). They are `.psyn` plugins, `WAVE.psyn`, `PHASE.psyn` and `DCO6.psyn`, in the card's `System/Synths` folder beside CE's engines (install step 3). Their effects are Synth FX's slots (below). Patches save as CE's do. Off hides the models; a part already playing one keeps it. 1.2.0 projects' WAVE and PHASE parts aren't converted. | Project Settings → Synths |
 | **[Synth FX](docs/mods/synthfx.md)** | Two effect slots, FX1 then FX2, on each synth part, every engine (CE's eight, WAVE, PHASE and DCO6). Each slot picks a plugin (`.ptsfx`) from `/SynthFX/` on the card; the firmware writes its default pack there (Overdrive, Distortion, Bit Crusher, Chorus, Flanger, Phaser; [what each does](docs/mods/synthfx.md#the-default-plugins)), and anyone can build more ([docs/synthfx_plugins.md](docs/synthfx_plugins.md)). In the patch editor, button 3 shows the part's slots and the plugin's knobs. The slots belong to the part, not the patch, so loading another patch keeps them, and they are saved with the project; an old WAVE or PHASE patch has its own effects moved into the slots. On PERC the effects reach the main output, not its sends. The Distortion and Phaser cost the most CPU: 8 DIRT voices with both on every part reach about 95 %. A slot always runs on the part, after the engine; WAVE's old Placement Pre is gone, and a project saved with it opens with those slots on the part. | Patch editor → button 3 |
 
 Every mod is tested on hardware.
@@ -59,14 +59,22 @@ have no mods.
    merge of CE's updates (`CE_YYYYMMDD`). You can also build it with `make plus` (see
    [Building Firmware](#building-firmware) below), which makes
    `build/TrackerPlus_MT_1.0.0.ptf`.
-3. **Copy the synth engines to the card.** Every synth engine is a `.psyn` file on the card,
-   not part of the firmware: CE's (ACD, FAT, VAP, WTFM, PERC, DIRT and CHIP) and the
-   Synths mod's WAVE, PHASE and DCO6. Each release has all ten in `PolyendTracker_CE_Synths.zip`, and
-   `make psyn` puts them in `build/Synths/`. Copy the `Synths` folder to the card's root.
-   Without the folder, a project's synth parts can open on another engine, since the project
-   stores each part's engine by its place in the list.
-   Also copy the `Words` folder from `PolyendTracker_CE_Words.zip` to the card's root: CE
-   picks new project names from its two lists, and without them it uses 16 words of each kind.
+3. **Copy the `System` folder to the card.** Each release has it in
+   `PolyendTracker_CE_SD_Card.zip`: copy the `System` folder in it to the card's root. It holds
+   every synth engine, since an engine is a `.psyn` file on the card and not part of the
+   firmware: CE's (ACD, FAT, VAP, WTFM, PERC, DIRT and CHIP) and the Synths mod's WAVE, PHASE and
+   DCO6, in `System/Synths`. Without them, a project's synth parts can open on another engine,
+   since the project stores each part's engine by its place in the list. It also holds the
+   Sample Editor effects, the words for new project names, the help texts for the FX and
+   Config screens, the themes and the New font. `make psyn` puts the engines in
+   `build/System/Synths/`.
+   **Updating from an earlier release:** CE now reads all of this from `System` only. Move
+   your own `.psyn` files from `/Synths` to `/System/Synths`, your synth patches from
+   `/Patches` to `/System/Synths/Patches`, synth samples from `/SynthSamples` to
+   `/System/Synths/Samples`, and your own effects (with `Presets`), themes and fonts from
+   `/Effects`, `/Themes` and `/Fonts` into the folders of the same name in `System`. Your
+   settings carry over by themselves, and projects stay in `/Projects`. The mods' own
+   folders (`/MasterFX`, `/SynthFX`, `/Mods`) stay where they are.
 4. **Flash it** as in
    [Flashing on Hardware & Emergency Recovery](#4-flashing-on-hardware--emergency-recovery)
    below. Config then shows the version as `1.0.0 MT`.
@@ -108,7 +116,7 @@ Built directly from the original Polyend firmware source code, Tracker CE opens 
 Automatically built from the latest changes in `main` (for all 3 devices):
 
 * Download the latest [Beta Firmware builds (`.zip`)](https://nightly.link/polyend/tracker-ce/workflows/build.yml/main/polyend-tracker-ce-firmware.zip)
-* Download the latest [SD Card Content (`.zip`)](https://nightly.link/polyend/tracker-ce/workflows/build.yml/main/polyend-tracker-ce-sd-card.zip) (`/Words`, `/Effects`, `/Synths`)
+* Download the latest [SD Card Content (`.zip`)](https://nightly.link/polyend/tracker-ce/workflows/build.yml/main/polyend-tracker-ce-sd-card.zip) (`/System/`)
 * See [`UPCOMING.md`](UPCOMING.md) to find out what's new in these Beta Builds.
 
 ---
@@ -199,10 +207,10 @@ make original   # -> build/PolyendTracker_CE_1.0.0.ptf
 make plus       # -> build/TrackerPlus_CE_1.0.0.ptf
 make mini       # -> build/TrackerMini_CE_1.0.0.ptf
 
-# Build reference .ptfx Sample Editor effects into editor-fx-sdk/build/Effects/:
+# Build reference .ptfx Sample Editor effects into editor-fx-sdk/build/System/Effects/:
 make ptfx
 
-# Build open-source .psyn synths (CHIP.psyn; MT+: WAVE.psyn, PHASE.psyn and DCO6.psyn) and stage all factory + open-source .psyn plugins into build/Synths/:
+# Build open-source .psyn synths (CHIP.psyn; MT+: WAVE.psyn, PHASE.psyn and DCO6.psyn) and stage all factory + open-source .psyn plugins into build/System/Synths/:
 make psyn
 
 # Or compile only the synth-plugin-sdk reference plugin (CHIP.psyn -> synth-plugin-sdk/build/):
@@ -252,7 +260,7 @@ Full user and developer documentation is available in [`docs/`](docs/Home.md) an
 * **User Guides**:
   * [Custom Themes & Fonts](docs/custom_themes_and_fonts.md) + [Live Web Editor](https://polyend.github.io/tracker-theme-editor/) ([`polyend/tracker-theme-editor`](https://github.com/polyend/tracker-theme-editor))
   * [Wavetable Envelopes, LFOs & Step FX](docs/wavetable_envelopes.md)
-  * [SD Card Image Viewer](docs/image_viewer.md)
+  * [File Manager & Built-In File Viewer](docs/info_viewer.md)
 * **Developer & Architecture Guides**:
   * [Firmware Memory Map, Budgets & Subsystem Limits](docs/memory_map.md)
   * [Firmware Architecture, Hardware Limits & Developer Gotchas](docs/developer_guide.md)

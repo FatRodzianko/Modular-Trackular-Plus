@@ -41,7 +41,7 @@ const uint8_t PRODUCT_BETA = FW_VER_BETA;
 const char firmwareVersionLabelFormat[] = "%d.%d.%d " FW_EDITION_NAME;
 const char firmwareVersionLabelFormatBeta[] = "%d.%d.%d " FW_EDITION_NAME " beta %d";
 
-const uint8_t PROJECT_FILE_VERSION = 17;   // wersja struktury pliku projektu
+const uint8_t PROJECT_FILE_VERSION = 18;   // wersja struktury pliku projektu
 const uint8_t INSTRUMENT_FILE_VERSION = 9; // wersja struktury pliku instrumentu
 const uint8_t PATTERN_FILE_VERSION = 6;
 
@@ -847,6 +847,17 @@ typedef struct
 } SynthPartSettings;
 
 //----------------------------------------------------------------------------------
+enum MaxTracksMode : uint8_t
+{
+    kMaxTracks4 = 0,
+    kMaxTracks8 = 1,
+    kMaxTracks12 = 2,
+    kMaxTracks16 = 3,
+
+    kMaxTracksModeCount = 4,
+    kMaxTracksModeDefault = kMaxTracks16,
+};
+
 struct strMtValues
 {
     uint8_t lastUsedNote = 0;
@@ -973,8 +984,10 @@ struct strMtValues
     SynthPartSettings synthPart[kSynthInstrumentsCount];
 
     uint8_t recorderGainUsb;
+    uint8_t maxTracksMode = kMaxTracksModeDefault;
     void setDefaultTrackName(int trackIdx);
 };
+static_assert(sizeof(strMtValues) == 1792, "strMtValues size must remain 1792 bytes");
 
 //----------------------------------------------------------------------------------
 struct strSong
@@ -1090,6 +1103,8 @@ struct strMtConfig
         uint8_t ccInChannel;
         uint8_t middleC;
         uint8_t slaveClockComp;
+        uint8_t programChangeInMode;
+        uint8_t programChangeInChannel;
     } midi;
 
     struct strGlobalValues
@@ -1135,6 +1150,7 @@ struct strMtConfig
         uint8_t previewVolume;
         uint8_t recThreshold;
         uint8_t noteDisplayMode;
+        uint8_t confirmFileDelete;
     } general;
 
     struct strInterfaceState
@@ -1197,6 +1213,30 @@ struct strRecentFile
 
 extern strMtProject mtProject;
 extern strMtConfig mtConfig;
+
+inline uint8_t getProjectMaxTracks()
+{
+    const uint8_t mode = mtProject.values.maxTracksMode;
+    return (mode < kMaxTracksModeCount) ? static_cast<uint8_t>((mode + 1) << 2)
+                                        : static_cast<uint8_t>(kAllTracks);
+}
+
+inline uint8_t getProjectActiveSampleTracks()
+{
+    const uint8_t maxTracks = getProjectMaxTracks();
+    return maxTracks < kSampleTracks ? maxTracks : static_cast<uint8_t>(kSampleTracks);
+}
+
+inline uint8_t getProjectActiveMidiTracks()
+{
+    const uint8_t maxTracks = getProjectMaxTracks();
+    return maxTracks > kSampleTracks ? static_cast<uint8_t>(maxTracks - kSampleTracks) : 0;
+}
+
+inline bool isSampleTrackMutedOrHidden(uint8_t track)
+{
+    return (track >= getProjectMaxTracks()) || (mtProject.values.trackMute[track] != 0);
+}
 
 struct strMtDispSpectrum
 {

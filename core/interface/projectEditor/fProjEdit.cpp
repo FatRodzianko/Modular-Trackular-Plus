@@ -2,6 +2,7 @@
 #include <mtAudioExport.h>
 #include <mtRandomNameGenerator.h>
 
+#include "configEditor/configMenuActions.h"
 #include "core/interfaceMenuPopup.h"
 #include "core/interfacePopups.h"
 
@@ -15,7 +16,9 @@
 #include "performanceMode/performanceMode.h"
 
 #include "FileBrowser.h"
+#include "core/interface.h"
 #include "fileBrowser/GlobalFileBrowser.h"
+#include "fileManager/FileManagerModule.h"
 #include "fileManager.h"
 
 #include "Platform.h"
@@ -50,6 +53,7 @@ static void functImportMod();
 static void functSaveProject();
 static void functSaveAsProject();
 static void functExport();
+static void functOpenFileManager();
 //****************************************************
 // New project
 static void functSaveChangesCancelNewProject();
@@ -280,6 +284,7 @@ void cProjectEditor::setDefaultScreenFunct()
     ip->setButtonObj(interfaceButton3, buttonPress, functSaveProject);
     ip->setButtonObj(interfaceButton4, buttonPress, functSaveAsProject);
     ip->setButtonObj(interfaceButton5, buttonPress, functExport);
+    ip->setButtonObj(interfaceButton7, buttonPress, functOpenFileManager);
 
     ip->setButtonObj(interfaceButtonPlay, buttonPress, functPlayAction);
 
@@ -409,6 +414,11 @@ uint8_t cProjectEditor::loadProjectValues()
 
     //----------------------------------------------------------------------------------------------------
     // performance mode i inne
+    if (mtProject.values.maxTracksMode >= kMaxTracksModeCount)
+    {
+        mtProject.values.maxTracksMode = kMaxTracksModeDefault;
+    }
+
     for (uint8_t i = 0; i < kMaxAllTracksInTrackers; i++)
     {
         mtProject.perfTracksPatterns[i] = 1;
@@ -427,7 +437,7 @@ uint8_t cProjectEditor::loadProjectValues()
         if (mtProject.values.trackMute[i] >= trackMasterModeCount)
             mtProject.values.trackMute[i] = 0;
 
-        engine.muteTrack(i, mtProject.values.trackMute[i]);
+        engine.muteTrack(i, isSampleTrackMutedOrHidden(i) ? 1 : 0);
     }
 
     for (uint8_t i = 0; i < kMaxMidiTracksInTrackers; i++)
@@ -541,6 +551,8 @@ uint8_t cProjectEditor::loadProjectValues()
         engine.refreshSynthInstrumentParams(mtProject.values.synthPart[part], part);
     }
 #endif
+
+    applyProjectMaxTracks();
 
     return 1;
 }
@@ -1128,6 +1140,12 @@ static void functExport()
 
     PE->setExportWindowFuncts();
     PE->showExportWindow();
+}
+
+static void functOpenFileManager()
+{
+    mtInterface.deactivateModule(&projectEditor);
+    mtInterface.activateModule(&fileManagerModule, 0);
 }
 
 //===============================================================================================================

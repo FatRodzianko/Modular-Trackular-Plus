@@ -4,7 +4,7 @@
 // DCO6, a virtual analog after the Juno-106's design (docs/mt/VA_SYNTH_PLAN.md), as .psyn
 // plugins built with CE's synth-plugin-sdk (psyn/: waveSynth.cpp, phaseSynth.cpp,
 // dco6Synth.cpp, psyn/Makefile). The firmware has none of their code: PsynLoader finds
-// WAVE.psyn, PHASE.psyn and DCO6.psyn in /Synths on the card with CE's engines, at the type
+// WAVE.psyn, PHASE.psyn and DCO6.psyn in /System/Synths on the card with CE's engines, at the type
 // ids below. WAVE's and PHASE's old effects' settings (synthsFx.h) become Synth FX's slots.
 // DCO6's Unison needs one hook in CE's host (InstrumentImpl::mtUnisonNoteOn), given its
 // parameters by unisonParams below.

@@ -1,0 +1,583 @@
+# Polyend Tracker CE - Step FX Help Descriptions
+# Format: [KEY] for shared/Original descriptions, [KEY.SYNTH] for Synth-enabled variants.
+# Lines starting with '#' are comments.
+
+[NONE]
+Destination: Sample, MIDI 
+
+Indicates that there's no effect used on the desired step.
+
+[NONE.SYNTH]
+Destination: Sample, Synth, MIDI 
+
+Indicates that there's no effect used on the desired step.
+
+[OFF]
+Destination: Sample, MIDI 
+
+Toggle off the effect used on previous step.
+
+[OFF.SYNTH]
+Destination: Sample, Synth, MIDI 
+
+Toggle off the effect used on previous step.
+
+[VOLUME]
+Destination: Sample, MIDI 
+
+Sets the Volume of an Instrument. For MIDI instruments this sends the NOTE ON Velocity parameter. 
+
+From 0% to 100%.
+
+[VOLUME.SYNTH]
+Destination: Sample, Synth, MIDI 
+
+Sets the Volume of an Instrument. For MIDI instruments this sends the NOTE ON Velocity parameter. For Synth instruments sets the Macro 7. 
+
+From 0% to 100%.
+
+[PANNING]
+Destination: Sample 
+
+Sets the Panning of an Instrument.
+
+From -50 (L) to +50 (R).
+
+[PANNING.SYNTH]
+Destination: Sample, Synth 
+
+Sets the Panning of an Instrument or Synth.
+
+From -50 (L) to +50 (R).
+
+[MICROTUNING]
+Destination: Sample, MIDI 
+
+Sets the microtuning adjustments.
+
+From -99 cents to +99 cents.
+
+For MIDI instruments sends pitchbend message.
+
+[MICROTUNING.SYNTH]
+Destination: Sample, Synth, MIDI 
+
+Sets the microtuning adjustments. For MIDI instruments and Synths this sends the pitchbend message.
+
+From -99 cents to +99 cents.
+
+[GLIDE]
+Destination: Sample 
+
+Sets the time it takes for the pitch of previous note to travel to the pitch of corresponding note.
+
+From 0-49% (0-1s) 
+to 50-100% (1-15s).
+
+[TEMPO]
+Destination: Pattern
+
+Changes pattern tempo. Handy to create custom swings or grooves.
+
+From 10 BPM to 400 BPM.
+Also includes TSTP value which stops the playback. TSTP value is excluded when Tempo FX is used in combination with Random FX Value (f).
+
+[SWING]
+Destination: Pattern
+
+Changes pattern swing.
+
+From 25% to 75%.
+
+[MICROMOVE]
+Destination: Sample, MIDI 
+
+Slightly moves (nudges) forward the step position.
+
+From 0% to 100%.
+
+[MICROMOVE.SYNTH]
+Destination: Sample, Synth, MIDI 
+
+Slightly moves (nudges) forward the step position.
+
+From 0% to 100%.
+
+[GATE_LENGTH]
+Destination: Sample, MIDI 
+
+Sets length of note if you need shorter than step
+
+From 0% to 100%.
+
+[GATE_LENGTH.SYNTH]
+Destination: Sample, Synth, MIDI 
+
+Sets length of note if you need shorter than step
+
+From 0% to 100%.
+
+[CHANCE]
+Destination: Sample, MIDI 
+
+Sets a chance or condition for a step being played.
+
+0-100: Probability %
+GL / !L: Group / Not Last
+1:1-6:6: Play N / Skip M
+S11-S66: Skip N / Play M
+
+[CHANCE.SYNTH]
+Destination: Sample, Synth, MIDI 
+
+Sets a chance or condition for a step being played.
+
+0-100: Probability %
+GL / !L: Group / Not Last
+1:1-6:6: Play N / Skip M
+S11-S66: Skip N / Play M
+
+[ROLL]
+Destination: Sample, MIDI 
+
+Sets the type and value of the Roll (step divider) parameter.
+
+From 0 to 16 for each Roll type.
+R - regular Roll.
+Rv - decreasing volume Roll.
+RV - increasing volume Roll.
+Rn - decreasing note Roll.
+RN - increasing note Roll.
+RR - random note Roll.
+
+[ROLL.SYNTH]
+Destination: Sample, Synth, MIDI 
+
+Sets the type and value of the Roll (step divider) parameter.
+
+From 0 to 16 for each Roll type.
+R - regular Roll.
+Rv - decreasing volume Roll.
+RV - increasing volume Roll.
+Rn - decreasing note Roll.
+RN - increasing note Roll.
+RR - random note Roll.
+
+[ARP]
+Destination:  MIDI 
+
+Combine with the Chord effect (0xx) to arpeggiate in the given tempo divider, either in raising /, falling \, or random R pitches.
+
+[ARP.SYNTH]
+Destination: Synth, MIDI 
+
+Combine with the Chord effect (0xx) to arpeggiate in the given tempo divider, either in raising /, falling \, or random R pitches.
+
+[RANDOM_NOTE]
+Destination: Sample, MIDI 
+
+Sets the range of randomization for Note with each sequencer pass.
+
+From +/- 0 to +/- 100
+
+[RANDOM_NOTE.SYNTH]
+Destination: Sample, Synth, MIDI 
+
+Sets the range of randomization for Note with each sequencer pass.
+
+From +/- 0 to +/- 100
+
+[RANDOM_INSTRUMENT]
+Destination: Sample, MIDI 
+
+Sets the range of randomization for Instrument number with each sequencer pass.
+
+From +/- 0 to +/- 47
+
+[RANDOM_INSTRUMENT.SYNTH]
+Destination: Sample, Synth, MIDI 
+
+Sets the range of randomization for Instrument, Synth or MIDI channel number with each sequencer pass.
+
+From +/- 0 to +/- 47
+
+[RANDOM_VALUE]
+Destination: Sample, MIDI 
+
+Sets the range of randomization for the FX that is in the same step with each sequencer pass. For example, if randomizer value is 10 and affected FX value is 100, the algorithm will pick the value from 90 to 110.
+
+From +/- 0 to +/-255.
+
+[RANDOM_VALUE.SYNTH]
+Destination: Sample, Synth, MIDI 
+
+Sets the range of randomization for the FX that is in the same step with each sequencer pass. For example, if randomizer value is 10 and affected FX value is 100, the algorithm will pick the value from 90 to 110.
+
+From +/- 0 to +/-255.
+
+[RANDOM_VOLUME]
+Destination: Sample, MIDI 
+
+Sets the range of randomization for Volume with each sequencer pass.
+
+From +/- 0 to +/- 100
+
+[RANDOM_VOLUME.SYNTH]
+Destination: Sample, Synth, MIDI 
+
+Sets the range of randomization for Volume (Sample), Velocity (MIDI) or Macro 7 (Synth) with each sequencer pass.
+
+From +/- 0 to +/- 100
+
+[REVERSE_PLAYBACK]
+Destination: Sample 
+
+Changes the playback direction of the sample.
+
+Values: <<< and >>>.
+
+[POSITION]
+Destination: Sample 
+
+In relation to the chosen sample playback type - changes the position of: Sample start or Wavetable position or Granular position.
+
+From 0% to 100%.
+
+[SAMPLE_SLICE]
+Destination: Sample 
+
+Sets the slice number of a instrument with a Slice playback type.
+
+From 1 to 48.
+
+[VOLUME_LFO]
+Destination: Sample 
+
+Sets the LFO rate for instrument Volume. LFO is synced to project Tempo.
+
+Values: 24; 16; 12; 8; 6; 4; 3; 2; 3/2; 1; 3/4; 1/2; 3/8; 1/3; 1/4; 316 (3/16); 1/6; 1/8; /12 (1/12); /16 (1/16); /24 (1/24); /32 (1/32); /48 (1/48); /64 (1/64).
+
+[PANNING_LFO]
+Destination: Sample 
+
+Sets the LFO rate for Panning. LFO is synced to project Tempo.
+
+Values: 128; 96; 64; 48; 32; 24; 16; 12; 8; 6; 4; 3; 2; 3/2; 1; 3/4; 1/2; 3/8; 1/3; 1/4; 316 (3/16); 1/6; 1/8; /12 (1/12); /16 (1/16); /24 (1/24); /32 (1/32); /48 (1/48); /64 (1/64).
+
+[PANNING_LFO.SYNTH]
+Destination: Sample 
+
+Sets the LFO rate for instrument Panning.
+
+Values: 128; 96; 64; 48; 32; 24; 16; 12; 8; 6; 4; 3; 2; 3/2; 1; 3/4; 1/2; 3/8; 1/3; 1/4; 316 (3/16); 1/6; 1/8; /12 (1/12); /16 (1/16); /24 (1/24); /32 (1/32); /48 (1/48); /64 (1/64).
+
+[FILTER_LFO]
+Destination: Sample 
+
+Sets the LFO rate for the selected Filter type. LFO is synced to project Tempo.
+
+Values: 128; 96; 64; 48; 32; 24; 16; 12; 8; 6; 4; 3; 2; 3/2; 1; 3/4; 1/2; 3/8; 1/3; 1/4; 316 (3/16); 1/6; 1/8; /12 (1/12); /16 (1/16); /24 (1/24); /32 (1/32); /48 (1/48); /64 (1/64).
+
+[POSITION_LFO]
+Destination: Sample 
+
+Sets the LFO rate for the selected playback type (Wavetable, Granular). Position in respect to the project tempo (BPM).
+
+Values: 128; 96; 64; 48; 32; 24; 16; 12; 8; 6; 4; 3; 2; 3/2; 1; 3/4; 1/2; 3/8; 1/3; 1/4; 316 (3/16); 1/6; 1/8; /12 (1/12); /16 (1/16); /24 (1/24); /32 (1/32); /48 (1/48); /64 (1/64).
+
+[FINETUNE_LFO]
+Destination: Sample 
+
+Sets the LFO rate for instrument Finetune. LFO is synced to project Tempo.
+
+Values: 128; 96; 64; 48; 32; 24; 16; 12; 8; 6; 4; 3; 2; 3/2; 1; 3/4; 1/2; 3/8; 1/3; 1/4; 316 (3/16); 1/6; 1/8; /12 (1/12); /16 (1/16); /24 (1/24); /32 (1/32); /48 (1/48); /64 (1/64).
+
+[OVERDRIVE]
+Destination: Sample 
+
+Sets the amount of Overdrive.
+
+From 0% to 100%.
+
+[OVERDRIVE.SYNTH]
+Destination: Sample 
+
+Sets the amount of instrument Overdrive.
+
+From 0% to 100%.
+
+[FILTER_LOWPASS]
+Destination: Sample 
+
+Sets the cutoff amount of the Low-pass Filter.
+
+From 0% to 100%.
+
+[FILTER_LOWPASS.SYNTH]
+Destination: Sample 
+
+Sets the cutoff amount of the instrument Low-pass Filter.
+
+From 0% to 100%.
+
+[FILTER_BANDPASS]
+Destination: Sample 
+
+Sets the cutoff amount of the Band-pass Filter.
+
+From 0% to 100%.
+
+[FILTER_BANDPASS.SYNTH]
+Destination: Sample 
+
+Sets the cutoff amount of the instrument Band-pass Filter.
+
+From 0% to 100%.
+
+[FILTER_HIGHPASS]
+Destination: Sample 
+
+Sets the cutoff amount of the High-pass Filter.
+
+From 0% to 100%.
+
+[FILTER_HIGHPASS.SYNTH]
+Destination: Sample 
+
+Sets the cutoff amount of the instrument High-pass Filter.
+
+From 0% to 100%.
+
+[DELAY_SEND]
+Destination: Sample 
+
+Sets the amount of Delay send.
+
+From 0% to 100%.
+
+[DELAY_SEND.SYNTH]
+Destination: Sample, Synth 
+
+Sets the amount of Delay send.
+
+From 0% to 100%.
+
+[REVERB_SEND]
+Destination: Sample 
+
+Sets the amount of Reverb send.
+
+From 0% to 100%.
+
+[REVERB_SEND.SYNTH]
+Destination: Sample, Synth 
+
+Sets the amount of Reverb send.
+
+From 0% to 100%.
+
+[BIT_DEPTH]
+Destination: Sample 
+
+Sets the bit depth.
+
+From 4 bits to 16 bits.
+
+[BIT_DEPTH.SYNTH]
+Destination: Sample 
+
+Sets the instrument bit depth.
+
+From 4 bits to 16 bits.
+
+[TUNE]
+Destination: Sample 
+
+Sets the tuning adjustments.
+
+From -24 semitones 
+to 24 semitones.
+
+[TUNE.SYNTH]
+Destination: Sample 
+
+Sets the instrument tuning adjustments.
+
+From -24 semitones 
+to 24 semitones.
+
+[SLIDE_UP]
+Destination: Sample 
+
+Sets the slide up amount in steps of 1/16th a semitone.
+
+From 0 to 255.
+
+[SLIDE_DOWN]
+Destination: Sample 
+
+Sets the slide down amount in steps of 1/16th a semitone.
+
+From 0 to 255.
+
+[AMP_ENV]
+Destination: Sample 
+
+Sets Volume Envelope Attack and Decay/Release times simultaneously.
+
+Value is represented as two hexadecimal digits (AR):
+First digit (A): Attack time (0: 0ms stab .. F: 8s rise).
+Second digit (R): Decay/Release time (0: 0ms .. F: 8s).
+In Wavetable mode, modulates speed and time warp.
+
+[FILTER_ENV]
+Destination: Sample 
+
+Sets Filter Envelope Attack and Decay/Release times simultaneously.
+
+Value is represented as two hexadecimal digits (AR):
+First digit (A): Attack time (0: 0ms stab .. F: 8s rise).
+Second digit (R): Decay/Release time (0: 0ms .. F: 8s).
+In Wavetable mode, modulates filter speed and time warp.
+
+[GRANULAR_LENGTH]
+Destination: Sample 
+
+Sets the Grain Length for an Instrument in Granular Playback mode.
+
+0-50% maps 1ms to 100ms, 50-100% maps 100ms to 1000ms (clamped to sample length).
+
+From 0% to 100%.
+
+[SEND_CC_A]
+Destination: MIDI 
+
+Sends MIDI CC number set to A in MIDI Instrument Parameters.
+
+From 0 to 127.
+
+[SEND_CC_A.SYNTH]
+Destination: MIDI, Synth 
+
+Sends MIDI CC number set to A in MIDI Instrument Parameters.
+
+For Synth instruments sets the Macro 1.
+
+From 0 to 127.
+
+[SEND_CC_B]
+Destination: MIDI 
+
+Sends MIDI CC number set to B in MIDI Instrument Parameters.
+
+From 0 to 127.
+
+[SEND_CC_B.SYNTH]
+Destination: MIDI, Synth 
+
+Sends MIDI CC number set to B in MIDI Instrument Parameters.
+
+For Synth instruments sets the Macro 2.
+
+From 0 to 127.
+
+[SEND_CC_C]
+Destination: MIDI 
+
+Sends MIDI CC number set to C in MIDI Instrument Parameters.
+
+From 0 to 127.
+
+[SEND_CC_C.SYNTH]
+Destination: MIDI, Synth 
+
+Sends MIDI CC number set to C in MIDI Instrument Parameters.
+
+For Synth instruments sets the Macro 3.
+
+From 0 to 127.
+
+[SEND_CC_D]
+Destination: MIDI 
+
+Sends MIDI CC number set to D in MIDI Instrument Parameters.
+
+From 0 to 127.
+
+[SEND_CC_D.SYNTH]
+Destination: MIDI, Synth 
+
+Sends MIDI CC number set to D in MIDI Instrument Parameters.
+
+For Synth instruments sets the Macro 4.
+
+From 0 to 127.
+
+[SEND_CC_E]
+Destination: MIDI 
+
+Sends MIDI CC number set to E in MIDI Instrument Parameters.
+
+From 0 to 127.
+
+[SEND_CC_E.SYNTH]
+Destination: MIDI, Synth 
+
+Sends MIDI CC number set to E in MIDI Instrument Parameters.
+
+For Synth instruments sets the Macro 5.
+
+From 0 to 127.
+
+[SEND_CC_F]
+Destination: MIDI 
+
+Sends MIDI CC number set to F in MIDI Instrument Parameters.
+
+From 0 to 127.
+
+[SEND_CC_F.SYNTH]
+Destination: MIDI, Synth 
+
+Sends MIDI CC number set to F in MIDI Instrument Parameters.
+
+For Synth instruments sets the Macro 6.
+
+From 0 to 127.
+
+[MIDI_CHORD]
+Destination: MIDI 
+
+Sends many MIDI notes or sets up Arp.
+Numbers represent semitones above the base note. For example, C-4 047 will play a major chord: C-4 (base note), E-4 (base+4), and G-4 (base+7).
+Try:
+027: Sus2   057: Sus4
+037: Min    047: Maj
+05C: Open4  07C: Open5
+0379: Min6  037A: Min7
+0479: Maj6  047A: Maj7
+047B: MajMaj7
+After 057B, inversions:
+038: Maj/1st  059: Maj/2nd
+049: Min/1st  058: Min/2nd
+
+[MIDI_CHORD.SYNTH]
+Destination: MIDI, Synth 
+
+Sends many MIDI notes or sets up Arp.
+Numbers represent semitones above the base note. For example, C-4 047 will play a major chord: C-4 (base note), E-4 (base+4), and G-4 (base+7).
+Try:
+027: Sus2   057: Sus4
+037: Min    047: Maj
+05C: Open4  07C: Open5
+0379: Min6  037A: Min7
+0479: Maj6  047A: Maj7
+047B: MajMaj7
+After 057B, inversions:
+038: Maj/1st  059: Maj/2nd
+049: Min/1st  058: Min/2nd
+
+[BREAK_PATTERN]
+Destination: Pattern 
+
+Breaks current pattern playback and jumps to the next pattern.

@@ -74,7 +74,7 @@ All notable changes to the **Polyend Tracker Community Edition (CE)** firmware a
      
 11. **Reactivated Multi-Folder SD Card Image Viewer (All 3 Devices)**
    * Reactivated and expanded the JPEG image viewer under `Config > Info` with three user folders (`Reference`, `Notes`, and `Custom` in `/Images/<Folder>/1.jpg` … `48.jpg`), supporting Left/Right, Jog-wheel, and direct Pad `1–48` selection.
-   * See [`docs/image_viewer.md`](docs/image_viewer.md).
+   * See [`docs/info_viewer.md`](docs/info_viewer.md).
 
 ### Changed & Fixed
 

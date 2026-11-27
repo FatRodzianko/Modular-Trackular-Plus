@@ -52,7 +52,11 @@ COPY_CHECK = "_ZN12cFileManager14isPatternEmptyEh"
 # while playing: with no MIDI and no button pressed, nothing else stops the song there.
 STOP = "_ZN9Sequencer4stopENS_11StopContextE"
 REQUEST = "_ZN12cFileManager20loadWorkspacePatternEh"
+# The load starts in startRequestedPatternLoad once a pattern was asked for. Older builds have the part after
+# its "nothing asked for" return as .part.0; since CE's 1e9a9e5 the whole function is out of line, entered on
+# every update(), so an entry counts only while requestedPattern is set (as .part.0's did).
 LOAD_START = "_ZN12cFileManager25startRequestedPatternLoadEv.part.0"
+LOAD_START_WHOLE = "_ZN12cFileManager25startRequestedPatternLoadEv"
 SWITCH = "_ZN9Sequencer20switchRamPatternsNowEv"
 # The pattern is in memory once the file manager has copied it into the sequencer's spare buffer:
 # preloadedPattern is set when this returns (loadPatternFromWorkspace).
@@ -133,6 +137,19 @@ def copy_returns(sim):
     return found
 
 
+def requested_offset(sim) -> int:
+    """cFileManager::requestedPattern's offset: loadWorkspacePattern(77) on the boot state, then put back"""
+    m, fm = sim.m, sim.syms["newFileManager"]
+    before = bytes(m.read(fm.addr, fm.size))
+    m.call(sim.syms[REQUEST].addr, fm.addr, 77)
+    after = bytes(m.read(fm.addr, fm.size))
+    m.write(fm.addr, before)
+    hits = [i for i in range(fm.size) if after[i] == 77 and before[i] != 77]
+    if len(hits) != 1:
+        raise SystemExit(f"requestedPattern not found in cFileManager: {hits}")
+    return hits[0]
+
+
 def run(args):
     p = Params(seed=args.seed, phase_ns=args.phase_ns)
     p.t_card_call_ns = int(p.t_card_call_ns * args.card_scale)
@@ -153,8 +170,16 @@ def run(args):
         return lambda mm: ev[kind].append(k.now())
     sim.watch(sim.m.addr(PATTERN_UPDATE), lambda mm: screens.__setitem__("pattern", screens["pattern"] + 1))
     sim.watch(sim.m.addr(SONG_UPDATE), lambda mm: screens.__setitem__("song", screens["song"] + 1))
-    for kind, name in (("request", REQUEST), ("load_start", LOAD_START), ("loaded", LOADED), ("switch", SWITCH),
+    load_start = LOAD_START
+    if LOAD_START not in syms and LOAD_START_WHOLE in syms:
+        load_start = None
+        requested = syms["newFileManager"].addr + requested_offset(sim)
+        sim.watch(syms[LOAD_START_WHOLE].addr,
+                  lambda mm: ev["load_start"].append(k.now()) if mm.r8(requested) else None)
+    for kind, name in (("request", REQUEST), ("load_start", load_start), ("loaded", LOADED), ("switch", SWITCH),
                        ("stop", STOP), ("read", TEMP_READ), ("check", COPY_CHECK)):
+        if name is None:
+            continue                                # watched above
         if name not in syms and kind in ("read", "check"):
             continue                                # the mods' readers: not in a reference build
         if name not in syms:

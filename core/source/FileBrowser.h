@@ -10,6 +10,7 @@ enum FileBrowserMode
     kProjectBrowser,
     kModBrowser,
     kSamplesBrowser,
+    kAllFilesBrowser,
 
 };
 

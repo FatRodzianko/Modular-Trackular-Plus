@@ -72,6 +72,7 @@ class cSongEditor : public ModuleBase
     void setDefaultScreenFunct();
 
     void changeSongPositionSelection(int16_t value);
+    void goToSongTop();
     void changeSelectedPlayListPattern(int value);
 
     void readSong();
@@ -118,6 +119,7 @@ class cSongEditor : public ModuleBase
     void startSongPlayer();
     void stopSongPlayer();
     void refreshSongPlayer(uint8_t source);
+    void onMaxTracksChanged(uint8_t maxTracks);
 
     void stopPlayingSelection();
 

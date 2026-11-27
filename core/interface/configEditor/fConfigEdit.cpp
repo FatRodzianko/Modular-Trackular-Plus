@@ -922,7 +922,10 @@ void cConfigEditor::updateFirmware(bool yes)
         processUpdate = 1;
     }
 
+    CE->hidePopout();
     CE->hideConfigList();
+    CE->hideConfigItemLabel();
+    CE->hideConfigItemDesctription();
 
     CE->itemEditorShown = 0;
 
@@ -1039,22 +1042,4 @@ void cConfigEditor::saveConfigToEeprom()
 //==============================================================================================================
 
 //==============================================================================================================
-
-void openManual1Action()
-{
-    uint8_t folderIndex = 0;
-    CE->eventFunct(eventActivateImageViewer, CE, &folderIndex, 0);
-}
-
-void openManual2Action()
-{
-    uint8_t folderIndex = 1;
-    CE->eventFunct(eventActivateImageViewer, CE, &folderIndex, 0);
-}
-
-void openManual3Action()
-{
-    uint8_t folderIndex = 2;
-    CE->eventFunct(eventActivateImageViewer, CE, &folderIndex, 0);
-}
 

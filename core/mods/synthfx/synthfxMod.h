@@ -5,7 +5,7 @@
 // plugin in both slots; two parts can. The slots run on what the part's engine has rendered, in
 // PolySynth::update, before the sends and the fader, so both get the result, and inside CE's
 // synth time budget (its check comes after them). Any engine works, and every engine is a .psyn
-// plugin from /Synths/: CE's (closed, licence section 2(c)) and ours (WAVE, PHASE) alike are only
+// plugin from /System/Synths/: CE's (closed, licence section 2(c)) and ours (WAVE, PHASE) alike are only
 // heard from outside: the slots work on the part's output buffer, never inside an engine.
 //
 // A mono part stays mono until a slot holds a plugin that widens (WIDENS: the Chorus, Flanger and

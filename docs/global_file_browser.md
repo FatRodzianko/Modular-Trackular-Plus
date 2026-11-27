@@ -191,7 +191,8 @@ Pass a `GlobalFileBrowserConfig` struct to `GlobalFileBrowser::open(cfg)` (or `o
 | :--- | :--- | :--- |
 | **Project Open, Save As & MOD/IT Import** | [`core/interface/projectEditor/fProjEdit.cpp`](../core/interface/projectEditor/fProjEdit.cpp) | `kLoadFolderPackage`, `kSaveFolderPackage`, `kLoadGenericFile` (`.mod` / `.it`) |
 | **Synth Patch Load / Save As & Sample Slots** | [`core/interface/instrumentEditor/SynthPatchEditor.cpp`](../core/interface/instrumentEditor/SynthPatchEditor.cpp), [`SynthEditor.cpp`](../core/interface/instrumentEditor/SynthEditor.cpp) | Generic `.patch` load/save with metadata inspector, `onPadEvent` C4 auditioning, voice silencing, and `kLoadWav` for sample-based synth engine slots |
-| **Modular `.ptfx` Effect Loader, File Params & `.ptp` Presets** | [`core/interface/sampleEditor/fSampleEdit.cpp`](../core/interface/sampleEditor/fSampleEdit.cpp) | `kLoadGenericFile` (`.ptfx` plugins from `/Effects` with header inspector via **`Load Effect...`**), `kLoadWav` / `kSaveWav` and `kLoadGenericFile` / `kSaveGenericFile` for `PTFX_PARAM_FILE` / `PTFX_PARAM_SAVE_FILE`, plus `.ptp` preset load/save under `/Effects/Presets/<SanitizedPluginName>/` |
+| **Modular `.ptfx` Effect Loader, File Params & `.ptp` Presets** | [`core/interface/sampleEditor/fSampleEdit.cpp`](../core/interface/sampleEditor/fSampleEdit.cpp) | `kLoadGenericFile` (`.ptfx` plugins from `/System/Effects` with header inspector via **`Load Effect...`**), `kLoadWav` / `kSaveWav` and `kLoadGenericFile` / `kSaveGenericFile` for `PTFX_PARAM_FILE` / `PTFX_PARAM_SAVE_FILE`, plus `.ptp` preset load/save under `/System/Effects/Presets/<SanitizedPluginName>/` |
+| **Instrument Effects — Save `.pti`** | [`core/interface/instrumentEditor/fIinstrEdit.cpp`](../core/interface/instrumentEditor/fIinstrEdit.cpp) | `kSaveGenericFile` (`.pti`, defaulting to `/Instruments`, `contextKey = "save_pti"`) to export the active sample instrument (header, effects/automations, and mono/stereo/streamed PCM audio) anywhere on the SD card |
 
 ---
 
@@ -204,7 +205,7 @@ Pass a `GlobalFileBrowserConfig` struct to `GlobalFileBrowser::open(cfg)` (or `o
 void openIrPicker(ModuleBase* caller) {
     GlobalFileBrowser::loadFile(
         "Load Impulse Response",
-        "/Effects/IRs",
+        "/System/Effects/IRs",
         ".ir",
         caller,
         [](const std::string& fullPath) {
@@ -218,7 +219,7 @@ void openIrPicker(ModuleBase* caller) {
 ```cpp
 GlobalFileBrowser::saveFile(
     "Save Effect Preset",
-    "/Effects/Presets/MyPlugin",
+    "/System/Effects/Presets/MyPlugin",
     "InitPreset",
     ".ptp",
     caller,
@@ -233,7 +234,7 @@ GlobalFileBrowser::saveFile(
 GlobalFileBrowserConfig cfg;
 cfg.mode = GlobalFileBrowserConfig::Mode::kLoadGenericFile;
 cfg.title = "Load Synth Patch";
-cfg.initialDirectory = "/Patches";
+cfg.initialDirectory = "/System/Synths/Patches";
 cfg.extensionFilter = ".patch";
 cfg.contextKey = "synth_patch_load";
 cfg.returnModule = returnMod;

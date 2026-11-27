@@ -9,13 +9,13 @@ Welcome to the official documentation for **Polyend Tracker Community Edition (C
 ## Musician & User Guides
 
 * **[Custom Themes & Fonts (`docs/custom_themes_and_fonts.md`)](custom_themes_and_fonts.md)**
-  * How to install and create custom JSON color themes (`/Themes/*.json`) and custom antialiased bitmap fonts (`/Fonts/*.ptfont`) using the [Web Theme & Font Editor](https://polyend.github.io/tracker-theme-editor/) ([`polyend/tracker-theme-editor`](https://github.com/polyend/tracker-theme-editor)), plus full color key reference tables.
+  * How to install and create custom JSON color themes (`/System/Themes/*.json`) and custom antialiased bitmap fonts (`/System/Fonts/*.ptfont`) using the [Web Theme & Font Editor](https://polyend.github.io/tracker-theme-editor/) ([`polyend/tracker-theme-editor`](https://github.com/polyend/tracker-theme-editor)), plus full color key reference tables.
 * **[Wavetable Envelopes, LFOs & Step FX (`docs/wavetable_envelopes.md`)](wavetable_envelopes.md)**
-  * Complete guide to the 256-shape `WT Env` and `WT LFO` instrument modulators, dual-axis `Warp X/Y` shaping, `w` / `y` pattern step FX, and loading custom `.wav` contours from `/Envelopes/`.
+  * Complete guide to the 256-shape `WT Env` and `WT LFO` instrument modulators, dual-axis `Warp X/Y` shaping, `w` / `y` pattern step FX, and loading custom `.wav` contours from `/System/Envelopes/`.
 * **[Modular Sample Editor Effects - User & Architecture Guide (`docs/modular_effects_system.md`)](modular_effects_system.md)**
-  * Overview of hot-loadable `.ptfx` Sample Editor effects and generators (`/Effects/*.ptfx`), bundled reference plugins, and hardware memory/cache architecture.
-* **[SD Card Image Viewer (`docs/image_viewer.md`)](image_viewer.md)**
-  * How to prepare and view up to 48 baseline JPEGs (`800 × 390` px) per folder in `/Images/Reference/`, `/Images/Notes/`, and `/Images/Custom/` under `Config > Info`.
+  * Overview of hot-loadable `.ptfx` Sample Editor effects and generators (`/System/Effects/*.ptfx`), bundled reference plugins, and hardware memory/cache architecture.
+* **[File Manager & Built-In File Viewer (`docs/info_viewer.md`)](info_viewer.md)**
+  * Commander-style 2-pane SD card File Manager (`File → File Manager`) with copy/move/rename/delete/mkdir/WAV preview, configurable confirmation modes (`Config → General → File Manager`), integrated Baseline JPEG (`800 × 390` px) & scrollable text viewer (up to `128 KB`), and inline `Config → Info` (`/System/info.txt`).
 
 ---
 
@@ -28,7 +28,7 @@ Welcome to the official documentation for **Polyend Tracker Community Edition (C
 * **[Global File Browser Developer Guide (`docs/global_file_browser.md`)](global_file_browser.md)**
   * Unified SD-card file, `.wav`, and package-folder browser (`GlobalFileBrowser`), 6 operation modes, one-call helpers, `GlobalFileBrowserConfig` inspector/audition/delete hooks, `Left`-arrow jump-to-top, and scratch-buffer + FatFs handle safety rules.
 * **[Custom Synth Engine & `.psyn` Plugin SDK (`docs/custom_synth_sdk.md`)](custom_synth_sdk.md)**
-  * Complete developer guide (`synth-plugin-sdk/` + `synth/include/PolySynth/sdk/`) for building cross-device loadable `.psyn` synth engines (`/Synths/*.psyn`), sample-based `SampleSlot` engines (`/SynthSamples/<CODE_NAME>/`), `PsynHostApi` direct SD/WAV I/O, and `GlobalFileBrowser` patch/sample workflows.
+  * Complete developer guide (`synth-plugin-sdk/` + `synth/include/PolySynth/sdk/`) for building cross-device loadable `.psyn` synth engines (`/System/Synths/*.psyn`), sample-based `SampleSlot` engines (`/System/Synths/Samples/<CODE_NAME>/`), `PsynHostApi` direct SD/WAV I/O, and `GlobalFileBrowser` patch/sample workflows.
 * **[Modular Sample Editor Effects & `.ptfx` Developer SDK (`docs/modular_effects_system.md`)](modular_effects_system.md)**
   * Complete C/C++ developer guide (`editor-fx-sdk/`), `PTFX_PARAM_FILE` / `PTFX_PARAM_SAVE_FILE`, `PtfxHostApi` SD & secondary WAV I/O, 472-byte `PtfxHeader` binary spec, and automatic `.ptp` effect presets across all 3 Tracker devices.
 * **[Repository README - Build Instructions & PR Guidelines (`README.md`)](../README.md)**
@@ -39,7 +39,7 @@ Welcome to the official documentation for **Polyend Tracker Community Edition (C
 ## Polyend Tracker Open-Source Ecosystem
 
 * **[`polyend/tracker-ce`](https://github.com/polyend/tracker-ce)** - Polyend Tracker Community Edition firmware, Open Synth SDK, and `.ptfx` Sample Editor Effects SDK.
-* **[`polyend/tracker-theme-editor`](https://github.com/polyend/tracker-theme-editor)** ([Live Web App](https://polyend.github.io/tracker-theme-editor/)) - Visual browser-based Theme Editor (`/Themes/*.json`) and Font Editor (TTF/OTF to `/Fonts/*.ptfont`).
+* **[`polyend/tracker-theme-editor`](https://github.com/polyend/tracker-theme-editor)** ([Live Web App](https://polyend.github.io/tracker-theme-editor/)) - Visual browser-based Theme Editor (`/System/Themes/*.json`) and Font Editor (TTF/OTF to `/System/Fonts/*.ptfont`).
 * **[`polyend/tracker-lib`](https://github.com/polyend/tracker-lib)** - Open-source library for reading, writing, and inspecting Polyend Tracker project (`.mt`), pattern (`.mtp`), and instrument (`.pti`) files.
 * **[Polyend Backstage Forum](https://backstage.polyend.com/)** - Community discussions, custom themes, fonts, and plugins.
 * **[The Tracker Overflow (Discord)](https://discord.com/invite/uEPTnwckJV)** - Unofficial Polyend Tracker Discord where users and developers can join and find like-minded people.

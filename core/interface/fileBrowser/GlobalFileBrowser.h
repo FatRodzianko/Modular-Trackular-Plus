@@ -25,7 +25,7 @@ struct GlobalFileBrowserConfig
 
     Mode mode = Mode::kLoadWav;
     std::string title = "Load File";
-    std::string initialDirectory = "/Samples";
+    std::string initialDirectory = "/";
     std::string defaultFileName = "sample";
     std::string extensionFilter = ".wav";
     ModuleBase* returnModule = nullptr;

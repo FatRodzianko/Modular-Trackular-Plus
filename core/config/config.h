@@ -30,8 +30,6 @@ static constexpr int kSynthMaxVoices = 8;
 static constexpr int kSynthCCs = 8;
 static constexpr int kSends = 2;
 
-const char* const kPatchesFolder = "Patches";
 const char* const kWorkspaceFolder = "Workspace";
-const char* const kSynthsFolder = "Synths";
 
 #endif /* CONFIG_CONFIG_H_ */

@@ -128,6 +128,7 @@ class UsbMidi : public Midi
         void (*noteOff)(uint8_t, uint8_t, uint8_t);
         void (*songPosition)(uint16_t);
         void (*controlChange)(uint8_t, uint8_t, uint8_t);
+        void (*programChange)(uint8_t, uint8_t);
     };
 
     virtual void setReceiveActions(MidiReceiveActions* receiveActions) = 0;
@@ -146,6 +147,7 @@ class UartMidi : public Midi
         void (*songPosition)(unsigned);
         void (*continueMessage)(void);
         void (*controlChange)(uint8_t, uint8_t, uint8_t);
+        void (*programChange)(uint8_t, uint8_t);
     };
     virtual void init() = 0;
     virtual void setReceiveActions(MidiReceiveActions* receiveActions) = 0;
@@ -334,7 +336,6 @@ class FileSystem
         enListFileFilter_wave_inst,
         enListFileFilter_firmware,
         enListFileFilter_mod,
-        enListFileFilter_game,
     };
 
     enum FileOpenMode
@@ -399,10 +400,7 @@ class FileSystem
                                 char** list,
                                 uint8_t list_length,
                                 uint16_t max_used_memory,
-                                enListFileFilter filter = enListFileFilter_all,
-                                uint16_t skip_count = 0,
-                                uint16_t max_files_in_subdir = 0,
-                                enListFileFilter folderSizeFilter = enListFileFilter_all) = 0;
+                                enListFileFilter filter = enListFileFilter_all) = 0;
 
     virtual void listDirContents(const char* dirpath,
                                  DirContentType contentType,

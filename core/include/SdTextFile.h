@@ -58,6 +58,24 @@ bool readRandomWord(FileSystem* fs,
                     uint32_t seed,
                     char* outWord,
                     size_t maxLen);
+
+/**
+ * @brief Stream an INI-style `[key]` section from a text file on SD into outBuf using a small
+ *        stack buffer (0 B permanent RAM). Ignores `#` comment lines and `\r`, preserves
+ *        multi-line paragraphs and internal blank lines, trims trailing blank lines, and always
+ *        NUL-terminates outBuf.
+ * @return true if the section was found and produced at least 1 character.
+ */
+bool readSection(FileSystem* fs,
+                 const char* path,
+                 const char* key,
+                 char* outBuf,
+                 size_t outSize);
+
+/**
+ * @brief Remove all '\r' characters in-place from a NUL-terminated string.
+ */
+void stripCr(char* buf);
 } // namespace SdTextFile
 
 #endif /* INCLUDE_SDTEXTFILE_H_ */

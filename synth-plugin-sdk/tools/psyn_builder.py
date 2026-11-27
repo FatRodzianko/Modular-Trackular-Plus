@@ -71,6 +71,7 @@ def parse_elf_and_pack(
     has_sample_slots: int = 0,
     supports_idle_sleep: int = 0,
     has_voice_tick_idle: int = 0,
+    has_randomize_patch: int = 0,
 ) -> None:
     with open(elf_path, "rb") as f:
         elf = f.read()
@@ -279,6 +280,7 @@ def parse_elf_and_pack(
         (0x0001 if has_sample_slots else 0)
         | (0x0002 if supports_idle_sleep else 0)
         | (0x0004 if has_voice_tick_idle else 0)
+        | (0x0008 if has_randomize_patch else 0)
     )
     header = struct.pack(
         "<IHHHH8s24s16sBBBBIIIIIIII8I",
@@ -347,6 +349,12 @@ def main() -> None:
         default=0,
         help="1 if PsynPluginApi appends voice_tick_idle",
     )
+    parser.add_argument(
+        "--has-randomize-patch",
+        type=int,
+        default=0,
+        help="1 if PsynPluginApi appends randomize_patch",
+    )
     args = parser.parse_args()
 
     patch_folder = args.patch_folder if args.patch_folder else args.code_name
@@ -365,6 +373,7 @@ def main() -> None:
         has_sample_slots=args.has_sample_slots,
         supports_idle_sleep=args.supports_idle_sleep,
         has_voice_tick_idle=args.has_voice_tick_idle,
+        has_randomize_patch=args.has_randomize_patch,
     )
 
 

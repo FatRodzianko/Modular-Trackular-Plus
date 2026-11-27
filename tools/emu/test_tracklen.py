@@ -44,7 +44,7 @@ from unicorn.arm_const import UC_ARM_REG_S0
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from machine import Machine  # noqa: E402
 from test_step0 import FakeSd, menu_item_named  # noqa: E402
-from test_swing import Projects, QUIET, f32  # noqa: E402
+from test_swing import Projects, f32, quiet  # noqa: E402
 
 TRACKLEN_ID = 12
 RECORD_ID = TRACKLEN_ID + 1
@@ -92,7 +92,7 @@ class Rig:
         self.mods = "_ZN4mods8switchesE" in m.elf.symbols
         self.project = m.addr("mtProject")
 
-        for name in QUIET:
+        for name in quiet(m):
             if "sendNoteOff" not in name:
                 m.stub_function(m.addr(name), lambda mm: 0)
         m.stub_function(m.addr("_ZN9Sequencer10sendNoteOnEhPNS_9strPlayer14strPlayerTrack11strSendStepE"), self._on)

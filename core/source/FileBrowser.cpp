@@ -36,33 +36,62 @@ void FileBrowser::refresh()
     }
 
     int listNamesLen = listNamesOffset;
+    int folderBytesUsed = 0;
 
-    if (data->mode == kProjectBrowser || data->mode == kSamplesBrowser || data->mode == kModBrowser)
+    if (data->mode == kProjectBrowser || data->mode == kSamplesBrowser || data->mode == kModBrowser ||
+        data->mode == kAllFilesBrowser)
     {
-        if (folderList != nullptr)
-        {
-            delete[] folderList;
-            folderList = nullptr;
-        }
-
         folderListLength = data->maxBrowserListLen - listNamesOffset;
-        folderList = new char*[folderListLength];
+        char** folderOut = &data->browserList[listNamesLen];
 
+        const bool showAll = (data->mode == kAllFilesBrowser);
+        const bool atRoot = isRoot();
         fileSystem->listDirContents(
           data->currentPath,
           FileSystem::DirContentType::kFolders,
-          [](const char* name)
-          { return name != nullptr && name[0] != '.' && strcasecmp(name, "workspace") != 0; },
+          [showAll, atRoot](const char* name)
+          {
+              if (name == nullptr || name[0] == '\0')
+              {
+                  return false;
+              }
+              if (showAll)
+              {
+                  if (atRoot)
+                  {
+                      if (strcasecmp(name, "System Volume Information") == 0)
+                      {
+                          return false;
+                      }
+                      if (name[0] == '.' && strcasecmp(name, ".system") != 0)
+                      {
+                          return false;
+                      }
+                  }
+                  return strcmp(name, ".") != 0 && strcmp(name, "..") != 0;
+              }
+              return name[0] != '.' && strcasecmp(name, "workspace") != 0;
+          },
           data->fileNamesBuffer,
           data->fileNamesBufferSize,
           kMaxFileNameLen,
           folderListLength,
-          folderList);
+          folderOut);
+
+        for (int i = 0; i < folderListLength; ++i)
+        {
+            int endOff =
+              static_cast<int>((folderOut[i] - data->fileNamesBuffer) + strlen(folderOut[i]) + 1);
+            if (endOff > folderBytesUsed)
+            {
+                folderBytesUsed = endOff;
+            }
+        }
 
         if (folderListLength > 1)
         {
-            std::sort(folderList,
-                      folderList + folderListLength,
+            std::sort(folderOut,
+                      folderOut + folderListLength,
                       [](const char* a, const char* b) { return strcasecmp(a, b) < 0; });
         }
 
@@ -83,68 +112,77 @@ void FileBrowser::refresh()
                 for (int folder = 0; folder < folderListLength; folder++)
                 {
                     snprintf(
-                      path, dstSize, "%s%s/%s", data->currentPath, folderList[folder], marker);
+                      path, dstSize, "%s%s/%s", data->currentPath, folderOut[folder], marker);
                     data->selectionList[selectionIdx++] = fileSystem->exists(path) ? 1 : 0;
                 }
             }
         }
-
-        memcpy(
-          &data->browserList[listNamesLen], folderList, folderListLength * sizeof(folderList[0]));
-
-        delete[] folderList;
-        folderList = nullptr;
 
         // add valid folders
         listNamesLen += folderListLength;
         assert(listNamesLen <= data->maxBrowserListLen);
     }
 
-    if (data->mode == kSamplesBrowser || data->mode == kModBrowser)
+    if (data->mode == kSamplesBrowser || data->mode == kModBrowser ||
+        data->mode == kAllFilesBrowser)
     {
-        if (fileList != nullptr)
+        fileListLength = data->maxBrowserListLen - listNamesLen;
+        char** fileOut = &data->browserList[listNamesLen];
+        int remainingBytes = data->fileNamesBufferSize - folderBytesUsed;
+
+        if (fileListLength > 0 && remainingBytes > 0)
         {
-            delete[] fileList;
-            fileList = nullptr;
-        }
-
-        fileListLength = data->maxBrowserListLen - folderListLength - listNamesOffset;
-        fileList = new char*[fileListLength];
-
-        fileSystem->listDirContents(
-          data->currentPath,
-          FileSystem::DirContentType::kFiles,
-          [&](const char* name) mutable
-          {
-              if (name == nullptr || name[0] == '.')
+            fileSystem->listDirContents(
+              data->currentPath,
+              FileSystem::DirContentType::kFiles,
+              [&](const char* name) mutable
               {
-                  return false;
-              }
-              if (data->mode == kSamplesBrowser)
-              {
-                  if (data->customExtension != nullptr)
+                  if (name == nullptr || name[0] == '\0')
                   {
-                      return checkFilenameExtension(name, data->customExtension);
+                      return false;
                   }
-                  return checkFilenameExtension(name, kWavFileExtension);
-              }
-              if (data->mode == kModBrowser)
-              {
-                  return checkFilenameExtension(name, kModFileExtension1) ||
-                         checkFilenameExtension(name, kModFileExtension2);
-              }
-              return false;
-          },
-          data->fileNamesBuffer + (data->maxFileNameLen * folderListLength),
-          data->fileNamesBufferSize - (data->maxFileNameLen * folderListLength),
-          kMaxFileNameLen,
-          fileListLength,
-          fileList);
+                  if (data->mode == kAllFilesBrowser)
+                  {
+                      if (isRoot() && name[0] == '.')
+                      {
+                          return false;
+                      }
+                      return strcmp(name, ".") != 0 && strcmp(name, "..") != 0;
+                  }
+                  if (name[0] == '.')
+                  {
+                      return false;
+                  }
+                  if (data->mode == kSamplesBrowser)
+                  {
+                      if (data->customExtension != nullptr)
+                      {
+                          return checkFilenameExtension(name, data->customExtension);
+                      }
+                      return checkFilenameExtension(name, kWavFileExtension);
+                  }
+                  if (data->mode == kModBrowser)
+                  {
+                      return checkFilenameExtension(name, kModFileExtension1) ||
+                             checkFilenameExtension(name, kModFileExtension2);
+                  }
+                  return false;
+              },
+              data->fileNamesBuffer + folderBytesUsed,
+              remainingBytes,
+              kMaxFileNameLen,
+              fileListLength,
+              fileOut);
+        }
+        else
+        {
+            fileListLength = 0;
+        }
 
         if (fileListLength > 1)
         {
-            std::sort(fileList,
-                      fileList + fileListLength,
+            std::sort(fileOut,
+                      fileOut + fileListLength,
                       [](const char* a, const char* b) { return strcasecmp(a, b) < 0; });
         }
 
@@ -162,11 +200,6 @@ void FileBrowser::refresh()
                 }
             }
         }
-
-        memcpy(&data->browserList[listNamesLen], fileList, fileListLength * sizeof(fileList[0]));
-
-        delete[] fileList;
-        fileList = nullptr;
 
         // add valid files
         listNamesLen += fileListLength;

@@ -4,7 +4,7 @@ A Synth FX plugin is an effect for the synth parts, in a file on the card. Each 
 two effect slots, FX1 and FX2, and each slot runs one plugin from `/SynthFX/`. The firmware
 loads the plugin's code into its own memory and runs it in the audio interrupt, once per block
 of 128 samples, on the part's audio. It works on every synth engine: the `.psyn` engines in
-`/Synths/`, CE's and Modular-Trackular Plus's WAVE and PHASE alike.
+`/System/Synths/`, CE's and Modular-Trackular Plus's WAVE and PHASE alike.
 
 Plugins run only on the Modular-Trackular Plus firmware with the Synth FX mod on. Stock CE
 doesn't load `.ptsfx` files.
@@ -580,7 +580,7 @@ is in the last column; its guide says why it differs.
 | | `.psyn` (CE) | `.ptfx` (CE) | `.ptsfx` (Synth FX) | `.ptmfx` (Master FX) |
 | :--- | :--- | :--- | :--- | :--- |
 | What it is | a synth engine | an offline sample-editor effect | a real-time effect on a synth part | a master reverb, delay or dynamics effect |
-| Card folder | `/Synths/` | `/Effects/` | `/SynthFX/` | `/MasterFX/` |
+| Card folder | `/System/Synths/` | `/System/Effects/` | `/SynthFX/` | `/MasterFX/` |
 | Header | 128 bytes, magic and API version | 472 bytes, magic and version | 476 bytes, magic and version | 240 bytes, magic and version |
 | Host table | `PsynHostApi` (versioned) | `PtfxHostApi` | `PtsfxHost` (versioned) | `PtmfxHost` (versioned) |
 | Code | relocated ELF (ABS32, MOVW/MOVT), `.data`/`.bss` and constructors allowed | position-independent | position-independent, no `.data`/`.bss` | position-independent, no `.data`/`.bss`, up to 8 KB |
@@ -592,7 +592,7 @@ is in the last column; its guide says why it differs.
 | Guards | CE's 2.1 ms synth limit | none needed (main loop) | time, output and start marker, inside CE's limit | time, output and start marker |
 | File I/O for the plugin | `read_file`, `load_wav_file` (outside the audio thread) | file parameters | none | none |
 | Builder | `psyn_builder.py` from an ELF | `ptfx_builder.py` | `ptsfx_builder.py` (from `ptfx_builder.py`) | `ptmfx_builder.py` (from `ptsfx_builder.py`) |
-| Shipped | CE's `polyend-tracker-ce-sd-card` build and `PolyendTracker_CE_Synths.zip` | CE's `polyend-tracker-ce-sd-card` build and `PolyendTracker_CE_Effects.zip` | the default pack is in the firmware, written when missing or as an older release shipped it | the default pack is in the firmware, written when missing or as an older release shipped it |
+| Shipped | CE's `polyend-tracker-ce-sd-card` build and `PolyendTracker_CE_SD_Card.zip` | CE's `polyend-tracker-ce-sd-card` build and `PolyendTracker_CE_SD_Card.zip` | the default pack is in the firmware, written when missing or as an older release shipped it | the default pack is in the firmware, written when missing or as an older release shipped it |
 
 Why the differences:
 

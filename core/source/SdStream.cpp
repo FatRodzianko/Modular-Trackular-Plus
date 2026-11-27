@@ -4,6 +4,7 @@
 #include "interruptsControl.h"
 #include "log.h"
 #include "string.h"
+#include "util_string.h"
 #include "wavHeaderReader.h"
 #include <algorithm>
 #include <cstring>
@@ -158,12 +159,7 @@ bool SdStream::handleFileDecapsulation(const char* path,
                                        uint32_t* endPosition,
                                        uint8_t* fileType)
 {
-    uint32_t pathLength = strlen(path);
-
-    if (((path[pathLength - 1] == 'V') || (path[pathLength - 1] == 'v')) &&
-        ((path[pathLength - 2] == 'A') || (path[pathLength - 2] == 'a')) &&
-        ((path[pathLength - 3] == 'W') || (path[pathLength - 3] == 'w')) &&
-        (path[pathLength - 4] == '.'))
+    if (hasFileExtension(path, "wav"))
     {
         if (!readHeader(header, wavfile))
         {
@@ -198,10 +194,7 @@ bool SdStream::handleFileDecapsulation(const char* path,
             return true;
         }
     }
-    else if (((path[pathLength - 1] == 'i') || (path[pathLength - 1] == 'I')) &&
-             ((path[pathLength - 2] == 't') || (path[pathLength - 2] == 'T')) &&
-             ((path[pathLength - 3] == 'p') || (path[pathLength - 3] == 'P')) &&
-             (path[pathLength - 4] == '.'))
+    else if (hasFileExtension(path, "pti"))
     {
         uint32_t fileSize = fileSystem->getFileSize(wavfile);
         strInstrumentFile instrFile;

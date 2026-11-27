@@ -6,9 +6,11 @@ from core/include/Platform.h. Notes go in through Synth's public calls, and audi
 audioEngine::updateAudioBuffers, the interrupt's own entry. See docs/mt/SOUND_TEST_PLAN.md.
 
 Since CE's plugin synths the synth host (libPolySynth.a, built from synth/source) is CE's open code,
-and the engines are .psyn plugins on the card: this rig puts CE's on the fake card's /Synths/
+and the engines are .psyn plugins on the card: this rig puts CE's on the fake card's /System/Synths/
 (build/Synths from `make psyn`: the factory ones from synth/prebuilt and CHIP), and Synth::init loads
-them as the firmware does. The factory .psyn files are a black box (their licence, section 2(c)):
+them as the firmware does. Since CE's 94cdc96 Synth::init reads SdPaths::synthsDir(): /System/Synths
+once the card has a /System folder (SdPaths.cpp, resolveIfNeeded). Firmwares from before it, the
+--before baselines, read /Synths, so the engines are in both, as on a card copied for both. The factory .psyn files are a black box (their licence, section 2(c)):
 they run, and what comes out can be compared between our builds, nothing more. PsynLoader relocates
 them into the synth's pool (s_psynRamPool, Synth.cpp), so the guard is that pool's range: the
 helpers refuse any hook in it, and nothing is read from it. If something fails inside one, stop and
@@ -33,17 +35,19 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from machine import Machine, SCRATCH  # noqa: E402
-from test_step0 import FakeSd  # noqa: E402
+from test_step0 import FakeSd, card_path  # noqa: E402
 from unicorn import UC_HOOK_CODE  # noqa: E402
 from unicorn.arm_const import UC_ARM_REG_S0  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
-SYNTHS = REPO / "build" / "Synths"           # `make psyn`
+SYNTHS = REPO / "build" / "Synths"           # a copy of `make psyn`'s build/System/Synths
 OWN_PSYN_BUILD = REPO / "core" / "mods" / "synths" / "psyn" / "build"
 SYNTHS_FALLBACK = (REPO / "synth" / "prebuilt", REPO / "synth-plugin-sdk" / "build", OWN_PSYN_BUILD)
 FACTORY_SYNTHS = ("ACD", "DIRT", "FAT", "PERC", "VAP", "WTFM")  # synth/prebuilt; CE dropped GRAIN (CE 26baedf)
 OWN_SYNTHS = ("WAVE", "PHASE", "DCO6")        # ours, open: core/mods/synths/psyn
 PSYN_HEADER = 128
+# The card's engine folders: CE's since 94cdc96 (SdPaths::synthsDir) and the one before it
+SYNTH_DIRS = ("System/Synths", "Synths")
 HEAP_SIZE = 138_752                 # CE's fixed heap; a build's own is in its ELF (heap_size)
 BLOCK = 128
 BLOCK_MS = 3                        # the fake clock's step per block: 128 samples at 44.1 kHz
@@ -125,8 +129,9 @@ class PsynCard(FakeSd):
         buf, n, h = self.m.arg(1), self.m.arg(2), self.m.arg(3)
         path, _mode, pos = self.handles[h]
         got = super().read_file()
-        if path.startswith("/Synths/") and pos == PSYN_HEADER:
-            self.on_image(path[len("/Synths/"):], buf, got)
+        folder, _, name = card_path(path).rpartition("/")
+        if folder in SYNTH_DIRS and pos == PSYN_HEADER:
+            self.on_image(name, buf, got)
         return got
 
 
@@ -247,10 +252,12 @@ class SoundRig:
         self._fake_timer()
         self._run_static_constructors()
         self.sd = PsynCard(m, self._image_read)
-        self.sd.dirs.add("/Synths")
+        for folder in ("System",) + SYNTH_DIRS:
+            self.sd.dirs.add(folder)
         self.own = {}
         for name, data in synth_files().items():    # CE's engines and ours, as on a card with its Synths folder
-            self.sd.files[f"/Synths/{name}"] = data
+            for folder in SYNTH_DIRS:
+                self.sd.files[f"{folder}/{name}"] = data
             if name[:-len(".psyn")] in OWN_SYNTHS:
                 self.own[name[:-len(".psyn")]] = OwnEngine(name[:-len(".psyn")], data)
         self._fake_platform()

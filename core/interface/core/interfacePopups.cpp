@@ -892,7 +892,7 @@ void InterfacePopups::changeStepPopupValue(int16_t value, InterfacePopups::Popup
 
 void InterfacePopups::refreshFxDescription()
 {
-    display.setControlValue(textBox, 10);
+    display.setControlValue(textBox, 3);
     display.setControlText(textBox, interfaceGlobals.fxDescPtr(selectedActualItem));
     // display.setControlShow(textBox);
     display.refreshControl(textBox);
@@ -1388,6 +1388,12 @@ void InterfacePopups::showProgressPopup(const char* text)
     display.setControlValue(progressBar, 0);
 
     display.synchronizeRefresh();
+}
+
+void InterfacePopups::setProgressPopupText(const char* text)
+{
+    textLines[0] = (char*)text;
+    display.refreshControl(textPopup);
 }
 
 void InterfacePopups::changePopupProgress(int8_t value)

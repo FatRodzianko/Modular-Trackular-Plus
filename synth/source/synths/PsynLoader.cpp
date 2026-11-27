@@ -190,6 +190,7 @@ struct PluginRecord
     bool hasSampleSlots = false;
     bool supportsIdleSleep = false;
     bool hasVoiceTickIdle = false;
+    bool hasRandomizePatch = false;
     bool metadataPrimedOnce = false;
     int index = -1;
     int typeId = 0;
@@ -1978,6 +1979,7 @@ void PsynLoader::scanAndRegister(FileSystem& synthsFs,
         rec.supportsIdleSleep = ((hdr.flags & PSYN_FLAG_SUPPORTS_IDLE_SLEEP) != 0) ||
                                 isKnownStockIdleSleepSynth(hdr.code_name);
         rec.hasVoiceTickIdle = ((hdr.flags & PSYN_FLAG_HAS_VOICE_TICK_IDLE) != 0);
+        rec.hasRandomizePatch = ((hdr.flags & PSYN_FLAG_HAS_RANDOMIZE_PATCH) != 0);
         rec.index = pluginIdx;
         rec.typeId = assignedId;
         std::strncpy(rec.filename, fname.c_str(), sizeof(rec.filename) - 1);
@@ -2037,6 +2039,51 @@ void PsynLoader::setSamplesFileSystem(FileSystem& samplesFs)
             ensurePluginSampleFolder(s_plugins[i]);
         }
     }
+}
+
+bool PsynLoader::supportsRandomizePatch(int typeId)
+{
+    for (size_t i = 0; i < s_pluginCount; ++i)
+    {
+        const auto& rec = s_plugins[i];
+        if (rec.valid && rec.typeId == typeId)
+        {
+            if (!rec.hasRandomizePatch)
+            {
+                return false;
+            }
+            if (rec.pluginApi != nullptr)
+            {
+                return rec.pluginApi->randomize_patch != nullptr;
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+bool PsynLoader::randomizePatch(int typeId, Patch& patch, uint32_t seed)
+{
+    for (size_t i = 0; i < s_pluginCount; ++i)
+    {
+        auto& rec = s_plugins[i];
+        if (rec.valid && rec.typeId == typeId)
+        {
+            if (!rec.hasRandomizePatch)
+            {
+                return false;
+            }
+            const PsynPluginApi* api = rec.pluginApi;
+            if (api == nullptr || api->randomize_patch == nullptr)
+            {
+                return false;
+            }
+            ScopedPluginContext pluginScope(&rec);
+            api->randomize_patch(&patch, seed);
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace polysynth

@@ -1,0 +1,17 @@
+Polyend Tracker Community Edition (CE)
+Licensed under the MIT License
+(No Wholesale Commercial Clones; see LICENSE).
+
+All provided demo projects & samples are under CC BY-NC 4.0 license.
+
+Find out more at: github.com/polyend/tracker-ce
+
+
+
+
+
+
+
+
+
+Sandroid sends his love to all the contributors <3

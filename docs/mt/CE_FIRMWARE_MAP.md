@@ -254,17 +254,17 @@ in file-transfer mode. `handleFileTransferMode` swaps the class and resets the b
 
 ## 15. Memory budget
 
-Exact, from the ELF, with `tools/mem_budget.py`, on the merge of CE `cf8bd7b` into `modular`
-(Synths 1.1, the heap trim below), 2026-11-20. "Mods" is the release mod build, every mod in, with the 1 MiB
+Exact, from the ELF, with `tools/mem_budget.py`, on the merge of CE `1e9a9e5` into `modular`
+(Synths 1.1, Resample 1.0, the heap trim below), 2026-11-26. "Mods" is the release mod build, every mod in, with the 1 MiB
 taken from sample memory.
 
 | Region | Size | Plain CE free | Mods free | Floor | Notes |
 | --- | --- | --- | --- | --- | --- |
-| Flash | 16,580,608 | 15,249,820 | 15,101,340 | 1 MiB | 1.2.0 images up to 8 MB flashed whole; CE 422e0ed's fmt without `std::locale` freed about 125 KB |
-| ITCM | 131,064 | 68,176 | 37,984 | 1,024 | closed libs, audio code, masterfx's 5,584 |
-| DTCM unreserved | gap | 14,868 | 8,872 | 4,096 | heap end to stack base; 8,936 before CE cf8bd7b (the file browser's 64-byte `deleteDeniedText`), 4,616 before CE 422e0ed (its fmt build without `std::locale` gave back 4,320), 5,152 before CE 922bba0 (its stereo mirror in each voice and the menus' vectors took 536), 4,128 before the trim; the recorder (diag) build has 7,352 |
+| Flash | 16,580,608 | 15,263,200 | 15,109,728 | 1 MiB | 1.2.0 images up to 8 MB flashed whole; CE 422e0ed's fmt without `std::locale` freed about 125 KB |
+| ITCM | 131,064 | 67,800 | 37,568 | 1,024 | closed libs, audio code, masterfx's 5,584 |
+| DTCM unreserved | gap | 13,460 | 6,944 | 4,096 | heap end to stack base; 8,352 before CE 1e9a9e5 (its File Manager module's 1,084 and the info viewer's 616, less the image viewer's 220 and the file manager's 272), 8,872 before Resample 1.0, 8,936 before CE cf8bd7b (the file browser's 64-byte `deleteDeniedText`), 4,616 before CE 422e0ed (its fmt build without `std::locale` gave back 4,320), 5,152 before CE 922bba0 (its stereo mirror in each voice and the menus' vectors took 536), 4,128 before the trim; the recorder (diag) build has 5,416 |
 | OCRAM | 32,768 | 9,556 | 9,556 | 1,024 | mods stay out |
-| SDRAM unreserved | 67,108,864 | 21,048 | 610,824 | 256 KiB | the pool takes all the rest in plain CE |
+| SDRAM unreserved | 67,108,864 | 15,428 | 605,236 | 256 KiB | the pool takes all the rest in plain CE |
 
 **Heap trim (mods builds only).** `platforms/imx/makefile` passes `--defsym=_MtHeapTrim=0x400` to
 the link of a Tracker+ build without `MT_NO_MODS` (the same rule as `core/mods/modsBuild.h`), and

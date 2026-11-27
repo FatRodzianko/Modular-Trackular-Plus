@@ -75,6 +75,16 @@ QUIET = [
     "_ZN9Interface29isPerformanceModeScreenActiveEv",
 ]
 
+# Since CE's 6ff1eaa, GCC inlines stopAllOpenNotes into its callers in the no-mods image, so it has no
+# symbol there. The inlined loop calls stopOpenNoteOnTrack for each track, which only sends note-offs
+# (sendNoteOff, stubbed here) and clears liveRecHeldNotesCount, so it is quiet without the stub.
+MAY_BE_INLINED = {"_ZN9Sequencer16stopAllOpenNotesEv"}
+
+
+def quiet(m) -> list:
+    """QUIET's names that `m` has: all of them, but one that GCC may inline"""
+    return [name for name in QUIET if name in m.elf.symbols or name not in MAY_BE_INLINED]
+
 failures = 0
 
 
@@ -103,7 +113,7 @@ class Rig:
         self.muted: set[int] = set()
         self.next_pattern_index = 2
 
-        for name in QUIET:
+        for name in quiet(m):
             m.stub_function(m.addr(name), lambda mm: 0)
         m.stub_function(m.addr("_ZN9Sequencer10sendNoteOnEhPNS_9strPlayer14strPlayerTrack11strSendStepE"), self._note)
         m.stub_function(m.sym("_ZN9Sequencer18isTrackEngineMutedEh").addr,

@@ -47,6 +47,7 @@ $(BUILD_DIR)/CHIP.elf: $(SDK_DIR)/engines/chip.cpp $(SDK_DIR)/include/psyn/psyn_
 HAS_SAMPLE_SLOTS ?= 0
 SUPPORTS_IDLE_SLEEP ?= 1
 HAS_VOICE_TICK_IDLE ?= 1
+HAS_RANDOMIZE_PATCH ?= 1
 
 $(BUILD_DIR)/CHIP.psyn: $(BUILD_DIR)/CHIP.elf $(SDK_DIR)/tools/psyn_builder.py
 	$(PYTHON) $(SDK_DIR)/tools/psyn_builder.py \
@@ -63,7 +64,8 @@ $(BUILD_DIR)/CHIP.psyn: $(BUILD_DIR)/CHIP.elf $(SDK_DIR)/tools/psyn_builder.py
 		--renders-aux 0 \
 		--has-sample-slots $(HAS_SAMPLE_SLOTS) \
 		--supports-idle-sleep $(SUPPORTS_IDLE_SLEEP) \
-		--has-voice-tick-idle $(HAS_VOICE_TICK_IDLE)
+		--has-voice-tick-idle $(HAS_VOICE_TICK_IDLE) \
+		--has-randomize-patch $(HAS_RANDOMIZE_PATCH)
 
 clean:
 	rm -rf $(BUILD_DIR)
